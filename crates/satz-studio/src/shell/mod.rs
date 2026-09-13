@@ -14,12 +14,13 @@ use dioxus::prelude::*;
 
 pub use banner::SatzBanner;
 pub use drawer::DiagnosticsDrawer;
-pub use placeholder::{NoEstate, NotBuilt};
+pub use placeholder::NoEstate;
 pub use rail::NavigationRail;
 pub use snackbar::SnackbarHost;
 pub use top_bar::TopBar;
 
 use crate::state::{AppStore, AppStoreStoreExt, OpenEstate, View, estate_coroutine};
+use crate::views::chat::ChatView;
 use crate::views::commands::CommandsView;
 use crate::views::estates::EstatesView;
 use crate::views::gallery::GalleryView;
@@ -80,6 +81,6 @@ fn Content() -> Element {
         View::Params => rsx! { ParamsView {} },
         View::Map => rsx! { MapView {} },
         View::Resources => rsx! { ResourcesView {} },
-        View::Chat => rsx! { NotBuilt { view } },
+        View::Chat => rsx! { ChatView {} },
     }
 }
