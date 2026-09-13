@@ -10,7 +10,10 @@ fn main() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../vendor/satz-tree-sitter/src");
     let parser = root.join("parser.c");
     println!("cargo:rerun-if-changed={}", parser.display());
-    println!("cargo:rerun-if-changed={}", root.join("tree_sitter/parser.h").display());
+    println!(
+        "cargo:rerun-if-changed={}",
+        root.join("tree_sitter/parser.h").display()
+    );
     let scanner = root.join("scanner.c");
     let mut build = cc::Build::new();
     build.include(&root).file(&parser).warnings(false);

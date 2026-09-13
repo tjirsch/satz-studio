@@ -51,8 +51,14 @@ impl Default for Settings {
 pub enum ProviderChoice {
     Claude,
     /// any endpoint speaking OpenAI's chat-completions API: Ollama, LM Studio, OpenRouter, Gemini's compatible endpoint
-    OpenAiCompat { base_url: String, model: String },
-    Ollama { base_url: String, model: String },
+    OpenAiCompat {
+        base_url: String,
+        model: String,
+    },
+    Ollama {
+        base_url: String,
+        model: String,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -65,12 +71,22 @@ pub enum Theme {
 
 #[derive(Debug, thiserror::Error)]
 pub enum SettingsError {
-    #[error("no configuration directory on this system (XDG_CONFIG_HOME / ~/Library/Application Support / %APPDATA%)")]
+    #[error(
+        "no configuration directory on this system (XDG_CONFIG_HOME / ~/Library/Application Support / %APPDATA%)"
+    )]
     NoConfigDir,
     #[error("{path}: {source}")]
-    Io { path: PathBuf, #[source] source: std::io::Error },
+    Io {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
     #[error("{path}: not a settings file: {source}")]
-    Parse { path: PathBuf, #[source] source: toml::de::Error },
+    Parse {
+        path: PathBuf,
+        #[source]
+        source: toml::de::Error,
+    },
     #[error("settings could not be serialised: {0}")]
     Serialize(#[from] toml::ser::Error),
 }
@@ -98,9 +114,17 @@ impl Settings {
         let text = match std::fs::read_to_string(path) {
             Ok(t) => t,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Self::default()),
-            Err(e) => return Err(SettingsError::Io { path: path.to_path_buf(), source: e }),
+            Err(e) => {
+                return Err(SettingsError::Io {
+                    path: path.to_path_buf(),
+                    source: e,
+                });
+            }
         };
-        toml::from_str(&text).map_err(|e| SettingsError::Parse { path: path.to_path_buf(), source: e })
+        toml::from_str(&text).map_err(|e| SettingsError::Parse {
+            path: path.to_path_buf(),
+            source: e,
+        })
     }
 
     pub fn save(&self) -> Result<(), SettingsError> {
@@ -110,9 +134,15 @@ impl Settings {
     pub fn save_to(&self, path: &Path) -> Result<(), SettingsError> {
         let text = toml::to_string_pretty(self)?;
         if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).map_err(|e| SettingsError::Io { path: parent.to_path_buf(), source: e })?;
+            std::fs::create_dir_all(parent).map_err(|e| SettingsError::Io {
+                path: parent.to_path_buf(),
+                source: e,
+            })?;
         }
-        std::fs::write(path, text).map_err(|e| SettingsError::Io { path: path.to_path_buf(), source: e })
+        std::fs::write(path, text).map_err(|e| SettingsError::Io {
+            path: path.to_path_buf(),
+            source: e,
+        })
     }
 }
 
@@ -132,7 +162,10 @@ mod tests {
     #[test]
     fn a_missing_file_is_the_first_run() {
         let dir = tempfile::tempdir().unwrap();
-        assert_eq!(Settings::load_from(&dir.path().join("none.toml")).unwrap(), Settings::default());
+        assert_eq!(
+            Settings::load_from(&dir.path().join("none.toml")).unwrap(),
+            Settings::default()
+        );
     }
 
     #[test]
@@ -140,7 +173,10 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("settings.toml");
         std::fs::write(&path, "model = [").unwrap();
-        assert!(matches!(Settings::load_from(&path), Err(SettingsError::Parse { .. })));
+        assert!(matches!(
+            Settings::load_from(&path),
+            Err(SettingsError::Parse { .. })
+        ));
     }
 
     #[test]

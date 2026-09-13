@@ -32,7 +32,9 @@ pub struct CacheControl {
 
 impl CacheControl {
     pub fn ephemeral() -> Self {
-        Self { kind: "ephemeral".to_string() }
+        Self {
+            kind: "ephemeral".to_string(),
+        }
     }
 }
 
@@ -73,7 +75,10 @@ pub enum ContentBlock {
 
 impl ContentBlock {
     pub fn text(text: impl Into<String>) -> Self {
-        ContentBlock::Text { text: text.into(), cache_control: None }
+        ContentBlock::Text {
+            text: text.into(),
+            cache_control: None,
+        }
     }
 
     /// The `type` of the block as the API names it.
@@ -84,7 +89,10 @@ impl ContentBlock {
             ContentBlock::RedactedThinking { .. } => "redacted_thinking",
             ContentBlock::ToolUse { .. } => "tool_use",
             ContentBlock::ToolResult { .. } => "tool_result",
-            ContentBlock::Other(value) => value.get("type").and_then(serde_json::Value::as_str).unwrap_or("?"),
+            ContentBlock::Other(value) => value
+                .get("type")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("?"),
         }
     }
 
@@ -92,7 +100,8 @@ impl ContentBlock {
     /// another kind is left as it is.
     fn set_cache_control(&mut self, marker: Option<CacheControl>) {
         match self {
-            ContentBlock::Text { cache_control, .. } | ContentBlock::ToolResult { cache_control, .. } => *cache_control = marker,
+            ContentBlock::Text { cache_control, .. }
+            | ContentBlock::ToolResult { cache_control, .. } => *cache_control = marker,
             _ => {}
         }
     }
@@ -165,13 +174,40 @@ enum Known {
 impl Serialize for ContentBlock {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         match self {
-            ContentBlock::Text { text, cache_control } => KnownRef::Text { text, cache_control: cache_control.as_ref() }.serialize(serializer),
-            ContentBlock::Thinking { thinking, signature } => KnownRef::Thinking { thinking, signature }.serialize(serializer),
-            ContentBlock::RedactedThinking { data } => KnownRef::RedactedThinking { data }.serialize(serializer),
-            ContentBlock::ToolUse { id, name, input } => KnownRef::ToolUse { id, name, input }.serialize(serializer),
-            ContentBlock::ToolResult { tool_use_id, content, is_error, cache_control } => {
-                KnownRef::ToolResult { tool_use_id, content, is_error: *is_error, cache_control: cache_control.as_ref() }.serialize(serializer)
+            ContentBlock::Text {
+                text,
+                cache_control,
+            } => KnownRef::Text {
+                text,
+                cache_control: cache_control.as_ref(),
             }
+            .serialize(serializer),
+            ContentBlock::Thinking {
+                thinking,
+                signature,
+            } => KnownRef::Thinking {
+                thinking,
+                signature,
+            }
+            .serialize(serializer),
+            ContentBlock::RedactedThinking { data } => {
+                KnownRef::RedactedThinking { data }.serialize(serializer)
+            }
+            ContentBlock::ToolUse { id, name, input } => {
+                KnownRef::ToolUse { id, name, input }.serialize(serializer)
+            }
+            ContentBlock::ToolResult {
+                tool_use_id,
+                content,
+                is_error,
+                cache_control,
+            } => KnownRef::ToolResult {
+                tool_use_id,
+                content,
+                is_error: *is_error,
+                cache_control: cache_control.as_ref(),
+            }
+            .serialize(serializer),
             ContentBlock::Other(value) => value.serialize(serializer),
         }
     }
@@ -180,16 +216,42 @@ impl Serialize for ContentBlock {
 impl<'de> Deserialize<'de> for ContentBlock {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let value = serde_json::Value::deserialize(deserializer)?;
-        let kind = value.get("type").and_then(serde_json::Value::as_str).ok_or_else(|| serde::de::Error::custom("a content block has no `type`"))?;
+        let kind = value
+            .get("type")
+            .and_then(serde_json::Value::as_str)
+            .ok_or_else(|| serde::de::Error::custom("a content block has no `type`"))?;
         match kind {
             "text" | "thinking" | "redacted_thinking" | "tool_use" | "tool_result" => {
-                let known: Known = serde_json::from_value(value).map_err(serde::de::Error::custom)?;
+                let known: Known =
+                    serde_json::from_value(value).map_err(serde::de::Error::custom)?;
                 Ok(match known {
-                    Known::Text { text, cache_control } => ContentBlock::Text { text, cache_control },
-                    Known::Thinking { thinking, signature } => ContentBlock::Thinking { thinking, signature },
+                    Known::Text {
+                        text,
+                        cache_control,
+                    } => ContentBlock::Text {
+                        text,
+                        cache_control,
+                    },
+                    Known::Thinking {
+                        thinking,
+                        signature,
+                    } => ContentBlock::Thinking {
+                        thinking,
+                        signature,
+                    },
                     Known::RedactedThinking { data } => ContentBlock::RedactedThinking { data },
                     Known::ToolUse { id, name, input } => ContentBlock::ToolUse { id, name, input },
-                    Known::ToolResult { tool_use_id, content, is_error, cache_control } => ContentBlock::ToolResult { tool_use_id, content, is_error, cache_control },
+                    Known::ToolResult {
+                        tool_use_id,
+                        content,
+                        is_error,
+                        cache_control,
+                    } => ContentBlock::ToolResult {
+                        tool_use_id,
+                        content,
+                        is_error,
+                        cache_control,
+                    },
                 })
             }
             _ => Ok(ContentBlock::Other(value)),
@@ -205,10 +267,16 @@ pub struct Message {
 
 impl Message {
     pub fn user(content: Vec<ContentBlock>) -> Self {
-        Self { role: Role::User, content }
+        Self {
+            role: Role::User,
+            content,
+        }
     }
     pub fn assistant(content: Vec<ContentBlock>) -> Self {
-        Self { role: Role::Assistant, content }
+        Self {
+            role: Role::Assistant,
+            content,
+        }
     }
     /// The text blocks, joined.
     pub fn text(&self) -> String {

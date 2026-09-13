@@ -23,8 +23,17 @@ pub struct OpenAiCompat {
 }
 
 impl OpenAiCompat {
-    pub fn new(base_url: impl Into<String>, api_key: Option<String>, model: impl Into<String>) -> Self {
-        Self { base_url: base_url.into(), api_key, model: model.into(), http: http_client() }
+    pub fn new(
+        base_url: impl Into<String>,
+        api_key: Option<String>,
+        model: impl Into<String>,
+    ) -> Self {
+        Self {
+            base_url: base_url.into(),
+            api_key,
+            model: model.into(),
+            http: http_client(),
+        }
     }
 
     /// The wire body: the system blocks joined into one system message, tool results
@@ -40,7 +49,13 @@ impl OpenAiCompat {
             match message.role {
                 Role::User => {
                     for block in &message.content {
-                        if let ContentBlock::ToolResult { tool_use_id, content, is_error, .. } = block {
+                        if let ContentBlock::ToolResult {
+                            tool_use_id,
+                            content,
+                            is_error,
+                            ..
+                        } = block
+                        {
                             messages.push(serde_json::json!({"role": "tool", "tool_call_id": tool_use_id, "content": tool_content(content, *is_error)}));
                         }
                     }
@@ -74,7 +89,12 @@ impl OpenAiCompat {
         body
     }
 
-    async fn run(&self, req: &Request, tx: mpsc::Sender<StreamEvent>, cancel: CancellationToken) -> Result<(), ClaudeError> {
+    async fn run(
+        &self,
+        req: &Request,
+        tx: mpsc::Sender<StreamEvent>,
+        cancel: CancellationToken,
+    ) -> Result<(), ClaudeError> {
         match self.run_inner(req, &tx, &cancel).await {
             Ok(()) => Ok(()),
             Err(e) => {
@@ -84,8 +104,19 @@ impl OpenAiCompat {
         }
     }
 
-    async fn run_inner(&self, req: &Request, tx: &mpsc::Sender<StreamEvent>, cancel: &CancellationToken) -> Result<(), ClaudeError> {
-        let mut request = self.http.post(format!("{}/chat/completions", self.base_url.trim_end_matches('/'))).json(&self.body(req));
+    async fn run_inner(
+        &self,
+        req: &Request,
+        tx: &mpsc::Sender<StreamEvent>,
+        cancel: &CancellationToken,
+    ) -> Result<(), ClaudeError> {
+        let mut request = self
+            .http
+            .post(format!(
+                "{}/chat/completions",
+                self.base_url.trim_end_matches('/')
+            ))
+            .json(&self.body(req));
         if let Some(key) = &self.api_key {
             request = request.bearer_auth(key);
         }
@@ -129,9 +160,19 @@ impl ChatProvider for OpenAiCompat {
         "openai-compat"
     }
     fn capabilities(&self) -> Capabilities {
-        Capabilities { tools: true, thinking: false, effort: false, cache_control: false }
+        Capabilities {
+            tools: true,
+            thinking: false,
+            effort: false,
+            cache_control: false,
+        }
     }
-    fn stream<'a>(&'a self, req: &'a Request, tx: mpsc::Sender<StreamEvent>, cancel: CancellationToken) -> StreamFuture<'a> {
+    fn stream<'a>(
+        &'a self,
+        req: &'a Request,
+        tx: mpsc::Sender<StreamEvent>,
+        cancel: CancellationToken,
+    ) -> StreamFuture<'a> {
         Box::pin(self.run(req, tx, cancel))
     }
 }
@@ -201,11 +242,15 @@ struct Fold {
 
 impl Fold {
     fn feed(&mut self, data: &str) -> Result<Vec<StreamEvent>, ClaudeError> {
-        let chunk: Chunk = serde_json::from_str(data).map_err(|e| ClaudeError::Stream(format!("a chunk is not a chat completion: {e}")))?;
+        let chunk: Chunk = serde_json::from_str(data)
+            .map_err(|e| ClaudeError::Stream(format!("a chunk is not a chat completion: {e}")))?;
         let mut out = Vec::new();
         if !self.started {
             self.started = true;
-            out.push(StreamEvent::Started { id: chunk.id, model: chunk.model });
+            out.push(StreamEvent::Started {
+                id: chunk.id,
+                model: chunk.model,
+            });
         }
         if let Some(usage) = chunk.usage {
             self.usage.input_tokens = usage.prompt_tokens;
@@ -219,26 +264,59 @@ impl Fold {
                 out.push(StreamEvent::TextDelta(text));
             }
             for call in choice.delta.tool_calls.unwrap_or_default() {
-                let arguments = call.function.as_ref().and_then(|f| f.arguments.clone()).unwrap_or_default();
+                let arguments = call
+                    .function
+                    .as_ref()
+                    .and_then(|f| f.arguments.clone())
+                    .unwrap_or_default();
                 if call.index < self.blocks.calls() {
                     let index = self.blocks.call_mut(call.index).expect("index checked").0;
                     if !arguments.is_empty() {
-                        self.blocks.call_mut(call.index).expect("index checked").3.push_str(&arguments);
-                        out.push(StreamEvent::ToolInputDelta { index, partial_json: arguments });
+                        self.blocks
+                            .call_mut(call.index)
+                            .expect("index checked")
+                            .3
+                            .push_str(&arguments);
+                        out.push(StreamEvent::ToolInputDelta {
+                            index,
+                            partial_json: arguments,
+                        });
                     }
                     continue;
                 }
                 if call.index != self.blocks.calls() {
-                    return Err(ClaudeError::Stream(format!("tool call {} started where {} was expected", call.index, self.blocks.calls())));
+                    return Err(ClaudeError::Stream(format!(
+                        "tool call {} started where {} was expected",
+                        call.index,
+                        self.blocks.calls()
+                    )));
                 }
-                let id = call.id.ok_or_else(|| ClaudeError::Stream(format!("tool call {} started without an id", call.index)))?;
-                let name = call.function.as_ref().and_then(|f| f.name.clone()).ok_or_else(|| ClaudeError::Stream(format!("tool call {} started without a name", call.index)))?;
+                let id = call.id.ok_or_else(|| {
+                    ClaudeError::Stream(format!("tool call {} started without an id", call.index))
+                })?;
+                let name = call
+                    .function
+                    .as_ref()
+                    .and_then(|f| f.name.clone())
+                    .ok_or_else(|| {
+                        ClaudeError::Stream(format!(
+                            "tool call {} started without a name",
+                            call.index
+                        ))
+                    })?;
                 out.extend(self.blocks.close_text());
                 let index = self.blocks.open_call(id.clone(), name.clone());
                 out.push(StreamEvent::ToolUseStart { index, id, name });
                 if !arguments.is_empty() {
-                    self.blocks.call_mut(call.index).expect("just opened").3.push_str(&arguments);
-                    out.push(StreamEvent::ToolInputDelta { index, partial_json: arguments });
+                    self.blocks
+                        .call_mut(call.index)
+                        .expect("just opened")
+                        .3
+                        .push_str(&arguments);
+                    out.push(StreamEvent::ToolInputDelta {
+                        index,
+                        partial_json: arguments,
+                    });
                 }
             }
             if choice.finish_reason.is_some() {
@@ -254,7 +332,9 @@ impl Fold {
             return Ok(Vec::new());
         }
         if !self.started {
-            return Err(ClaudeError::Stream("the stream ended without a chunk".to_string()));
+            return Err(ClaudeError::Stream(
+                "the stream ended without a chunk".to_string(),
+            ));
         }
         self.finished = true;
         let mut out = Vec::new();
@@ -262,8 +342,17 @@ impl Fold {
         let calls = self.blocks.calls();
         out.extend(self.blocks.close_calls()?);
         let stop = stop_reason(self.finish.as_deref(), calls);
-        let stop_details = (stop == StopReason::Refusal).then(|| StopDetails { kind: "refusal".to_string(), category: self.finish.clone(), explanation: None, recommended_model: None });
-        out.push(StreamEvent::Done { stop_reason: stop, stop_details, usage: self.usage });
+        let stop_details = (stop == StopReason::Refusal).then(|| StopDetails {
+            kind: "refusal".to_string(),
+            category: self.finish.clone(),
+            explanation: None,
+            recommended_model: None,
+        });
+        out.push(StreamEvent::Done {
+            stop_reason: stop,
+            stop_details,
+            usage: self.usage,
+        });
         Ok(out)
     }
 }

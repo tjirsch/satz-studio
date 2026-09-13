@@ -36,18 +36,33 @@ enum Attempt {
 
 impl ClaudeClient {
     pub fn new(credential: Credential) -> Self {
-        let http = reqwest::Client::builder().timeout(TIMEOUT).build().expect("the HTTP client builds: no proxy or TLS setting of this app can fail");
-        Self { credential, base_url: "https://api.anthropic.com".to_string(), backoff: [Duration::from_secs(1), Duration::from_secs(3)], http }
+        let http = reqwest::Client::builder()
+            .timeout(TIMEOUT)
+            .build()
+            .expect("the HTTP client builds: no proxy or TLS setting of this app can fail");
+        Self {
+            credential,
+            base_url: "https://api.anthropic.com".to_string(),
+            backoff: [Duration::from_secs(1), Duration::from_secs(3)],
+            http,
+        }
     }
 
-    async fn run(&self, req: &Request, tx: mpsc::Sender<StreamEvent>, cancel: CancellationToken) -> Result<(), ClaudeError> {
+    async fn run(
+        &self,
+        req: &Request,
+        tx: mpsc::Sender<StreamEvent>,
+        cancel: CancellationToken,
+    ) -> Result<(), ClaudeError> {
         let body = body(req);
         let betas = betas(req, &self.credential).join(",");
         let mut attempt = 0;
         loop {
             match self.attempt(&body, &betas, &tx, &cancel).await {
                 Ok(()) => return Ok(()),
-                Err(Attempt::Retryable(e)) if attempt < self.backoff.len() && !cancel.is_cancelled() => {
+                Err(Attempt::Retryable(e))
+                    if attempt < self.backoff.len() && !cancel.is_cancelled() =>
+                {
                     tracing::warn!(error = %e, attempt, "request failed before its stream started; retrying");
                     tokio::select! {
                         _ = tokio::time::sleep(self.backoff[attempt]) => {}
@@ -64,8 +79,21 @@ impl ClaudeClient {
         }
     }
 
-    async fn attempt(&self, body: &serde_json::Value, betas: &str, tx: &mpsc::Sender<StreamEvent>, cancel: &CancellationToken) -> Result<(), Attempt> {
-        let mut request = self.http.post(format!("{}/v1/messages", self.base_url.trim_end_matches('/'))).header("anthropic-version", API_VERSION).json(body);
+    async fn attempt(
+        &self,
+        body: &serde_json::Value,
+        betas: &str,
+        tx: &mpsc::Sender<StreamEvent>,
+        cancel: &CancellationToken,
+    ) -> Result<(), Attempt> {
+        let mut request = self
+            .http
+            .post(format!(
+                "{}/v1/messages",
+                self.base_url.trim_end_matches('/')
+            ))
+            .header("anthropic-version", API_VERSION)
+            .json(body);
         request = match &self.credential {
             Credential::ApiKey(key) => request.header("x-api-key", key),
             Credential::Bearer(token) => request.bearer_auth(token),
@@ -80,9 +108,16 @@ impl ClaudeClient {
         let status = response.status();
         if !status.is_success() {
             let headers = response.headers().clone();
-            let text = response.text().await.map_err(|e| Attempt::Retryable(ClaudeError::Connection(e.to_string())))?;
+            let text = response
+                .text()
+                .await
+                .map_err(|e| Attempt::Retryable(ClaudeError::Connection(e.to_string())))?;
             let error = from_status(status, &headers, &text);
-            return Err(if error.is_retryable() { Attempt::Retryable(error) } else { Attempt::Final(error) });
+            return Err(if error.is_retryable() {
+                Attempt::Retryable(error)
+            } else {
+                Attempt::Final(error)
+            });
         }
 
         let mut stream = response.bytes_stream();
@@ -105,8 +140,12 @@ impl ClaudeClient {
                         }
                     }
                 }
-                Some(Err(e)) if consumed => return Err(Attempt::Final(ClaudeError::Stream(e.to_string()))),
-                Some(Err(e)) => return Err(Attempt::Retryable(ClaudeError::Connection(e.to_string()))),
+                Some(Err(e)) if consumed => {
+                    return Err(Attempt::Final(ClaudeError::Stream(e.to_string())));
+                }
+                Some(Err(e)) => {
+                    return Err(Attempt::Retryable(ClaudeError::Connection(e.to_string())));
+                }
                 None => break,
             }
         }
@@ -120,9 +159,19 @@ impl ChatProvider for ClaudeClient {
         "claude"
     }
     fn capabilities(&self) -> Capabilities {
-        Capabilities { tools: true, thinking: true, effort: true, cache_control: true }
+        Capabilities {
+            tools: true,
+            thinking: true,
+            effort: true,
+            cache_control: true,
+        }
     }
-    fn stream<'a>(&'a self, req: &'a Request, tx: mpsc::Sender<StreamEvent>, cancel: CancellationToken) -> StreamFuture<'a> {
+    fn stream<'a>(
+        &'a self,
+        req: &'a Request,
+        tx: mpsc::Sender<StreamEvent>,
+        cancel: CancellationToken,
+    ) -> StreamFuture<'a> {
         Box::pin(self.run(req, tx, cancel))
     }
 }

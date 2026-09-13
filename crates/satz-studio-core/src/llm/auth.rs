@@ -62,9 +62,14 @@ impl Credential {
             },
             Err(_) => tried.push("`ant` is not on PATH".to_string()),
         }
-        match tokio::task::spawn_blocking(read_keychain).await.map_err(|e| ClaudeError::Keychain(format!("the keychain task failed: {e}")))?? {
+        match tokio::task::spawn_blocking(read_keychain)
+            .await
+            .map_err(|e| ClaudeError::Keychain(format!("the keychain task failed: {e}")))??
+        {
             Some(key) => return Ok((Credential::ApiKey(key), CredentialSource::Keychain)),
-            None => tried.push(format!("no keychain entry {KEYCHAIN_SERVICE} / {KEYCHAIN_USER}")),
+            None => tried.push(format!(
+                "no keychain entry {KEYCHAIN_SERVICE} / {KEYCHAIN_USER}"
+            )),
         }
         Err(ClaudeError::NoCredential { tried })
     }
@@ -72,9 +77,13 @@ impl Credential {
     /// Store a key in the OS keychain (`satz-studio` / `anthropic-api-key`).
     pub fn store_in_keychain(key: &str) -> Result<(), ClaudeError> {
         if key.trim().is_empty() {
-            return Err(ClaudeError::Keychain("an empty key is not stored".to_string()));
+            return Err(ClaudeError::Keychain(
+                "an empty key is not stored".to_string(),
+            ));
         }
-        keychain_entry()?.set_password(key).map_err(|e| ClaudeError::Keychain(e.to_string()))
+        keychain_entry()?
+            .set_password(key)
+            .map_err(|e| ClaudeError::Keychain(e.to_string()))
     }
 
     /// Remove the keychain entry. An entry that does not exist is already removed.
@@ -87,18 +96,34 @@ impl Credential {
 }
 
 fn non_empty_env(name: &str) -> Option<String> {
-    std::env::var(name).ok().map(|v| v.trim().to_string()).filter(|v| !v.is_empty())
+    std::env::var(name)
+        .ok()
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
 }
 
 /// The access token of the active `ant` profile; a note saying why not, otherwise.
 async fn ant_access_token(ant: &std::path::Path) -> Result<String, String> {
-    let output = tokio::time::timeout(ANT_TIMEOUT, tokio::process::Command::new(ant).args(["auth", "print-credentials", "--access-token"]).output())
-        .await
-        .map_err(|_| format!("`ant auth print-credentials` did not answer within {}s", ANT_TIMEOUT.as_secs()))?
-        .map_err(|e| format!("`ant auth print-credentials` could not run: {e}"))?;
+    let output = tokio::time::timeout(
+        ANT_TIMEOUT,
+        tokio::process::Command::new(ant)
+            .args(["auth", "print-credentials", "--access-token"])
+            .output(),
+    )
+    .await
+    .map_err(|_| {
+        format!(
+            "`ant auth print-credentials` did not answer within {}s",
+            ANT_TIMEOUT.as_secs()
+        )
+    })?
+    .map_err(|e| format!("`ant auth print-credentials` could not run: {e}"))?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        return Err(format!("`ant auth print-credentials` exited with {}: {stderr}", output.status));
+        return Err(format!(
+            "`ant auth print-credentials` exited with {}: {stderr}",
+            output.status
+        ));
     }
     let token = String::from_utf8_lossy(&output.stdout).trim().to_string();
     if token.is_empty() {
@@ -118,7 +143,8 @@ fn read_keychain() -> Result<Option<String>, ClaudeError> {
 
 fn keychain_entry() -> Result<keyring_core::Entry, ClaudeError> {
     register_store()?;
-    keyring_core::Entry::new(KEYCHAIN_SERVICE, KEYCHAIN_USER).map_err(|e| ClaudeError::Keychain(e.to_string()))
+    keyring_core::Entry::new(KEYCHAIN_SERVICE, KEYCHAIN_USER)
+        .map_err(|e| ClaudeError::Keychain(e.to_string()))
 }
 
 static STORE: OnceLock<Result<(), String>> = OnceLock::new();
@@ -137,7 +163,8 @@ fn register_store() -> Result<(), ClaudeError> {
 
 #[cfg(target_os = "macos")]
 fn platform_store() -> keyring_core::Result<Arc<keyring_core::CredentialStore>> {
-    apple_native_keyring_store::keychain::Store::new().map(|s| s as Arc<keyring_core::CredentialStore>)
+    apple_native_keyring_store::keychain::Store::new()
+        .map(|s| s as Arc<keyring_core::CredentialStore>)
 }
 
 #[cfg(target_os = "windows")]
@@ -152,5 +179,7 @@ fn platform_store() -> keyring_core::Result<Arc<keyring_core::CredentialStore>> 
 
 #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
 fn platform_store() -> keyring_core::Result<Arc<keyring_core::CredentialStore>> {
-    Err(keyring_core::Error::NotSupportedByStore("no keychain store is built for this platform".to_string()))
+    Err(keyring_core::Error::NotSupportedByStore(
+        "no keychain store is built for this platform".to_string(),
+    ))
 }

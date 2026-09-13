@@ -15,7 +15,8 @@ pub fn language() -> tree_sitter::Language {
 /// A parser for Satz, ready to use.
 pub fn parser() -> tree_sitter::Parser {
     let mut p = tree_sitter::Parser::new();
-    p.set_language(&language()).expect("the vendored grammar matches the tree-sitter crate's ABI");
+    p.set_language(&language())
+        .expect("the vendored grammar matches the tree-sitter crate's ABI");
     p
 }
 
@@ -32,13 +33,17 @@ mod tests {
         assert!(!root.has_error(), "{}", root.to_sexp());
         // comments are nodes, so nothing is lost
         let mut cursor = root.walk();
-        let comments = root.children(&mut cursor).filter(|n| n.kind() == "comment").count();
+        let comments = root
+            .children(&mut cursor)
+            .filter(|n| n.kind() == "comment")
+            .count();
         assert_eq!(comments, 2);
     }
 
     #[test]
     fn the_grammar_and_satz_core_agree_on_the_smoke_estates() {
-        let dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../vendor/satz/tests/smoke/yaml");
+        let dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../vendor/satz/tests/smoke/yaml");
         let mut p = parser();
         for entry in std::fs::read_dir(&dir).unwrap() {
             let path = entry.unwrap().path();
@@ -47,7 +52,12 @@ mod tests {
             }
             let src = std::fs::read_to_string(&path).unwrap();
             let tree = p.parse(&src, None).unwrap();
-            assert!(!tree.root_node().has_error(), "{}: {}", path.display(), tree.root_node().to_sexp());
+            assert!(
+                !tree.root_node().has_error(),
+                "{}: {}",
+                path.display(),
+                tree.root_node().to_sexp()
+            );
             satz_core::satz::parse(&src).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
         }
     }

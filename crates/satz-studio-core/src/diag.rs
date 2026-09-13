@@ -32,6 +32,8 @@ pub enum DiagSource {
     Command(String),
     /// a tool over MCP refused, by name
     Tool(String),
+    /// the view model's own finding (a pack line active while its gate is false)
+    Model,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -46,7 +48,13 @@ pub struct Diagnostic {
 
 impl Diagnostic {
     pub fn error(message: impl Into<String>, source: DiagSource) -> Self {
-        Self { file: None, line: None, severity: Severity::Error, message: message.into(), source }
+        Self {
+            file: None,
+            line: None,
+            severity: Severity::Error,
+            message: message.into(),
+            source,
+        }
     }
 
     pub fn at(mut self, file: impl Into<PathBuf>, line: u32) -> Self {
@@ -70,7 +78,11 @@ impl Diagnostic {
     /// resolved against `base`, which is the estate's directory.
     pub fn from_pipeline_error(base: &Path, e: &PipelineError) -> Self {
         let file = Path::new(&e.file);
-        let file = if file.is_absolute() { file.to_path_buf() } else { base.join(file) };
+        let file = if file.is_absolute() {
+            file.to_path_buf()
+        } else {
+            base.join(file)
+        };
         Self {
             file: Some(file),
             line: Some(e.line as u32),
@@ -111,7 +123,13 @@ pub fn parse_satz_output(text: &str, source: DiagSource) -> Vec<Diagnostic> {
         }
         let (severity, rest) = strip_severity(line.trim_start());
         let rest = rest.strip_prefix("transpile --check: ").unwrap_or(rest);
-        let mut d = Diagnostic { file: None, line: None, severity, message: rest.to_string(), source: source.clone() };
+        let mut d = Diagnostic {
+            file: None,
+            line: None,
+            severity,
+            message: rest.to_string(),
+            source: source.clone(),
+        };
         if let Some((n, msg)) = split_satz_line(rest) {
             d.line = Some(n);
             d.message = msg.to_string();
@@ -180,7 +198,10 @@ mod tests {
 
     #[test]
     fn a_pipeline_line_has_file_and_line() {
-        let d = parse_satz_output("satz v0.56.1 (built 2026-09-13 13:56:42)\nerror: transpile --check: yaml/smoke.satz:12: unknown param 'x'\n", DiagSource::Check);
+        let d = parse_satz_output(
+            "satz v0.56.1 (built 2026-09-13 13:56:42)\nerror: transpile --check: yaml/smoke.satz:12: unknown param 'x'\n",
+            DiagSource::Check,
+        );
         assert_eq!(d.len(), 1);
         assert_eq!(d[0].file.as_deref(), Some(Path::new("yaml/smoke.satz")));
         assert_eq!(d[0].line, Some(12));
@@ -198,9 +219,15 @@ mod tests {
 
     #[test]
     fn an_indented_line_continues_the_one_above() {
-        let d = parse_satz_output("composition conflict at google_folder.x\n  - a.satz:4\n  - b.satz:9\nwarning: something else", DiagSource::Compile);
+        let d = parse_satz_output(
+            "composition conflict at google_folder.x\n  - a.satz:4\n  - b.satz:9\nwarning: something else",
+            DiagSource::Compile,
+        );
         assert_eq!(d.len(), 2);
-        assert_eq!(d[0].message, "composition conflict at google_folder.x\n- a.satz:4\n- b.satz:9");
+        assert_eq!(
+            d[0].message,
+            "composition conflict at google_folder.x\n- a.satz:4\n- b.satz:9"
+        );
         assert_eq!(d[1].severity, Severity::Warning);
     }
 
@@ -214,7 +241,10 @@ mod tests {
     #[test]
     fn repoint_moves_only_the_named_file() {
         let d = Diagnostic::error("m", DiagSource::Check).at("/e/yaml/a.satz.studio-tmp", 2);
-        let d = d.repoint(Path::new("/e/yaml/a.satz.studio-tmp"), Path::new("/e/yaml/a.satz"));
+        let d = d.repoint(
+            Path::new("/e/yaml/a.satz.studio-tmp"),
+            Path::new("/e/yaml/a.satz"),
+        );
         assert_eq!(d.file.as_deref(), Some(Path::new("/e/yaml/a.satz")));
     }
 }

@@ -13,7 +13,10 @@ struct Env {
 
 impl Env {
     fn set(vars: &[(&'static str, Option<&str>)]) -> Self {
-        let saved = vars.iter().map(|(name, _)| (*name, std::env::var(name).ok())).collect();
+        let saved = vars
+            .iter()
+            .map(|(name, _)| (*name, std::env::var(name).ok()))
+            .collect();
         for (name, value) in vars {
             // SAFETY: every test that touches the environment holds `ENV`, and no other
             // thread of this test binary reads these variables meanwhile.
@@ -45,7 +48,10 @@ impl Drop for Env {
 #[tokio::test]
 async fn the_api_key_variable_wins() {
     let _lock = ENV.lock().await;
-    let _env = Env::set(&[("ANTHROPIC_API_KEY", Some("sk-example")), ("ANTHROPIC_AUTH_TOKEN", Some("tok-example"))]);
+    let _env = Env::set(&[
+        ("ANTHROPIC_API_KEY", Some("sk-example")),
+        ("ANTHROPIC_AUTH_TOKEN", Some("tok-example")),
+    ]);
     let (credential, source) = Credential::resolve().await.expect("resolves");
     assert_eq!(credential, Credential::ApiKey("sk-example".to_string()));
     assert_eq!(source, CredentialSource::ApiKeyEnv);
@@ -54,7 +60,10 @@ async fn the_api_key_variable_wins() {
 #[tokio::test]
 async fn the_auth_token_variable_is_second_and_a_blank_variable_is_unset() {
     let _lock = ENV.lock().await;
-    let _env = Env::set(&[("ANTHROPIC_API_KEY", Some("   ")), ("ANTHROPIC_AUTH_TOKEN", Some(" tok-example\n"))]);
+    let _env = Env::set(&[
+        ("ANTHROPIC_API_KEY", Some("   ")),
+        ("ANTHROPIC_AUTH_TOKEN", Some(" tok-example\n")),
+    ]);
     let (credential, source) = Credential::resolve().await.expect("resolves");
     assert_eq!(credential, Credential::Bearer("tok-example".to_string()));
     assert_eq!(source, CredentialSource::AuthTokenEnv);
@@ -69,20 +78,34 @@ async fn the_keychain_entry_is_last_and_nothing_names_every_source() {
     let _lock = ENV.lock().await;
     let empty = tempfile::tempdir().expect("a temp dir");
     let path = empty.path().to_str().expect("utf-8").to_string();
-    let _env = Env::set(&[("ANTHROPIC_API_KEY", None), ("ANTHROPIC_AUTH_TOKEN", None), ("PATH", Some(&path))]);
+    let _env = Env::set(&[
+        ("ANTHROPIC_API_KEY", None),
+        ("ANTHROPIC_AUTH_TOKEN", None),
+        ("PATH", Some(&path)),
+    ]);
 
     Credential::store_in_keychain("sk-example-keychain").expect("stores");
-    let (credential, source) = Credential::resolve().await.expect("resolves from the keychain");
-    assert_eq!(credential, Credential::ApiKey("sk-example-keychain".to_string()));
+    let (credential, source) = Credential::resolve()
+        .await
+        .expect("resolves from the keychain");
+    assert_eq!(
+        credential,
+        Credential::ApiKey("sk-example-keychain".to_string())
+    );
     assert_eq!(source, CredentialSource::Keychain);
 
     Credential::delete_from_keychain().expect("deletes");
     Credential::delete_from_keychain().expect("deleting an absent entry is fine");
     let error = Credential::resolve().await.expect_err("nothing is left");
-    let ClaudeError::NoCredential { tried } = &error else { panic!("{error}") };
+    let ClaudeError::NoCredential { tried } = &error else {
+        panic!("{error}")
+    };
     assert_eq!(tried.len(), 4, "{tried:?}");
     assert!(tried[2].contains("`ant` is not on PATH"));
     assert!(tried[3].contains("no keychain entry"));
     assert!(error.to_string().contains("ant auth login"));
-    assert!(matches!(Credential::store_in_keychain(" "), Err(ClaudeError::Keychain(_))));
+    assert!(matches!(
+        Credential::store_in_keychain(" "),
+        Err(ClaudeError::Keychain(_))
+    ));
 }

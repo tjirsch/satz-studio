@@ -217,7 +217,13 @@ mod tests {
 
     #[test]
     fn interview_args_send_only_what_is_set() {
-        let a = InterviewArgs { answers: BTreeMap::from([("x".to_string(), serde_json::json!(true))]), ..Default::default() };
-        assert_eq!(serde_json::to_value(&a).unwrap(), serde_json::json!({"answers": {"x": true}}));
+        let a = InterviewArgs {
+            answers: BTreeMap::from([("x".to_string(), serde_json::json!(true))]),
+            ..Default::default()
+        };
+        assert_eq!(
+            serde_json::to_value(&a).unwrap(),
+            serde_json::json!({"answers": {"x": true}})
+        );
     }
 }

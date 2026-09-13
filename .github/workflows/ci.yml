@@ -44,6 +44,8 @@ jobs:
         run: |
           bash scripts/install-satz.sh
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: formatting (rustfmt, the two packages — vendor/satz is satz's own)
+        run: cargo fmt -p satz-studio-core -p satz-studio -- --check
       - name: clippy (warnings are errors)
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - name: tests
@@ -85,6 +87,8 @@ jobs:
         run: |
           cargo build --release --manifest-path vendor/satz/Cargo.toml --locked
           echo "$GITHUB_WORKSPACE/vendor/satz/target/release" >> "$GITHUB_PATH"
+      - name: formatting (rustfmt, the two packages — vendor/satz is satz's own)
+        run: cargo fmt -p satz-studio-core -p satz-studio -- --check
       - name: clippy (warnings are errors)
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - name: tests

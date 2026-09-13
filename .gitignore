@@ -8,6 +8,6 @@ CLAUDE.local.md
 *.local.md
 .claude/
 # a value edit in flight: the file satz checks before it replaces the real one
-*.studio-tmp
+*.studio-tmp.satz
 # the bundle output of `dx bundle`
 /dist/

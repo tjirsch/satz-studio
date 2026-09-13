@@ -51,12 +51,15 @@ pub struct TranscriptStore {
 impl TranscriptStore {
     /// `<data dir>/satz-studio/transcripts`
     pub fn open_default() -> Result<Self, TranscriptError> {
-        Ok(Self { root: crate::settings::data_dir()?.join("transcripts") })
+        Ok(Self {
+            root: crate::settings::data_dir()?.join("transcripts"),
+        })
     }
 
     /// The directory of one estate's transcripts.
     pub fn dir_for(&self, estate: &Path) -> PathBuf {
-        self.root.join(crate::edit::sha256_hex(estate.to_string_lossy().as_bytes()))
+        self.root
+            .join(crate::edit::sha256_hex(estate.to_string_lossy().as_bytes()))
     }
 
     /// The estate's transcripts, newest first. An estate without a directory has none.
@@ -65,11 +68,21 @@ impl TranscriptStore {
         let entries = match std::fs::read_dir(&dir) {
             Ok(entries) => entries,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
-            Err(e) => return Err(TranscriptError::Io { path: dir, source: e }),
+            Err(e) => {
+                return Err(TranscriptError::Io {
+                    path: dir,
+                    source: e,
+                });
+            }
         };
         let mut paths = Vec::new();
         for entry in entries {
-            let path = entry.map_err(|e| TranscriptError::Io { path: dir.clone(), source: e })?.path();
+            let path = entry
+                .map_err(|e| TranscriptError::Io {
+                    path: dir.clone(),
+                    source: e,
+                })?
+                .path();
             if path.extension().is_some_and(|x| x == "jsonl") {
                 paths.push(path);
             }
@@ -82,51 +95,113 @@ impl TranscriptStore {
     /// exists is never overwritten.
     pub fn create(&self, estate: &Path, model: &str) -> Result<Transcript, TranscriptError> {
         let dir = self.dir_for(estate);
-        std::fs::create_dir_all(&dir).map_err(|e| TranscriptError::Io { path: dir.clone(), source: e })?;
+        std::fs::create_dir_all(&dir).map_err(|e| TranscriptError::Io {
+            path: dir.clone(),
+            source: e,
+        })?;
         let created = rfc3339_now();
         let path = dir.join(format!("{}.jsonl", created.replace(':', "-")));
-        let header = TranscriptHeader { estate: estate.to_path_buf(), model: model.to_string(), created };
-        let mut file = std::fs::OpenOptions::new().write(true).create_new(true).open(&path).map_err(|e| TranscriptError::Io { path: path.clone(), source: e })?;
+        let header = TranscriptHeader {
+            estate: estate.to_path_buf(),
+            model: model.to_string(),
+            created,
+        };
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)
+            .map_err(|e| TranscriptError::Io {
+                path: path.clone(),
+                source: e,
+            })?;
         write_line(&mut file, &path, &header)?;
-        Ok(Transcript { path, header, messages: Vec::new() })
+        Ok(Transcript {
+            path,
+            header,
+            messages: Vec::new(),
+        })
     }
 
     /// Read a transcript back: line 1 the header, every other line a message. A line
     /// that is neither is [`TranscriptError::Line`].
     pub fn load(&self, path: &Path) -> Result<Transcript, TranscriptError> {
-        let text = std::fs::read_to_string(path).map_err(|e| TranscriptError::Io { path: path.to_path_buf(), source: e })?;
+        let text = std::fs::read_to_string(path).map_err(|e| TranscriptError::Io {
+            path: path.to_path_buf(),
+            source: e,
+        })?;
         let mut lines = text.lines().enumerate();
-        let (_, first) =
-            lines.next().ok_or_else(|| TranscriptError::Io { path: path.to_path_buf(), source: std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "an empty file is not a transcript") })?;
-        let header: TranscriptHeader = serde_json::from_str(first).map_err(|e| TranscriptError::Line { path: path.to_path_buf(), line: 1, source: e })?;
+        let (_, first) = lines.next().ok_or_else(|| TranscriptError::Io {
+            path: path.to_path_buf(),
+            source: std::io::Error::new(
+                std::io::ErrorKind::UnexpectedEof,
+                "an empty file is not a transcript",
+            ),
+        })?;
+        let header: TranscriptHeader =
+            serde_json::from_str(first).map_err(|e| TranscriptError::Line {
+                path: path.to_path_buf(),
+                line: 1,
+                source: e,
+            })?;
         let mut messages = Vec::new();
         for (i, line) in lines {
             if line.trim().is_empty() {
                 continue;
             }
-            messages.push(serde_json::from_str(line).map_err(|e| TranscriptError::Line { path: path.to_path_buf(), line: i + 1, source: e })?);
+            messages.push(
+                serde_json::from_str(line).map_err(|e| TranscriptError::Line {
+                    path: path.to_path_buf(),
+                    line: i + 1,
+                    source: e,
+                })?,
+            );
         }
-        Ok(Transcript { path: path.to_path_buf(), header, messages })
+        Ok(Transcript {
+            path: path.to_path_buf(),
+            header,
+            messages,
+        })
     }
 
     /// Append one message to the transcript's file, flushed before it returns.
-    pub fn append(&self, transcript: &mut Transcript, message: Message) -> Result<(), TranscriptError> {
-        let mut file = std::fs::OpenOptions::new().append(true).open(&transcript.path).map_err(|e| TranscriptError::Io { path: transcript.path.clone(), source: e })?;
+    pub fn append(
+        &self,
+        transcript: &mut Transcript,
+        message: Message,
+    ) -> Result<(), TranscriptError> {
+        let mut file = std::fs::OpenOptions::new()
+            .append(true)
+            .open(&transcript.path)
+            .map_err(|e| TranscriptError::Io {
+                path: transcript.path.clone(),
+                source: e,
+            })?;
         write_line(&mut file, &transcript.path, &message)?;
         transcript.messages.push(message);
         Ok(())
     }
 }
 
-fn write_line<T: serde::Serialize>(file: &mut std::fs::File, path: &Path, value: &T) -> Result<(), TranscriptError> {
+fn write_line<T: serde::Serialize>(
+    file: &mut std::fs::File,
+    path: &Path,
+    value: &T,
+) -> Result<(), TranscriptError> {
     let mut line = serde_json::to_string(value).expect("a header or a message serialises");
     line.push('\n');
-    file.write_all(line.as_bytes()).and_then(|()| file.flush()).map_err(|e| TranscriptError::Io { path: path.to_path_buf(), source: e })
+    file.write_all(line.as_bytes())
+        .and_then(|()| file.flush())
+        .map_err(|e| TranscriptError::Io {
+            path: path.to_path_buf(),
+            source: e,
+        })
 }
 
 /// Now, as `YYYY-MM-DDTHH:MM:SS.ffffffZ`.
 fn rfc3339_now() -> String {
-    let since = SystemTime::now().duration_since(UNIX_EPOCH).expect("the clock is after 1970");
+    let since = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("the clock is after 1970");
     rfc3339(since.as_secs(), since.subsec_micros())
 }
 
@@ -134,7 +209,12 @@ fn rfc3339(secs: u64, micros: u32) -> String {
     let days = (secs / 86_400) as i64;
     let rest = secs % 86_400;
     let (year, month, day) = civil_from_days(days);
-    format!("{year:04}-{month:02}-{day:02}T{:02}:{:02}:{:02}.{micros:06}Z", rest / 3600, (rest % 3600) / 60, rest % 60)
+    format!(
+        "{year:04}-{month:02}-{day:02}T{:02}:{:02}:{:02}.{micros:06}Z",
+        rest / 3600,
+        (rest % 3600) / 60,
+        rest % 60
+    )
 }
 
 /// Days since 1970-01-01 to a proleptic Gregorian date.
@@ -159,6 +239,9 @@ mod tests {
     fn rfc3339_renders_known_instants() {
         assert_eq!(rfc3339(0, 0), "1970-01-01T00:00:00.000000Z");
         assert_eq!(rfc3339(951_782_400, 5), "2000-02-29T00:00:00.000005Z");
-        assert_eq!(rfc3339(1_789_000_000, 123_456), "2026-09-10T00:26:40.123456Z");
+        assert_eq!(
+            rfc3339(1_789_000_000, 123_456),
+            "2026-09-10T00:26:40.123456Z"
+        );
     }
 }

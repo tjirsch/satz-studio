@@ -23,12 +23,18 @@ use super::claude::types::{ContentBlock, Message, Role, StopReason, ToolDef};
 pub const TIMEOUT: Duration = Duration::from_secs(600);
 
 pub(crate) fn http_client() -> reqwest::Client {
-    reqwest::Client::builder().timeout(TIMEOUT).build().expect("the HTTP client builds: no proxy or TLS setting of this app can fail")
+    reqwest::Client::builder()
+        .timeout(TIMEOUT)
+        .build()
+        .expect("the HTTP client builds: no proxy or TLS setting of this app can fail")
 }
 
 /// Send a request and hand its body back chunk by chunk; a non-2xx status is the
 /// mapped error, a transport failure before the body a connection error.
-pub(crate) async fn post_stream(request: reqwest::RequestBuilder, cancel: &CancellationToken) -> Result<reqwest::Response, ClaudeError> {
+pub(crate) async fn post_stream(
+    request: reqwest::RequestBuilder,
+    cancel: &CancellationToken,
+) -> Result<reqwest::Response, ClaudeError> {
     let response = tokio::select! {
         r = request.send() => r.map_err(|e| ClaudeError::Connection(e.to_string()))?,
         _ = cancel.cancelled() => return Err(ClaudeError::Cancelled),
@@ -36,14 +42,20 @@ pub(crate) async fn post_stream(request: reqwest::RequestBuilder, cancel: &Cance
     let status = response.status();
     if !status.is_success() {
         let headers = response.headers().clone();
-        let text = response.text().await.map_err(|e| ClaudeError::Connection(e.to_string()))?;
+        let text = response
+            .text()
+            .await
+            .map_err(|e| ClaudeError::Connection(e.to_string()))?;
         return Err(from_status(status, &headers, &text));
     }
     Ok(response)
 }
 
 /// Send one event; a closed receiver means the caller is gone.
-pub(crate) async fn emit(tx: &mpsc::Sender<StreamEvent>, event: StreamEvent) -> Result<(), ClaudeError> {
+pub(crate) async fn emit(
+    tx: &mpsc::Sender<StreamEvent>,
+    event: StreamEvent,
+) -> Result<(), ClaudeError> {
     tx.send(event).await.map_err(|_| ClaudeError::Cancelled)
 }
 
@@ -69,7 +81,11 @@ pub(crate) fn tool_names(messages: &[Message]) -> BTreeMap<String, String> {
 /// The `content` of a tool message: an error is said to be one, since neither wire
 /// format has a flag for it.
 pub(crate) fn tool_content(content: &str, is_error: bool) -> String {
-    if is_error { format!("error: {content}") } else { content.to_string() }
+    if is_error {
+        format!("error: {content}")
+    } else {
+        content.to_string()
+    }
 }
 
 /// The blocks a provider's stream builds up: one open text block at a time, tool
@@ -96,7 +112,15 @@ impl Blocks {
 
     /// Close the open text block, if any: the event that completes it.
     pub(crate) fn close_text(&mut self) -> Option<StreamEvent> {
-        self.text.take().map(|(index, text)| StreamEvent::BlockStop { index, block: ContentBlock::Text { text, cache_control: None } })
+        self.text
+            .take()
+            .map(|(index, text)| StreamEvent::BlockStop {
+                index,
+                block: ContentBlock::Text {
+                    text,
+                    cache_control: None,
+                },
+            })
     }
 
     /// Open a tool call; its block index.
@@ -107,7 +131,10 @@ impl Blocks {
         index
     }
 
-    pub(crate) fn call_mut(&mut self, position: usize) -> Option<&mut (usize, String, String, String)> {
+    pub(crate) fn call_mut(
+        &mut self,
+        position: usize,
+    ) -> Option<&mut (usize, String, String, String)> {
         self.calls.get_mut(position)
     }
 
@@ -122,9 +149,14 @@ impl Blocks {
             let input = if arguments.trim().is_empty() {
                 serde_json::Value::Object(Default::default())
             } else {
-                serde_json::from_str(&arguments).map_err(|e| ClaudeError::Stream(format!("the arguments of tool `{name}` are not JSON: {e}")))?
+                serde_json::from_str(&arguments).map_err(|e| {
+                    ClaudeError::Stream(format!("the arguments of tool `{name}` are not JSON: {e}"))
+                })?
             };
-            events.push(StreamEvent::BlockStop { index, block: ContentBlock::ToolUse { id, name, input } });
+            events.push(StreamEvent::BlockStop {
+                index,
+                block: ContentBlock::ToolUse { id, name, input },
+            });
         }
         Ok(events)
     }
