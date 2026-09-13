@@ -17,7 +17,7 @@ Map, Resources) and the Chat view are built next.
 
 ## What it needs
 
-- **`satz` 0.56.1 or newer.** `MIN_SATZ` in `crates/satz-studio-core/src/satz/binary.rs`
+- **`satz` 0.56.7 or newer.** `MIN_SATZ` in `crates/satz-studio-core/src/satz/binary.rs`
   names the version, the same release the submodule `vendor/satz` is pinned to. Install
   satz with its installer or bring it up to date with `satz self-update`. The app looks
   at the path set in Settings, then on `PATH`, then at `~/.local/bin/satz`. An older
@@ -60,10 +60,34 @@ live Claude request runs only with `SATZ_STUDIO_LIVE=1` and a credential.
 | `vendor/satz/` | git submodule, pinned to a satz release tag. **The one pin:** satz-core as a path dependency, the presets, the smoke estates and the provider-schema fixture all come from this checkout |
 | `vendor/satz-tree-sitter/` | the generated tree-sitter parser for Satz (`src/`), copied from the grammar repository at the commit named in `COMMIT`; `scripts/sync-grammar.sh` refreshes it and `crates/satz-studio-core/build.rs` compiles it |
 | `tests/fixtures/` | an estate directory over satz's smoke estates, its `config.toml` pointing into the submodule; a test that writes copies it first |
-| `docs/` | [`architecture.md`](docs/architecture.md) and the decision records under [`adr/`](docs/adr/README.md) |
-| `scripts/` | the privacy gate (`check-names.sh`), the satz installer CI runs (`install-satz.sh`, the `MIN_SATZ` release verified against its SHA-256 sidecar), the grammar refresh (`sync-grammar.sh`) |
-| `.github/workflows/` | `ci.yml` (formatting, clippy, tests, a build of the app; Linux on every push, macOS and Windows on a tag) and `names-gate.yml` (the privacy gate over the tree and the commits) |
+| `docs/` | [`architecture.md`](docs/architecture.md), [`ui.md`](docs/ui.md), [`verification.md`](docs/verification.md) and the decision records under [`adr/`](docs/adr/README.md) |
+| `scripts/` | the privacy gate (`check-names.sh`), the satz installer CI runs (`install-satz.sh`, the `MIN_SATZ` release verified against its SHA-256 sidecar), the verification harness (`e2e.sh`), the grammar refresh (`sync-grammar.sh`) |
+| `.github/workflows/` | `ci.yml` (formatting, clippy, tests, the verification harness, a build of the app; Linux on every push, macOS and Windows on a tag), `release.yml` (the bundles of the three operating systems on a tag) and `names-gate.yml` (the privacy gate over the tree and the commits) |
 | `.githooks/` | the pre-commit and commit-msg hooks that run the gate locally |
+
+## Release
+
+A tag `vX.Y.Z` runs `.github/workflows/release.yml`: `dx bundle` on each runner and a
+GitHub release with the bundles and a `.sha256` sidecar per file. The version in the
+file names is the workspace version in `Cargo.toml`; the tag is that version with a
+`v`. A manual run of the workflow builds the same bundles as workflow artifacts.
+
+| file | built on |
+|---|---|
+| `SatzStudio_<tag>_arm64.app.zip`, `SatzStudio_<version>_aarch64.dmg` | `macos-15` |
+| `SatzStudio_<tag>_x86_64.app.zip`, `SatzStudio_<version>_x86_64.dmg` | `macos-15-intel` |
+| `satz-studio_<version>_amd64.deb`, `satz-studio_<version>_x86_64.AppImage` | `ubuntu-24.04` |
+| `SatzStudio_<version>_x64.msi` | `windows-2022` |
+
+The builds are not signed and not notarized. On macOS, Gatekeeper refuses the first
+launch with "Apple could not verify “SatzStudio” is free of malware"; System Settings
+→ Privacy & Security → "Open Anyway" lets it start, and so does
+`xattr -d com.apple.quarantine SatzStudio.app` on the unzipped app. On Windows,
+SmartScreen shows "Windows protected your PC"; "More info" → "Run anyway" installs.
+The `.deb` and the `.AppImage` prompt nothing. The same bundle is built locally with
+`dx bundle --package satz-studio --platform desktop --release`, under
+`target/dx/satz-studio/bundle/`; `docs/verification.md` is what is checked before a
+tag.
 
 ## Privacy
 

@@ -1,3 +1,12 @@
+# What `dx bundle` reads (dioxus-cli 0.7.10, `src/config/bundle.rs`: BundleConfig,
+# DebianSettings, MacOsSettings, WindowsSettings). The icons are the PNGs under
+# assets/icons/: one drawn symbol, rendered at 1024 px by assets/icons/render.py and
+# resampled with `sips -z N N icon-1024.png --out icon-N.png`. dx builds the macOS
+# .icns from the PNG list itself and installs the PNGs under /usr/share/icons/hicolor
+# in the .deb and the AppImage; it derives no .ico, so the Windows executable and the
+# MSI take `windows.icon_path`, which wraps the 256 px PNG (Windows reads a
+# PNG-compressed icon). The MSI upgrade code is the one dx derives from the product
+# name and the architecture (a UUID v5), stable as long as the package name is.
 [application]
 name = "satz-studio"
 
@@ -8,3 +17,18 @@ copyright = "2026"
 category = "DeveloperTool"
 short_description = "The desktop app for satz"
 long_description = "satz-studio runs the satz interview, edits the estate map and the estate files through a typed interface, runs satz commands, and drives satz through Claude."
+icon = [
+  "assets/icons/icon-32.png",
+  "assets/icons/icon-128.png",
+  "assets/icons/icon-256.png",
+  "assets/icons/icon-512.png",
+  "assets/icons/icon-1024.png",
+]
+
+# the runtime halves of the -dev packages ci.yml installs (Ubuntu 24.04 names its
+# time64 builds `…t64` and declares the plain name as provided)
+[bundle.deb]
+depends = ["libwebkit2gtk-4.1-0", "libgtk-3-0", "libayatana-appindicator3-1", "librsvg2-2", "libxdo3"]
+
+[bundle.windows]
+icon_path = "assets/icons/icon.ico"

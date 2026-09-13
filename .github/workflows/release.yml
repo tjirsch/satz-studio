@@ -1,0 +1,113 @@
+name: release
+
+# The bundles of the three operating systems, built by `dx bundle` on a release tag
+# (`v*`) and attached to the GitHub release with a SHA-256 sidecar each; a manual
+# dispatch builds the same bundles and keeps them as workflow artifacts, so the
+# workflow runs without a tag. The version in every file name is the workspace
+# version in Cargo.toml; the tag is expected to be that version with a `v`.
+#
+# Signing and notarization are NOT done. The macOS bundles are unsigned and not
+# notarized: Gatekeeper refuses the first launch of the app with "Apple could not
+# verify “SatzStudio” is free of malware that may harm your Mac" — the way past it
+# is System Settings → Privacy & Security → "Open Anyway" after that dialog, or
+# `xattr -d com.apple.quarantine SatzStudio.app` on the unzipped app; the app in the
+# DMG is the same. The Windows MSI is unsigned: SmartScreen shows "Windows protected
+# your PC" — "More info" → "Run anyway". The .deb and the .AppImage are not signed
+# either; dpkg and the desktop do not prompt. Apple Developer ID signing with
+# notarization, and Windows Authenticode, are what changes this, and each needs a
+# certificate this repository does not hold.
+#
+# Runners, from GitHub's hosted-runner list: macos-15 is arm64 and macos-15-intel is
+# x86_64 (both current); ubuntu-24.04 builds the .deb and the .AppImage against
+# webkit2gtk-4.1; windows-2022 builds the MSI with the WiX 3.14 toolset dx downloads.
+# dioxus-cli is the release binary through cargo-binstall, built from source with
+# `cargo install` only when no binary exists for the runner.
+#
+# What dx writes (dioxus-cli 0.7.10, src/build/request.rs `bundle_dir` and
+# src/bundler/{macos,linux,windows}.rs): under target/dx/satz-studio/bundle/,
+# macos/macos/SatzStudio.app and macos/macos/SatzStudio_<version>_<arch>.dmg,
+# linux/deb/satz-studio_<version>_<arch>.deb and
+# linux/appimage/satz-studio_<version>_<arch>.AppImage,
+# windows/msi/SatzStudio_<version>_<arch>.msi; `--out-dir dist` copies each into
+# dist/ flat, which is what the steps below read.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  bundle:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            arch: arm64
+            package_types: --package-types macos --package-types dmg
+          - os: macos-15-intel
+            arch: x86_64
+            package_types: --package-types macos --package-types dmg
+          - os: ubuntu-24.04
+            arch: x86_64
+            package_types: --package-types deb --package-types appimage
+          - os: windows-2022
+            arch: x86_64
+            package_types: --package-types msi
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: system libraries the desktop crate links (the set of ci.yml), and what the AppImage build needs
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev pkg-config libfuse2 patchelf
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: cargo-bins/cargo-binstall@main
+      - name: dioxus-cli 0.7.10 (the release binary; built from source only when the runner has none)
+        shell: bash
+        run: |
+          cargo binstall dioxus-cli --version 0.7.10 --no-confirm --disable-strategies compile \
+            || cargo install dioxus-cli --version 0.7.10 --locked
+          dx --version
+      - name: dx bundle
+        shell: bash
+        run: |
+          dx bundle --package satz-studio --platform desktop --release ${{ matrix.package_types }} --out-dir dist
+          ls -la dist
+      - name: the artifacts (the .app zipped) and their SHA-256 sidecars
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd dist
+          for app in *.app; do
+            [ -d "$app" ] || continue
+            ditto -c -k --keepParent "$app" "${app%.app}_${GITHUB_REF_NAME}_${{ matrix.arch }}.app.zip"
+            rm -r "$app"
+          done
+          for f in *; do
+            [ -f "$f" ] || continue
+            if command -v sha256sum >/dev/null 2>&1; then
+              sha256sum "$f" > "$f.sha256"
+            else
+              shasum -a 256 "$f" > "$f.sha256"
+            fi
+          done
+          ls -la
+          cat ./*.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: satz-studio-${{ matrix.os }}
+          path: dist/*
+          if-no-files-found: error
+      - uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/v')
+        with:
+          files: dist/*
+          generate_release_notes: true
