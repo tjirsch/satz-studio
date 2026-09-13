@@ -14,7 +14,9 @@ use tokio::sync::{mpsc, oneshot};
 use tokio_util::sync::CancellationToken;
 
 use super::claude::error::ClaudeError;
-use super::claude::types::{CacheControl, ContentBlock, Effort, Message, Request, Response, StopReason, SystemBlock, Usage};
+use super::claude::types::{
+    CacheControl, ContentBlock, Effort, Message, Request, Response, StopReason, SystemBlock, Usage,
+};
 use super::{ChatProvider, StreamEvent};
 use crate::satz::{EstateSession, SatzError, ToolInfo, ToolOutcome};
 
@@ -36,7 +38,11 @@ pub trait ToolHost: Send + Sync {
     fn instructions(&self) -> String;
     /// The text of `satz://guide`.
     fn guide(&self) -> String;
-    fn call<'a>(&'a self, name: &'a str, args: serde_json::Map<String, serde_json::Value>) -> Pin<Box<dyn Future<Output = Result<ToolOutcome, SatzError>> + Send + 'a>>;
+    fn call<'a>(
+        &'a self,
+        name: &'a str,
+        args: serde_json::Map<String, serde_json::Value>,
+    ) -> Pin<Box<dyn Future<Output = Result<ToolOutcome, SatzError>> + Send + 'a>>;
 }
 
 impl ToolHost for EstateSession {
@@ -51,10 +57,20 @@ impl ToolHost for EstateSession {
     }
     /// A tool that is not read-only runs under the estate's write lock, like every
     /// other writer.
-    fn call<'a>(&'a self, name: &'a str, args: serde_json::Map<String, serde_json::Value>) -> Pin<Box<dyn Future<Output = Result<ToolOutcome, SatzError>> + Send + 'a>> {
+    fn call<'a>(
+        &'a self,
+        name: &'a str,
+        args: serde_json::Map<String, serde_json::Value>,
+    ) -> Pin<Box<dyn Future<Output = Result<ToolOutcome, SatzError>> + Send + 'a>> {
         Box::pin(async move {
-            let writes = !self.tool_info(name).is_some_and(|t| t.annotations.is_read_only());
-            let _guard = if writes { Some(self.write_lock().await) } else { None };
+            let writes = !self
+                .tool_info(name)
+                .is_some_and(|t| t.annotations.is_read_only());
+            let _guard = if writes {
+                Some(self.write_lock().await)
+            } else {
+                None
+            };
             self.tool(name, args).await
         })
     }
@@ -91,9 +107,17 @@ impl EstateContext {
         }
         if !self.diagnostics.is_empty() {
             lines.push(format!("diagnostics ({}):", self.diagnostics.len()));
-            lines.extend(self.diagnostics.iter().take(Self::MAX_DIAGNOSTICS).map(|d| format!("  {d}")));
+            lines.extend(
+                self.diagnostics
+                    .iter()
+                    .take(Self::MAX_DIAGNOSTICS)
+                    .map(|d| format!("  {d}")),
+            );
             if self.diagnostics.len() > Self::MAX_DIAGNOSTICS {
-                lines.push(format!("  … and {} more", self.diagnostics.len() - Self::MAX_DIAGNOSTICS));
+                lines.push(format!(
+                    "  … and {} more",
+                    self.diagnostics.len() - Self::MAX_DIAGNOSTICS
+                ));
             }
         }
         if !self.outline.is_empty() {
@@ -170,12 +194,32 @@ pub struct Agent {
 }
 
 impl Agent {
-    pub fn new(provider: Arc<dyn ChatProvider>, session: Arc<EstateSession>, model: String, effort: Effort) -> Self {
+    pub fn new(
+        provider: Arc<dyn ChatProvider>,
+        session: Arc<EstateSession>,
+        model: String,
+        effort: Effort,
+    ) -> Self {
         Self::with_host(provider, session, model, effort)
     }
 
-    pub fn with_host(provider: Arc<dyn ChatProvider>, host: Arc<dyn ToolHost>, model: String, effort: Effort) -> Self {
-        Self { provider, host, model, effort, fallbacks: true, auto_approve_writes: false, messages: Vec::new(), allowed: BTreeMap::new(), context: None }
+    pub fn with_host(
+        provider: Arc<dyn ChatProvider>,
+        host: Arc<dyn ToolHost>,
+        model: String,
+        effort: Effort,
+    ) -> Self {
+        Self {
+            provider,
+            host,
+            model,
+            effort,
+            fallbacks: true,
+            auto_approve_writes: false,
+            messages: Vec::new(),
+            allowed: BTreeMap::new(),
+            context: None,
+        }
     }
 
     pub fn set_context(&mut self, context: EstateContext) {
@@ -193,9 +237,15 @@ impl Agent {
                 guide.push(part);
             }
         }
-        let mut system = vec![SystemBlock { text: guide.join("\n\n"), cache_control: Some(CacheControl::ephemeral()) }];
+        let mut system = vec![SystemBlock {
+            text: guide.join("\n\n"),
+            cache_control: Some(CacheControl::ephemeral()),
+        }];
         if let Some(context) = &self.context {
-            system.push(SystemBlock { text: context.render(), cache_control: None });
+            system.push(SystemBlock {
+                text: context.render(),
+                cache_control: None,
+            });
         }
         Request {
             model: self.model.clone(),
@@ -213,7 +263,12 @@ impl Agent {
     /// its messages; a turn that is refused, cancelled or fails leaves `messages` as
     /// it was before the turn, so the transcript is valid for the next request either
     /// way.
-    pub async fn run_turn(&mut self, user_text: String, events: mpsc::Sender<AgentEvent>, cancel: CancellationToken) -> Result<(), ClaudeError> {
+    pub async fn run_turn(
+        &mut self,
+        user_text: String,
+        events: mpsc::Sender<AgentEvent>,
+        cancel: CancellationToken,
+    ) -> Result<(), ClaudeError> {
         let start = self.messages.len();
         match self.turn(user_text, &events, &cancel).await {
             Ok(()) => Ok(()),
@@ -221,9 +276,15 @@ impl Agent {
                 self.messages.truncate(start);
                 let event = match &e {
                     ClaudeError::Cancelled => AgentEvent::Cancelled,
-                    ClaudeError::Refused { category, explanation, recommended_model } => {
-                        AgentEvent::Refused { category: category.clone(), explanation: explanation.clone(), recommended_model: recommended_model.clone() }
-                    }
+                    ClaudeError::Refused {
+                        category,
+                        explanation,
+                        recommended_model,
+                    } => AgentEvent::Refused {
+                        category: category.clone(),
+                        explanation: explanation.clone(),
+                        recommended_model: recommended_model.clone(),
+                    },
                     other => AgentEvent::Failed(other.clone()),
                 };
                 // the receiver may be gone; the error is returned either way
@@ -233,7 +294,12 @@ impl Agent {
         }
     }
 
-    async fn turn(&mut self, user_text: String, events: &mpsc::Sender<AgentEvent>, cancel: &CancellationToken) -> Result<(), ClaudeError> {
+    async fn turn(
+        &mut self,
+        user_text: String,
+        events: &mpsc::Sender<AgentEvent>,
+        cancel: &CancellationToken,
+    ) -> Result<(), ClaudeError> {
         let mut next_user = Some(Message::user(vec![ContentBlock::text(user_text)]));
         let mut pauses = 0;
         loop {
@@ -242,36 +308,61 @@ impl Agent {
             }
             let request = self.request();
             let response = self.stream_once(&request, events, cancel).await?;
-            self.messages.push(Message::assistant(response.content.clone()));
+            self.messages
+                .push(Message::assistant(response.content.clone()));
             match response.stop_reason {
                 StopReason::ToolUse => {
                     let results = self.execute_tools(&response, events, cancel).await?;
                     if results.is_empty() {
-                        return Err(ClaudeError::Stream("stop_reason tool_use without a tool_use block".to_string()));
+                        return Err(ClaudeError::Stream(
+                            "stop_reason tool_use without a tool_use block".to_string(),
+                        ));
                     }
                     next_user = Some(Message::user(results));
                 }
                 StopReason::EndTurn | StopReason::MaxTokens | StopReason::StopSequence => {
-                    send(events, AgentEvent::TurnDone { stop_reason: response.stop_reason, usage: response.usage }).await?;
+                    send(
+                        events,
+                        AgentEvent::TurnDone {
+                            stop_reason: response.stop_reason,
+                            usage: response.usage,
+                        },
+                    )
+                    .await?;
                     return Ok(());
                 }
                 StopReason::PauseTurn => {
                     pauses += 1;
                     if pauses > MAX_PAUSES {
-                        return Err(ClaudeError::Stream(format!("the model paused {pauses} times in one turn")));
+                        return Err(ClaudeError::Stream(format!(
+                            "the model paused {pauses} times in one turn"
+                        )));
                     }
                 }
                 StopReason::Refusal => {
                     let details = response.stop_details.unwrap_or_default();
-                    return Err(ClaudeError::Refused { category: details.category, explanation: details.explanation, recommended_model: details.recommended_model });
+                    return Err(ClaudeError::Refused {
+                        category: details.category,
+                        explanation: details.explanation,
+                        recommended_model: details.recommended_model,
+                    });
                 }
-                StopReason::Unknown => return Err(ClaudeError::Stream("a stop reason this code does not know".to_string())),
+                StopReason::Unknown => {
+                    return Err(ClaudeError::Stream(
+                        "a stop reason this code does not know".to_string(),
+                    ));
+                }
             }
         }
     }
 
     /// One request: stream it, forward the deltas, fold the blocks into the response.
-    async fn stream_once(&self, request: &Request, events: &mpsc::Sender<AgentEvent>, cancel: &CancellationToken) -> Result<Response, ClaudeError> {
+    async fn stream_once(
+        &self,
+        request: &Request,
+        events: &mpsc::Sender<AgentEvent>,
+        cancel: &CancellationToken,
+    ) -> Result<Response, ClaudeError> {
         let (tx, mut rx) = mpsc::channel(64);
         let streaming = self.provider.stream(request, tx, cancel.clone());
         let forwarding = async {
@@ -290,18 +381,32 @@ impl Agent {
                         tool_ids.insert(index, id.clone());
                         Some(AgentEvent::ToolUseStarted { id, name })
                     }
-                    StreamEvent::ToolInputDelta { index, partial_json } => {
-                        let id = tool_ids.get(&index).cloned().ok_or_else(|| ClaudeError::Stream(format!("an input delta for block {index}, which is not a tool call")))?;
+                    StreamEvent::ToolInputDelta {
+                        index,
+                        partial_json,
+                    } => {
+                        let id = tool_ids.get(&index).cloned().ok_or_else(|| {
+                            ClaudeError::Stream(format!(
+                                "an input delta for block {index}, which is not a tool call"
+                            ))
+                        })?;
                         Some(AgentEvent::ToolInputDelta { id, partial_json })
                     }
                     StreamEvent::BlockStop { index, block } => {
                         if index != fold.content.len() {
-                            return Err(ClaudeError::Stream(format!("block {index} completed where block {} was expected", fold.content.len())));
+                            return Err(ClaudeError::Stream(format!(
+                                "block {index} completed where block {} was expected",
+                                fold.content.len()
+                            )));
                         }
                         fold.content.push(block);
                         None
                     }
-                    StreamEvent::Done { stop_reason, stop_details, usage } => {
+                    StreamEvent::Done {
+                        stop_reason,
+                        stop_details,
+                        usage,
+                    } => {
                         fold.done = Some((stop_reason, stop_details, usage));
                         None
                     }
@@ -327,21 +432,39 @@ impl Agent {
     }
 
     /// Every `tool_use` block of the response, in order, under the approval gate.
-    async fn execute_tools(&mut self, response: &Response, events: &mpsc::Sender<AgentEvent>, cancel: &CancellationToken) -> Result<Vec<ContentBlock>, ClaudeError> {
+    async fn execute_tools(
+        &mut self,
+        response: &Response,
+        events: &mpsc::Sender<AgentEvent>,
+        cancel: &CancellationToken,
+    ) -> Result<Vec<ContentBlock>, ClaudeError> {
         let tools = self.host.tools();
         let mut results = Vec::new();
         for block in &response.content {
-            let ContentBlock::ToolUse { id, name, input } = block else { continue };
+            let ContentBlock::ToolUse { id, name, input } = block else {
+                continue;
+            };
             let info = tools.iter().find(|t| &t.name == name);
             let outcome = match (info, input.as_object()) {
                 (None, _) => Outcome::refused(format!("no such tool: {name}")),
-                (Some(_), None) => Outcome::refused("the tool input is not a JSON object".to_string()),
+                (Some(_), None) => {
+                    Outcome::refused("the tool input is not a JSON object".to_string())
+                }
                 (Some(info), Some(args)) => {
                     if self.runs_without_asking(info) {
                         self.run_tool(name, args.clone(), cancel).await?
                     } else {
                         let (ack, answer) = oneshot::channel();
-                        send(events, AgentEvent::ToolCallPending { id: id.clone(), name: name.clone(), input: input.clone(), approval: ack }).await?;
+                        send(
+                            events,
+                            AgentEvent::ToolCallPending {
+                                id: id.clone(),
+                                name: name.clone(),
+                                input: input.clone(),
+                                approval: ack,
+                            },
+                        )
+                        .await?;
                         let approval = tokio::select! {
                             a = answer => a.map_err(|_| ClaudeError::Tool { name: name.clone(), message: "the approval card was dropped without an answer".to_string() })?,
                             _ = cancel.cancelled() => return Err(ClaudeError::Cancelled),
@@ -352,27 +475,48 @@ impl Agent {
                                 self.allowed.insert(name.clone(), ());
                                 self.run_tool(name, args.clone(), cancel).await?
                             }
-                            Approval::Deny => Outcome::refused("denied by the operator".to_string()),
+                            Approval::Deny => {
+                                Outcome::refused("denied by the operator".to_string())
+                            }
                         }
                     }
                 }
             };
-            send(events, AgentEvent::ToolResult { id: id.clone(), name: name.clone(), outcome: outcome.outcome.clone(), millis: outcome.millis }).await?;
+            send(
+                events,
+                AgentEvent::ToolResult {
+                    id: id.clone(),
+                    name: name.clone(),
+                    outcome: outcome.outcome.clone(),
+                    millis: outcome.millis,
+                },
+            )
+            .await?;
             results.push(bridge::tool_result(id, &outcome.outcome));
         }
         Ok(results)
     }
 
     /// Without a card: a read-only tool; a non-destructive one when writes are
-    /// auto-approved; a tool the operator allowed for the session.
+    /// auto-approved or when the operator allowed the tool for the session. A
+    /// destructive tool asks every time, whatever was allowed before.
     fn runs_without_asking(&self, tool: &ToolInfo) -> bool {
         let a = &tool.annotations;
-        a.is_read_only() || (self.auto_approve_writes && a.destructive != Some(true)) || self.allowed.contains_key(&tool.name)
+        if a.is_read_only() {
+            return true;
+        }
+        let destructive = a.destructive == Some(true);
+        !destructive && (self.auto_approve_writes || self.allowed.contains_key(&tool.name))
     }
 
     /// The call runs to completion on its own task: cancellation stops the wait and
     /// drops the result, never a write half-done.
-    async fn run_tool(&self, name: &str, args: serde_json::Map<String, serde_json::Value>, cancel: &CancellationToken) -> Result<Outcome, ClaudeError> {
+    async fn run_tool(
+        &self,
+        name: &str,
+        args: serde_json::Map<String, serde_json::Value>,
+        cancel: &CancellationToken,
+    ) -> Result<Outcome, ClaudeError> {
         let host = Arc::clone(&self.host);
         let tool = name.to_string();
         let started = Instant::now();
@@ -381,7 +525,10 @@ impl Agent {
             joined = task => joined.map_err(|e| ClaudeError::Tool { name: name.to_string(), message: format!("the tool task ended abnormally: {e}") })?.map_err(|e| ClaudeError::Tool { name: name.to_string(), message: e.to_string() })?,
             _ = cancel.cancelled() => return Err(ClaudeError::Cancelled),
         };
-        Ok(Outcome { outcome, millis: started.elapsed().as_millis() })
+        Ok(Outcome {
+            outcome,
+            millis: started.elapsed().as_millis(),
+        })
     }
 }
 
@@ -393,7 +540,14 @@ struct Outcome {
 
 impl Outcome {
     fn refused(text: String) -> Self {
-        Self { outcome: ToolOutcome { structured: None, text, is_error: true }, millis: 0 }
+        Self {
+            outcome: ToolOutcome {
+                structured: None,
+                text,
+                is_error: true,
+            },
+            millis: 0,
+        }
     }
 }
 
@@ -408,9 +562,20 @@ struct Fold {
 
 impl Fold {
     fn finish(self) -> Result<Response, ClaudeError> {
-        let id = self.id.ok_or_else(|| ClaudeError::Stream("the stream ended without a start".to_string()))?;
-        let (stop_reason, stop_details, usage) = self.done.ok_or_else(|| ClaudeError::Stream("the stream ended without its end".to_string()))?;
-        Ok(Response { id, model: self.model, content: self.content, stop_reason, stop_details, usage })
+        let id = self
+            .id
+            .ok_or_else(|| ClaudeError::Stream("the stream ended without a start".to_string()))?;
+        let (stop_reason, stop_details, usage) = self
+            .done
+            .ok_or_else(|| ClaudeError::Stream("the stream ended without its end".to_string()))?;
+        Ok(Response {
+            id,
+            model: self.model,
+            content: self.content,
+            stop_reason,
+            stop_details,
+            usage,
+        })
     }
 }
 

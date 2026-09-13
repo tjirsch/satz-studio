@@ -51,16 +51,33 @@ impl std::fmt::Display for Allow {
 pub enum SatzError {
     #[error("satz not found; tried {}", tried.iter().map(|p| p.display().to_string()).collect::<Vec<_>>().join(", "))]
     NotFound { tried: Vec<PathBuf> },
-    #[error("satz {found} is too old: satz-studio needs {required} or newer — run `satz self-update`")]
-    TooOld { found: semver::Version, required: semver::Version },
+    #[error(
+        "satz {found} is too old: satz-studio needs {required} or newer — run `satz self-update`"
+    )]
+    TooOld {
+        found: semver::Version,
+        required: semver::Version,
+    },
     #[error("could not read a version from `satz --version`: {0:?}")]
     VersionUnparsable(String),
     #[error("{context}: {source}")]
-    Io { context: String, #[source] source: std::io::Error },
+    Io {
+        context: String,
+        #[source]
+        source: std::io::Error,
+    },
     #[error("`satz {command}` exited with {status}:\n{stderr}")]
-    Exit { command: String, status: std::process::ExitStatus, stderr: String },
+    Exit {
+        command: String,
+        status: std::process::ExitStatus,
+        stderr: String,
+    },
     #[error("`satz {command}` printed JSON this app does not understand: {source}")]
-    Json { command: String, #[source] source: serde_json::Error },
+    Json {
+        command: String,
+        #[source]
+        source: serde_json::Error,
+    },
     #[error("satz mcp: {0}")]
     Mcp(String),
     #[error("{tool} refused: {text}")]

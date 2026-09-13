@@ -80,7 +80,7 @@ pub(super) fn build(
                         "line active, gate false: `use \"{}\" when {gate}` is in, but `{gate}` is false, so the pack is left out",
                         u.path
                     ),
-                    source: DiagSource::Cst,
+                    source: DiagSource::Model,
                 }
                 .at(main, u.line),
             );

@@ -25,7 +25,10 @@ pub use agent::{Agent, AgentEvent, Approval, EstateContext, MAX_TOKENS, ToolHost
 pub use auth::{Credential, CredentialSource};
 pub use claude::client::ClaudeClient;
 pub use claude::error::ClaudeError;
-pub use claude::types::{CacheControl, ContentBlock, Effort, Message, Request, Response, Role, StopDetails, StopReason, SystemBlock, ToolDef, Usage};
+pub use claude::types::{
+    CacheControl, ContentBlock, Effort, Message, Request, Response, Role, StopDetails, StopReason,
+    SystemBlock, ToolDef, Usage,
+};
 pub use provider::ollama::Ollama;
 pub use provider::openai_compat::OpenAiCompat;
 
@@ -35,13 +38,30 @@ pub use provider::openai_compat::OpenAiCompat;
 /// the response from those and from [`StreamEvent::Done`].
 #[derive(Debug, Clone, PartialEq)]
 pub enum StreamEvent {
-    Started { id: String, model: String },
+    Started {
+        id: String,
+        model: String,
+    },
     TextDelta(String),
     ThinkingDelta(String),
-    ToolUseStart { index: usize, id: String, name: String },
-    ToolInputDelta { index: usize, partial_json: String },
-    BlockStop { index: usize, block: ContentBlock },
-    Done { stop_reason: StopReason, stop_details: Option<StopDetails>, usage: Usage },
+    ToolUseStart {
+        index: usize,
+        id: String,
+        name: String,
+    },
+    ToolInputDelta {
+        index: usize,
+        partial_json: String,
+    },
+    BlockStop {
+        index: usize,
+        block: ContentBlock,
+    },
+    Done {
+        stop_reason: StopReason,
+        stop_details: Option<StopDetails>,
+        usage: Usage,
+    },
     Error(String),
 }
 
@@ -63,5 +83,10 @@ pub type StreamFuture<'a> = Pin<Box<dyn Future<Output = Result<(), ClaudeError>>
 pub trait ChatProvider: Send + Sync {
     fn id(&self) -> &str;
     fn capabilities(&self) -> Capabilities;
-    fn stream<'a>(&'a self, req: &'a Request, tx: mpsc::Sender<StreamEvent>, cancel: CancellationToken) -> StreamFuture<'a>;
+    fn stream<'a>(
+        &'a self,
+        req: &'a Request,
+        tx: mpsc::Sender<StreamEvent>,
+        cancel: CancellationToken,
+    ) -> StreamFuture<'a>;
 }

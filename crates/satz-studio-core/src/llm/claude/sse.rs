@@ -30,7 +30,9 @@ impl Lines {
             if line.last() == Some(&b'\r') {
                 line.pop();
             }
-            lines.push(String::from_utf8(line).map_err(|e| ClaudeError::Stream(format!("a line of the stream is not UTF-8: {e}")))?);
+            lines.push(String::from_utf8(line).map_err(|e| {
+                ClaudeError::Stream(format!("a line of the stream is not UTF-8: {e}"))
+            })?);
         }
         Ok(lines)
     }
@@ -93,7 +95,9 @@ impl SseDecoder {
     /// without their newline, mean the stream was cut.
     pub fn finish(self) -> Result<(), ClaudeError> {
         if !self.lines.pending().is_empty() || self.event.is_some() || !self.data.is_empty() {
-            return Err(ClaudeError::Stream("the stream ended inside an event".to_string()));
+            return Err(ClaudeError::Stream(
+                "the stream ended inside an event".to_string(),
+            ));
         }
         Ok(())
     }
@@ -104,7 +108,10 @@ impl SseDecoder {
             return None;
         }
         let data = std::mem::take(&mut self.data).join("\n");
-        Some(SseEvent { event: event.unwrap_or_else(|| "message".to_string()), data })
+        Some(SseEvent {
+            event: event.unwrap_or_else(|| "message".to_string()),
+            data,
+        })
     }
 }
 
@@ -177,9 +184,18 @@ struct WireError {
 /// A block while its deltas arrive.
 enum Building {
     Text(String),
-    Thinking { thinking: String, signature: String },
+    Thinking {
+        thinking: String,
+        signature: String,
+    },
     RedactedThinking(String),
-    ToolUse { id: String, name: String, input: serde_json::Value, json: String, deltas: bool },
+    ToolUse {
+        id: String,
+        name: String,
+        input: serde_json::Value,
+        json: String,
+        deltas: bool,
+    },
     Other(serde_json::Value),
 }
 
@@ -206,7 +222,17 @@ impl Default for Assembler {
 
 impl Assembler {
     pub fn new() -> Self {
-        Self { id: None, model: String::new(), usage: Usage::default(), stop_reason: None, stop_details: None, blocks: Vec::new(), done: Vec::new(), open: BTreeMap::new(), stopped: false }
+        Self {
+            id: None,
+            model: String::new(),
+            usage: Usage::default(),
+            stop_reason: None,
+            stop_details: None,
+            blocks: Vec::new(),
+            done: Vec::new(),
+            open: BTreeMap::new(),
+            stopped: false,
+        }
     }
 
     /// `message_start` has arrived.
@@ -216,20 +242,38 @@ impl Assembler {
 
     /// Fold one event; the stream events it produces, in order.
     pub fn feed(&mut self, event: &SseEvent) -> Result<Vec<StreamEvent>, ClaudeError> {
-        let wire: Wire = serde_json::from_str(&event.data).map_err(|e| ClaudeError::Stream(format!("event `{}` is not one this code reads: {e}", event.event)))?;
+        let wire: Wire = serde_json::from_str(&event.data).map_err(|e| {
+            ClaudeError::Stream(format!(
+                "event `{}` is not one this code reads: {e}",
+                event.event
+            ))
+        })?;
         let mut out = Vec::new();
         match wire {
             Wire::MessageStart { message } => {
                 self.id = Some(message.id.clone());
                 self.model = message.model.clone();
                 self.usage = message.usage;
-                out.push(StreamEvent::Started { id: message.id, model: message.model });
+                out.push(StreamEvent::Started {
+                    id: message.id,
+                    model: message.model,
+                });
             }
-            Wire::ContentBlockStart { index, content_block } => {
+            Wire::ContentBlockStart {
+                index,
+                content_block,
+            } => {
                 if index != self.blocks.len() {
-                    return Err(ClaudeError::Stream(format!("content block {index} started where {} was expected", self.blocks.len())));
+                    return Err(ClaudeError::Stream(format!(
+                        "content block {index} started where {} was expected",
+                        self.blocks.len()
+                    )));
                 }
-                let kind = content_block.get("type").and_then(serde_json::Value::as_str).unwrap_or_default().to_string();
+                let kind = content_block
+                    .get("type")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or_default()
+                    .to_string();
                 let building = match kind.as_str() {
                     "text" => {
                         let text = field_str(&content_block, "text");
@@ -238,14 +282,32 @@ impl Assembler {
                         }
                         Building::Text(text)
                     }
-                    "thinking" => Building::Thinking { thinking: field_str(&content_block, "thinking"), signature: field_str(&content_block, "signature") },
-                    "redacted_thinking" => Building::RedactedThinking(field_str(&content_block, "data")),
+                    "thinking" => Building::Thinking {
+                        thinking: field_str(&content_block, "thinking"),
+                        signature: field_str(&content_block, "signature"),
+                    },
+                    "redacted_thinking" => {
+                        Building::RedactedThinking(field_str(&content_block, "data"))
+                    }
                     "tool_use" => {
                         let id = field_str(&content_block, "id");
                         let name = field_str(&content_block, "name");
-                        let input = content_block.get("input").cloned().unwrap_or(serde_json::Value::Object(Default::default()));
-                        out.push(StreamEvent::ToolUseStart { index, id: id.clone(), name: name.clone() });
-                        Building::ToolUse { id, name, input, json: String::new(), deltas: false }
+                        let input = content_block
+                            .get("input")
+                            .cloned()
+                            .unwrap_or(serde_json::Value::Object(Default::default()));
+                        out.push(StreamEvent::ToolUseStart {
+                            index,
+                            id: id.clone(),
+                            name: name.clone(),
+                        });
+                        Building::ToolUse {
+                            id,
+                            name,
+                            input,
+                            json: String::new(),
+                            deltas: false,
+                        }
                     }
                     _ => Building::Other(content_block),
                 };
@@ -253,7 +315,11 @@ impl Assembler {
                 self.open.insert(index, ());
             }
             Wire::ContentBlockDelta { index, delta } => {
-                let kind = delta.get("type").and_then(serde_json::Value::as_str).unwrap_or_default().to_string();
+                let kind = delta
+                    .get("type")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or_default()
+                    .to_string();
                 let block = self.building_mut(index)?;
                 match (kind.as_str(), block) {
                     ("text_delta", Building::Text(text)) => {
@@ -266,24 +332,56 @@ impl Assembler {
                         thinking.push_str(&piece);
                         out.push(StreamEvent::ThinkingDelta(piece));
                     }
-                    ("signature_delta", Building::Thinking { signature, .. }) => signature.push_str(&field_str(&delta, "signature")),
+                    ("signature_delta", Building::Thinking { signature, .. }) => {
+                        signature.push_str(&field_str(&delta, "signature"))
+                    }
                     ("input_json_delta", Building::ToolUse { json, deltas, .. }) => {
                         let piece = field_str(&delta, "partial_json");
                         json.push_str(&piece);
                         *deltas = true;
-                        out.push(StreamEvent::ToolInputDelta { index, partial_json: piece });
+                        out.push(StreamEvent::ToolInputDelta {
+                            index,
+                            partial_json: piece,
+                        });
                     }
-                    (other, _) => return Err(ClaudeError::Stream(format!("delta `{other}` on content block {index} is not one this code folds"))),
+                    (other, _) => {
+                        return Err(ClaudeError::Stream(format!(
+                            "delta `{other}` on content block {index} is not one this code folds"
+                        )));
+                    }
                 }
             }
             Wire::ContentBlockStop { index } => {
                 let block = self.building_mut(index)?;
                 let done = match std::mem::replace(block, Building::Text(String::new())) {
-                    Building::Text(text) => ContentBlock::Text { text, cache_control: None },
-                    Building::Thinking { thinking, signature } => ContentBlock::Thinking { thinking, signature },
+                    Building::Text(text) => ContentBlock::Text {
+                        text,
+                        cache_control: None,
+                    },
+                    Building::Thinking {
+                        thinking,
+                        signature,
+                    } => ContentBlock::Thinking {
+                        thinking,
+                        signature,
+                    },
                     Building::RedactedThinking(data) => ContentBlock::RedactedThinking { data },
-                    Building::ToolUse { id, name, input, json, deltas } => {
-                        let input = if deltas { serde_json::from_str(&json).map_err(|e| ClaudeError::Stream(format!("the input of tool `{name}` is not JSON: {e}")))? } else { input };
+                    Building::ToolUse {
+                        id,
+                        name,
+                        input,
+                        json,
+                        deltas,
+                    } => {
+                        let input = if deltas {
+                            serde_json::from_str(&json).map_err(|e| {
+                                ClaudeError::Stream(format!(
+                                    "the input of tool `{name}` is not JSON: {e}"
+                                ))
+                            })?
+                        } else {
+                            input
+                        };
                         ContentBlock::ToolUse { id, name, input }
                     }
                     Building::Other(value) => ContentBlock::Other(value),
@@ -291,7 +389,10 @@ impl Assembler {
                 self.blocks[index] = None;
                 self.open.remove(&index);
                 if index != self.done.len() {
-                    return Err(ClaudeError::Stream(format!("content block {index} stopped before block {}", self.done.len())));
+                    return Err(ClaudeError::Stream(format!(
+                        "content block {index} stopped before block {}",
+                        self.done.len()
+                    )));
                 }
                 self.done.push(done.clone());
                 out.push(StreamEvent::BlockStop { index, block: done });
@@ -311,7 +412,8 @@ impl Assembler {
                         self.usage.output_tokens = n;
                     }
                     if partial.cache_creation_input_tokens.is_some() {
-                        self.usage.cache_creation_input_tokens = partial.cache_creation_input_tokens;
+                        self.usage.cache_creation_input_tokens =
+                            partial.cache_creation_input_tokens;
                     }
                     if partial.cache_read_input_tokens.is_some() {
                         self.usage.cache_read_input_tokens = partial.cache_read_input_tokens;
@@ -320,37 +422,72 @@ impl Assembler {
             }
             Wire::MessageStop => {
                 if !self.open.is_empty() {
-                    return Err(ClaudeError::Stream(format!("message_stop with content block {} still open", self.open.keys().next().expect("non-empty"))));
+                    return Err(ClaudeError::Stream(format!(
+                        "message_stop with content block {} still open",
+                        self.open.keys().next().expect("non-empty")
+                    )));
                 }
-                let stop_reason = self.stop_reason.ok_or_else(|| ClaudeError::Stream("message_stop without a stop_reason".to_string()))?;
+                let stop_reason = self.stop_reason.ok_or_else(|| {
+                    ClaudeError::Stream("message_stop without a stop_reason".to_string())
+                })?;
                 self.stopped = true;
-                out.push(StreamEvent::Done { stop_reason, stop_details: self.stop_details.clone(), usage: self.usage });
+                out.push(StreamEvent::Done {
+                    stop_reason,
+                    stop_details: self.stop_details.clone(),
+                    usage: self.usage,
+                });
             }
             Wire::Ping => {}
-            Wire::Error { error } => return Err(ClaudeError::Stream(format!("{}: {}", error.kind, error.message))),
+            Wire::Error { error } => {
+                return Err(ClaudeError::Stream(format!(
+                    "{}: {}",
+                    error.kind, error.message
+                )));
+            }
         }
         Ok(out)
     }
 
     /// The response, once `message_stop` has been folded.
     pub fn finish(self) -> Result<Response, ClaudeError> {
-        let id = self.id.ok_or_else(|| ClaudeError::Stream("the stream ended before message_start".to_string()))?;
+        let id = self.id.ok_or_else(|| {
+            ClaudeError::Stream("the stream ended before message_start".to_string())
+        })?;
         if !self.stopped {
-            return Err(ClaudeError::Stream("the stream ended before message_stop".to_string()));
+            return Err(ClaudeError::Stream(
+                "the stream ended before message_stop".to_string(),
+            ));
         }
-        let stop_reason = self.stop_reason.ok_or_else(|| ClaudeError::Stream("message_stop without a stop_reason".to_string()))?;
-        Ok(Response { id, model: self.model, content: self.done, stop_reason, stop_details: self.stop_details, usage: self.usage })
+        let stop_reason = self
+            .stop_reason
+            .ok_or_else(|| ClaudeError::Stream("message_stop without a stop_reason".to_string()))?;
+        Ok(Response {
+            id,
+            model: self.model,
+            content: self.done,
+            stop_reason,
+            stop_details: self.stop_details,
+            usage: self.usage,
+        })
     }
 
     fn building_mut(&mut self, index: usize) -> Result<&mut Building, ClaudeError> {
         match self.blocks.get_mut(index) {
             Some(Some(block)) => Ok(block),
-            Some(None) => Err(ClaudeError::Stream(format!("content block {index} is already stopped"))),
-            None => Err(ClaudeError::Stream(format!("content block {index} was never started"))),
+            Some(None) => Err(ClaudeError::Stream(format!(
+                "content block {index} is already stopped"
+            ))),
+            None => Err(ClaudeError::Stream(format!(
+                "content block {index} was never started"
+            ))),
         }
     }
 }
 
 fn field_str(value: &serde_json::Value, key: &str) -> String {
-    value.get(key).and_then(serde_json::Value::as_str).unwrap_or_default().to_string()
+    value
+        .get(key)
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or_default()
+        .to_string()
 }

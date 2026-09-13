@@ -166,8 +166,9 @@ impl McpSession {
         let service = match ().serve(transport).await {
             Ok(s) => s,
             Err(e) => {
-                // What satz said before it died is the error.
-                pump.abort();
+                // What satz said before it died is the error: its stderr closes when it
+                // exits, so the pump is awaited (bounded) before the backlog is read.
+                let _ = tokio::time::timeout(STDERR_DRAIN, pump).await;
                 let said = backlog
                     .lock()
                     .expect("the backlog lock is never poisoned")
