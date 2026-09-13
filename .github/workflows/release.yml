@@ -102,6 +102,11 @@ jobs:
           ls -la
           cat ./*.sha256
       - uses: actions/upload-artifact@v4
+        # Actions artifact storage is a quota the account can exhaust; the release
+        # step below uploads to the release itself, which is not that quota. So this
+        # upload serves a dispatch run only, and never gates the release.
+        if: github.event_name == 'workflow_dispatch'
+        continue-on-error: true
         with:
           name: satz-studio-${{ matrix.os }}
           path: dist/*
