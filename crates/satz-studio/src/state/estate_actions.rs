@@ -245,6 +245,7 @@ async fn reload(session: &Arc<EstateSession>, app: Store<AppStore>) {
 
     let built = match parsed {
         Ok(Ok((cst, env, registry))) => {
+            let schema_dir = session.dir.schema_dir();
             let registry = match registry {
                 Ok(r) => Some(r),
                 Err(SchemaError::Missing(_)) => None,
@@ -257,7 +258,7 @@ async fn reload(session: &Arc<EstateSession>, app: Store<AppStore>) {
                 EstateModel::build(
                     &session.main,
                     &cst,
-                    registry.as_ref(),
+                    registry.as_ref().ok_or(schema_dir.as_path()),
                     &env,
                     q,
                     diagnostics.clone(),

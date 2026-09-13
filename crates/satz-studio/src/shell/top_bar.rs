@@ -42,7 +42,7 @@ pub fn TopBar() -> Element {
                 }
                 {
                     let (icon, label, error) = match &schema {
-                        Some(SchemaStatus::Loaded { provider, version, resources }) => ("schema", format!("{provider} {version}: {resources} types"), false),
+                        Some(SchemaStatus::Loaded { providers, resources }) => ("schema", format!("{}: {resources} types", providers.join(", ")), false),
                         Some(SchemaStatus::Missing(_)) => ("schema", "no schema: run update-schema".to_string(), true),
                         None => ("schema", "schema not read".to_string(), false),
                     };
