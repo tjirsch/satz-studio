@@ -15,10 +15,11 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use dioxus::prelude::*;
+use satz_studio_core::cst::Cst;
 use satz_studio_core::diag::Diagnostic;
 use satz_studio_core::llm::CredentialSource;
 use satz_studio_core::model::EstateModel;
-use satz_studio_core::satz::reports::QuestionsReport;
+use satz_studio_core::satz::reports::{InterviewReport, QuestionsReport};
 use satz_studio_core::satz::{CliLine, EstateSession, SatzBinary};
 use satz_studio_core::settings::Settings;
 
@@ -181,7 +182,12 @@ pub enum CredentialStatus {
 #[derive(Store, Default)]
 pub struct EstateStore {
     pub model: Option<Arc<EstateModel>>,
+    /// the main file's document tree as read at the last reload: the views slice a
+    /// value's source text and a line's text from it
+    pub cst: Option<Arc<Cst>>,
     pub questions: Option<QuestionsReport>,
+    /// what the last `satz_interview` call returned — `rename_to` is read from it
+    pub interview: Option<InterviewReport>,
     pub diagnostics: Vec<Diagnostic>,
     /// the streamed output of the last command, ANSI stripped
     pub command_log: Vec<CliLine>,

@@ -39,7 +39,7 @@ so a log line re-renders the log and not the rail:
 | `snackbar` | the toast queue (`VecDeque<Toast>`, three visible) |
 | `credential` | what `Credential::resolve` answered |
 | `drawer_open` | the diagnostics drawer |
-| `estate` | the `EstateStore`: `model`, `questions`, `diagnostics`, `command_log`, `running`, `last_command`, `outcome`, `loading` — reset when an estate opens or closes |
+| `estate` | the `EstateStore`: `model`, `cst` (the main file's document tree as read at the last reload — the views slice a value's source text and a line's text from it), `questions`, `interview` (what the last `satz_interview` call returned; `rename_to` is read from it), `diagnostics`, `command_log`, `running`, `last_command`, `outcome`, `loading` — reset when an estate opens or closes |
 
 `DiagnosticSelection(Signal<Option<Diagnostic>>)` is a second context: the drawer sets
 it when a row is clicked, the estate views read it.
@@ -68,6 +68,30 @@ nothing blocks in an event handler.
   (`EstateSession::external_command`) and opens it in the OS terminal. `Close` drops the
   session.
 
+  The estate is written from this coroutine only, every write under
+  `EstateSession::write_lock`, verified by `satz transpile --check` and followed by a
+  reload:
+
+  - `Answer { subject, value }` is satz's own writer: `Snapshot::take` of the main file,
+    `satz_interview {answers: {subject: value}}` (for a `oneof` the value is the chosen
+    option's param name), then `Snapshot::verify` through `McpChecker` on the real path.
+    A refused tool call wrote nothing and is satz's own sentence in a toast (the brace
+    refusal included). A check that refuses restores the bytes, puts its diagnostics in
+    the drawer — they stay through the reload that follows — and a toast names the
+    first line. `AcceptDefaults` is the same call with `accept_defaults: true`.
+  - `CommitEdit(Edit)` is the app's writer: `EditSession::open`, `apply(&[edit])`,
+    `Proposed::commit(&McpChecker)`. An edit the document layer refuses (`EditError`)
+    is a toast and nothing was written; `Rollback::Check` is diagnostics and a toast as
+    above; `Rollback::ChangedOnDisk` is the toast "changed on disk — reloaded".
+  - `EnableMap` uncomments the exact comment line `// use "presets/estate-map.satz"`
+    (from `scan_uses`: the `Map` row in state `Off`) by splicing the line without its
+    `// ` — the one pack line no question gates, so no satz writer activates it —
+    under the delegated-write discipline: the bytes recorded, the real path checked, a
+    refusal restored. Nothing else is ever uncommented by the app; satz does that on a
+    yes.
+  - `MergePresets` calls `satz_merge_presets` for a pack row the file has no line for,
+    with the outcome in the command log as `RunTool` puts it.
+
 An error from either — a refusal, a missing binary, a function another unit has not
 built — is a toast in the snackbar and, where it concerns the estate, a diagnostic in
 the drawer or an outcome under the log.
@@ -80,7 +104,11 @@ the drawer or an outcome under the log.
 | Commands | `src/views/commands.rs` | the palette (`PALETTE`): `transpile --check`, `transpile`, `questions`, `check-presets`, `iac-roles`, `update-schema`, `hcl-init`, `plan`, `require`, `report-compliance`, `get-presets`, `merge-presets`, and `apply` and `bootstrap` as command lines to copy or open in the terminal; each with its argument fields, the command line as it will run, Run and Cancel, the streamed log with stdout and stderr distinguished, and the session tools `satz_whoami`, `satz_transpile_check`, `satz_questions` as one click each |
 | Settings | `src/views/settings.rs` | every `Settings` field as a form: the satz path with the detected version, the MCP ceiling, auto-approve, the provider with base URL and model for the non-Claude ones, the Claude model, effort, fallbacks, transcripts, theme; Save writes the file and locates satz again; the credential card shows where the Claude credential comes from and stores a key in the keychain |
 | Gallery | `src/views/gallery.rs` | every component in its variants, light and dark side by side |
-| Interview, Params, Map, Resources, Chat | — | a card saying the view is not part of this build; `src/views/mod.rs` and the `match` in `src/shell/mod.rs` are where a view is added |
+| Interview | `src/views/interview.rs` | the questions report one question at a time, unanswered first with a "Show answered" switch: the pack's description when the pack changes, the prompt, the `why`, chips for reversal and blast, a warning banner on a one-way door, the recommendation when it differs from the offer, the field in the shape of the offered value as satz's `parse_answer` types an answer (a switch, a number field, a chip list, a text field that refuses a brace with satz's sentence), a `oneof` as filter chips with the chosen option's `why`; Accept or Answer, Skip, "Accept n defaults"; the progress from `summary`, the complete state, and the `rename_to` card when the last `satz_interview` returned one. Each answer is one `Answer` action |
+| Params | `src/views/params.rs` | one row per `ParamRow`, grouped by the asking question's pack (else "estate"): a typed field by `ParamKind` in value mode, or the Satz source in source mode — a row whose value carries a `{param}` or `${…}` opens there, with its parts as chips; the question's `why` as a tooltip, a one-way-door chip, a raw-line toggle showing the line; a commit on Enter, blur, a switch flip or a chip change is `CommitEdit(Edit::ReplaceParam)` with a `TypedValue` in value mode and `TypedValue::Raw` in source mode |
+| Map | `src/views/map.rs` | the `PackRow`s: the map row first — Off is a card with "Enable the map" (`EnableMap`), On a chip, Absent the merge-presets remedy — then sections by phase (the phase comment's first line; a line without one joins the section open at that point; every Absent row last under "Not in this file"), one card per gated line with its path, prompt and `why`, a switch bound to the gate (an answer through `Answer`; off keeps the commented line, satz never re-comments one) or one segmented button per `oneof` group over its options, a badge On/Off/Absent, "Run merge-presets" (`MergePresets`) on an Absent row, and the model's "line active, gate false" note inline on its row |
+| Resources | `src/views/resources.rs` | two panes: the tree of `ResourceNode`s (an icon per kind, a resource's name, `use` lines as leaves, branches collapsed below depth 2, a chip with the count of required attributes not written) and the selected node's card: kind, type, line, the missing required names, then one row per `AttrRow` — a typed field by `AttrType` (string, number, bool, a list of one of them; everything else and `Unknown` in source mode), locked rows dimmed with the reason (`import-id`, computed, not in the schema), source mode with its chips; a commit is `CommitEdit(Edit::ReplaceValue)`. Without a schema every row is locked and the header carries "Run update-schema". A row clicked in the drawer selects the node at its line |
+| Chat | — | a card saying the view is not part of this build; `src/views/mod.rs` and the `match` in `src/shell/mod.rs` are where a view is added |
 
 A view that works on an estate shows a card with a button to Estates while none is
 open.
@@ -147,14 +175,17 @@ works offline.
 | `Fab` (small, medium, large, extended) | `.m-fab` | <https://m3.material.io/components/floating-action-button/specs> | primary-container colour only; no FAB menu |
 | `Chip` (assist, filter, input; `error`) | `.m-chip` | <https://m3.material.io/components/chips/specs> | no suggestion chip; the `error` colouring is the app's own, for a status a chip states |
 | `Card` (elevated, filled, outlined) | `.m-card` | <https://m3.material.io/components/cards/specs> | — |
-| `TextField` (outlined) | `.m-text-field` | <https://m3.material.io/components/text-fields/specs> | outlined only, no filled variant; no trailing icon, prefix or suffix, no character counter |
+| `TextField` (outlined) | `.m-text-field` | <https://m3.material.io/components/text-fields/specs> | outlined only, no filled variant; no trailing icon, prefix or suffix, no character counter; `onenter` and `onblur` are what a field commits on |
 | `Switch` | `.m-switch` | <https://m3.material.io/components/switch/specs> | — |
 | `Checkbox` | `.m-checkbox` | <https://m3.material.io/components/checkbox/specs> | no indeterminate state |
 | `Radio` | `.m-radio` | <https://m3.material.io/components/radio-button/specs> | — |
 | `SegmentedButton` | `.m-segmented` | <https://m3.material.io/components/segmented-buttons/specs> | single-select only |
 | `Dialog` | `.m-dialog` | <https://m3.material.io/components/dialogs/specs> | basic dialog only; no full-screen dialog |
 | `List`, `ListItem` | `.m-list`, `.m-list-item` | <https://m3.material.io/components/lists/specs> | one- and two-line items; no three-line item, no dividers |
-| `Tree`, `TreeItem` | `.m-tree` | — (not a Material 3 component) | a nested list with a disclosure per branch, styled with list-item tokens |
+| `Tree`, `TreeItem` | `.m-tree` | — (not a Material 3 component) | a nested list with a disclosure per branch, styled with list-item tokens; a `trailing` slot at the row's end |
+| `ChipList` | `.chip-list` (in `views.css`) | — (input chips over a text field) | the values of a list as removable input chips, a field that adds one on Enter or blur, several with commas |
+| `TypedField` | — | — (composes `Switch`, `TextField`, `ChipList`) | one field in the shape satz reads a value in (`FieldKind`: bool, number, list, text) over a `Draft`; a brace in a text and a non-number in a number field are refused under the field with satz's sentence, and `oncommit` fires only for a draft without a problem |
+| `SourceChips` | `.source-chips` (in `views.css`) | — (assist chips over literal text) | a value as satz reads it: a `{param}` chip with what it resolves to, a `${…}` reference chip, the literal text between |
 | `Badge` | `.m-badge` | <https://m3.material.io/components/badges/specs> | — |
 | `LinearProgress`, `CircularProgress` | `.m-linear-progress`, `.m-circular-progress` | <https://m3.material.io/components/progress-indicators/specs> | the linear indicator has the Expressive stop indicator; the wavy Expressive variant is not drawn |
 | `Tooltip` | `.m-tooltip` | <https://m3.material.io/components/tooltips/specs> | plain tooltip only, below the anchor, no rich tooltip |
@@ -164,8 +195,11 @@ works offline.
 | banner (`SatzBanner`) | `.banner` | — (not a Material 3 component) | an error-container surface with the text and two buttons |
 
 No Material Web Components and no other library are used: the components are Dioxus
-components over these classes. The Gallery view is the checklist: every component above
-in every variant, in the light and the dark scheme side by side.
+components over these classes. The Gallery view is the checklist: every Material
+component above in every variant, in the light and the dark scheme side by side; the
+three composites (`ChipList`, `TypedField`, `SourceChips`) are seen in the estate views
+and their classes live in `views.css`, so `components.css` stays the Material anatomies
+alone.
 
 ### Shell
 
@@ -187,3 +221,43 @@ in every variant, in the light and the dark scheme side by side.
   to the estate directory and its source; clicking a row sets the selection.
 - **Snackbar host:** the toasts, three at most, a notice for five seconds and an error
   for twelve, each dismissable.
+
+## The smoke walk
+
+The manual check of the estate views, over `tests/fixtures/smoke` (satz's own smoke
+estate, read from the pinned submodule — copy the estate to a scratch directory before
+a step that writes, as the fixture's `config.toml` says) and over a skeleton written by
+`satz interview <dir>/yaml/new.satz --create`, which is the estate every pack line
+starts commented in. No step needs a credential; every write is checked by
+`satz transpile --check` through the estate's `satz mcp` child.
+
+1. **Open.** Estates → the folder → Open. The top bar shows the file, "runs as the ADC
+   identity", the schema chip with the provider and its type count; the rail shows the
+   count of unanswered questions on Interview.
+2. **Answer a question.** Interview → the first open question → Accept (or type a
+   value and Answer). The toast says "1 answer written"; the file has one new line in
+   `params { }` (`git diff` shows nothing else: no re-emission, comments and alignment
+   intact); the question count on the rail drops by one; a diagnostic the compile had
+   raised for that param is gone from the drawer.
+3. **Enable the map, then a pack.** On the skeleton: Map → "Enable the map" → the line
+   `use "presets/estate-map.satz"` is uncommented and the map's questions are open.
+   Toggle `use_budget` on → the answer lands as `use_budget = true` and satz
+   uncomments `use "presets/organization-budget.satz" when use_budget`; toggle it off
+   → `use_budget = false` and the line stays active — the card says so, and the drawer
+   carries the model's note "line active, gate false" on that line, shown inline on the
+   card.
+4. **Edit an attribute.** Resources → a resource → a string row → change it → Enter.
+   The toast names the file; the line shows the new value with its `=` column where it
+   was; the rest of the file is byte-identical.
+5. **Type a brace.** Params → a text row in value mode → type `{x}` → the field turns
+   red with "braces interpolate in a Satz string — if `{x}` is what you mean, write
+   that param by hand" and nothing is sent; the source-mode toggle is where an
+   interpolation is written.
+6. **Break a value.** Params → source mode on a row → replace the value with a bare
+   name nothing binds → Enter. The toast says "not written — line N: …"; the drawer
+   shows the check's diagnostic at that line, source "check", and it stays after the
+   reload; clicking it in the drawer selects the node at that line in Resources; the
+   file is byte-identical to before.
+7. **Missing schema.** Point a copy's `schema_dir` at an empty directory and open it:
+   the schema chip is red, Resources locks every row with "no schema" and its header
+   carries "Run update-schema", which runs in Commands.

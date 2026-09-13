@@ -11,7 +11,7 @@ pub fn Tree(#[props(default)] class: String, children: Element) -> Element {
 }
 
 /// One tree row. With `children` it is a branch with a disclosure that starts `open`;
-/// without, a leaf. `onclick` selects the row.
+/// without, a leaf. `onclick` selects the row; `trailing` sits at the row's end.
 #[component]
 pub fn TreeItem(
     label: String,
@@ -20,6 +20,7 @@ pub fn TreeItem(
     #[props(default = true)] open: bool,
     #[props(default)] selected: bool,
     #[props(default)] onclick: Option<EventHandler<MouseEvent>>,
+    #[props(default)] trailing: Option<Element>,
     #[props(default)] children: Option<Element>,
 ) -> Element {
     let mut expanded = use_signal(|| open);
@@ -59,6 +60,9 @@ pub fn TreeItem(
                 span { class: "m-tree-item__label", "{label}" }
                 if !supporting.is_empty() {
                     span { class: "m-tree-item__supporting", "{supporting}" }
+                }
+                if let Some(trailing) = trailing {
+                    span { class: "m-tree-item__trailing", {trailing} }
                 }
             }
             if let Some(children) = children {

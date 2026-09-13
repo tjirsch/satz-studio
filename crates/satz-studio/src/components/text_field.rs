@@ -3,7 +3,8 @@ use dioxus::prelude::*;
 use super::Icon;
 
 /// An outlined text field: floating label, optional leading icon, supporting text,
-/// error state. `oninput` gets the new value; `onenter` fires on Enter.
+/// error state. `oninput` gets the new value; `onenter` fires on Enter, `onblur` when
+/// the input loses focus.
 #[component]
 pub fn TextField(
     label: String,
@@ -18,6 +19,7 @@ pub fn TextField(
     #[props(default)] leading_icon: String,
     #[props(default)] class: String,
     #[props(default)] onenter: Option<EventHandler<()>>,
+    #[props(default)] onblur: Option<EventHandler<()>>,
 ) -> Element {
     let populated = !value.is_empty() || !placeholder.is_empty();
     rsx! {
@@ -45,6 +47,11 @@ pub fn TextField(
                         if e.key() == Key::Enter
                             && let Some(h) = &onenter
                         {
+                            h.call(());
+                        }
+                    },
+                    onblur: move |_| {
+                        if let Some(h) = &onblur {
                             h.call(());
                         }
                     },

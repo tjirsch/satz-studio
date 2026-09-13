@@ -23,6 +23,10 @@ use crate::state::{AppStore, AppStoreStoreExt, OpenEstate, View, estate_coroutin
 use crate::views::commands::CommandsView;
 use crate::views::estates::EstatesView;
 use crate::views::gallery::GalleryView;
+use crate::views::interview::InterviewView;
+use crate::views::map::MapView;
+use crate::views::params::ParamsView;
+use crate::views::resources::ResourcesView;
 use crate::views::settings::SettingsView;
 
 #[component]
@@ -72,8 +76,10 @@ fn Content() -> Element {
         View::Settings => rsx! { SettingsView {} },
         View::Gallery => rsx! { GalleryView {} },
         View::Commands => rsx! { CommandsView {} },
-        View::Interview | View::Params | View::Map | View::Resources | View::Chat => {
-            rsx! { NotBuilt { view } }
-        }
+        View::Interview => rsx! { InterviewView {} },
+        View::Params => rsx! { ParamsView {} },
+        View::Map => rsx! { MapView {} },
+        View::Resources => rsx! { ResourcesView {} },
+        View::Chat => rsx! { NotBuilt { view } },
     }
 }
