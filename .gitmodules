@@ -1,0 +1,3 @@
+[submodule "vendor/satz"]
+	path = vendor/satz
+	url = https://github.com/tjirsch/satz.git

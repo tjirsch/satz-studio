@@ -1,0 +1,90 @@
+name: ci
+
+# Clippy, tests and a debug build of the app. The satz binary the tests drive is
+# the pinned MIN_SATZ release (`pub const MIN_SATZ` in
+# crates/satz-studio-core/src/satz/binary.rs), installed by
+# scripts/install-satz.sh from the satz GitHub release and verified against its
+# SHA-256 sidecar. Windows has no satz release: there it is built from the
+# submodule vendor/satz instead, so the same pinned source serves.
+#
+# `core` (Linux) runs on every push and pull request. `platforms` (macOS,
+# Windows) runs only for a release tag or a manual dispatch: the repository is
+# private for now and macOS runner minutes count tenfold. Once the repository is
+# public, remove that `if:` condition.
+
+on:
+  push:
+    branches: ['**']
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  core:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: system libraries the desktop crate links
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev pkg-config
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: satz (the pinned MIN_SATZ release)
+        run: |
+          bash scripts/install-satz.sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: clippy (warnings are errors)
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: tests
+        run: cargo test --workspace --locked
+      - name: build the app
+        run: cargo build -p satz-studio --locked
+
+  platforms:
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, windows-2022]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        if: runner.os != 'Windows'
+      - uses: Swatinem/rust-cache@v2
+        if: runner.os == 'Windows'
+        with:
+          # the satz build from the submodule is cached beside the app's
+          workspaces: |
+            . -> target
+            vendor/satz -> vendor/satz/target
+      - name: satz (the pinned MIN_SATZ release)
+        if: runner.os != 'Windows'
+        run: |
+          bash scripts/install-satz.sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: satz (built from the submodule — no Windows release)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          cargo build --release --manifest-path vendor/satz/Cargo.toml --locked
+          echo "$GITHUB_WORKSPACE/vendor/satz/target/release" >> "$GITHUB_PATH"
+      - name: clippy (warnings are errors)
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: tests
+        run: cargo test --workspace --locked
+      - name: build the app
+        run: cargo build -p satz-studio --locked
