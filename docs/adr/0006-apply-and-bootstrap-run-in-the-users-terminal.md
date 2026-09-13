@@ -18,7 +18,8 @@ imports through the same wrapper. satz's MCP server serves neither (`MCP_PARITY`
 and stdout are the protocol.
 
 The app runs every other command itself: `SatzCli` streams stdout and stderr into the
-Commands pane, and `plan` runs there non-interactively (`-input=false`). The question
+Commands pane, and `plan` runs there without a terminal: satz writes every variable's
+value into `terraform.tfvars`, so tofu asks nothing. The question
 is what the app does with the two commands whose interaction is the safety step.
 
 ## Decision

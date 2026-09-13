@@ -10,6 +10,7 @@ mod rail;
 mod snackbar;
 mod top_bar;
 
+use dioxus::desktop::{WindowEvent, tao, use_wry_event_handler};
 use dioxus::prelude::*;
 
 pub use banner::SatzBanner;
@@ -19,7 +20,7 @@ pub use rail::NavigationRail;
 pub use snackbar::SnackbarHost;
 pub use top_bar::TopBar;
 
-use crate::state::{AppStore, AppStoreStoreExt, OpenEstate, View, estate_coroutine};
+use crate::state::{AppStore, AppStoreStoreExt, EstateAction, OpenEstate, View, estate_coroutine};
 use crate::views::chat::ChatView;
 use crate::views::commands::CommandsView;
 use crate::views::estates::EstatesView;
@@ -44,7 +45,18 @@ pub fn Shell() -> Element {
 fn EstateHost(open: OpenEstate) -> Element {
     let app = use_context::<Store<AppStore>>();
     let session = open.session.clone();
-    use_coroutine(move |rx| estate_coroutine(rx, session.clone(), app));
+    let estate = use_coroutine(move |rx| estate_coroutine(rx, session.clone(), app));
+    // `apply` and `bootstrap` run in the user's terminal (ADR 0006): the estate may
+    // have changed while the window was away, so it is read again on focus.
+    use_wry_event_handler(move |event, _| {
+        if let tao::event::Event::WindowEvent {
+            event: WindowEvent::Focused(true),
+            ..
+        } = event
+        {
+            estate.send(EstateAction::Reload);
+        }
+    });
     rsx! { Frame {} }
 }
 

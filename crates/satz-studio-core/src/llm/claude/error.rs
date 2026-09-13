@@ -47,8 +47,6 @@ pub enum ClaudeError {
     Tool { name: String, message: String },
     #[error("cancelled")]
     Cancelled,
-    #[error(transparent)]
-    Unimplemented(#[from] crate::Unimplemented),
 }
 
 impl ClaudeError {

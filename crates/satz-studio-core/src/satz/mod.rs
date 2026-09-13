@@ -86,6 +86,4 @@ pub enum SatzError {
     Closed(String),
     #[error("cancelled")]
     Cancelled,
-    #[error(transparent)]
-    Unimplemented(#[from] crate::Unimplemented),
 }
