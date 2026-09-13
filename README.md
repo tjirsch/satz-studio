@@ -9,7 +9,11 @@ pack choice or an import id is written by satz's own writer; every other edit is
 checked by `satz transpile --check` before it replaces the file. macOS, Linux and
 Windows.
 
-Scaffold. The units of the plan land one pull request each.
+The headless core is complete: the document layer, the edit primitives and the write
+discipline, the provider schema and the view model, the satz driver, the Claude client
+and agent loop, transcripts, settings and diagnostics. The window has its shell and the
+Estates, Settings, Commands and Gallery views; the estate views (Interview, Params,
+Map, Resources) and the Chat view are built next.
 
 ## What it needs
 
@@ -43,7 +47,8 @@ cargo test -p satz-studio-core        # the headless tests: no window, no creden
 
 A clone without `--recurse-submodules` has an empty `vendor/satz` and does not build;
 `git submodule update --init` fills it. The tests read the pinned satz checkout and
-`tests/fixtures`; the tests that drive the `satz` binary (U4 onward) need it installed.
+`tests/fixtures`; the tests that drive the `satz` binary need it installed, and the one
+live Claude request runs only with `SATZ_STUDIO_LIVE=1` and a credential.
 
 ## Repository layout
 
@@ -56,7 +61,9 @@ A clone without `--recurse-submodules` has an empty `vendor/satz` and does not b
 | `vendor/satz-tree-sitter/` | the generated tree-sitter parser for Satz (`src/`), copied from the grammar repository at the commit named in `COMMIT`; `scripts/sync-grammar.sh` refreshes it and `crates/satz-studio-core/build.rs` compiles it |
 | `tests/fixtures/` | an estate directory over satz's smoke estates, its `config.toml` pointing into the submodule; a test that writes copies it first |
 | `docs/` | [`architecture.md`](docs/architecture.md) and the decision records under [`adr/`](docs/adr/README.md) |
-| `scripts/` | the privacy gate (`check-names.sh`), the grammar refresh (`sync-grammar.sh`), what CI runs |
+| `scripts/` | the privacy gate (`check-names.sh`), the satz installer CI runs (`install-satz.sh`, the `MIN_SATZ` release verified against its SHA-256 sidecar), the grammar refresh (`sync-grammar.sh`) |
+| `.github/workflows/` | `ci.yml` (formatting, clippy, tests, a build of the app; Linux on every push, macOS and Windows on a tag) and `names-gate.yml` (the privacy gate over the tree and the commits) |
+| `.githooks/` | the pre-commit and commit-msg hooks that run the gate locally |
 
 ## Privacy
 
