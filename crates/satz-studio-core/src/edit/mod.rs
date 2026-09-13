@@ -1,12 +1,27 @@
 //! Edit primitives over the document layer, and the write discipline: the new text is
-//! built in memory, satz-core's parser must accept it and the AST must differ only at
-//! the edited node, the temp file beside the real one is checked by
+//! built in memory, satz-core's parser must accept it and the document tree must differ
+//! only at the edited nodes, the temp file beside the real one is checked by
 //! `satz transpile --check`, then the real file is replaced atomically. A file that
 //! changed under the app is refused, never merged. Answers and pack toggles do not
-//! come through here — they are satz's own writer, called through `satz_interview`.
+//! come through here — they are satz's own writer, called through `satz_interview`;
+//! [`Snapshot`] is the shape that write takes.
+//!
+//! The lock lives in the session: a caller holds [`EstateSession::write_lock`] across
+//! [`EditSession::apply`] and [`Proposed::commit`], and across a delegated write and
+//! its [`Snapshot::verify`], so one writer at a time reaches the file.
+//!
+//! [`EstateSession::write_lock`]: crate::satz::EstateSession::write_lock
+
+mod apply;
+pub mod check;
+mod commit;
+pub mod snapshot;
 
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
+
+pub use check::{CliChecker, McpChecker};
+pub use snapshot::Snapshot;
 
 use crate::cst::{Cst, NodeId, TypedValue};
 use crate::diag::Diagnostic;
@@ -33,8 +48,18 @@ pub enum EditError {
     NoParamsBlock,
     #[error("the edit changed the document beyond its target (line {line}) — refused")]
     ChangedElsewhere { line: u32 },
+    #[error("{0}: not a `.satz` file — satz reads no other")]
+    NotSatz(PathBuf),
+    #[error("two edits target {0} — refused")]
+    Duplicate(String),
+    #[error("node {inner} lies inside node {outer}, and both are edited — refused")]
+    Nested { inner: NodeId, outer: NodeId },
     #[error("{path}: {source}")]
-    Io { path: PathBuf, #[source] source: std::io::Error },
+    Io {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
     #[error(transparent)]
     Cst(#[from] crate::cst::CstError),
     #[error(transparent)]
@@ -55,7 +80,15 @@ pub enum CommitError {
     #[error("not written: {0:?}")]
     Rollback(Rollback),
     #[error("{path}: {source}")]
-    Io { path: PathBuf, #[source] source: std::io::Error },
+    Io {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+    #[error(
+        "{path}: the bytes on disk after the rename are not the bytes written — another writer is active"
+    )]
+    Overwritten { path: PathBuf },
     #[error(transparent)]
     Satz(#[from] SatzError),
     #[error(transparent)]
@@ -71,10 +104,12 @@ pub enum CheckFailure {
     Failed(SatzError),
 }
 
-pub type CheckFuture<'a> = Pin<Box<dyn Future<Output = Result<CompileSummary, CheckFailure>> + Send + 'a>>;
+pub type CheckFuture<'a> =
+    Pin<Box<dyn Future<Output = Result<CompileSummary, CheckFailure>> + Send + 'a>>;
 
 /// `satz transpile --check` over one estate file: the MCP session in the app, the CLI
-/// in the verification harness. Both must agree.
+/// in the verification harness. Both must agree. `estate` is absolute: satz resolves a
+/// relative name inside `yaml_dir`, and a temp file is named by its own path.
 pub trait Checker: Send + Sync {
     fn check<'a>(&'a self, estate: &'a Path) -> CheckFuture<'a>;
 }
@@ -104,9 +139,34 @@ pub struct Committed {
 }
 
 impl EditSession {
+    /// Read the file, hash its bytes and build its tree. The path is made absolute, so
+    /// the temp file and the checkers are named by a path that does not depend on the
+    /// working directory; a file without the `.satz` extension is refused, since satz
+    /// reads no other.
     pub fn open(path: &Path) -> Result<EditSession, EditError> {
-        let _ = path;
-        Err(crate::Unimplemented::new("EditSession::open", "U3").into())
+        if path.extension().and_then(|e| e.to_str()) != Some("satz") {
+            return Err(EditError::NotSatz(path.to_path_buf()));
+        }
+        let path = std::path::absolute(path).map_err(|e| EditError::Io {
+            path: path.to_path_buf(),
+            source: e,
+        })?;
+        let bytes = std::fs::read(&path).map_err(|e| EditError::Io {
+            path: path.clone(),
+            source: e,
+        })?;
+        let original = String::from_utf8(bytes).map_err(|e| EditError::Io {
+            path: path.clone(),
+            source: std::io::Error::new(std::io::ErrorKind::InvalidData, e),
+        })?;
+        let sha256 = sha256_hex(original.as_bytes());
+        let cst = Cst::parse(&original)?;
+        Ok(EditSession {
+            path,
+            original,
+            sha256,
+            cst,
+        })
     }
     pub fn path(&self) -> &Path {
         &self.path
@@ -122,9 +182,35 @@ impl EditSession {
     }
     /// Apply edits in memory: the result parses, and differs from the original only at
     /// the edited nodes.
+    ///
+    /// Each [`Edit::ReplaceValue`] names a `Value` node, or an `Attr` or `ParamEntry`
+    /// whose value node is then the target; anything else is [`EditError::NotAValue`].
+    /// The new text is [`render_value`](crate::cst::render_value) in the
+    /// [`style_of`](crate::cst::style_of) the value node, spliced over the node's span
+    /// and nothing else, so the `=` column and a trailing comment on the line stay as
+    /// they are. [`Edit::ReplaceParam`] does the same on the entry `params { … }`
+    /// binds; a param the block does not bind is appended before its `}` as satz's own
+    /// `bind` appends it — two spaces, `name = value`, a newline — with several appends
+    /// stacked in the order given. Two edits on one node, an edit inside another edited
+    /// node, and two appends of one name are refused. Splices land from the highest
+    /// span start to the lowest, so every span of the original tree stays valid.
+    ///
+    /// The proof, in two parts. `satz_core::satz::parse` must accept the new text
+    /// ([`EditError::Syntax`] otherwise). Then the new tree is compared with the old:
+    /// both are walked in document order into a sequence of node signatures — the kind
+    /// and, where the kind carries one, the key, name, path or gate text; a scalar
+    /// value, a comment, an opaque statement and an error node by their whole text —
+    /// where each edited value node stands as a hole (its subtree skipped, and in the
+    /// new tree only a `Value` node with exactly the spliced span counts as that hole)
+    /// and each appended param as one `ParamEntry` of that name inside the appended
+    /// range. Any other difference is [`EditError::ChangedElsewhere`] naming the line
+    /// of the first node in the new text that does not match.
     pub fn apply(&self, edits: &[Edit]) -> Result<Proposed, EditError> {
-        let _ = edits;
-        Err(crate::Unimplemented::new("EditSession::apply", "U3").into())
+        let text = apply::apply(&self.cst, edits)?;
+        Ok(Proposed {
+            session: self.clone(),
+            text,
+        })
     }
 }
 
@@ -135,10 +221,25 @@ impl Proposed {
     pub fn session(&self) -> &EditSession {
         &self.session
     }
-    /// The write discipline, start to finish.
+    /// The write discipline, start to finish:
+    ///
+    /// 1. the file is read and hashed; a hash that is not the session's is
+    ///    [`Rollback::ChangedOnDisk`] — no merge;
+    /// 2. the new text is written to `<stem>.studio-tmp.satz` beside the file, so
+    ///    `use "…"` and `include_dirs` resolve as they do for the file, and the name
+    ///    keeps the extension satz reads;
+    /// 3. `checker.check(tmp)`: a refusal deletes the temp file and is
+    ///    [`Rollback::Check`] with every diagnostic re-pointed from the temp path (as
+    ///    given and canonical) to the real one; a checker that could not run deletes it
+    ///    and is [`CommitError::Satz`];
+    /// 4. the temp file is renamed over the real one;
+    /// 5. the file is read again and hashed: [`Committed`] carries that hash and the
+    ///    summary, its `estate` re-pointed to the real path.
+    ///
+    /// Every I/O failure names its path. The temp file never survives a failure: when
+    /// it cannot be removed, the error says so beside the failure that came first.
     pub async fn commit(self, checker: &dyn Checker) -> Result<Committed, CommitError> {
-        let _ = checker;
-        Err(crate::Unimplemented::new("Proposed::commit", "U3").into())
+        commit::commit(self, checker).await
     }
 }
 
