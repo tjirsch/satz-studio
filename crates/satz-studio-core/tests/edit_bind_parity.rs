@@ -14,6 +14,22 @@ use satz_studio_core::edit::{Edit, EditSession};
 async fn on_unaligned_params_replace_param_and_satz_write_the_same_bytes() {
     let copy = support::copy_smoke();
     let session = copy.open("smoke.satz").await;
+    // The premise is the line's shape, not the fixture's: whatever alignment the
+    // smoke estate carries, this copy binds `logsink_project_id` with one space
+    // on each side of `=`, which is the shape satz's `bind` writes back.
+    let unaligned: String = support::read(&session.main)
+        .lines()
+        .map(|l| {
+            if l.trim_start().starts_with("logsink_project_id") {
+                "  logsink_project_id = \"corp-log-infra-002\""
+            } else {
+                l
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+        + "\n";
+    std::fs::write(&session.main, unaligned).unwrap();
     let ours = EditSession::open(&session.main)
         .unwrap()
         .apply(&[

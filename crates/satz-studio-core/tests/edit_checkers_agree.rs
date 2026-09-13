@@ -44,7 +44,7 @@ async fn the_two_checkers_agree_on_six_cases() {
         (
             "a boolean",
             Edit::ReplaceValue {
-                node: support::attr_on_line(cst, 144, "uniform_bucket_level_access"),
+                node: support::attr_named(cst, "uniform_bucket_level_access"),
                 value: TypedValue::Bool(false),
             },
             true,
@@ -60,7 +60,7 @@ async fn the_two_checkers_agree_on_six_cases() {
         (
             "a reference nobody declares, in an attribute",
             Edit::ReplaceValue {
-                node: support::attr_on_line(cst, 143, "location"),
+                node: support::attr_named(cst, "location"),
                 value: TypedValue::Ref("nobody_declares_this".to_string()),
             },
             false,
@@ -68,7 +68,10 @@ async fn the_two_checkers_agree_on_six_cases() {
         (
             "a reference nobody declares, in a list item",
             Edit::ReplaceValue {
-                node: support::value_on_line(cst, 116),
+                node: support::value_on_line(
+                    cst,
+                    support::line_of(cst, "\"roles/iam.securityReviewer\""),
+                ),
                 value: TypedValue::Ref("not_a_param".to_string()),
             },
             false,

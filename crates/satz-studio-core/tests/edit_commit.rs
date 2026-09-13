@@ -82,7 +82,8 @@ async fn a_bad_edit_rolls_back_naming_the_real_file() {
     let (mcp, cli) = support::checkers(&session);
     for checker in [&mcp as &dyn Checker, &cli as &dyn Checker] {
         let es = EditSession::open(&session.main).unwrap();
-        let node = support::attr_on_line(es.cst(), 143, "location");
+        let node = support::attr_named(es.cst(), "location");
+        let line = support::line_of(es.cst(), "location");
         let p = es
             .apply(&[Edit::ReplaceValue {
                 node,
@@ -95,7 +96,7 @@ async fn a_bad_edit_rolls_back_naming_the_real_file() {
         };
         assert_eq!(diags.len(), 1, "{diags:?}");
         assert_eq!(diags[0].file.as_deref(), Some(session.main.as_path()));
-        assert_eq!(diags[0].line, Some(143));
+        assert_eq!(diags[0].line, Some(line));
         assert!(
             diags[0].message.contains("nobody_declares_this"),
             "{}",
@@ -153,10 +154,19 @@ async fn a_delegated_write_is_verified_and_a_broken_one_is_restored() {
     // a delegated write that breaks the estate: the check refuses it and the bytes go back
     let snapshot = Snapshot::take(&session.main).unwrap();
     assert_eq!(snapshot.bytes(), now.as_bytes());
-    let broken = now.replace(
-        "default_region = \"europe-west3\"",
-        "default_region = nobody_declares_this",
-    );
+    // by key, not by layout: the fixture aligns its params, and may re-align them
+    let broken: String = now
+        .lines()
+        .map(|l| {
+            if l.trim_start().starts_with("default_region") {
+                "  default_region = nobody_declares_this"
+            } else {
+                l
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+        + "\n";
     assert_ne!(broken, now);
     std::fs::write(&session.main, &broken).unwrap();
     let err = support::within(snapshot.verify(&cli)).await.unwrap_err();
