@@ -62,8 +62,6 @@ pub enum EditError {
     },
     #[error(transparent)]
     Cst(#[from] crate::cst::CstError),
-    #[error(transparent)]
-    Unimplemented(#[from] crate::Unimplemented),
 }
 
 /// Why a commit did not land. In both cases the real file is exactly as it was.
@@ -91,8 +89,6 @@ pub enum CommitError {
     Overwritten { path: PathBuf },
     #[error(transparent)]
     Satz(#[from] SatzError),
-    #[error(transparent)]
-    Unimplemented(#[from] crate::Unimplemented),
 }
 
 /// What a check returned when it did not pass.

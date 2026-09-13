@@ -115,7 +115,7 @@ open.
 
 ## 2. Material 3 Expressive
 
-The owner's rule is to follow the Material 3 Expressive guidelines and to use the
+The rule for this app is to follow the Material 3 Expressive guidelines and to use the
 Material Symbols font. There is no official web implementation of Material 3
 Expressive, so the tokens and the anatomies are written in CSS from the specification
 at <https://m3.material.io>. What follows is what is followed and what deviates.

@@ -15,9 +15,8 @@
 //!   provider adapters, credentials; [`transcript`] keeps the conversations.
 //! - [`settings`] and [`diag`] — the settings file and the one diagnostic type.
 //!
-//! The public surface of every module is the contract between the units that build
-//! satz-studio in parallel (see `docs/architecture.md`). A function whose unit has
-//! not shipped returns [`Unimplemented`] rather than panicking.
+//! The public surface of every module is the contract between the crates and the
+//! views (see `docs/architecture.md`).
 
 pub mod cst;
 pub mod diag;
@@ -29,17 +28,3 @@ pub mod satz;
 pub mod schema;
 pub mod settings;
 pub mod transcript;
-
-/// A stub left by the scaffold: the unit that owns this function has not shipped yet.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
-#[error("{what} is not built yet (satz-studio unit {unit})")]
-pub struct Unimplemented {
-    pub what: &'static str,
-    pub unit: &'static str,
-}
-
-impl Unimplemented {
-    pub const fn new(what: &'static str, unit: &'static str) -> Self {
-        Self { what, unit }
-    }
-}
