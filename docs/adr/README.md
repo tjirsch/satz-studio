@@ -41,3 +41,9 @@ recognises the other.
 | [0001](0001-dioxus-desktop-on-the-webview-renderer.md) | Dioxus 0.7 desktop on the webview renderer | accepted |
 | [0002](0002-a-separate-repository-with-satz-pinned-once.md) | a separate repository, with satz pinned once as a submodule and the binary required at a minimum version | accepted |
 | [0003](0003-the-document-layer-is-the-tree-sitter-grammar.md) | the document layer is the tree-sitter grammar of Satz, vendored and compiled in; satz-core stays the authority on meaning | accepted |
+| [0004](0004-claude-natively-other-providers-adapt-into-its-message-model.md) | Claude natively: the Messages API wire types are the app's message model, and other providers adapt into it | accepted |
+| [0005](0005-tool-approval-by-mcp-annotation-and-the-capability-ceiling.md) | tool approval by the MCP annotations satz declares; the capability ceiling stays satz's | accepted |
+| [0006](0006-apply-and-bootstrap-run-in-the-users-terminal.md) | `apply` and `bootstrap` run in the user's terminal, never with `-auto-approve` | accepted |
+| [0007](0007-pack-rows-are-derived-from-the-estate-file.md) | pack rows are derived from the estate file, the questions report and the resolved params; no copied table | accepted |
+| [0008](0008-transcripts-live-outside-the-estate.md) | transcripts live under the app's data directory, never inside an estate | accepted |
+| [0009](0009-refusal-fallbacks-are-on-by-default.md) | refusal fallbacks are on by default, off by a Settings switch | accepted |
