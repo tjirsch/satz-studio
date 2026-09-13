@@ -1,0 +1,13 @@
+/target
+.DS_Store
+*.log
+.env
+*.secret
+# private working state — never in this repository (also rejected by the gate)
+CLAUDE.local.md
+*.local.md
+.claude/
+# a value edit in flight: the file satz checks before it replaces the real one
+*.studio-tmp
+# the bundle output of `dx bundle`
+/dist/
