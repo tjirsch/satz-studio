@@ -1,0 +1,49 @@
+[package]
+name = "satz-studio-core"
+description = "The headless half of satz-studio: the estate model, the lossless document layer, the satz driver, the Claude client"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish = false
+build = "build.rs"
+
+[dependencies]
+satz-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
+toml.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+semver.workspace = true
+sha2.workspace = true
+hex.workspace = true
+dirs.workspace = true
+which.workspace = true
+notify.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+futures-util.workspace = true
+rmcp.workspace = true
+reqwest.workspace = true
+keyring.workspace = true
+keyring-core.workspace = true
+tree-sitter.workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+apple-native-keyring-store.workspace = true
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-native-keyring-store.workspace = true
+
+[target.'cfg(target_os = "linux")'.dependencies]
+zbus-secret-service-keyring-store.workspace = true
+
+[build-dependencies]
+cc.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+tempfile.workspace = true

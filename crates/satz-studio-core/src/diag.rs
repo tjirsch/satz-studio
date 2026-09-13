@@ -1,0 +1,220 @@
+//! One diagnostic type for everything the app can point at a line: satz-core's parse
+//! and pipeline errors, satz's own stderr, a tool refusal over MCP, the document
+//! layer's own findings. Line granularity — that is what satz records (a node carries
+//! its line and nothing finer).
+
+use std::path::{Path, PathBuf};
+
+use satz_core::pipeline::PipelineError;
+use satz_core::satz::SatzError;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Severity {
+    Error,
+    Warning,
+    Note,
+}
+
+/// Where a diagnostic came from, so the drawer can group and the reader can judge.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DiagSource {
+    /// the lossless document layer could not read the file's structure
+    Cst,
+    /// `satz_core::satz::parse` refused the file
+    Parse,
+    /// the fragment pipeline refused the estate (unknown type, fold conflict, …)
+    Compile,
+    /// `satz transpile --check`, run by the app before a write lands
+    Check,
+    /// a satz command run from the Commands view, by name
+    Command(String),
+    /// a tool over MCP refused, by name
+    Tool(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct Diagnostic {
+    pub file: Option<PathBuf>,
+    /// 1-based, as satz counts
+    pub line: Option<u32>,
+    pub severity: Severity,
+    pub message: String,
+    pub source: DiagSource,
+}
+
+impl Diagnostic {
+    pub fn error(message: impl Into<String>, source: DiagSource) -> Self {
+        Self { file: None, line: None, severity: Severity::Error, message: message.into(), source }
+    }
+
+    pub fn at(mut self, file: impl Into<PathBuf>, line: u32) -> Self {
+        self.file = Some(file.into());
+        self.line = Some(line);
+        self
+    }
+
+    /// `SatzError` carries a line and no file: the caller names the file it parsed.
+    pub fn from_satz_error(file: &Path, e: &SatzError) -> Self {
+        Self {
+            file: Some(file.to_path_buf()),
+            line: Some(e.line as u32),
+            severity: Severity::Error,
+            message: e.msg.clone(),
+            source: DiagSource::Parse,
+        }
+    }
+
+    /// `PipelineError` names the file as the loader was given it — relative paths are
+    /// resolved against `base`, which is the estate's directory.
+    pub fn from_pipeline_error(base: &Path, e: &PipelineError) -> Self {
+        let file = Path::new(&e.file);
+        let file = if file.is_absolute() { file.to_path_buf() } else { base.join(file) };
+        Self {
+            file: Some(file),
+            line: Some(e.line as u32),
+            severity: Severity::Error,
+            message: e.msg.clone(),
+            source: DiagSource::Compile,
+        }
+    }
+
+    /// Re-point a diagnostic that names a temp file at the real one (same lines).
+    pub fn repoint(mut self, from: &Path, to: &Path) -> Self {
+        if self.file.as_deref() == Some(from) {
+            self.file = Some(to.to_path_buf());
+        }
+        self
+    }
+}
+
+/// Parse what satz printed — its stderr, or the text of a refused tool call — into
+/// diagnostics. The banner (`satz vX (built …)`) is dropped; `error: `, `warning: ` and
+/// `note: ` set the severity; `transpile --check: ` is stripped; `file:line: msg` gives
+/// the location and `satz: line N: msg` the line alone; an indented line continues the
+/// diagnostic above it (satz prints a fold conflict as a header and its origins
+/// indented under it). A line that fits none of that is a diagnostic without a
+/// location, verbatim — nothing satz says is dropped.
+pub fn parse_satz_output(text: &str, source: DiagSource) -> Vec<Diagnostic> {
+    let mut out: Vec<Diagnostic> = Vec::new();
+    for raw in text.lines() {
+        let line = raw.trim_end();
+        if line.trim().is_empty() || is_banner(line) {
+            continue;
+        }
+        let continuation = raw.starts_with(' ') || raw.starts_with('\t');
+        if continuation && let Some(last) = out.last_mut() {
+            last.message.push('\n');
+            last.message.push_str(line.trim_start());
+            continue;
+        }
+        let (severity, rest) = strip_severity(line.trim_start());
+        let rest = rest.strip_prefix("transpile --check: ").unwrap_or(rest);
+        let mut d = Diagnostic { file: None, line: None, severity, message: rest.to_string(), source: source.clone() };
+        if let Some((n, msg)) = split_satz_line(rest) {
+            d.line = Some(n);
+            d.message = msg.to_string();
+        } else if let Some((file, n, msg)) = split_location(rest) {
+            d.file = Some(PathBuf::from(file));
+            d.line = Some(n);
+            d.message = msg.to_string();
+        }
+        out.push(d);
+    }
+    out
+}
+
+fn is_banner(line: &str) -> bool {
+    line.starts_with("satz v") && line.contains("(built ")
+}
+
+fn strip_severity(line: &str) -> (Severity, &str) {
+    if let Some(r) = line.strip_prefix("error: ") {
+        (Severity::Error, r)
+    } else if let Some(r) = line.strip_prefix("warning: ") {
+        (Severity::Warning, r)
+    } else if let Some(r) = line.strip_prefix("note: ") {
+        (Severity::Note, r)
+    } else {
+        (Severity::Error, line)
+    }
+}
+
+/// `satz: line 12: msg` → (12, msg)
+fn split_satz_line(s: &str) -> Option<(u32, &str)> {
+    let rest = s.strip_prefix("satz: line ")?;
+    let digits = rest.chars().take_while(char::is_ascii_digit).count();
+    if digits == 0 {
+        return None;
+    }
+    let n: u32 = rest[..digits].parse().ok()?;
+    let msg = rest[digits..].strip_prefix(": ")?;
+    Some((n, msg))
+}
+
+/// `path/to/file.satz:12: msg` → (path, 12, msg). The first `:<digits>: ` wins, so a
+/// Windows drive letter (`C:\…`) is not mistaken for the separator.
+fn split_location(s: &str) -> Option<(&str, u32, &str)> {
+    let bytes = s.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b':' {
+            let mut j = i + 1;
+            while j < bytes.len() && bytes[j].is_ascii_digit() {
+                j += 1;
+            }
+            if j > i + 1 && s[j..].starts_with(": ") && i > 0 {
+                let n: u32 = s[i + 1..j].parse().ok()?;
+                return Some((&s[..i], n, &s[j + 2..]));
+            }
+        }
+        i += 1;
+    }
+    None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_pipeline_line_has_file_and_line() {
+        let d = parse_satz_output("satz v0.56.1 (built 2026-09-13 13:56:42)\nerror: transpile --check: yaml/smoke.satz:12: unknown param 'x'\n", DiagSource::Check);
+        assert_eq!(d.len(), 1);
+        assert_eq!(d[0].file.as_deref(), Some(Path::new("yaml/smoke.satz")));
+        assert_eq!(d[0].line, Some(12));
+        assert_eq!(d[0].message, "unknown param 'x'");
+        assert_eq!(d[0].severity, Severity::Error);
+    }
+
+    #[test]
+    fn a_parse_error_has_a_line_and_no_file() {
+        let d = parse_satz_output("satz: line 3: expected `{`", DiagSource::Parse);
+        assert_eq!(d[0].line, Some(3));
+        assert_eq!(d[0].file, None);
+        assert_eq!(d[0].message, "expected `{`");
+    }
+
+    #[test]
+    fn an_indented_line_continues_the_one_above() {
+        let d = parse_satz_output("composition conflict at google_folder.x\n  - a.satz:4\n  - b.satz:9\nwarning: something else", DiagSource::Compile);
+        assert_eq!(d.len(), 2);
+        assert_eq!(d[0].message, "composition conflict at google_folder.x\n- a.satz:4\n- b.satz:9");
+        assert_eq!(d[1].severity, Severity::Warning);
+    }
+
+    #[test]
+    fn a_windows_path_keeps_its_drive_letter() {
+        let (f, n, m) = split_location(r"C:\estates\acme\yaml\a.satz:7: msg").unwrap();
+        assert_eq!(f, r"C:\estates\acme\yaml\a.satz");
+        assert_eq!((n, m), (7, "msg"));
+    }
+
+    #[test]
+    fn repoint_moves_only_the_named_file() {
+        let d = Diagnostic::error("m", DiagSource::Check).at("/e/yaml/a.satz.studio-tmp", 2);
+        let d = d.repoint(Path::new("/e/yaml/a.satz.studio-tmp"), Path::new("/e/yaml/a.satz"));
+        assert_eq!(d.file.as_deref(), Some(Path::new("/e/yaml/a.satz")));
+    }
+}

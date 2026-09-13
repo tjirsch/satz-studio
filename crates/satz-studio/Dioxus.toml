@@ -1,0 +1,10 @@
+[application]
+name = "satz-studio"
+
+[bundle]
+identifier = "io.github.tjirsch.satz-studio"
+publisher = "tjirsch"
+copyright = "2026"
+category = "DeveloperTool"
+short_description = "The desktop app for satz"
+long_description = "satz-studio runs the satz interview, edits the estate map and the estate files through a typed interface, runs satz commands, and drives satz through Claude."

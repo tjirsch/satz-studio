@@ -1,0 +1,43 @@
+# Architecture decision records
+
+One file per decision that was not obvious, in [MADR](https://adr.github.io/madr/)
+form: the context, the options weighed with their real trade-offs, what was chosen,
+and what it costs.
+
+A decision belongs here when reversing it would be expensive, when a reader of the
+code would otherwise ask "why on earth", or when it was a genuine choice between
+defensible alternatives. Most changes are none of those and need no record.
+
+## Why they live here rather than in a commit message
+
+A commit message explains one change to whoever reads that commit. A record answers
+"why is it like this?" months later, when nobody is looking at the commit and the
+alternative has started to look attractive again. satz keeps its records the same way
+and for the same reason; this repository follows its conventions so a reader of one
+recognises the other.
+
+## Conventions
+
+- `NNNN-kebab-title.md`, numbered in order, never renumbered. Take the next free number
+  from the directory, not from memory.
+- The header is **Status**, **Date** and **Deciders**; a decider is named by role
+  (`the maintainer`), never by name.
+- **Status** is `proposed`, `accepted`, `superseded by ADR-NNNN`, or `rejected`. A
+  superseded record is not deleted: the reasoning that was right at the time is what
+  is worth keeping, and the successor says what changed.
+- The sections are Context, Decision, Consequences, and the pros and cons of every
+  option, the chosen one marked *(chosen)*. Options are written with their real
+  trade-offs, including the one that was chosen; a record whose alternatives are
+  strawmen documents nothing.
+- Nothing here names a customer, an organisation or a person: this repository goes
+  public, and the privacy gate treats these files like any other.
+- A record that rests on a decision satz made links satz's record
+  (`vendor/satz/docs/adr/`) rather than restating it.
+
+## Records
+
+| | decision | status |
+|---|---|---|
+| [0001](0001-dioxus-desktop-on-the-webview-renderer.md) | Dioxus 0.7 desktop on the webview renderer | accepted |
+| [0002](0002-a-separate-repository-with-satz-pinned-once.md) | a separate repository, with satz pinned once as a submodule and the binary required at a minimum version | accepted |
+| [0003](0003-the-document-layer-is-the-tree-sitter-grammar.md) | the document layer is the tree-sitter grammar of Satz, vendored and compiled in; satz-core stays the authority on meaning | accepted |
