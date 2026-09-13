@@ -4,8 +4,11 @@ name: ci
 # the pinned MIN_SATZ release (`pub const MIN_SATZ` in
 # crates/satz-studio-core/src/satz/binary.rs), installed by
 # scripts/install-satz.sh from the satz GitHub release and verified against its
-# SHA-256 sidecar. Windows has no satz release: there it is built from the
-# submodule vendor/satz instead, so the same pinned source serves.
+# SHA-256 sidecar; the script also writes the runner's satz config with the
+# update check off, because satz prints its update notice on stdout and a
+# newer release would break every `--format json` test. Windows has no satz
+# release: there it is built from the submodule vendor/satz instead, so the
+# same pinned source serves.
 #
 # `core` (Linux) runs on every push and pull request. `platforms` (macOS,
 # Windows) runs only for a release tag or a manual dispatch: the repository is

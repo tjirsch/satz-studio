@@ -28,6 +28,18 @@ case "$(uname -s 2>/dev/null || true):${OS:-}" in
 esac
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
+
+# The runner's own satz configuration: no update check. satz prints "Update
+# available" with println! — on STDOUT — whenever a newer release than the pinned
+# one exists, and then every `--format json` command starts with that line and
+# no test can parse it. Written only when no config exists, which is the case on
+# a CI runner; a person's config is never touched.
+satz_cfg="${XDG_CONFIG_HOME:-$HOME/.config}/satz/satz.toml"
+if [[ ! -f "$satz_cfg" ]]; then
+  mkdir -p "$(dirname "$satz_cfg")"
+  printf 'self_update_frequency = "never"\n' > "$satz_cfg"
+  echo "install-satz: wrote $satz_cfg (self_update_frequency = never)"
+fi
 binary_rs="$repo_root/crates/satz-studio-core/src/satz/binary.rs"
 min_pat='^pub const MIN_SATZ: &str = "[0-9]+\.[0-9]+\.[0-9]+";'
 
