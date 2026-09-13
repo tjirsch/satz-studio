@@ -136,14 +136,22 @@ pub fn param_value(cst: &Cst, name: &str) -> NodeId {
     }
 }
 
-/// The attribute `key` that starts on `line`.
-pub fn attr_on_line(cst: &Cst, line: u32, key: &str) -> NodeId {
-    cst.nodes_at_line(line)
-        .into_iter()
-        .find(
-            |&id| matches!(cst.node(id).kind, NodeKind::Attr { key: k, .. } if cst.slice(k) == key),
-        )
-        .unwrap_or_else(|| panic!("no attribute {key} on line {line}"))
+/// The first attribute named `key`, wherever the fixture puts it — a test that
+/// pinned a line number broke the day satz moved a line in its own fixture.
+pub fn attr_named(cst: &Cst, key: &str) -> NodeId {
+    cst.nodes()
+        .find(|(_, n)| matches!(n.kind, NodeKind::Attr { key: k, .. } if cst.slice(k) == key))
+        .map(|(id, _)| id)
+        .unwrap_or_else(|| panic!("no attribute {key}"))
+}
+
+/// The 1-based line whose trimmed text starts with `needle`.
+pub fn line_of(cst: &Cst, needle: &str) -> u32 {
+    cst.text()
+        .lines()
+        .position(|l| l.trim_start().starts_with(needle))
+        .map(|i| i as u32 + 1)
+        .unwrap_or_else(|| panic!("no line starting with {needle}"))
 }
 
 /// The first value that starts on `line` — a list item, when the line holds one.
