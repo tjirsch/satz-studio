@@ -17,17 +17,70 @@ pub struct SatzBinary {
 
 impl SatzBinary {
     /// Settings override, then `PATH`, then `~/.local/bin/satz`; the first that exists is
-    /// run with `--version` and held to [`MIN_SATZ`].
+    /// run with `--version` and held to [`MIN_SATZ`]. An override that does not exist is
+    /// [`SatzError::NotFound`] naming it; a candidate that exists but does not run, or
+    /// prints no version, is an error naming it — the search never continues past it.
     pub async fn locate(override_path: Option<&Path>) -> Result<SatzBinary, SatzError> {
-        let _ = override_path;
-        Err(crate::Unimplemented::new("SatzBinary::locate", "U4").into())
+        let path = match override_path {
+            Some(p) if p.is_file() => p.to_path_buf(),
+            Some(p) => {
+                return Err(SatzError::NotFound {
+                    tried: vec![p.to_path_buf()],
+                });
+            }
+            None => Self::first_on_path_or_home()?,
+        };
+        let output = tokio::process::Command::new(&path)
+            .arg("--version")
+            .kill_on_drop(true)
+            .output()
+            .await
+            .map_err(|e| SatzError::Io {
+                context: format!("running `{} --version`", path.display()),
+                source: e,
+            })?;
+        if !output.status.success() {
+            return Err(SatzError::Exit {
+                command: "--version".to_string(),
+                status: output.status,
+                stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+            });
+        }
+        // The version line is on stdout, the banner on stderr; both are read so a
+        // binary that prints only the banner still names its version.
+        let mut text = String::from_utf8_lossy(&output.stdout).into_owned();
+        text.push('\n');
+        text.push_str(&String::from_utf8_lossy(&output.stderr));
+        let version = Self::parse_version(&text)?;
+        Self::check(path, version)
+    }
+
+    /// `satz` on `PATH`, else `~/.local/bin/satz`; [`SatzError::NotFound`] lists both.
+    fn first_on_path_or_home() -> Result<PathBuf, SatzError> {
+        let mut tried = Vec::new();
+        match which::which("satz") {
+            Ok(p) => return Ok(p),
+            Err(_) => tried.push(PathBuf::from("satz (on PATH)")),
+        }
+        if let Some(home) = dirs::home_dir() {
+            let local = home.join(".local").join("bin").join("satz");
+            if local.is_file() {
+                return Ok(local);
+            }
+            tried.push(local);
+        }
+        Err(SatzError::NotFound { tried })
     }
 
     /// The version in `satz --version` output (`satz 0.56.1`, possibly after the banner line).
     pub fn parse_version(output: &str) -> Result<semver::Version, SatzError> {
         for line in output.lines() {
             if let Some(rest) = line.trim().strip_prefix("satz ") {
-                let word = rest.trim_start_matches('v').split_whitespace().next().unwrap_or("");
+                let word = rest
+                    .trim_start_matches('v')
+                    .split_whitespace()
+                    .next()
+                    .unwrap_or("");
                 if let Ok(v) = semver::Version::parse(word) {
                     return Ok(v);
                 }
@@ -42,7 +95,10 @@ impl SatzBinary {
         if found < required {
             return Err(SatzError::TooOld { found, required });
         }
-        Ok(SatzBinary { path, version: found })
+        Ok(SatzBinary {
+            path,
+            version: found,
+        })
     }
 }
 
@@ -53,12 +109,16 @@ mod tests {
     #[test]
     fn the_version_line_is_read_past_the_banner() {
         let out = "satz v0.56.1 (built 2026-09-13 13:56:42)\nsatz 0.56.1\n";
-        assert_eq!(SatzBinary::parse_version(out).unwrap(), semver::Version::new(0, 56, 1));
+        assert_eq!(
+            SatzBinary::parse_version(out).unwrap(),
+            semver::Version::new(0, 56, 1)
+        );
     }
 
     #[test]
     fn an_older_binary_is_refused_by_version() {
-        let e = SatzBinary::check(PathBuf::from("satz"), semver::Version::new(0, 51, 1)).unwrap_err();
+        let e =
+            SatzBinary::check(PathBuf::from("satz"), semver::Version::new(0, 51, 1)).unwrap_err();
         assert!(matches!(e, SatzError::TooOld { .. }), "{e}");
         assert!(e.to_string().contains("self-update"));
     }
@@ -70,9 +130,15 @@ mod tests {
         let manifest = include_str!("../../../../vendor/satz/Cargo.toml");
         let version = manifest
             .lines()
-            .find_map(|l| l.strip_prefix("version = \"").and_then(|r| r.strip_suffix('"')))
+            .find_map(|l| {
+                l.strip_prefix("version = \"")
+                    .and_then(|r| r.strip_suffix('"'))
+            })
             .expect("vendor/satz/Cargo.toml has a version line");
-        assert_eq!(version, MIN_SATZ, "vendor/satz is at {version} but MIN_SATZ says {MIN_SATZ}");
+        assert_eq!(
+            version, MIN_SATZ,
+            "vendor/satz is at {version} but MIN_SATZ says {MIN_SATZ}"
+        );
     }
 
     #[test]
