@@ -305,6 +305,8 @@ async fn drive(
                         .map(|v| v.to_string())
                         .unwrap_or(outcome.text),
                 },
+                // only the Claude Code engine has a notice to raise
+                AgentEvent::Notice(text) => panic!("the agent raised a notice: {text}"),
                 AgentEvent::TurnDone { stop_reason, .. } => Seen::TurnDone(stop_reason),
                 AgentEvent::Refused { category, .. } => Seen::Refused(category),
                 AgentEvent::Failed(e) => Seen::Failed(e.to_string()),

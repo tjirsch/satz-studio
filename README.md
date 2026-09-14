@@ -26,10 +26,18 @@ Map, Resources) and the Chat view are built next.
 - **The platform's webview.** Windows 10 and 11 ship WebView2. Linux needs
   `webkit2gtk-4.1` (Debian and Ubuntu: `libwebkit2gtk-4.1-0`; Ubuntu 22.04 ships only
   the 4.0 API and does not run it). macOS needs nothing.
-- **A Claude credential, for the Chat view only:** `ANTHROPIC_API_KEY`,
-  `ANTHROPIC_AUTH_TOKEN`, an `ant auth login` profile, or a key entered in Settings and
-  kept in the OS keychain. The app writes no key to disk. Every other view works
-  without one.
+- **A Claude credential *or* a Claude Code login, for the Chat view only.** Either
+  serves it; Settings chooses which engine runs.
+  - *A credential:* `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, an `ant auth login`
+    profile, or a key entered in Settings and kept in the OS keychain. The app writes no
+    key to disk.
+  - *A Claude Code login:* the `claude` CLI installed and signed in to a claude.ai
+    account (`claude auth login`), which runs the chat on that subscription with no API
+    key. The app reads no credential of Claude Code's — only whether it is signed in —
+    and gives it the open estate's own satz tools, with the same approval card every
+    write passes. Settings shows the account and signs in and out for you.
+
+  Every other view works without either.
 
 ## Build and run from source
 
@@ -47,8 +55,11 @@ cargo test -p satz-studio-core        # the headless tests: no window, no creden
 
 A clone without `--recurse-submodules` has an empty `vendor/satz` and does not build;
 `git submodule update --init` fills it. The tests read the pinned satz checkout and
-`tests/fixtures`; the tests that drive the `satz` binary need it installed, and the one
-live Claude request runs only with `SATZ_STUDIO_LIVE=1` and a credential.
+`tests/fixtures`; the tests that drive the `satz` binary need it installed. The one live
+Claude request runs only with `SATZ_STUDIO_LIVE=1` and a credential, and the one live
+Claude Code turn only with `SATZ_STUDIO_LIVE_CLAUDE_CODE=1` and a signed-in `claude`;
+without those the two print a note and pass. The Claude Code tests otherwise run against
+a fake CLI and need Python 3.
 
 ## Repository layout
 

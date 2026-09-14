@@ -163,6 +163,10 @@ pub enum AgentEvent {
         outcome: ToolOutcome,
         millis: u128,
     },
+    /// something the engine says about the turn that is not part of the answer: the
+    /// subscription's usage against the plan, a retry, a tool the engine denied
+    /// itself. The Chat view shows the last one in its footer.
+    Notice(String),
     /// the turn ended; `usage` is the last request's
     TurnDone {
         stop_reason: StopReason,

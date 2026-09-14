@@ -45,6 +45,10 @@ pub enum ClaudeError {
     /// A tool call failed below the tool — the session, not the tool's own refusal.
     #[error("tool {name}: {message}")]
     Tool { name: String, message: String },
+    /// The Claude Code backend (ADR 0010) failed: the CLI, its protocol, or the turn
+    /// it reported. `llm::claude_code::ClaudeCodeError` is what said it.
+    #[error("{0}")]
+    ClaudeCode(String),
     #[error("cancelled")]
     Cancelled,
 }

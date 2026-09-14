@@ -44,6 +44,7 @@ pub fn Composer() -> Element {
     let ready = chat.agent().cloned() == AgentStatus::Ready;
     let caps = chat.capabilities().cloned();
     let effort = chat.effort().cloned();
+    let claude_code = chat.engine().cloned().is_claude_code();
     let can_send = ready && !busy && !draft().trim().is_empty();
     let mut send = move || {
         let text = draft().trim().to_string();
@@ -85,7 +86,8 @@ pub fn Composer() -> Element {
                     value: model_field(),
                     monospace: true,
                     class: "chat__model",
-                    supporting: "Enter applies it; a different model starts a new transcript",
+                    disabled: claude_code,
+                    supporting: if claude_code { "Claude Code takes its model from Settings" } else { "Enter applies it; a different model starts a new transcript" },
                     oninput: move |v: String| model_field.set(v),
                     onenter: move |_| handle.send(ChatAction::SetModel(model_field())),
                 }
@@ -104,14 +106,20 @@ pub fn Composer() -> Element {
                     }
                 }
                 div { class: "chat__caps",
-                    if !caps.thinking {
-                        Chip { kind: ChipKind::Assist, icon: "psychology_alt", label: "no thinking" }
-                    }
-                    if !caps.effort {
-                        Chip { kind: ChipKind::Assist, icon: "speed", label: "no effort" }
-                    }
-                    if !caps.cache_control {
-                        Chip { kind: ChipKind::Assist, icon: "cached", label: "no caching" }
+                    if claude_code {
+                        // the loop, the context window and the effort are Claude Code's;
+                        // what the app still owns is the estate's tools and their approval
+                        Chip { kind: ChipKind::Assist, icon: "terminal", label: "tools run inside Claude Code" }
+                    } else {
+                        if !caps.thinking {
+                            Chip { kind: ChipKind::Assist, icon: "psychology_alt", label: "no thinking" }
+                        }
+                        if !caps.effort {
+                            Chip { kind: ChipKind::Assist, icon: "speed", label: "no effort" }
+                        }
+                        if !caps.cache_control {
+                            Chip { kind: ChipKind::Assist, icon: "cached", label: "no caching" }
+                        }
                     }
                 }
             }

@@ -47,3 +47,4 @@ recognises the other.
 | [0007](0007-pack-rows-are-derived-from-the-estate-file.md) | pack rows are derived from the estate file, the questions report and the resolved params; no copied table | accepted |
 | [0008](0008-transcripts-live-outside-the-estate.md) | transcripts live under the app's data directory, never inside an estate | accepted |
 | [0009](0009-refusal-fallbacks-are-on-by-default.md) | refusal fallbacks are on by default, off by a Settings switch | accepted |
+| [0010](0010-claude-code-as-the-subscription-backend.md) | Claude Code as the subscription backend: the installed CLI driven over stdio, the estate's satz MCP server, the app's own approval card | accepted |

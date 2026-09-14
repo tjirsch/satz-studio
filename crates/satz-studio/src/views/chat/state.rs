@@ -26,7 +26,27 @@ pub enum AgentStatus {
     NoCredential {
         tried: Vec<String>,
     },
+    /// the Claude Code engine, with a CLI that is signed out; `login` is the shell
+    /// line the Sign in button runs in the user's terminal
+    NotSignedIn {
+        login: String,
+    },
     Failed(String),
+}
+
+/// Which engine serves the chat: the app's own loop over the Messages API, or the
+/// installed Claude Code CLI on the user's subscription (ADR 0010). The rail, the
+/// composer and the footer each show something different for the two.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EngineKind {
+    Api,
+    ClaudeCode,
+}
+
+impl EngineKind {
+    pub fn is_claude_code(self) -> bool {
+        matches!(self, EngineKind::ClaudeCode)
+    }
 }
 
 /// One turn of the conversation as the list shows it. Only these two mirror the
@@ -244,7 +264,11 @@ pub struct ChatStore {
     pub transcripts: Vec<PathBuf>,
     pub model: String,
     pub effort: Effort,
+    pub engine: EngineKind,
     pub capabilities: Capabilities,
+    /// the last thing the engine said about the turn that is not the answer: the
+    /// subscription's usage against the plan, a retry, a tool the engine denied itself
+    pub engine_notice: Option<String>,
     /// a turn is running: Send is off, Cancel is on
     pub busy: bool,
     /// something outside a turn went wrong: a transcript not written, an action refused
@@ -252,7 +276,7 @@ pub struct ChatStore {
 }
 
 impl ChatStore {
-    pub fn new(model: String, effort: Effort) -> Self {
+    pub fn new(model: String, effort: Effort, engine: EngineKind) -> Self {
         Self {
             agent: AgentStatus::Starting,
             turns: Vec::new(),
@@ -264,12 +288,14 @@ impl ChatStore {
             transcripts: Vec::new(),
             model,
             effort,
+            engine,
             capabilities: Capabilities {
                 tools: true,
                 thinking: true,
                 effort: true,
                 cache_control: true,
             },
+            engine_notice: None,
             busy: false,
             error: None,
         }
@@ -337,6 +363,7 @@ impl ChatStore {
                 }
                 self.pending = None;
             }
+            AgentEvent::Notice(text) => self.engine_notice = Some(text),
             AgentEvent::TurnDone { stop_reason, usage } => {
                 match self.streaming.take() {
                     Some(mut turn) => {
@@ -464,6 +491,7 @@ fn event_name(event: &AgentEvent) -> &'static str {
         AgentEvent::ToolInputDelta { .. } => "ToolInputDelta",
         AgentEvent::ToolCallPending { .. } => "ToolCallPending",
         AgentEvent::ToolResult { .. } => "ToolResult",
+        AgentEvent::Notice(_) => "Notice",
         AgentEvent::TurnDone { .. } => "TurnDone",
         AgentEvent::Refused { .. } => "Refused",
         AgentEvent::Failed(_) => "Failed",
@@ -690,7 +718,7 @@ mod tests {
     use satz_studio_core::llm::ClaudeError;
 
     fn store() -> ChatStore {
-        ChatStore::new("claude-opus-5".to_string(), Effort::High)
+        ChatStore::new("claude-opus-5".to_string(), Effort::High, EngineKind::Api)
     }
 
     fn started(store: &mut ChatStore, text: &str) {
@@ -949,6 +977,26 @@ mod tests {
         );
         assert_eq!(s.usage.turns, 1);
         assert_eq!(s.error, None);
+    }
+
+    #[test]
+    fn a_notice_reaches_the_footer_and_leaves_the_turn_alone() {
+        let mut s = store();
+        started(&mut s, "one");
+        s.apply(AgentEvent::TextDelta("partial".into()));
+        s.apply(AgentEvent::Notice(
+            "Claude plan: 51% of the seven-day limit used".into(),
+        ));
+        assert_eq!(
+            s.engine_notice.as_deref(),
+            Some("Claude plan: 51% of the seven-day limit used")
+        );
+        assert!(s.busy);
+        assert_eq!(s.error, None);
+        assert_eq!(
+            s.streaming.as_ref().unwrap().blocks,
+            vec![Block::Text("partial".into())]
+        );
     }
 
     #[test]
