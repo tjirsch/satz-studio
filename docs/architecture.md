@@ -53,7 +53,7 @@ Two crates in one workspace, satz pinned once as the submodule `vendor/satz`
 | `src/satz/cli.rs` | `satz --config <dir> <args…>` in the estate's directory, stdout and stderr streamed line by line and cancellable; `json` types `--format json` output | `SatzCli`, `CliLine` |
 | `src/satz/mcp.rs` | one `satz mcp` child per estate, spoken to with rmcp over stdio; every rmcp type stays inside this file | `McpSession`, `ToolInfo`, `ToolAnnotations`, `ToolOutcome` |
 | `src/satz/session.rs` | one session per open estate: the CLI runner, the MCP child, the write lock every writer takes, the identity from `satz_open`; `apply` and `bootstrap` as a one-shot script in the OS terminal | `EstateSession`, `session_root` |
-| `src/satz/reports.rs` | serde mirrors of what satz prints with `--format json` and returns as `structuredContent`: unknown fields ignored, missing required fields fail; the questions report round-trips a recorded output of the pinned satz | `QuestionsReport`, `QuestionRow`, `InterviewArgs`, `InterviewReport`, `OpenReport`, `EstatesReport`, `CompileSummary` |
+| `src/satz/reports.rs` | serde mirrors of what satz prints with `--format json` and returns as `structuredContent`: unknown fields ignored, missing required fields fail; the questions report round-trips a recorded output of the pinned satz. `Finding` is satz's own list of what the compile found after the front end — a `CompileSummary` carries the warnings and notes it did not refuse on, a `Refusal` the ones it did; `kind` is the kebab-case word satz writes, kept as a `String` so a kind satz adds is carried instead of failing the result | `QuestionsReport`, `QuestionRow`, `InterviewArgs`, `InterviewReport`, `OpenReport`, `EstatesReport`, `CompileSummary`, `Finding`, `FindingSeverity`, `Refusal` |
 | `src/satz/mod.rs` | the capability ceiling and the one error type of the driver | `Allow`, `SatzError` |
 | `src/llm/claude/` | Claude natively ([ADR 0004](adr/0004-claude-natively-other-providers-adapt-into-its-message-model.md)): `types.rs` the Messages API wire types as the app's only message model and `body()`, `sse.rs` the event-stream decoder and the assembler, `client.rs` the HTTPS client, `error.rs` the one error type | `Request`, `Response`, `Message`, `ContentBlock`, `SystemBlock`, `ToolDef`, `StopReason`, `StopDetails`, `Usage`, `Effort`, `ClaudeClient`, `ClaudeError` |
 | `src/llm/agent/` | the agent loop over a `ToolHost`, the approval gate, and `bridge.rs`: MCP tools as Claude tool definitions and outcomes back as `tool_result` blocks | `Agent`, `AgentEvent`, `Approval`, `ToolHost`, `EstateContext`, `tool_defs`, `tool_result` |
@@ -61,7 +61,7 @@ Two crates in one workspace, satz pinned once as the submodule `vendor/satz`
 | `src/llm/provider/` | the providers that are not Claude, mapping the Claude-shaped request into their wire format and their stream back; `Capabilities` says what each drops | `ChatProvider`, `StreamEvent`, `Capabilities`, `OpenAiCompat`, `Ollama` |
 | `src/transcript.rs` | conversations as JSONL under the app's data directory, outside the estate ([ADR 0008](adr/0008-transcripts-live-outside-the-estate.md)) | `TranscriptStore`, `Transcript`, `TranscriptHeader` |
 | `src/settings.rs` | `<config dir>/satz-studio/settings.toml`: a missing file is the first run, a broken one is an error; no credential in it; `data_dir` is where transcripts and the one-shot scripts go | `Settings`, `ProviderChoice`, `Theme`, `settings_path`, `data_dir` |
-| `src/diag.rs` | the one diagnostic type, and the parser for what satz prints (`file:line: msg`, `satz: line N: msg`, the severity prefixes, the banner dropped, an indented line continuing the one above) | `Diagnostic`, `Severity`, `DiagSource`, `parse_satz_output` |
+| `src/diag.rs` | the one diagnostic type: `Diagnostic::from_finding` turns one of satz's findings into it — the severity mapped, the `kind` carried, a relative file resolved against the estate's directory, the group's header in front of the message — and `parse_satz_output` reads what satz prints when there is no finding to read (`file:line: msg`, `satz: line N: msg`, the severity prefixes, the banner dropped, an indented line continuing the one above) | `Diagnostic`, `Severity`, `DiagSource`, `parse_satz_output` |
 
 `build.rs` compiles `vendor/satz-tree-sitter/src/parser.c` (and `scanner.c` when the
 grammar has one) with `cc` into the crate; `COMMIT` beside it names the grammar commit,
@@ -184,9 +184,21 @@ value }`:
    summary }` is the next session's snapshot.
 
 `McpChecker` calls `satz_transpile_check {estate}` over the session and types its
-`CompileSummary`; `CliChecker` runs `satz --config <dir> transpile <path> --check`,
-decodes a refusal from the final `Error:` line satz prints, and returns an empty
-address list, since the CLI prints none. A test holds both to the same verdict.
+`CompileSummary`; `CliChecker` runs `satz --config <dir> transpile <path> --check`.
+Both read satz's findings as data rather than the sentences it renders them to: over
+MCP a refusal's `structuredContent` carries them and a pass carries them in the
+summary; on the CLI they are the `Debug` of the `CompileRefusal` the process exits on,
+decoded from the final `Error:` line — one diagnostic per finding, at the file and
+line it names, with its `kind`. A structured payload of a shape the app does not read
+is `CheckFailure::Failed`, never a guess. A refusal that never reached the compile
+carries no findings, and its text is read as satz's output; a front-end failure is the
+`PipelineError` form, one located diagnostic. `CliChecker` returns an empty address
+list and no findings, since the CLI prints neither as data. A test holds both to the
+same verdict and the same `(file, line, kind, message)` set.
+
+What a check that passed reported reaches the drawer too: after a write lands — a
+value edit, an answer, the map line — `Committed.summary.findings` becomes diagnostics
+at their lines, so a warning satz raised is visible beside the change that raised it.
 
 A delegated write (an answer, a pack toggle, a `oneof` choice) is `satz_interview`,
 satz's own writer on the real file. `Snapshot::take(path)` records the bytes first;
@@ -257,11 +269,13 @@ request: the desktop crate's system libraries, then `scripts/install-satz.sh`, t
 `cargo fmt -p satz-studio-core -p satz-studio -- --check` (the two packages;
 `vendor/satz` is satz's own), `cargo clippy --workspace --all-targets --locked -- -D
 warnings`, `cargo test --workspace --locked` and `cargo build -p satz-studio --locked`.
-`install-satz.sh` downloads the cargo-dist installer of the `MIN_SATZ` release with its
-SHA-256 sidecar, refuses an installer without one, and writes the runner's satz config
-(`self_update_frequency = "never"`) when none exists: satz up to v0.56.6 prints its
-update notice on stdout, ahead of every `--format json` result; v0.56.7 prints it on
-stderr and runs no check under `mcp` and `lsp`. `platforms` (`macos-15`,
+`install-satz.sh` downloads the cargo-dist installer of the newest satz release with
+its SHA-256 sidecar, refuses an installer without one, and refuses a release below
+`MIN_SATZ`; a tag given as its one argument installs that release instead. It follows
+the newest because satz keeps only its five newest releases, so an installer asset
+pinned by tag is gone within days, and the app's contract is `MIN_SATZ` or newer. It
+also writes the runner's satz config (`self_update_frequency = "never"`) when none
+exists, so no update check runs while the tests read `--format json`. `platforms` (`macos-15`,
 `windows-2022`) runs only for a release tag or a manual dispatch while the repository
 is private; on Windows satz is built from the submodule, since satz has no Windows
 release. `.github/workflows/names-gate.yml` runs `scripts/check-names.sh` over the

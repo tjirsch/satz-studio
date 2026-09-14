@@ -166,13 +166,62 @@ pub struct EstatesReport {
     pub estates: Vec<EstateEntry>,
 }
 
-/// What a compile produced: the emitted addresses, and the files written (empty for a check).
+/// How bad a finding is. `Error` refuses the compile; `Warning` and `Note` come back
+/// with a summary that passed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum FindingSeverity {
+    Error,
+    Warning,
+    Note,
+}
+
+/// One thing the compile found after the front end, at the file and line it names.
+/// satz's own list (`src/findings.rs`), as it serialises it.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct Finding {
+    pub severity: FindingSeverity,
+    /// Which check spoke, kebab-case as satz writes it: `unadopted-pack`,
+    /// `missing-required`, `written-reference`, `conflict`, `dry-run-conflict`,
+    /// `suppression`, `emit`, `iac-roles`, `providers`, `action`, `hcl-passthrough`.
+    /// A `String` rather than an enum, so a kind satz adds is carried through instead
+    /// of failing the whole result.
+    pub kind: String,
+    /// The header the CLI prints once above the findings that share it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub group: Option<String>,
+    /// The file as the loader saw it — a `use` path, or the estate.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file: Option<String>,
+    /// 1-based, in that file
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub line: Option<u32>,
+    pub message: String,
+}
+
+/// What a compile produced: the emitted addresses, the files written (empty for a
+/// check), and what the compile found and did not refuse on.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct CompileSummary {
     pub estate: String,
     pub addresses: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub written: Vec<String>,
+    /// the warnings and notes the CLI prints; `CliChecker` synthesises a summary and
+    /// has none
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub findings: Vec<Finding>,
+}
+
+/// The `structuredContent` of a refused compile tool: what the compile found, each
+/// finding at its own line. satz sends the whole `CompileSummary` shape with nothing
+/// emitted; the findings are the half a caller can point at lines. A refusal that
+/// never reached the compile — a missing file, an estate outside the root — carries no
+/// structured content at all.
+#[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+pub struct Refusal {
+    #[serde(default)]
+    pub findings: Vec<Finding>,
 }
 
 #[cfg(test)]
@@ -213,6 +262,52 @@ mod tests {
         .unwrap();
         assert_eq!(r.rename_to.as_deref(), Some("C0example.satz"));
         assert!(r.report.summary.complete);
+    }
+
+    /// The `structuredContent` of a refused `satz_transpile_check`, recorded from the
+    /// pinned release.
+    const REFUSED: &str = r#"{
+        "addresses": [],
+        "estate": "/e/yaml/acme.satz",
+        "findings": [{
+            "file": "/e/yaml/acme.satz",
+            "group": "required arguments missing:",
+            "kind": "missing-required",
+            "line": 109,
+            "message": "google_storage_bucket.state (/e/yaml/acme.satz:109): the provider requires location",
+            "severity": "error"
+        }]
+    }"#;
+
+    #[test]
+    fn a_refusals_structured_content_reads_as_findings() {
+        let refusal: Refusal = serde_json::from_str(REFUSED).unwrap();
+        assert_eq!(refusal.findings.len(), 1);
+        let f = &refusal.findings[0];
+        assert_eq!(f.severity, FindingSeverity::Error);
+        assert_eq!(f.kind, "missing-required");
+        assert_eq!(f.line, Some(109));
+        assert_eq!(f.group.as_deref(), Some("required arguments missing:"));
+        // the same payload is a summary: a refusal emits nothing
+        let summary: CompileSummary = serde_json::from_str(REFUSED).unwrap();
+        assert!(summary.addresses.is_empty());
+        assert_eq!(summary.findings, refusal.findings);
+    }
+
+    #[test]
+    fn a_summary_without_findings_reads_and_a_kind_satz_adds_is_carried() {
+        let s: CompileSummary = serde_json::from_value(
+            serde_json::json!({"estate": "e", "addresses": ["google_folder.x"]}),
+        )
+        .unwrap();
+        assert!(s.findings.is_empty());
+        let f: Finding = serde_json::from_value(serde_json::json!({
+            "severity": "note", "kind": "a-kind-satz-grew", "message": "m"
+        }))
+        .unwrap();
+        assert_eq!(f.kind, "a-kind-satz-grew");
+        assert_eq!(f.severity, FindingSeverity::Note);
+        assert_eq!((f.file, f.line, f.group), (None, None, None));
     }
 
     #[test]

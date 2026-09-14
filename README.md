@@ -17,7 +17,7 @@ Map, Resources) and the Chat view are built next.
 
 ## What it needs
 
-- **`satz` 0.56.7 or newer.** `MIN_SATZ` in `crates/satz-studio-core/src/satz/binary.rs`
+- **`satz` 0.56.14 or newer.** `MIN_SATZ` in `crates/satz-studio-core/src/satz/binary.rs`
   names the version, the same release the submodule `vendor/satz` is pinned to. Install
   satz with its installer or bring it up to date with `satz self-update`. The app looks
   at the path set in Settings, then on `PATH`, then at `~/.local/bin/satz`. An older
@@ -61,7 +61,7 @@ live Claude request runs only with `SATZ_STUDIO_LIVE=1` and a credential.
 | `vendor/satz-tree-sitter/` | the generated tree-sitter parser for Satz (`src/`), copied from the grammar repository at the commit named in `COMMIT`; `scripts/sync-grammar.sh` refreshes it and `crates/satz-studio-core/build.rs` compiles it |
 | `tests/fixtures/` | an estate directory over satz's smoke estates, its `config.toml` pointing into the submodule; a test that writes copies it first |
 | `docs/` | [`architecture.md`](docs/architecture.md), [`ui.md`](docs/ui.md), [`verification.md`](docs/verification.md) and the decision records under [`adr/`](docs/adr/README.md) |
-| `scripts/` | the privacy gate (`check-names.sh`), the satz installer CI runs (`install-satz.sh`, the `MIN_SATZ` release verified against its SHA-256 sidecar), the verification harness (`e2e.sh`), the grammar refresh (`sync-grammar.sh`) |
+| `scripts/` | the privacy gate (`check-names.sh`), the satz installer CI runs (`install-satz.sh`, the newest satz release verified against its SHA-256 sidecar and held to `MIN_SATZ` or newer), the verification harness (`e2e.sh`), the grammar refresh (`sync-grammar.sh`) |
 | `.github/workflows/` | `ci.yml` (formatting, clippy, tests, the verification harness, a build of the app; Linux on every push, macOS and Windows on a tag), `release.yml` (the bundles of the three operating systems on a tag) and `names-gate.yml` (the privacy gate over the tree and the commits) |
 | `.githooks/` | the pre-commit and commit-msg hooks that run the gate locally |
 

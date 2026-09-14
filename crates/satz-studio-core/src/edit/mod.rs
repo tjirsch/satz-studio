@@ -94,9 +94,10 @@ pub enum CommitError {
 /// What a check returned when it did not pass.
 #[derive(Debug)]
 pub enum CheckFailure {
-    /// satz compiled the file and refused it — diagnostics with lines
+    /// satz compiled the file and refused it — one diagnostic per finding, at the
+    /// line the finding names
     Refused(Vec<Diagnostic>),
-    /// satz could not be run at all
+    /// satz could not be run at all, or answered in a shape this version does not read
     Failed(SatzError),
 }
 
@@ -131,6 +132,8 @@ pub struct Committed {
     pub path: PathBuf,
     /// the hash of what is on disk now — the next session's snapshot
     pub sha256: String,
+    /// what the check reported: the emitted addresses, and the findings it did not
+    /// refuse on — the warnings and notes the app shows at their lines after the write
     pub summary: CompileSummary,
 }
 
@@ -230,7 +233,8 @@ impl Proposed {
     ///    and is [`CommitError::Satz`];
     /// 4. the temp file is renamed over the real one;
     /// 5. the file is read again and hashed: [`Committed`] carries that hash and the
-    ///    summary, its `estate` re-pointed to the real path.
+    ///    summary — its `estate` re-pointed to the real path, its `findings` what the
+    ///    check reported without refusing.
     ///
     /// Every I/O failure names its path. The temp file never survives a failure: when
     /// it cannot be removed, the error says so beside the failure that came first.

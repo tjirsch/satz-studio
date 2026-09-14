@@ -43,6 +43,12 @@ pub struct SmokeCopy {
 }
 
 pub fn copy_smoke() -> SmokeCopy {
+    copy_smoke_at(None)
+}
+
+/// The same copy at a validation level other than satz's default (`warn`): under
+/// `"error"` a finding that would be a warning refuses the compile instead.
+pub fn copy_smoke_at(validation_level: Option<&str>) -> SmokeCopy {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path().canonicalize().unwrap();
     let yaml = root.join("yaml");
@@ -54,12 +60,15 @@ pub fn copy_smoke() -> SmokeCopy {
         }
     }
     let vendor = repo_root().join("vendor").join("satz");
-    let config = format!(
+    let mut config = format!(
         "yaml_dir = \"yaml\"\nhcl_dir = \"hcl\"\ninclude_dirs = [\".\", \"yaml\", '{}']\nschema_dir = '{}'\npresets_dir = '{}'\ntf_tool = \"tofu\"\nprovider_version = \"7.14.1\"\n",
         vendor.display(),
         vendor.join("tests").join("schemas").display(),
         vendor.join("presets").display(),
     );
+    if let Some(level) = validation_level {
+        config.push_str(&format!("validation_level = \"{level}\"\n"));
+    }
     std::fs::write(root.join("config.toml"), config).unwrap();
     SmokeCopy { _dir: dir, root }
 }
@@ -125,6 +134,18 @@ pub async fn interview(session: &EstateSession, answers: serde_json::Value) -> I
     let outcome = within(session.tool("satz_interview", args)).await.unwrap();
     assert!(!outcome.is_error, "{}", outcome.text);
     outcome.typed("satz_interview").unwrap()
+}
+
+/// Whether `params { }` binds `name` to `value`. By param, not by spacing: satz's own
+/// writer keeps a formatted file formatted, so the `=` column of a bound line is the
+/// block's, not the writer's.
+pub fn binds(text: &str, name: &str, value: &str) -> bool {
+    let cst = Cst::parse(text).expect("the file parses");
+    cst.param(name)
+        .is_some_and(|entry| match cst.node(entry).kind {
+            NodeKind::ParamEntry { value: node, .. } => cst.slice(cst.node(node).span) == value,
+            _ => false,
+        })
 }
 
 /// The value node of the param `name` binds.

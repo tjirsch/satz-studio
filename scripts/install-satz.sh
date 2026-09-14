@@ -1,8 +1,13 @@
 #!/usr/bin/env bash
 # install-satz.sh — installs the satz release the tests drive.
 #
-#   scripts/install-satz.sh            # the tag is MIN_SATZ, prefixed with v
-#   scripts/install-satz.sh vX.Y.Z     # that release
+#   scripts/install-satz.sh            # the NEWEST release, held to MIN_SATZ or newer
+#   scripts/install-satz.sh vX.Y.Z     # that release exactly
+#
+# satz keeps only its five newest releases (its prune workflow deletes older
+# releases and their tags), so an installer asset pinned by tag is gone within
+# days. The app's contract is MIN_SATZ OR NEWER, so the runner installs the newest
+# release and this script holds it to the floor.
 #
 # MIN_SATZ is the ONE minimum satz version: `pub const MIN_SATZ` in
 # crates/satz-studio-core/src/satz/binary.rs. The script downloads the cargo-dist
@@ -47,11 +52,12 @@ case $# in
   0)
     n=$(grep -c -E "$min_pat" "$binary_rs" || true)
     [[ "$n" -eq 1 ]] || die "expected exactly one \`pub const MIN_SATZ: &str = \"X.Y.Z\";\` line in $binary_rs, found $n"
-    tag="v$(grep -E "$min_pat" "$binary_rs" | sed -E 's/.*"([0-9.]+)".*/\1/')" ;;
+    floor="$(grep -E "$min_pat" "$binary_rs" | sed -E 's/.*"([0-9.]+)".*/\1/')"
+    tag="latest" ;;
   1)
     case "$1" in
       -h|--help) usage; exit 0 ;;
-      v[0-9]*.[0-9]*.[0-9]*) tag="$1" ;;
+      v[0-9]*.[0-9]*.[0-9]*) tag="$1"; floor="" ;;
       *) usage; die "a tag looks like vX.Y.Z, not '$1'" ;;
     esac ;;
   *) usage; exit 1 ;;
@@ -65,7 +71,11 @@ else
   die "neither sha256sum nor shasum is on PATH"
 fi
 
-base="https://github.com/tjirsch/satz/releases/download/$tag"
+if [[ "$tag" == "latest" ]]; then
+  base="https://github.com/tjirsch/satz/releases/latest/download"
+else
+  base="https://github.com/tjirsch/satz/releases/download/$tag"
+fi
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 echo "install-satz: $tag from $base"
@@ -89,5 +99,13 @@ bin="$HOME/.local/bin/satz"
 [[ -x "$bin" ]] || die "the installer ran but $bin is not there"
 version=$("$bin" --version)
 printf '%s\n' "$version"
-want=$(printf '%s' "${tag#v}" | sed 's/\./\\./g')
-printf '%s\n' "$version" | grep -q -E "(^|[ v])${want}"'( |$)' || die "$bin reports a version other than ${tag#v}"
+got=$(printf '%s\n' "$version" | sed -n -E 's/^satz ([0-9]+\.[0-9]+\.[0-9]+)$/\1/p' | tail -1)
+[[ -n "$got" ]] || die "$bin printed no 'satz X.Y.Z' line: $version"
+if [[ "$tag" == "latest" ]]; then
+  # the floor: the newest release must be MIN_SATZ or newer (sort -V orders versions)
+  lowest=$(printf '%s\n%s\n' "$floor" "$got" | sort -V | head -1)
+  [[ "$lowest" == "$floor" ]] || die "the newest satz release is $got, below MIN_SATZ $floor — move the pin down or wait for satz"
+  echo "install-satz: satz $got (MIN_SATZ $floor)"
+else
+  [[ "$got" == "${tag#v}" ]] || die "$bin reports $got, not ${tag#v}"
+fi

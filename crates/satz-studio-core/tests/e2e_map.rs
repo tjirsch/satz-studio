@@ -65,11 +65,17 @@ async fn the_map_goes_in_and_a_choice_answered_twice_leaves_its_line_active() {
     let text = support::read(&main);
     assert!(text.contains(&active), "{text}");
     assert!(!text.contains(&commented));
-    assert!(
-        text.contains("\n  use_billing_permissions = true\n"),
+    // by param, not by spacing: satz's writer keeps a formatted file formatted, so the
+    // bound line carries the block's `=` column
+    let cst = Cst::parse(&text).unwrap();
+    assert_eq!(
+        support::params_of(&cst)
+            .get("use_billing_permissions")
+            .map(String::as_str),
+        Some("true"),
         "{text}"
     );
-    let uses = scan_uses(&Cst::parse(&text).unwrap());
+    let uses = scan_uses(&cst);
     let line = uses.iter().find(|u| u.path == BILLING).unwrap();
     assert_eq!(line.state, UseState::Active);
     assert_eq!(line.gate.as_deref(), Some("use_billing_permissions"));
@@ -105,8 +111,11 @@ async fn the_map_goes_in_and_a_choice_answered_twice_leaves_its_line_active() {
     assert_eq!(report.written, 1);
     let text = support::read(&main);
     assert!(text.contains(&active), "{text}");
-    assert!(
-        text.contains("\n  use_billing_permissions = false\n"),
+    assert_eq!(
+        support::params_of(&Cst::parse(&text).unwrap())
+            .get("use_billing_permissions")
+            .map(String::as_str),
+        Some("false"),
         "{text}"
     );
     let m = support::model(&session, Vec::new()).await;
@@ -239,6 +248,7 @@ async fn a_gate_bound_true_without_its_line_is_absent_and_the_check_names_the_pa
     assert_eq!(refused.len(), 1, "{refused:?}");
     assert_eq!(refused[0].severity, Severity::Error);
     assert_eq!(refused[0].source, DiagSource::Check);
+    assert_eq!(refused[0].kind.as_deref(), Some("unadopted-pack"));
     assert!(
         refused[0]
             .message

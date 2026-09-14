@@ -7,7 +7,8 @@ use crate::components::{Chip, ChipKind, Icon, List, ListItem};
 use crate::state::{AppStore, AppStoreStoreExt, DiagnosticSelection, EstateStoreStoreExt};
 
 /// The bottom drawer: the open estate's diagnostics grouped by severity, each with its
-/// `file:line` and source; clicking one sets [`DiagnosticSelection`].
+/// `file:line`, its source, and — for one of satz's findings — a chip naming the check
+/// that raised it; clicking one sets [`DiagnosticSelection`].
 #[component]
 pub fn DiagnosticsDrawer() -> Element {
     let app = use_context::<Store<AppStore>>();
@@ -50,6 +51,7 @@ pub fn DiagnosticsDrawer() -> Element {
                                                 let is_selected = selected.as_ref() == Some(&d);
                                                 let location = location(&d, base.as_deref());
                                                 let headline = d.message.lines().next().unwrap_or_default().to_string();
+                                                let kind = d.kind.clone();
                                                 let item = d.clone();
                                                 let mut select = selection.0;
                                                 rsx! {
@@ -59,6 +61,7 @@ pub fn DiagnosticsDrawer() -> Element {
                                                         supporting: location,
                                                         selected: is_selected,
                                                         leading: rsx! { Icon { name: icon, size: 20, class: "drawer__icon drawer__icon--{icon}" } },
+                                                        trailing: kind.map(|kind| rsx! { Chip { kind: ChipKind::Assist, label: kind } }),
                                                         onclick: move |_| select.set(Some(item.clone())),
                                                     }
                                                 }

@@ -78,11 +78,14 @@ nothing blocks in an event handler.
     A refused tool call wrote nothing and is satz's own sentence in a toast (the brace
     refusal included). A check that refuses restores the bytes, puts its diagnostics in
     the drawer — they stay through the reload that follows — and a toast names the
-    first line. `AcceptDefaults` is the same call with `accept_defaults: true`.
+    first line; a check that passes puts the findings it reported there instead, so a
+    warning shows at its line beside the write that landed. `AcceptDefaults` is the
+    same call with `accept_defaults: true`.
   - `CommitEdit(Edit)` is the app's writer: `EditSession::open`, `apply(&[edit])`,
     `Proposed::commit(&McpChecker)`. An edit the document layer refuses (`EditError`)
     is a toast and nothing was written; `Rollback::Check` is diagnostics and a toast as
-    above; `Rollback::ChangedOnDisk` is the toast "changed on disk — reloaded".
+    above; `Rollback::ChangedOnDisk` is the toast "changed on disk — reloaded". A commit
+    that lands carries the check's own findings into the drawer, as an answer does.
   - `EnableMap` uncomments the exact comment line `// use "presets/estate-map.satz"`
     (from `scan_uses`: the `Map` row in state `Off`) by splicing the line without its
     `// ` — the one pack line no question gates, so no satz writer activates it —
@@ -218,7 +221,9 @@ alone.
   and "Settings".
 - **Diagnostics drawer:** a bottom drawer, collapsed to its header, listing the open
   estate's diagnostics grouped Errors, Warnings, Notes, each with `file:line` relative
-  to the estate directory and its source; clicking a row sets the selection.
+  to the estate directory, its source, and — for one of satz's findings — a chip naming
+  the check that raised it (`unadopted-pack`, `missing-required`, …); clicking a row
+  sets the selection.
 - **Snackbar host:** the toasts, three at most, a notice for five seconds and an error
   for twelve, each dismissable.
 
