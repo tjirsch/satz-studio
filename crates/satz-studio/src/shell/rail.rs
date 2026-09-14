@@ -32,9 +32,9 @@ pub fn NavigationRail() -> Element {
         NavRail {
             fab: rsx! {
                 Tooltip { text: "Open estate",
+                    // icon-only: a label makes an extended FAB, wider than the rail
                     Fab {
                         icon: "folder_open",
-                        label: "Open estate",
                         size: FabSize::Medium,
                         class: "rail-fab",
                         onclick: move |_| {
