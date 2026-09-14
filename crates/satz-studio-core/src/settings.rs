@@ -13,6 +13,9 @@ use crate::satz::Allow;
 pub struct Settings {
     /// an explicit path to the satz binary; otherwise `PATH`, then `~/.local/bin/satz`
     pub satz_binary: Option<PathBuf>,
+    /// an explicit path to the Claude Code binary; otherwise `PATH`, then
+    /// `~/.local/bin/claude`. Read only when the provider is Claude Code.
+    pub claude_code_binary: Option<PathBuf>,
     /// the capability ceiling every `satz mcp` this app starts is given
     pub mcp_allow: Allow,
     /// run non-destructive write tools the agent asks for without an approval card
@@ -33,6 +36,7 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             satz_binary: None,
+            claude_code_binary: None,
             mcp_allow: Allow::ReadWrite,
             auto_approve_writes: false,
             provider: ProviderChoice::Claude,
@@ -58,6 +62,12 @@ pub enum ProviderChoice {
     Ollama {
         base_url: String,
         model: String,
+    },
+    /// the installed Claude Code CLI, on the user's claude.ai subscription: no API
+    /// key, the loop and the tools Claude Code's own (ADR 0010). `model` is what
+    /// `--model` is given; `None` leaves Claude Code its own default.
+    ClaudeCode {
+        model: Option<String>,
     },
 }
 

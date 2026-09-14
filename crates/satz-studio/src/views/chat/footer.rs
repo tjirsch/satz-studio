@@ -1,6 +1,6 @@
 //! The usage footer: the last turn's figures and the session's, cache reads included
 //! — a zero after the second turn is a cache that did not hit, and it is shown as a
-//! zero.
+//! zero — and, on the Claude Code engine, what the subscription's plan windows say.
 
 use dioxus::prelude::*;
 use satz_studio_core::llm::Usage;
@@ -13,6 +13,7 @@ pub fn UsageFooter() -> Element {
     let chat = use_context::<Store<ChatStore>>();
     let usage = chat.usage().cloned();
     let model = chat.model().cloned();
+    let notice = chat.engine_notice().cloned();
     let transcript = chat.transcript().cloned();
     let kept = match transcript {
         Some(path) => format!("kept in {}", path.display()),
@@ -28,6 +29,12 @@ pub fn UsageFooter() -> Element {
             span { class: "chat__footer-group",
                 span { class: "chat__footer-label", "session, {usage.turns} turns" }
                 span { {usage_text(&usage.session)} }
+            }
+            if let Some(notice) = notice {
+                span { class: "chat__footer-group",
+                    Icon { name: "data_thresholding", size: 16 }
+                    span { "{notice}" }
+                }
             }
             span { class: "grow" }
             span { class: "chat__footer-group",

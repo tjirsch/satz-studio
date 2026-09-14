@@ -7,6 +7,9 @@
 //! - [`agent`] — the loop, the approval gate, the tool bridge, the tool host.
 //! - [`auth`] — where a credential comes from.
 //! - [`provider`] — the OpenAI-compatible and Ollama adapters.
+//! - [`claude_code`] — the second engine: the installed Claude Code CLI driven over
+//!   stdio, for a claude.ai subscription instead of an API key (ADR 0010). It raises
+//!   the same [`AgentEvent`]s, so the Chat view consumes one stream from either.
 //!
 //! Every public type is reachable here; the modules are the reading order.
 
@@ -18,6 +21,7 @@ use tokio_util::sync::CancellationToken;
 pub mod agent;
 pub mod auth;
 pub mod claude;
+pub mod claude_code;
 pub mod provider;
 
 pub use agent::bridge::{tool_defs, tool_result};
@@ -29,6 +33,7 @@ pub use claude::types::{
     CacheControl, ContentBlock, Effort, Message, Request, Response, Role, StopDetails, StopReason,
     SystemBlock, ToolDef, Usage,
 };
+pub use claude_code::{AuthStatus, ClaudeCodeCli, ClaudeCodeError, SessionOptions};
 pub use provider::ollama::Ollama;
 pub use provider::openai_compat::OpenAiCompat;
 

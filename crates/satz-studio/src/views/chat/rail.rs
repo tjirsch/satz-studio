@@ -1,4 +1,6 @@
-//! The rail of the open estate's transcripts, newest first, and "New".
+//! The rail of the open estate's transcripts, newest first, and "New". On the Claude
+//! Code engine there are none to list: that engine holds its conversation in its own
+//! process, and "New" starts a fresh one (ADR 0010).
 
 use std::path::Path;
 
@@ -13,7 +15,12 @@ pub fn TranscriptRail() -> Element {
     let chat = use_context::<Store<ChatStore>>();
     let handle = use_coroutine_handle::<ChatAction>();
     let current = chat.transcript().cloned();
-    let transcripts = chat.transcripts().cloned();
+    let claude_code = chat.engine().cloned().is_claude_code();
+    let transcripts = if claude_code {
+        Vec::new()
+    } else {
+        chat.transcripts().cloned()
+    };
     let busy = chat.busy().cloned();
     rsx! {
         aside { class: "chat__rail", class: if busy { "chat__rail--locked" }, "aria-label": "transcripts",
@@ -21,7 +28,9 @@ pub fn TranscriptRail() -> Element {
                 h2 { class: "chat__rail-title", "Transcripts" }
                 Button { variant: ButtonVariant::Tonal, icon: "add", disabled: busy, onclick: move |_| handle.send(ChatAction::NewTranscript), "New" }
             }
-            if transcripts.is_empty() {
+            if claude_code {
+                p { class: "chat__rail-empty", "Claude Code keeps this conversation itself. New starts a fresh session." }
+            } else if transcripts.is_empty() {
                 p { class: "chat__rail-empty", "None kept for this estate yet." }
             }
             List { class: "chat__rail-list",

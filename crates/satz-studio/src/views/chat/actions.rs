@@ -1,16 +1,23 @@
-//! The chat coroutine: it owns the [`Agent`], runs a turn on a tokio task while every
+//! The chat coroutine: it owns the [`Engine`], runs a turn on a tokio task while every
 //! [`AgentEvent`] folds into the store, parks the approval sender until the operator
 //! answers, cancels, and keeps the transcript. One turn at a time; an action that
-//! needs the agent while a turn runs is refused with a visible error.
+//! needs the engine while a turn runs is refused with a visible error.
+//!
+//! Two engines serve the same view (ADR 0010). [`Engine::Api`] is the app's own loop
+//! over the Messages API; [`Engine::ClaudeCode`] is the installed Claude Code CLI on
+//! the user's claude.ai subscription. Send, Cancel and Approve work for both; what
+//! differs is the transcript — the API engine holds the conversation as `Vec<Message>`
+//! and writes it to a file, Claude Code holds its own and the app keeps none.
 
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use dioxus::prelude::*;
 use futures_util::StreamExt;
+use satz_studio_core::llm::claude_code::{ClaudeCodeCli, Session as CcSession, SessionOptions};
 use satz_studio_core::llm::{
-    Agent, AgentEvent, Approval, ChatProvider, ClaudeClient, ClaudeError, Credential, Effort,
-    EstateContext, Message, Ollama, OpenAiCompat,
+    Agent, AgentEvent, Approval, Capabilities, ChatProvider, ClaudeClient, ClaudeError, Credential,
+    Effort, EstateContext, Message, Ollama, OpenAiCompat,
 };
 use satz_studio_core::satz::EstateSession;
 use satz_studio_core::settings::{ProviderChoice, Settings};
@@ -20,8 +27,8 @@ use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
 use super::state::{
-    AgentStatus, ChatStore, ChatStoreStoreExt, ContextInput, apply_delta, estate_context, is_delta,
-    replay,
+    AgentStatus, ChatStore, ChatStoreStoreExt, ContextInput, EngineKind, apply_delta,
+    estate_context, is_delta, replay,
 };
 use crate::state::{AppStore, AppStoreStoreExt, EstateStoreStoreExt};
 
@@ -35,18 +42,94 @@ pub enum ChatAction {
     /// a model switch starts a new transcript (ADR 0008)
     SetModel(String),
     SetEffort(Effort),
+    /// build the engine again — after a Claude Code sign-in, or a failed start
+    Restart,
 }
 
-/// How many events the agent may run ahead of the view.
+/// How many events the engine may run ahead of the view.
 const EVENT_BUFFER: usize = 64;
 
-/// A turn in flight: the agent lives on its task until the task returns it.
+/// What serves the chat. Both raise the same [`AgentEvent`]s.
+enum Engine {
+    Api(Box<Agent>),
+    ClaudeCode(Box<CcSession>),
+}
+
+impl Engine {
+    fn kind(&self) -> EngineKind {
+        match self {
+            Engine::Api(_) => EngineKind::Api,
+            Engine::ClaudeCode(_) => EngineKind::ClaudeCode,
+        }
+    }
+
+    fn model(&self) -> String {
+        match self {
+            Engine::Api(agent) => agent.model.clone(),
+            // Claude Code names the model at its first turn; until then it is the
+            // one Settings asked for, or Claude Code's own default
+            Engine::ClaudeCode(session) => session
+                .model()
+                .unwrap_or("the Claude Code default")
+                .to_string(),
+        }
+    }
+
+    fn capabilities(&self) -> Capabilities {
+        match self {
+            Engine::Api(agent) => agent.provider.capabilities(),
+            // the tools are the estate's either way; effort is Claude Code's own
+            Engine::ClaudeCode(_) => Capabilities {
+                tools: true,
+                thinking: true,
+                effort: false,
+                cache_control: true,
+            },
+        }
+    }
+
+    /// Where the next turn's messages start in the transcript the engine keeps, when
+    /// it keeps one.
+    fn transcript_start(&self) -> Option<usize> {
+        match self {
+            Engine::Api(agent) => Some(agent.messages.len()),
+            Engine::ClaudeCode(_) => None,
+        }
+    }
+
+    async fn run_turn(
+        &mut self,
+        text: String,
+        events: mpsc::Sender<AgentEvent>,
+        cancel: CancellationToken,
+    ) -> Result<(), ClaudeError> {
+        match self {
+            Engine::Api(agent) => agent.run_turn(text, events, cancel).await,
+            Engine::ClaudeCode(session) => session
+                .run_turn(text, events, cancel)
+                .await
+                .map_err(ClaudeError::from),
+        }
+    }
+
+    /// End the engine: a Claude Code process is closed, the API agent has nothing to
+    /// close.
+    async fn close(self) {
+        match self {
+            Engine::Api(_) => {}
+            Engine::ClaudeCode(session) => session.close().await,
+        }
+    }
+}
+
+/// A turn in flight: the engine lives on its task until the task returns it.
 struct Running {
     events: mpsc::Receiver<AgentEvent>,
-    join: JoinHandle<(Agent, Result<(), ClaudeError>)>,
+    join: JoinHandle<(Engine, Result<(), ClaudeError>)>,
     cancel: CancellationToken,
-    /// `agent.messages.len()` when the turn began: what follows is the turn's
-    start: usize,
+    /// where the turn began in the API engine's transcript; `None` for Claude Code,
+    /// which keeps its own
+    start: Option<usize>,
 }
 
 struct Chat {
@@ -57,12 +140,12 @@ struct Chat {
     /// persistence is on
     store: Option<TranscriptStore>,
     /// `None` while a turn runs (the task holds it) and when it could not be built
-    agent: Option<Agent>,
+    engine: Option<Engine>,
     running: Option<Running>,
     /// the approval card's answer channel, parked until the operator clicks
     approval: Option<oneshot::Sender<Approval>>,
     /// the transcript the conversation is appended to; `None` until the first turn,
-    /// and always while persistence is off
+    /// while persistence is off, and always on the Claude Code engine
     transcript: Option<Transcript>,
 }
 
@@ -76,7 +159,7 @@ pub async fn chat_coroutine(
     loop {
         tokio::select! {
             action = rx.next() => match action {
-                Some(action) => state.handle(action),
+                Some(action) => state.handle(action).await,
                 None => break,
             },
             event = state.next_event() => match event {
@@ -98,7 +181,7 @@ impl Chat {
             chat,
             session,
             store: None,
-            agent: None,
+            engine: None,
             running: None,
             approval: None,
             transcript: None,
@@ -108,18 +191,31 @@ impl Chat {
             Err(e) => me.fail(format!("transcripts unavailable: {e}")),
         }
         me.refresh_transcripts();
-        let settings = app.settings().cloned();
-        match build_agent(&settings, &me.session).await {
-            Ok(agent) => {
-                chat.capabilities().set(agent.provider.capabilities());
-                chat.model().set(agent.model.clone());
-                chat.effort().set(agent.effort);
-                chat.agent().set(AgentStatus::Ready);
-                me.agent = Some(agent);
-            }
-            Err(status) => chat.agent().set(status),
-        }
+        me.build().await;
         me
+    }
+
+    /// Build the engine from Settings and show what it is, or why it is not there.
+    async fn build(&mut self) {
+        let settings = self.app_store.settings().cloned();
+        let satz = self
+            .app_store
+            .satz()
+            .read()
+            .binary()
+            .map(|b| b.path.clone());
+        self.chat.agent().set(AgentStatus::Starting);
+        match build_engine(&settings, &self.session, satz).await {
+            Ok(engine) => {
+                self.chat.capabilities().set(engine.capabilities());
+                self.chat.model().set(engine.model());
+                self.chat.engine().set(engine.kind());
+                self.chat.effort().set(settings.effort);
+                self.chat.agent().set(AgentStatus::Ready);
+                self.engine = Some(engine);
+            }
+            Err(status) => self.chat.agent().set(status),
+        }
     }
 
     /// The next event of the running turn; forever pending while none runs, so the
@@ -131,15 +227,16 @@ impl Chat {
         }
     }
 
-    fn handle(&mut self, action: ChatAction) {
+    async fn handle(&mut self, action: ChatAction) {
         match action {
             ChatAction::Send(text) => self.send(text),
             ChatAction::Cancel => self.cancel(),
             ChatAction::Approve(approval) => self.approve(approval),
-            ChatAction::NewTranscript => self.new_transcript(),
+            ChatAction::NewTranscript => self.new_transcript().await,
             ChatAction::Resume(path) => self.resume(path),
-            ChatAction::SetModel(model) => self.set_model(model),
+            ChatAction::SetModel(model) => self.set_model(model).await,
             ChatAction::SetEffort(effort) => self.set_effort(effort),
+            ChatAction::Restart => self.restart().await,
         }
     }
 
@@ -192,56 +289,31 @@ impl Chat {
         if self.running.is_some() {
             return self.fail("a turn is already running");
         }
-        let Some(mut agent) = self.agent.take() else {
-            return self.fail("no agent: see the card above");
+        let Some(mut engine) = self.engine.take() else {
+            return self.fail("no engine: see the card above");
         };
         let text = text.trim().to_string();
         if text.is_empty() {
-            self.agent = Some(agent);
+            self.engine = Some(engine);
             return;
         }
-        agent.set_context(self.context());
-
-        // persistence is the setting at the time of each turn: off drops the file,
-        // on without one opens one
-        let persist = self.app_store.settings().read().persist_transcripts;
-        if !persist && self.transcript.is_some() {
-            self.transcript = None;
-            self.chat.transcript().set(None);
-        }
-        if persist && self.transcript.is_none() {
-            let created = self
-                .store
-                .as_ref()
-                .ok_or_else(|| "the app's data directory is unavailable".to_string())
-                .and_then(|store| {
-                    store
-                        .create(&self.session.main, &agent.model)
-                        .map_err(|e| e.to_string())
-                });
-            match created {
-                Ok(transcript) => {
-                    self.chat.transcript().set(Some(transcript.path.clone()));
-                    self.transcript = Some(transcript);
-                    self.refresh_transcripts();
-                }
-                Err(e) => {
-                    self.agent = Some(agent);
-                    return self.fail(format!(
-                        "transcript not created: {e} (switch persistence off in Settings to chat without one)"
-                    ));
-                }
-            }
+        if let Engine::Api(agent) = &mut engine {
+            agent.set_context(self.context());
         }
 
-        let start = agent.messages.len();
+        let start = engine.transcript_start();
+        if start.is_some() && !self.open_transcript(&engine) {
+            self.engine = Some(engine);
+            return;
+        }
+
         let (tx, events) = mpsc::channel(EVENT_BUFFER);
         let cancel = CancellationToken::new();
         let token = cancel.clone();
         let user_text = text.clone();
         let join = tokio::spawn(async move {
-            let result = agent.run_turn(user_text, tx, token).await;
-            (agent, result)
+            let result = engine.run_turn(user_text, tx, token).await;
+            (engine, result)
         });
         self.chat.write().begin_turn(text);
         self.running = Some(Running {
@@ -252,20 +324,60 @@ impl Chat {
         });
     }
 
-    /// The event channel closed: the task is done and returns the agent. A turn that
+    /// The transcript this turn is appended to, opened if it is wanted and not open.
+    /// `false` means Send must not proceed: the operator asked for a transcript and
+    /// there is none. Persistence is the setting at the time of each turn.
+    fn open_transcript(&mut self, engine: &Engine) -> bool {
+        let persist = self.app_store.settings().read().persist_transcripts;
+        if !persist && self.transcript.is_some() {
+            self.transcript = None;
+            self.chat.transcript().set(None);
+        }
+        if !persist || self.transcript.is_some() {
+            return true;
+        }
+        let created = self
+            .store
+            .as_ref()
+            .ok_or_else(|| "the app's data directory is unavailable".to_string())
+            .and_then(|store| {
+                store
+                    .create(&self.session.main, &engine.model())
+                    .map_err(|e| e.to_string())
+            });
+        match created {
+            Ok(transcript) => {
+                self.chat.transcript().set(Some(transcript.path.clone()));
+                self.transcript = Some(transcript);
+                self.refresh_transcripts();
+                true
+            }
+            Err(e) => {
+                self.fail(format!(
+                    "transcript not created: {e} (switch persistence off in Settings to chat without one)"
+                ));
+                false
+            }
+        }
+    }
+
+    /// The event channel closed: the task is done and returns the engine. A turn that
     /// completed is appended to the transcript; a refused, failed or cancelled one
-    /// left the agent's messages as they were and writes nothing.
+    /// left the messages as they were and writes nothing.
     async fn turn_ended(&mut self) {
         let Some(running) = self.running.take() else {
             return self.fail("the turn ended, but none was running");
         };
         self.approval = None;
         match running.join.await {
-            Ok((agent, result)) => {
-                if result.is_ok() {
-                    self.persist(&agent.messages[running.start..]);
+            Ok((engine, result)) => {
+                if let (Ok(()), Some(start), Engine::Api(agent)) = (&result, running.start, &engine)
+                {
+                    self.persist(&agent.messages[start..]);
                 }
-                self.agent = Some(agent);
+                // Claude Code names its model at its first turn, not at spawn
+                self.chat.model().set(engine.model());
+                self.engine = Some(engine);
             }
             Err(e) => self.chat.agent().set(AgentStatus::Failed(format!(
                 "the turn task ended abnormally: {e}; close and reopen the estate"
@@ -307,17 +419,43 @@ impl Chat {
         }
     }
 
-    fn new_transcript(&mut self) {
+    /// Build the engine again: what the Claude Code empty state's "Check again" does,
+    /// and what a model change on that engine needs, since its conversation lives in
+    /// the process.
+    async fn restart(&mut self) {
         if self.running.is_some() {
             return self.fail("wait for the turn to end");
         }
-        let Some(agent) = &mut self.agent else {
-            return self.fail("no agent");
-        };
-        agent.messages.clear();
+        if let Some(engine) = self.engine.take() {
+            engine.close().await;
+        }
         self.transcript = None;
-        let model = agent.model.clone();
+        self.build().await;
+        // a build that failed leaves the status card in charge; the footer keeps the
+        // model it had rather than showing an empty one
+        let model = match self.engine.as_ref() {
+            Some(engine) => engine.model(),
+            None => self.chat.model().cloned(),
+        };
         self.chat.write().reset_conversation(model);
+    }
+
+    async fn new_transcript(&mut self) {
+        if self.running.is_some() {
+            return self.fail("wait for the turn to end");
+        }
+        match &mut self.engine {
+            // Claude Code holds the conversation in its process: a new one is a new
+            // process
+            Some(Engine::ClaudeCode(_)) => self.restart().await,
+            Some(Engine::Api(agent)) => {
+                agent.messages.clear();
+                self.transcript = None;
+                let model = agent.model.clone();
+                self.chat.write().reset_conversation(model);
+            }
+            None => self.fail("no engine"),
+        }
     }
 
     /// Replay a transcript into the agent and the view, on the model that wrote it.
@@ -336,8 +474,10 @@ impl Chat {
             Ok(t) => t,
             Err(e) => return self.fail(format!("{}: {e}", path.display())),
         };
-        let Some(agent) = &mut self.agent else {
-            return self.fail("no agent");
+        let Some(Engine::Api(agent)) = &mut self.engine else {
+            return self.fail(
+                "only the Messages API engine resumes a transcript; Claude Code keeps its own conversation",
+            );
         };
         let model = transcript.header.model.clone();
         if agent.model != model {
@@ -357,7 +497,7 @@ impl Chat {
         }
     }
 
-    fn set_model(&mut self, model: String) {
+    async fn set_model(&mut self, model: String) {
         if self.running.is_some() {
             return self.fail("wait for the turn to end before changing the model");
         }
@@ -365,37 +505,52 @@ impl Chat {
         if model.is_empty() {
             return self.fail("the model name is empty");
         }
-        let Some(agent) = &mut self.agent else {
-            return self.fail("no agent");
-        };
-        if agent.model == model {
-            return;
+        match &mut self.engine {
+            // the model is a command-line argument of the process: a change is a new
+            // session, and Settings is where it is kept
+            Some(Engine::ClaudeCode(_)) => self.fail(
+                "Claude Code takes its model from Settings; change it there and use New to start a session on it",
+            ),
+            Some(Engine::Api(agent)) => {
+                if agent.model == model {
+                    return;
+                }
+                let choice = self.app_store.settings().read().provider.clone();
+                apply_model(agent, &choice, &model);
+                agent.messages.clear();
+                self.transcript = None;
+                self.chat.write().reset_conversation(model);
+            }
+            None => self.fail("no engine"),
         }
-        let choice = self.app_store.settings().read().provider.clone();
-        apply_model(agent, &choice, &model);
-        agent.messages.clear();
-        self.transcript = None;
-        self.chat.write().reset_conversation(model);
     }
 
     fn set_effort(&mut self, effort: Effort) {
         if self.running.is_some() {
             return self.fail("wait for the turn to end before changing the effort");
         }
-        let Some(agent) = &mut self.agent else {
-            return self.fail("no agent");
-        };
-        agent.effort = effort;
-        self.chat.effort().set(effort);
+        match &mut self.engine {
+            Some(Engine::ClaudeCode(_)) => self.fail("Claude Code sets its own effort"),
+            Some(Engine::Api(agent)) => {
+                agent.effort = effort;
+                self.chat.effort().set(effort);
+            }
+            None => self.fail("no engine"),
+        }
     }
 }
 
-/// The provider from Settings and the agent over it. Claude needs a credential;
-/// the other providers need a model name.
-async fn build_agent(
+/// The engine from Settings. Claude needs a credential; the other providers need a
+/// model name; Claude Code needs an installed CLI that is signed in, and satz, whose
+/// MCP server it is given.
+async fn build_engine(
     settings: &Settings,
     session: &Arc<EstateSession>,
-) -> Result<Agent, AgentStatus> {
+    satz_binary: Option<PathBuf>,
+) -> Result<Engine, AgentStatus> {
+    if let ProviderChoice::ClaudeCode { model } = &settings.provider {
+        return claude_code(settings, session, satz_binary, model.clone()).await;
+    }
     let (provider, model): (Arc<dyn ChatProvider>, String) = match &settings.provider {
         ProviderChoice::Claude => match Credential::resolve().await {
             Ok((credential, _)) => (
@@ -414,6 +569,7 @@ async fn build_agent(
         ProviderChoice::Ollama { base_url, model } => {
             (Arc::new(Ollama::new(base_url, model)), model.clone())
         }
+        ProviderChoice::ClaudeCode { .. } => unreachable!("handled above"),
     };
     if model.trim().is_empty() {
         return Err(AgentStatus::Failed(
@@ -423,7 +579,46 @@ async fn build_agent(
     let mut agent = Agent::new(provider, Arc::clone(session), model, settings.effort);
     agent.fallbacks = settings.fallbacks;
     agent.auto_approve_writes = settings.auto_approve_writes;
-    Ok(agent)
+    Ok(Engine::Api(Box::new(agent)))
+}
+
+/// The Claude Code engine: the CLI located, its login checked, and a process spawned
+/// on this estate.
+async fn claude_code(
+    settings: &Settings,
+    session: &Arc<EstateSession>,
+    satz_binary: Option<PathBuf>,
+    model: Option<String>,
+) -> Result<Engine, AgentStatus> {
+    let cli = ClaudeCodeCli::locate(settings.claude_code_binary.as_deref())
+        .await
+        .map_err(|e| AgentStatus::Failed(e.to_string()))?;
+    let status = cli
+        .auth_status()
+        .await
+        .map_err(|e| AgentStatus::Failed(e.to_string()))?;
+    if !status.logged_in {
+        return Err(AgentStatus::NotSignedIn {
+            login: cli.login_command(),
+        });
+    }
+    let Some(satz_binary) = satz_binary else {
+        return Err(AgentStatus::Failed(
+            "satz is not available, and Claude Code is given the estate's satz MCP server — see the banner".to_string(),
+        ));
+    };
+    let options = SessionOptions {
+        model,
+        max_turns: None,
+        resume: None,
+        auto_approve_writes: settings.auto_approve_writes,
+        satz_binary,
+        allow: settings.mcp_allow,
+    };
+    let spawned = CcSession::spawn(&cli, Arc::clone(session), options)
+        .await
+        .map_err(|e| AgentStatus::Failed(e.to_string()))?;
+    Ok(Engine::ClaudeCode(Box::new(spawned)))
 }
 
 /// Point the agent at another model. Claude reads the model from the request; the
@@ -431,7 +626,7 @@ async fn build_agent(
 fn apply_model(agent: &mut Agent, choice: &ProviderChoice, model: &str) {
     agent.model = model.to_string();
     match choice {
-        ProviderChoice::Claude => {}
+        ProviderChoice::Claude | ProviderChoice::ClaudeCode { .. } => {}
         ProviderChoice::OpenAiCompat { base_url, .. } => {
             agent.provider = Arc::new(OpenAiCompat::new(base_url, None, model));
         }

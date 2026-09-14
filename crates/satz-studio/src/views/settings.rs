@@ -1,10 +1,11 @@
 //! The Settings view: every field of `Settings` as a form, saved as one file; the
-//! detected satz beside its path; the credential's source and the keychain key.
+//! detected satz beside its path; the credential's source and the keychain key; and
+//! the Claude Code CLI with the claude.ai account it is signed in to (ADR 0010).
 
 use std::path::PathBuf;
 
 use dioxus::prelude::*;
-use satz_studio_core::llm::{CredentialSource, Effort};
+use satz_studio_core::llm::{AuthStatus, ClaudeCodeCli, CredentialSource, Effort};
 use satz_studio_core::satz::Allow;
 use satz_studio_core::settings::{ProviderChoice, Settings, Theme, settings_path};
 
@@ -41,6 +42,7 @@ pub fn SettingsView() -> Element {
         ProviderChoice::Claude => "claude",
         ProviderChoice::OpenAiCompat { .. } => "openai_compat",
         ProviderChoice::Ollama { .. } => "ollama",
+        ProviderChoice::ClaudeCode { .. } => "claude_code",
     }
     .to_string();
     let effort_value = effort_key(draft().effort).to_string();
@@ -51,9 +53,13 @@ pub fn SettingsView() -> Element {
     }
     .to_string();
     let endpoint = match &draft().provider {
-        ProviderChoice::Claude => None,
+        ProviderChoice::Claude | ProviderChoice::ClaudeCode { .. } => None,
         ProviderChoice::OpenAiCompat { base_url, model }
         | ProviderChoice::Ollama { base_url, model } => Some((base_url.clone(), model.clone())),
+    };
+    let claude_code_model = match &draft().provider {
+        ProviderChoice::ClaudeCode { model } => Some(model.clone().unwrap_or_default()),
+        _ => None,
     };
 
     rsx! {
@@ -93,17 +99,23 @@ pub fn SettingsView() -> Element {
                     h2 { class: "settings__heading", Icon { name: "smart_toy", size: 20 } "Model" }
                     p { class: "settings__label", "Provider" }
                     SegmentedButton {
-                        options: vec![Segment::new("claude", "Claude"), Segment::new("openai_compat", "OpenAI-compatible"), Segment::new("ollama", "Ollama")],
+                        options: vec![
+                            Segment::new("claude", "Claude"),
+                            Segment::new("claude_code", "Claude Code (your claude.ai account)"),
+                            Segment::new("openai_compat", "OpenAI-compatible"),
+                            Segment::new("ollama", "Ollama"),
+                        ],
                         selected: provider_value,
                         onselect: move |v: String| {
                             let current = draft().provider;
                             let (base_url, model) = match current {
-                                ProviderChoice::Claude => (String::new(), String::new()),
+                                ProviderChoice::Claude | ProviderChoice::ClaudeCode { .. } => (String::new(), String::new()),
                                 ProviderChoice::OpenAiCompat { base_url, model } | ProviderChoice::Ollama { base_url, model } => (base_url, model),
                             };
                             draft.write().provider = match v.as_str() {
                                 "openai_compat" => ProviderChoice::OpenAiCompat { base_url: if base_url.is_empty() { "http://localhost:1234/v1".to_string() } else { base_url }, model },
                                 "ollama" => ProviderChoice::Ollama { base_url: if base_url.is_empty() { "http://localhost:11434".to_string() } else { base_url }, model },
+                                "claude_code" => ProviderChoice::ClaudeCode { model: None },
                                 _ => ProviderChoice::Claude,
                             };
                         },
@@ -111,6 +123,18 @@ pub fn SettingsView() -> Element {
                     if let Some((base_url, model)) = endpoint {
                         TextField { label: "Base URL", value: base_url, monospace: true, oninput: move |v: String| set_endpoint(&mut draft, Some(v), None) }
                         TextField { label: "Model", value: model, monospace: true, supporting: "the model name the endpoint serves", oninput: move |v: String| set_endpoint(&mut draft, None, Some(v)) }
+                    } else if let Some(model) = claude_code_model {
+                        TextField {
+                            label: "Claude Code model",
+                            value: model,
+                            monospace: true,
+                            placeholder: "opus",
+                            supporting: "what Claude Code is given as --model; empty leaves it its own default",
+                            oninput: move |v: String| {
+                                let v = v.trim().to_string();
+                                draft.write().provider = ProviderChoice::ClaudeCode { model: (!v.is_empty()).then_some(v) };
+                            },
+                        }
                     } else {
                         TextField { label: "Claude model", value: draft().model, monospace: true, oninput: move |v: String| draft.write().model = v }
                     }
@@ -147,6 +171,7 @@ pub fn SettingsView() -> Element {
                     }
                 }
                 CredentialCard {}
+                ClaudeCodeCard { draft }
             }
             div { class: "settings__actions",
                 span { class: "settings__file", "{file}" }
@@ -192,7 +217,7 @@ fn set_endpoint(draft: &mut Signal<Settings>, base_url: Option<String>, model: O
                 *m = v;
             }
         }
-        ProviderChoice::Claude => {}
+        ProviderChoice::Claude | ProviderChoice::ClaudeCode { .. } => {}
     }
 }
 
@@ -260,6 +285,119 @@ fn CredentialCard() -> Element {
                         key.set(String::new());
                     },
                     "Store in keychain"
+                }
+            }
+        }
+    }
+}
+
+/// What the Claude Code CLI answered: the binary, and the account it is signed in to.
+#[derive(Clone, PartialEq)]
+enum ClaudeCodeProbe {
+    Checking,
+    Ready(ClaudeCodeCli, AuthStatus),
+    Failed(String),
+}
+
+/// The Claude Code CLI: where it is, which version, and which claude.ai account it is
+/// signed in to. Signing in and out run in the user's own terminal — the login opens a
+/// browser — and the app reads no credential of Claude Code's, only what
+/// `claude auth status` reports.
+#[component]
+fn ClaudeCodeCard(draft: Signal<Settings>) -> Element {
+    let app = use_context::<Store<AppStore>>();
+    let probe = use_signal(|| ClaudeCodeProbe::Checking);
+    let check = move || {
+        let path = draft.peek().claude_code_binary.clone();
+        // the signal is Copy: taken by value here, so the closure itself only reads
+        let mut probe = probe;
+        probe.set(ClaudeCodeProbe::Checking);
+        spawn(async move {
+            let found = match ClaudeCodeCli::locate(path.as_deref()).await {
+                Ok(cli) => match cli.auth_status().await {
+                    Ok(status) => ClaudeCodeProbe::Ready(cli, status),
+                    Err(e) => ClaudeCodeProbe::Failed(e.to_string()),
+                },
+                Err(e) => ClaudeCodeProbe::Failed(e.to_string()),
+            };
+            probe.set(found);
+        });
+    };
+    use_hook(check);
+    let found = probe();
+    let binary_text = match &found {
+        ClaudeCodeProbe::Checking => "locating the Claude Code CLI".to_string(),
+        ClaudeCodeProbe::Ready(cli, _) => {
+            format!("Claude Code {} at {}", cli.version, cli.path.display())
+        }
+        ClaudeCodeProbe::Failed(e) => e.clone(),
+    };
+    let binary_error = matches!(found, ClaudeCodeProbe::Failed(_));
+    let (icon, account, signed_in) = match &found {
+        ClaudeCodeProbe::Checking => ("hourglass_empty", "checking".to_string(), false),
+        ClaudeCodeProbe::Failed(_) => ("account_circle_off", "no CLI to ask".to_string(), false),
+        ClaudeCodeProbe::Ready(_, status) if status.logged_in => (
+            "account_circle",
+            match (&status.email, &status.auth_method) {
+                (Some(email), Some(method)) => format!("signed in as {email} via {method}"),
+                (Some(email), None) => format!("signed in as {email}"),
+                (None, Some(method)) => format!("signed in via {method}"),
+                (None, None) => "signed in".to_string(),
+            },
+            true,
+        ),
+        ClaudeCodeProbe::Ready(..) => ("account_circle_off", "not signed in".to_string(), false),
+    };
+    let cli = match &found {
+        ClaudeCodeProbe::Ready(cli, _) => Some(cli.clone()),
+        _ => None,
+    };
+    let sign = move |line: String| {
+        if let Err(e) = ClaudeCodeCli::open_in_terminal(&line) {
+            toast(app, ToastKind::Error, e.to_string());
+        }
+    };
+    rsx! {
+        Card { variant: CardVariant::Outlined, class: "settings__card",
+            h2 { class: "settings__heading", Icon { name: "terminal", size: 20 } "Claude Code" }
+            TextField {
+                label: "Claude Code binary",
+                value: draft().claude_code_binary.map(|p| p.display().to_string()).unwrap_or_default(),
+                placeholder: "on PATH, then ~/.local/bin/claude",
+                monospace: true,
+                supporting: binary_text,
+                error: binary_error,
+                oninput: move |v: String| draft.write().claude_code_binary = if v.trim().is_empty() { None } else { Some(PathBuf::from(v.trim())) },
+                onblur: move |_| check(),
+            }
+            p { class: "settings__status", class: if !signed_in { "settings__status--error" },
+                Icon { name: icon, size: 20 }
+                span { "{account}" }
+                Button { variant: ButtonVariant::Text, onclick: move |_| check(), "Check again" }
+            }
+            p { class: "settings__label", "This engine runs on the claude.ai subscription the CLI is signed in to; no API key is used and none is stored. Signing in opens a browser from your terminal." }
+            div { class: "settings__key",
+                if let Some(cli) = cli {
+                    Button {
+                        variant: ButtonVariant::Tonal,
+                        icon: "login",
+                        disabled: signed_in,
+                        onclick: {
+                            let line = cli.login_command();
+                            move |_| sign(line.clone())
+                        },
+                        "Sign in"
+                    }
+                    Button {
+                        variant: ButtonVariant::Text,
+                        icon: "logout",
+                        disabled: !signed_in,
+                        onclick: {
+                            let line = cli.logout_command();
+                            move |_| sign(line.clone())
+                        },
+                        "Sign out"
+                    }
                 }
             }
         }

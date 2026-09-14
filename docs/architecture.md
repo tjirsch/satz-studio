@@ -208,10 +208,14 @@ pass; a refusal, or a checker that could not run, writes the recorded bytes back
 
 ### 4c. An agent turn
 
-`Agent::run_turn(user_text, events, cancel)` over a `ToolHost`. `EstateSession`
-implements the trait; its `call` takes the write lock for a tool that is not read-only.
-The Chat view that drives the loop is U9; the loop is complete and tested against a
-scripted provider and a mock host.
+Two engines serve the Chat view and raise the same `AgentEvent`s, so the transcript
+list, the tool cards and the approval card are one implementation. `Settings.provider`
+chooses: **the API engine** is `Agent::run_turn(user_text, events, cancel)` over a
+`ToolHost` — `EstateSession` implements the trait, and its `call` takes the write lock
+for a tool that is not read-only — and **the Claude Code engine** is the installed CLI
+driven over stdio on the user's claude.ai subscription
+([ADR 0010](adr/0010-claude-code-as-the-subscription-backend.md), below). The rest of
+this section is the API engine.
 
 - **Request.** `Agent::request` builds `system[0]` from `PREAMBLE`, the session's
   `instructions` and the text of `satz://guide`, with the cache breakpoint, and
@@ -258,6 +262,44 @@ scripted provider and a mock host.
   model, instant), then one `Message` per line, appended and flushed; an existing file
   is never overwritten, and a line that is neither fails the load.
 
+### 4d. A Claude Code turn
+
+`llm::claude_code::Session` is one `claude -p --input-format stream-json
+--output-format stream-json` per open estate, spawned in the estate directory. It runs
+on the claude.ai account the CLI is signed in to; the app reads no credential of Claude
+Code's and asks it nothing but `claude auth status --json`.
+
+- **The command line** (`command_args`) is `--setting-sources ""` and
+  `--strict-mcp-config` so the user's own Claude Code settings and MCP servers stay out,
+  `--tools ""` so no built-in tool is available, `--mcp-config` naming one server —
+  this estate's `satz mcp --root <session root> --allow <ceiling>` — `--permission-mode
+  default`, `--permission-prompt-tool stdio`, `--allowedTools` from the annotations satz
+  declares ([ADR 0005](adr/0005-tool-approval-by-mcp-annotation-and-the-capability-ceiling.md)),
+  and `--append-system-prompt` with `PREAMBLE`, the MCP server's instructions, the text
+  of `satz://guide` and which estate this session is about. `--bare` is never passed:
+  bare mode does not read the subscription login.
+- **The protocol.** The client writes one JSON object per line on stdin: an initialize
+  control request at spawn, then `{"type":"user",…}` per turn, a `control_response` per
+  approval, and an `interrupt` control request to cancel. The CLI writes one per line
+  on stdout: `system/init` (the session id, the model, the MCP servers' status — read
+  at the first turn, not at spawn), `stream_event` carrying the Messages API's own
+  events, `user` messages holding the results of the tools it ran, `rate_limit_event`,
+  `can_use_tool` control requests, and a `result` line ending the turn.
+- **The translation.** `stream_event` payloads go through the same `Assembler` the API
+  engine uses — a new one per `message_start`, since one turn is many assistant
+  messages — and its `StreamEvent`s become `TextDelta`, `ThinkingDelta`,
+  `ToolUseStarted` and `ToolInputDelta` under the name satz gives the tool, with the
+  `mcp__satz__` prefix stripped. A `tool_result` block becomes `ToolResult`, a
+  `can_use_tool` request becomes `ToolCallPending` whose answer is the control response
+  (`ForSession` remembers the tool, so the next call needs no card), `rate_limit_event`
+  becomes `AgentEvent::Notice` for the footer, and `result` becomes `TurnDone` —
+  `EndTurn`, or `MaxTokens` for `error_max_turns`.
+- **The estate's write lock is held for the whole turn**, not per call: Claude Code's
+  satz server writes the estate, and the app cannot see the calls it pre-approved. The
+  app keeps no transcript for this engine — Claude Code holds the conversation, "New"
+  starts a fresh process, and the model comes from Settings because it is an argument of
+  that process.
+
 ## 5. Deployment and CI
 
 `Dioxus.toml` names the bundle identity; `dx bundle --release --platform desktop`
@@ -294,6 +336,7 @@ tree and over the commits each push or pull request adds.
 | [0007](adr/0007-pack-rows-are-derived-from-the-estate-file.md) | pack rows are derived from the estate file, the questions report and the resolved params; no copied table |
 | [0008](adr/0008-transcripts-live-outside-the-estate.md) | transcripts live under the app's data directory, never inside an estate |
 | [0009](adr/0009-refusal-fallbacks-are-on-by-default.md) | refusal fallbacks are on by default, off by a Settings switch |
+| [0010](adr/0010-claude-code-as-the-subscription-backend.md) | Claude Code as the subscription backend: the installed CLI driven over stdio, the estate's satz MCP server, the app's own approval card |
 
 ## 7. Not built, and why
 
