@@ -16,7 +16,7 @@ use futures_util::StreamExt;
 use satz_studio_core::cst::{Cst, Span, UseState, scan_uses};
 use satz_studio_core::diag::{DiagSource, Diagnostic, Severity};
 use satz_studio_core::edit::snapshot::Snapshot;
-use satz_studio_core::edit::{CommitError, Edit, EditSession, McpChecker, Rollback};
+use satz_studio_core::edit::{CommitError, Committed, Edit, EditSession, McpChecker, Rollback};
 use satz_studio_core::model::{EstateModel, MAP_PATH};
 use satz_studio_core::satz::reports::{InterviewArgs, InterviewReport, QuestionsReport};
 use satz_studio_core::satz::{CliLine, EstateSession};
@@ -154,25 +154,24 @@ async fn interview(session: &Arc<EstateSession>, app: Store<AppStore>, args: Int
             session: Arc::clone(session),
         };
         match snapshot.verify(&checker).await {
-            Ok(_) => match report {
-                Ok(report) => {
-                    let written = report.written;
-                    app.estate().interview().set(Some(report));
-                    toast(
-                        app,
-                        ToastKind::Info,
-                        match written {
-                            1 => "1 answer written".to_string(),
-                            n => format!("{n} answers written"),
-                        },
-                    );
-                    Vec::new()
+            Ok(committed) => {
+                match report {
+                    Ok(report) => {
+                        let written = report.written;
+                        app.estate().interview().set(Some(report));
+                        toast(
+                            app,
+                            ToastKind::Info,
+                            match written {
+                                1 => "1 answer written".to_string(),
+                                n => format!("{n} answers written"),
+                            },
+                        );
+                    }
+                    Err(e) => toast(app, ToastKind::Error, format!("satz_interview: {e}")),
                 }
-                Err(e) => {
-                    toast(app, ToastKind::Error, format!("satz_interview: {e}"));
-                    Vec::new()
-                }
-            },
+                carried_findings(&committed)
+            }
             Err(e) => rolled_back(app, e),
         }
     };
@@ -214,7 +213,7 @@ async fn commit_edit(session: &Arc<EstateSession>, app: Store<AppStore>, edit: E
                     .map(|n| n.to_string_lossy().into_owned())
                     .unwrap_or_default();
                 toast(app, ToastKind::Info, format!("{name} written"));
-                Vec::new()
+                carried_findings(&committed)
             }
             Err(e) => rolled_back(app, e),
         }
@@ -286,13 +285,13 @@ async fn enable_map(session: &Arc<EstateSession>, app: Store<AppStore>) {
             session: Arc::clone(session),
         };
         match snapshot.verify(&checker).await {
-            Ok(_) => {
+            Ok(committed) => {
                 toast(
                     app,
                     ToastKind::Info,
                     "the map is in: its questions are open",
                 );
-                Vec::new()
+                carried_findings(&committed)
             }
             Err(e) => rolled_back(app, e),
         }
@@ -313,6 +312,24 @@ pub fn uncomment_line(text: &str, span: Span) -> Result<String, String> {
         &text[..span.start],
         &text[span.end..]
     ))
+}
+
+/// The findings of a check that passed, as diagnostics to carry through the reload: a
+/// warning the compile raised — a required argument the provider wants, a pack the
+/// estate asks for and does not use — belongs in the drawer at its line, beside the
+/// write that landed.
+fn carried_findings(committed: &Committed) -> Vec<Diagnostic> {
+    let base = committed
+        .path
+        .parent()
+        .unwrap_or(Path::new("."))
+        .to_path_buf();
+    committed
+        .summary
+        .findings
+        .iter()
+        .map(|f| Diagnostic::from_finding(&base, f, DiagSource::Check))
+        .collect()
 }
 
 /// A commit that did not land, as a toast, and the diagnostics to carry through the

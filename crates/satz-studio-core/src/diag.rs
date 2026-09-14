@@ -8,6 +8,8 @@ use std::path::{Path, PathBuf};
 use satz_core::pipeline::PipelineError;
 use satz_core::satz::SatzError;
 
+use crate::satz::reports::{Finding, FindingSeverity};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Severity {
@@ -42,6 +44,10 @@ pub struct Diagnostic {
     /// 1-based, as satz counts
     pub line: Option<u32>,
     pub severity: Severity,
+    /// which of satz's checks spoke, kebab-case (`unadopted-pack`,
+    /// `missing-required`, …); `None` for a diagnostic that is not one of its findings
+    #[serde(default)]
+    pub kind: Option<String>,
     pub message: String,
     pub source: DiagSource,
 }
@@ -52,6 +58,7 @@ impl Diagnostic {
             file: None,
             line: None,
             severity: Severity::Error,
+            kind: None,
             message: message.into(),
             source,
         }
@@ -69,8 +76,45 @@ impl Diagnostic {
             file: Some(file.to_path_buf()),
             line: Some(e.line as u32),
             severity: Severity::Error,
+            kind: None,
             message: e.msg.clone(),
             source: DiagSource::Parse,
+        }
+    }
+
+    /// One of satz's own findings: the severity it carries, the kind it came from, and
+    /// its file resolved against `base` — the estate's directory — when relative, since
+    /// satz names a `use` path as the loader saw it. A finding that belongs to a group
+    /// keeps that header in front of its message, the way the CLI prints the two
+    /// together; the header ends in its own colon, which becomes the separator.
+    pub fn from_finding(base: &Path, f: &Finding, source: DiagSource) -> Self {
+        let file = f.file.as_ref().map(|f| {
+            let path = Path::new(f);
+            if path.is_absolute() {
+                path.to_path_buf()
+            } else {
+                base.join(path)
+            }
+        });
+        let message = match &f.group {
+            Some(group) => format!(
+                "{}: {}",
+                group.strip_suffix(':').unwrap_or(group),
+                f.message
+            ),
+            None => f.message.clone(),
+        };
+        Self {
+            file,
+            line: f.line,
+            severity: match f.severity {
+                FindingSeverity::Error => Severity::Error,
+                FindingSeverity::Warning => Severity::Warning,
+                FindingSeverity::Note => Severity::Note,
+            },
+            kind: Some(f.kind.clone()),
+            message,
+            source,
         }
     }
 
@@ -87,6 +131,7 @@ impl Diagnostic {
             file: Some(file),
             line: Some(e.line as u32),
             severity: Severity::Error,
+            kind: None,
             message: e.msg.clone(),
             source: DiagSource::Compile,
         }
@@ -127,6 +172,7 @@ pub fn parse_satz_output(text: &str, source: DiagSource) -> Vec<Diagnostic> {
             file: None,
             line: None,
             severity,
+            kind: None,
             message: rest.to_string(),
             source: source.clone(),
         };
@@ -236,6 +282,66 @@ mod tests {
         let (f, n, m) = split_location(r"C:\estates\acme\yaml\a.satz:7: msg").unwrap();
         assert_eq!(f, r"C:\estates\acme\yaml\a.satz");
         assert_eq!((n, m), (7, "msg"));
+    }
+
+    fn finding(severity: FindingSeverity, kind: &str) -> Finding {
+        Finding {
+            severity,
+            kind: kind.to_string(),
+            group: None,
+            file: None,
+            line: None,
+            message: "the provider requires location".to_string(),
+        }
+    }
+
+    #[test]
+    fn a_finding_keeps_its_kind_and_resolves_its_file_against_the_estate() {
+        let mut f = finding(FindingSeverity::Warning, "missing-required");
+        f.file = Some("presets/organization-budget.satz".to_string());
+        f.line = Some(12);
+        let d = Diagnostic::from_finding(Path::new("/e/yaml"), &f, DiagSource::Check);
+        assert_eq!(
+            d.file.as_deref(),
+            Some(Path::new("/e/yaml/presets/organization-budget.satz"))
+        );
+        assert_eq!(d.line, Some(12));
+        assert_eq!(d.severity, Severity::Warning);
+        assert_eq!(d.kind.as_deref(), Some("missing-required"));
+        assert_eq!(d.message, "the provider requires location");
+
+        f.file = Some("/other/a.satz".to_string());
+        let d = Diagnostic::from_finding(Path::new("/e/yaml"), &f, DiagSource::Check);
+        assert_eq!(d.file.as_deref(), Some(Path::new("/other/a.satz")));
+    }
+
+    #[test]
+    fn a_group_heads_the_message_and_keeps_one_colon() {
+        let mut f = finding(FindingSeverity::Error, "missing-required");
+        f.group = Some("required arguments missing:".to_string());
+        let d = Diagnostic::from_finding(Path::new("/e/yaml"), &f, DiagSource::Check);
+        assert_eq!(
+            d.message,
+            "required arguments missing: the provider requires location"
+        );
+        assert_eq!(d.severity, Severity::Error);
+        assert_eq!(d.file, None);
+        assert_eq!(d.line, None);
+    }
+
+    #[test]
+    fn a_note_without_a_group_keeps_its_message_verbatim() {
+        let d = Diagnostic::from_finding(
+            Path::new("/e/yaml"),
+            &finding(FindingSeverity::Note, "iac-roles"),
+            DiagSource::Tool("satz_transpile_check".to_string()),
+        );
+        assert_eq!(d.severity, Severity::Note);
+        assert_eq!(d.message, "the provider requires location");
+        assert_eq!(
+            d.source,
+            DiagSource::Tool("satz_transpile_check".to_string())
+        );
     }
 
     #[test]

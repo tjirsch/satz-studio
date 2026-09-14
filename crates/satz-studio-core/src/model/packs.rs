@@ -76,6 +76,7 @@ pub(super) fn build(
                     file: None,
                     line: None,
                     severity: Severity::Note,
+                    kind: None,
                     message: format!(
                         "line active, gate false: `use \"{}\" when {gate}` is in, but `{gate}` is false, so the pack is left out",
                         u.path

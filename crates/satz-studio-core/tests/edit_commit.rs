@@ -146,7 +146,10 @@ async fn a_delegated_write_is_verified_and_a_broken_one_is_restored() {
     assert_eq!(report.written, 1);
     let c = support::within(snapshot.verify(&mcp)).await.unwrap();
     let now = support::read(&session.main);
-    assert!(now.contains("\n  logsink_retention_days = 400\n"), "{now}");
+    assert!(
+        support::binds(&now, "logsink_retention_days", "400"),
+        "{now}"
+    );
     assert_eq!(c.sha256, sha256_hex(now.as_bytes()));
     assert_eq!(c.path, session.main);
     assert!(!c.summary.addresses.is_empty());
