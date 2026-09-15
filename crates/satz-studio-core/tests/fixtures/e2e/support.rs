@@ -59,6 +59,20 @@ pub fn repo_root() -> PathBuf {
         .unwrap()
 }
 
+/// A temporary directory on the REPOSITORY's drive rather than the system one. A
+/// session's root is the longest common prefix of the estate's directory and every
+/// directory its config names, and those reach into `vendor/satz`; on Windows the
+/// system temporary directory is often on another drive, where a temporary estate and
+/// the submodule share no prefix at all and there is no root to confine `satz mcp` to.
+pub fn scratch() -> tempfile::TempDir {
+    let dir = repo_root().join("target").join("test-scratch");
+    std::fs::create_dir_all(&dir).unwrap();
+    tempfile::Builder::new()
+        .prefix("estate")
+        .tempdir_in(&dir)
+        .unwrap()
+}
+
 pub fn vendor() -> PathBuf {
     repo_root().join("vendor").join("satz")
 }
@@ -74,7 +88,7 @@ pub struct Estate {
 /// include directory of `vendor/satz` by absolute path; `validation_level` is satz's
 /// default (`warn`) unless given.
 pub fn estate_dir(validation_level: Option<&str>) -> Estate {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = scratch();
     let root = dir.path().canonicalize().unwrap();
     let yaml = root.join("yaml");
     std::fs::create_dir_all(&yaml).unwrap();
@@ -89,7 +103,7 @@ pub fn estate_dir(validation_level: Option<&str>) -> Estate {
 /// A second config directory over the `yaml/` of another estate, at the given
 /// validation level: `satz --config <this>` reads the same files under another rule.
 pub fn config_over(yaml: &Path, validation_level: &str) -> Estate {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = scratch();
     let root = dir.path().canonicalize().unwrap();
     write_config(&root, yaml, Some(validation_level));
     Estate {

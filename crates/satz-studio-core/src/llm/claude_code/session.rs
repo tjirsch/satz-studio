@@ -74,7 +74,7 @@ pub fn allowed_tools(tools: &[ToolInfo], auto_approve_writes: bool) -> Vec<Strin
 /// The `--mcp-config` payload: the estate's own satz MCP server, under the name whose
 /// prefix every tool carries.
 pub fn mcp_config(estate: &EstateSession, opts: &SessionOptions) -> String {
-    let root = crate::satz::session::session_root(&estate.dir, &estate.main);
+    let root = &estate.root;
     serde_json::json!({
         "mcpServers": {
             SERVER: {

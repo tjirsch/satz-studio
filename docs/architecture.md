@@ -132,7 +132,12 @@ views, U9 the chat.
    (`yaml_dir`, `hcl_dir`, `schema_dir`, `presets_dir`, each `include_dirs` entry) and
    the main file's directory — the directory itself for an estate whose config stays
    inside it, the repository root for `tests/fixtures/smoke`, whose paths reach into
-   `vendor/satz`. `allow` is `Settings.mcp_allow`, `read,write` by default.
+   `vendor/satz`. Directories that share no component have no common prefix, and the
+   empty path is not an answer: `session_root` returns `SatzError::NoCommonRoot` naming
+   them, because the root is the boundary `satz mcp` enforces. The session keeps the root
+   it opened with, so the `--mcp-config` payload the Claude Code engine writes carries
+   that same root rather than deriving a second one. `allow` is `Settings.mcp_allow`,
+   `read,write` by default.
 4. `McpSession::open` initializes and keeps the server's `instructions`, lists the
    tools as `ToolInfo` with their `ToolAnnotations`, reads `satz://guide`, and calls
    `satz_open {config, estate}` for the `OpenReport` with `runs_as` and

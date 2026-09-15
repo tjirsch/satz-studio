@@ -79,6 +79,11 @@ pub enum SatzError {
         #[source]
         source: serde_json::Error,
     },
+    #[error(
+        "the estate's directories share no common root, so `satz mcp` cannot be confined to one: {}. On Windows this is an estate and a directory its config names — presets, schemas, an include — sitting on different drives; they have to be on one.",
+        dirs.iter().map(|p| p.display().to_string()).collect::<Vec<_>>().join(", ")
+    )]
+    NoCommonRoot { dirs: Vec<PathBuf> },
     #[error("satz mcp: {0}")]
     Mcp(String),
     #[error("{tool} refused: {text}")]
