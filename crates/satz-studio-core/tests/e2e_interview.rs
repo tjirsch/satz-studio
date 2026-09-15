@@ -90,14 +90,13 @@ async fn the_app_path_and_the_cli_path_end_in_the_same_estate() {
     assert!(report.report.questions.is_empty(), "nothing is open");
     assert!(!committed.summary.addresses.is_empty());
 
-    // `satz questions --format json` says the same as the last report, and lists
-    // every question answered with what was typed
-    let cli: QuestionsReport = support::within(session.cli.json(&[
-        "questions".to_string(),
-        main.display().to_string(),
-        "--format".to_string(),
-        "json".to_string(),
-    ]))
+    // the `questions` report the CLI writes says the same as the last report, and
+    // lists every question answered with what was typed
+    let cli: QuestionsReport = support::within(
+        session
+            .cli
+            .json_report(&["questions".to_string(), main.display().to_string()]),
+    )
     .await
     .unwrap();
     assert_eq!(cli.summary, report.report.summary);

@@ -50,10 +50,10 @@ Two crates in one workspace, satz pinned once as the submodule `vendor/satz`
 | `src/schema.rs` | the provider schema as `satz update-schema` writes it, the types lifted from satz's `src/schema.rs`; `load_all` reads every `*.json` in `schema_dir` and is `SchemaError::Missing` for a directory that is absent or holds no resource type; `AttrType` decodes Terraform's type expression and prints it in Terraform's spelling | `ResourceRegistry`, `AttrType`, `BlockSchema`, `AttributeSchema`, `SchemaError` |
 | `src/model/` | the view model, built pure and rebuilt after every commit and reload: `outline.rs` classifies the blocks as satz's `EstateResolver` and `is_child` do, `params.rs` joins the `params { }` block with the questions, `packs.rs` derives the pack rows ([ADR 0007](adr/0007-pack-rows-are-derived-from-the-estate-file.md)), `value.rs` decodes a string as satz's lexer reads it | `EstateModel`, `ResourceNode`, `ResourceKind`, `AttrRow`, `ParamRow`, `PackRow`, `PackRowKind`, `LineState`, `Choice`, `SourceValue`, `StrPart`, `EditMode`, `SchemaStatus` |
 | `src/satz/binary.rs` | where satz is and which version: the Settings override, `PATH`, `~/.local/bin/satz`; the gate against `MIN_SATZ` | `SatzBinary`, `MIN_SATZ` |
-| `src/satz/cli.rs` | `satz --config <dir> <args…>` in the estate's directory, stdout and stderr streamed line by line and cancellable; `json` types `--format json` output | `SatzCli`, `CliLine` |
+| `src/satz/cli.rs` | `satz --config <dir> <args…>` in the estate's directory, stdout and stderr streamed line by line and cancellable; `json_report` runs a reporting command with `--format json` and an `--out` of its own and types the file it wrote | `SatzCli`, `CliLine` |
 | `src/satz/mcp.rs` | one `satz mcp` child per estate, spoken to with rmcp over stdio; every rmcp type stays inside this file | `McpSession`, `ToolInfo`, `ToolAnnotations`, `ToolOutcome` |
 | `src/satz/session.rs` | one session per open estate: the CLI runner, the MCP child, the write lock every writer takes, the identity from `satz_open`; `apply` and `bootstrap` as a one-shot script in the OS terminal | `EstateSession`, `session_root` |
-| `src/satz/reports.rs` | serde mirrors of what satz prints with `--format json` and returns as `structuredContent`: unknown fields ignored, missing required fields fail; the questions report round-trips a recorded output of the pinned satz. `Finding` is satz's own list of what the compile found after the front end — a `CompileSummary` carries the warnings and notes it did not refuse on, a `Refusal` the ones it did; `kind` is the kebab-case word satz writes, kept as a `String` so a kind satz adds is carried instead of failing the result | `QuestionsReport`, `QuestionRow`, `InterviewArgs`, `InterviewReport`, `OpenReport`, `EstatesReport`, `CompileSummary`, `Finding`, `FindingSeverity`, `Refusal` |
+| `src/satz/reports.rs` | serde mirrors of what a reporting command writes with `--format json` and satz returns as `structuredContent`: unknown fields ignored, missing required fields fail; the questions report round-trips a recorded output of the pinned satz. `Finding` is satz's own list of what the compile found after the front end — a `CompileSummary` carries the warnings and notes it did not refuse on, a `Refusal` the ones it did; `kind` is the kebab-case word satz writes, kept as a `String` so a kind satz adds is carried instead of failing the result | `QuestionsReport`, `QuestionRow`, `InterviewArgs`, `InterviewReport`, `OpenReport`, `EstatesReport`, `CompileSummary`, `Finding`, `FindingSeverity`, `Refusal` |
 | `src/satz/mod.rs` | the capability ceiling and the one error type of the driver | `Allow`, `SatzError` |
 | `src/llm/claude/` | Claude natively ([ADR 0004](adr/0004-claude-natively-other-providers-adapt-into-its-message-model.md)): `types.rs` the Messages API wire types as the app's only message model and `body()`, `sse.rs` the event-stream decoder and the assembler, `client.rs` the HTTPS client, `error.rs` the one error type | `Request`, `Response`, `Message`, `ContentBlock`, `SystemBlock`, `ToolDef`, `StopReason`, `StopDetails`, `Usage`, `Effort`, `ClaudeClient`, `ClaudeError` |
 | `src/llm/agent/` | the agent loop over a `ToolHost`, the approval gate, and `bridge.rs`: MCP tools as Claude tool definitions and outcomes back as `tool_result` blocks | `Agent`, `AgentEvent`, `Approval`, `ToolHost`, `EstateContext`, `tool_defs`, `tool_result` |
@@ -96,6 +96,13 @@ the stores are written from there only:
   started by `EstateHost` in `src/shell/mod.rs` with the `Arc<EstateSession>` and
   living as long as the estate is open: `Reload`, `RunCommand`, `CancelCommand`,
   `RunTool`, `OpenInTerminal`, `Close`.
+
+A reporting command takes one `--format` and one `--out`, both required, and writes one
+file instead of printing (satz's ADR 0021). The app names the destination: the file the
+command's own `--out` field names, which is the estate's and stays, else one under
+`reports_dir()` — the app's directory in the system temporary directory — which
+`RunCommand` reads into the log after the streamed lines and removes. `iac-roles` is the
+one command in the palette the ADR leaves on the console.
 
 The shell (`src/shell/`) is the navigation rail with its badges, the top bar with the
 `runs_as`, deployment-mode, schema and satz-version chips, the `SatzBanner` while satz
@@ -317,7 +324,7 @@ its SHA-256 sidecar, refuses an installer without one, and refuses a release bel
 the newest because satz keeps only its five newest releases, so an installer asset
 pinned by tag is gone within days, and the app's contract is `MIN_SATZ` or newer. It
 also writes the runner's satz config (`self_update_frequency = "never"`) when none
-exists, so no update check runs while the tests read `--format json`. `platforms` (`macos-15`,
+exists, so no update check reaches GitHub while the tests drive satz. `platforms` (`macos-15`,
 `windows-2022`) runs the same formatting, clippy, test and build steps on every push
 and pull request; on Windows satz is built from the submodule, since satz has no
 Windows release. `.github/workflows/names-gate.yml` runs `scripts/check-names.sh` over

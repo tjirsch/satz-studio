@@ -1,7 +1,8 @@
 //! The satz driver: the binary and its version gate ([`binary`]), the CLI runner
 //! ([`cli`]), the MCP session over `satz mcp` ([`mcp`]), and one session per open
 //! estate that the Commands view and the agent share ([`session`]). [`reports`] are the
-//! JSON payloads satz prints with `--format json` and returns as `structuredContent`.
+//! JSON payloads a reporting command writes with `--format json` and the server returns
+//! as `structuredContent`.
 
 pub mod binary;
 pub mod cli;
@@ -72,7 +73,7 @@ pub enum SatzError {
         status: std::process::ExitStatus,
         stderr: String,
     },
-    #[error("`satz {command}` printed JSON this app does not understand: {source}")]
+    #[error("`satz {command}` answered with JSON this app does not understand: {source}")]
     Json {
         command: String,
         #[source]

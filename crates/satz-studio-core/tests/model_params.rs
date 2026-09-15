@@ -25,11 +25,8 @@ fn fixture() -> EstateDir {
 async fn questions(estate: &EstateDir, name: &str) -> QuestionsReport {
     let bin = SatzBinary::locate(None).await.unwrap();
     let cli = SatzCli::new(bin, estate.dir.canonicalize().unwrap());
-    let args: Vec<String> = ["questions", name, "--format", "json"]
-        .iter()
-        .map(|s| s.to_string())
-        .collect();
-    tokio::time::timeout(TIME_BOX, cli.json(&args))
+    let args = ["questions".to_string(), name.to_string()];
+    tokio::time::timeout(TIME_BOX, cli.json_report(&args))
         .await
         .unwrap()
         .unwrap()

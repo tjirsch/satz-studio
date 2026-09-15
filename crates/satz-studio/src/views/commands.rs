@@ -3,16 +3,18 @@
 //! line to copy or to open in the OS terminal.
 
 use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
 
 use dioxus::prelude::*;
 use satz_studio_core::satz::CliLine;
 
 use crate::components::{
     Button, ButtonVariant, Card, CardVariant, Chip, ChipKind, Icon, LinearProgress, List, ListItem,
-    Switch, TextField, Tooltip,
+    Segment, SegmentedButton, Switch, TextField, Tooltip,
 };
 use crate::state::{
-    AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt, ToastKind, command_line, toast,
+    AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt, ToastKind, command_line,
+    reports_dir, toast,
 };
 
 /// Where the open estate's file goes on the command line.
@@ -33,6 +35,15 @@ pub enum Field {
         key: &'static str,
         flag: &'static str,
         label: &'static str,
+    },
+    /// `flag <one of options>`, always: the choice starts at `default` and an empty
+    /// one is an error naming the field
+    Choice {
+        key: &'static str,
+        flag: &'static str,
+        label: &'static str,
+        options: &'static [&'static str],
+        default: &'static str,
     },
     /// `flag <value>` when the value is not empty
     Option {
@@ -59,6 +70,7 @@ impl Field {
     pub fn key(&self) -> &'static str {
         match self {
             Field::Flag { key, .. }
+            | Field::Choice { key, .. }
             | Field::Option { key, .. }
             | Field::Positional { key, .. }
             | Field::Trailing { key, .. } => key,
@@ -78,8 +90,24 @@ pub struct CommandSpec {
     /// fixed words after the estate, `["--check"]`
     pub tail: &'static [&'static str],
     pub fields: &'static [Field],
+    /// a reporting command: satz's ADR 0021 gives it one `--format` and one `--out`,
+    /// both required, and it prints nothing. The destination is the file the spec's
+    /// `--out` field names, else one of the app's own, which the log is filled from
+    /// and which is removed.
+    pub reports: bool,
     /// runs in the OS terminal, never in the app
     pub external: bool,
+}
+
+/// The file extension of a `--format` value: the destination says what it holds.
+pub fn extension(format: &str) -> &'static str {
+    match format {
+        "markdown" => "md",
+        "json" => "json",
+        "pdf" => "pdf",
+        "xlsx" => "xlsx",
+        _ => "txt",
+    }
 }
 
 /// The read-only session tools the view offers as one click: name and what it answers.
@@ -112,6 +140,7 @@ pub const PALETTE: &[CommandSpec] = &[
         estate: EstateArg::Positional,
         tail: &["--check"],
         fields: &[],
+        reports: false,
         external: false,
     },
     CommandSpec {
@@ -139,6 +168,7 @@ pub const PALETTE: &[CommandSpec] = &[
                 label: "Print the resolved variables",
             },
         ],
+        reports: false,
         external: false,
     },
     CommandSpec {
@@ -148,12 +178,22 @@ pub const PALETTE: &[CommandSpec] = &[
         description: "What the estate's packs ask, joined with the answers its params carry.",
         head: &["questions"],
         estate: EstateArg::Positional,
-        tail: &["--format", "json"],
-        fields: &[Field::Flag {
-            key: "unanswered",
-            flag: "--unanswered",
-            label: "Only the unanswered questions",
-        }],
+        tail: &[],
+        fields: &[
+            Field::Choice {
+                key: "format",
+                flag: "--format",
+                label: "Format",
+                options: &["text", "markdown", "json"],
+                default: "json",
+            },
+            Field::Flag {
+                key: "unanswered",
+                flag: "--unanswered",
+                label: "Only the unanswered questions",
+            },
+        ],
+        reports: true,
         external: false,
     },
     CommandSpec {
@@ -163,13 +203,23 @@ pub const PALETTE: &[CommandSpec] = &[
         description: "Which packs are clean, behind upstream, or edited locally.",
         head: &["check-presets"],
         estate: EstateArg::Positional,
-        tail: &["--format", "json"],
-        fields: &[Field::Option {
-            key: "pristine_dir",
-            flag: "--pristine-dir",
-            label: "Pristine directory",
-            placeholder: "compare against this directory instead of downloading",
-        }],
+        tail: &[],
+        fields: &[
+            Field::Choice {
+                key: "format",
+                flag: "--format",
+                label: "Format",
+                options: &["text", "json"],
+                default: "json",
+            },
+            Field::Option {
+                key: "pristine_dir",
+                flag: "--pristine-dir",
+                label: "Pristine directory",
+                placeholder: "compare against this directory instead of downloading",
+            },
+        ],
+        reports: true,
         external: false,
     },
     CommandSpec {
@@ -177,6 +227,8 @@ pub const PALETTE: &[CommandSpec] = &[
         label: "iac-roles",
         icon: "admin_panel_settings",
         description: "The roles the IaC service account needs against the roles the estate grants it.",
+        // one of the two commands satz's ADR 0021 leaves on the console: the exit code
+        // is the answer and the text is the diagnosis, so it takes no `--out`
         head: &["iac-roles"],
         estate: EstateArg::Positional,
         tail: &["--format", "json"],
@@ -185,6 +237,7 @@ pub const PALETTE: &[CommandSpec] = &[
             flag: "--execute",
             label: "Write the missing roles into the estate file",
         }],
+        reports: false,
         external: false,
     },
     CommandSpec {
@@ -209,6 +262,7 @@ pub const PALETTE: &[CommandSpec] = &[
                 placeholder: "the config's by default",
             },
         ],
+        reports: false,
         external: false,
     },
     CommandSpec {
@@ -224,6 +278,7 @@ pub const PALETTE: &[CommandSpec] = &[
             label: "Extra arguments",
             placeholder: "-reconfigure, -migrate-state",
         }],
+        reports: false,
         external: false,
     },
     CommandSpec {
@@ -239,6 +294,7 @@ pub const PALETTE: &[CommandSpec] = &[
             label: "Extra arguments",
             placeholder: "-target=…, -out=plan.tfplan",
         }],
+        reports: false,
         external: false,
     },
     CommandSpec {
@@ -255,12 +311,15 @@ pub const PALETTE: &[CommandSpec] = &[
                 label: "Catalog",
                 default: "cis-gcp-5.0",
             },
-            Field::Flag {
-                key: "json",
-                flag: "--format=json",
-                label: "JSON output",
+            Field::Choice {
+                key: "format",
+                flag: "--format",
+                label: "Format",
+                options: &["text", "json"],
+                default: "text",
             },
         ],
+        reports: true,
         external: false,
     },
     CommandSpec {
@@ -276,6 +335,13 @@ pub const PALETTE: &[CommandSpec] = &[
                 key: "framework",
                 label: "Catalog",
                 default: "cis-gcp-5.0",
+            },
+            Field::Choice {
+                key: "format",
+                flag: "--format",
+                label: "Format",
+                options: &["markdown", "json"],
+                default: "markdown",
             },
             Field::Flag {
                 key: "no_live",
@@ -294,12 +360,13 @@ pub const PALETTE: &[CommandSpec] = &[
                 placeholder: "path to the json-ocsf file",
             },
             Field::Option {
-                key: "report",
-                flag: "--report",
+                key: "out",
+                flag: "--out",
                 label: "Report file",
-                placeholder: "evidence/<catalog>-latest.md by default",
+                placeholder: "a file of the estate's; empty writes one the log shows",
             },
         ],
+        reports: true,
         external: false,
     },
     CommandSpec {
@@ -323,6 +390,7 @@ pub const PALETTE: &[CommandSpec] = &[
                 placeholder: "take the library from here instead of downloading",
             },
         ],
+        reports: false,
         external: false,
     },
     CommandSpec {
@@ -352,6 +420,7 @@ pub const PALETTE: &[CommandSpec] = &[
                 placeholder: "a pack stem, or all",
             },
         ],
+        reports: false,
         external: false,
     },
     CommandSpec {
@@ -367,6 +436,7 @@ pub const PALETTE: &[CommandSpec] = &[
             label: "Extra arguments",
             placeholder: "-target=…, a saved plan file",
         }],
+        reports: false,
         external: true,
     },
     CommandSpec {
@@ -389,28 +459,62 @@ pub const PALETTE: &[CommandSpec] = &[
                 label: "Greenfield: materialise a not-yet-existing organisation",
             },
         ],
+        reports: false,
         external: true,
     },
 ];
 
-/// The initial field values of a spec: positionals at their default, everything else empty.
+/// The initial field values of a spec: positionals and choices at their default,
+/// everything else empty.
 pub fn defaults(spec: &CommandSpec) -> BTreeMap<String, String> {
     spec.fields
         .iter()
         .map(|f| match f {
-            Field::Positional { key, default, .. } => ((*key).to_string(), (*default).to_string()),
+            Field::Positional { key, default, .. } | Field::Choice { key, default, .. } => {
+                ((*key).to_string(), (*default).to_string())
+            }
             _ => (f.key().to_string(), String::new()),
         })
         .collect()
 }
 
+/// The `--format` a spec's choice field currently holds, `"text"` for a spec without
+/// one.
+fn format_of(spec: &CommandSpec, values: &BTreeMap<String, String>) -> String {
+    spec.fields
+        .iter()
+        .find_map(|f| match f {
+            Field::Choice {
+                key,
+                flag: "--format",
+                ..
+            } => values.get(*key).map(|v| v.trim().to_string()),
+            _ => None,
+        })
+        .filter(|v| !v.is_empty())
+        .unwrap_or_else(|| "text".to_string())
+}
+
+/// Where a reporting command writes when no field of its own names a file: the app's
+/// own file, one per command, named for the format it holds. The run reads it into the
+/// log and removes it.
+pub fn report_path(spec: &CommandSpec, values: &BTreeMap<String, String>) -> PathBuf {
+    let format = format_of(spec, values);
+    reports_dir().join(format!("{}.{}", spec.id, extension(&format)))
+}
+
 /// The argument vector after `satz --config <dir>`: head, positionals, the estate, the
-/// tail, flags and options in field order, trailing words last. A flag is on when its
-/// value is `"true"`. An empty positional is an error naming the field.
+/// tail, flags, choices and options in field order, the destination of a reporting
+/// command, trailing words last. A flag is on when its value is `"true"`. An empty
+/// positional or choice is an error naming the field.
+///
+/// A reporting command writes one file and prints nothing (satz's ADR 0021), so it
+/// always carries `--out`: the file its own field names, else `report_to`.
 pub fn build_args(
     spec: &CommandSpec,
     estate: &str,
     values: &BTreeMap<String, String>,
+    report_to: &Path,
 ) -> Result<Vec<String>, String> {
     let value = |key: &str| {
         values
@@ -446,6 +550,16 @@ pub fn build_args(
                     args.push((*flag).to_string());
                 }
             }
+            Field::Choice {
+                key, flag, label, ..
+            } => {
+                let v = value(key);
+                if v.is_empty() {
+                    return Err(format!("{label} is required"));
+                }
+                args.push((*flag).to_string());
+                args.push(v);
+            }
             Field::Option { key, flag, .. } => {
                 let v = value(key);
                 if !v.is_empty() {
@@ -456,6 +570,10 @@ pub fn build_args(
             Field::Positional { .. } => {}
             Field::Trailing { .. } => {}
         }
+    }
+    if spec.reports && !args.iter().any(|a| a == "--out") {
+        args.push("--out".to_string());
+        args.push(report_to.display().to_string());
     }
     for f in spec.fields {
         if let Field::Trailing { key, .. } = f {
@@ -480,7 +598,7 @@ pub fn CommandsView() -> Element {
     let log = app.estate().command_log().cloned();
     let last = app.estate().last_command().cloned();
     let outcome = app.estate().outcome().cloned();
-    let built = build_args(&spec, &open.name, &values());
+    let built = build_args(&spec, &open.name, &values(), &report_path(&spec, &values()));
     let preview = built
         .as_ref()
         .map(|args| command_line(&open.dir, args))
@@ -518,6 +636,14 @@ pub fn CommandsView() -> Element {
                                 match *f {
                                     Field::Flag { label, .. } => rsx! {
                                         Switch { key: "{key}", label: label.to_string(), checked: current == "true", onchange: move |v: bool| { values.write().insert(key.clone(), v.to_string()); } }
+                                    },
+                                    Field::Choice { label, options, .. } => rsx! {
+                                        p { key: "{key}", class: "commands__label", "{label}" }
+                                        SegmentedButton {
+                                            options: options.iter().map(|o| Segment::new(*o, *o)).collect::<Vec<_>>(),
+                                            selected: current,
+                                            onselect: move |v: String| { values.write().insert(key.clone(), v); },
+                                        }
                                     },
                                     Field::Option { label, placeholder, .. } => rsx! {
                                         TextField { key: "{key}", label: label.to_string(), value: current, placeholder: placeholder.to_string(), monospace: true, oninput: move |v: String| { values.write().insert(key.clone(), v); } }
@@ -634,8 +760,16 @@ fn copy_to_clipboard(app: Store<AppStore>, text: &str) {
 mod tests {
     use super::*;
 
+    /// The destination the app would name; `build_args` takes it, so a test reads the
+    /// same command line the preview shows.
+    const OUT: &str = "/tmp/satz-studio-reports/report";
+
     fn spec(id: &str) -> &'static CommandSpec {
         PALETTE.iter().find(|s| s.id == id).unwrap()
+    }
+
+    fn built(id: &str, estate: &str, values: &BTreeMap<String, String>) -> Vec<String> {
+        build_args(spec(id), estate, values, Path::new(OUT)).unwrap()
     }
 
     #[test]
@@ -654,7 +788,7 @@ mod tests {
 
     #[test]
     fn a_check_puts_the_estate_before_the_tail() {
-        let args = build_args(spec("transpile-check"), "C0example.satz", &BTreeMap::new()).unwrap();
+        let args = built("transpile-check", "C0example.satz", &BTreeMap::new());
         assert_eq!(args, ["transpile", "C0example.satz", "--check"]);
     }
 
@@ -663,16 +797,19 @@ mod tests {
         let mut v = defaults(spec("report-compliance"));
         v.insert("checkov".into(), "true".into());
         v.insert("prowler".into(), " /tmp/prowler.json ".into());
-        let args = build_args(spec("report-compliance"), "C0example.satz", &v).unwrap();
         assert_eq!(
-            args,
+            built("report-compliance", "C0example.satz", &v),
             [
                 "report-compliance",
                 "cis-gcp-5.0",
                 "C0example.satz",
+                "--format",
+                "markdown",
                 "--checkov",
                 "--prowler",
-                "/tmp/prowler.json"
+                "/tmp/prowler.json",
+                "--out",
+                OUT
             ]
         );
     }
@@ -682,8 +819,18 @@ mod tests {
         let mut v = defaults(spec("require"));
         v.insert("framework".into(), "  ".into());
         assert_eq!(
-            build_args(spec("require"), "x.satz", &v).unwrap_err(),
+            build_args(spec("require"), "x.satz", &v, Path::new(OUT)).unwrap_err(),
             "Catalog is required"
+        );
+    }
+
+    #[test]
+    fn an_empty_choice_is_refused_by_name() {
+        let mut v = defaults(spec("questions"));
+        v.insert("format".into(), String::new());
+        assert_eq!(
+            build_args(spec("questions"), "x.satz", &v, Path::new(OUT)).unwrap_err(),
+            "Format is required"
         );
     }
 
@@ -692,7 +839,7 @@ mod tests {
         let mut v = defaults(spec("merge-presets"));
         v.insert("report_only".into(), "true".into());
         assert_eq!(
-            build_args(spec("merge-presets"), "C0example.satz", &v).unwrap(),
+            built("merge-presets", "C0example.satz", &v),
             [
                 "merge-presets",
                 "--estate",
@@ -706,7 +853,7 @@ mod tests {
             "-target=google_folder.x  -out=p.tfplan".into(),
         );
         assert_eq!(
-            build_args(spec("plan"), "C0example.satz", &v).unwrap(),
+            built("plan", "C0example.satz", &v),
             ["plan", "-target=google_folder.x", "-out=p.tfplan"]
         );
     }
@@ -715,12 +862,12 @@ mod tests {
     fn a_flag_that_is_off_or_an_empty_option_adds_nothing() {
         let v = defaults(spec("transpile"));
         assert_eq!(
-            build_args(spec("transpile"), "C0example.satz", &v).unwrap(),
+            built("transpile", "C0example.satz", &v),
             ["transpile", "C0example.satz"]
         );
         let v = defaults(spec("update-schema"));
         assert_eq!(
-            build_args(spec("update-schema"), "C0example.satz", &v).unwrap(),
+            built("update-schema", "C0example.satz", &v),
             ["update-schema"]
         );
     }
@@ -733,5 +880,76 @@ mod tests {
             .map(|s| s.id)
             .collect();
         assert_eq!(external, ["apply", "bootstrap"]);
+    }
+
+    /// satz's ADR 0021: a reporting command takes one `--format` and one `--out`, both
+    /// required. `iac-roles` is the one entry the ADR leaves on the console.
+    #[test]
+    fn every_reporting_command_names_a_format_and_a_destination() {
+        let reporting: Vec<&str> = PALETTE.iter().filter(|s| s.reports).map(|s| s.id).collect();
+        assert_eq!(
+            reporting,
+            ["questions", "check-presets", "require", "report-compliance"]
+        );
+        for s in PALETTE.iter().filter(|s| s.reports) {
+            let args = built(s.id, "C0example.satz", &defaults(s));
+            assert!(args.iter().any(|a| a == "--format"), "{}: {args:?}", s.id);
+            assert_eq!(
+                args.iter().filter(|a| *a == "--out").count(),
+                1,
+                "{}: {args:?}",
+                s.id
+            );
+        }
+        let iac = spec("iac-roles");
+        assert!(!iac.reports);
+        assert_eq!(iac.tail, ["--format", "json"]);
+        assert!(
+            !built("iac-roles", "C0example.satz", &defaults(iac))
+                .iter()
+                .any(|a| a == "--out")
+        );
+    }
+
+    #[test]
+    fn a_reporting_command_takes_the_app_s_file_and_a_named_one_wins() {
+        let v = defaults(spec("questions"));
+        assert_eq!(
+            built("questions", "C0example.satz", &v),
+            [
+                "questions",
+                "C0example.satz",
+                "--format",
+                "json",
+                "--out",
+                OUT
+            ]
+        );
+        let mut v = defaults(spec("report-compliance"));
+        v.insert("out".into(), "evidence/cis.md".into());
+        let args = built("report-compliance", "C0example.satz", &v);
+        assert_eq!(args.iter().filter(|a| *a == "--out").count(), 1, "{args:?}");
+        assert!(args.ends_with(&["--out".to_string(), "evidence/cis.md".to_string()]));
+    }
+
+    #[test]
+    fn the_app_s_file_is_named_for_the_format_it_holds() {
+        let s = spec("questions");
+        let mut v = defaults(s);
+        assert_eq!(
+            report_path(s, &v).file_name().unwrap(),
+            std::ffi::OsStr::new("questions.json")
+        );
+        v.insert("format".into(), "markdown".into());
+        assert_eq!(
+            report_path(s, &v).file_name().unwrap(),
+            std::ffi::OsStr::new("questions.md")
+        );
+        v.insert("format".into(), "text".into());
+        assert_eq!(
+            report_path(s, &v).file_name().unwrap(),
+            std::ffi::OsStr::new("questions.txt")
+        );
+        assert!(report_path(s, &v).starts_with(reports_dir()));
     }
 }
