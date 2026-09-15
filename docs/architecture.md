@@ -131,7 +131,7 @@ an `InitOptions`, `check_target` refuses a folder that is not there or already c
 `config.toml`, and `SatzCli::run_in(bin, dir, argv, …)` runs the command with the folder
 as its working directory and **no `--config`** — `init` is what writes `config.toml`, so
 there is no file for a `--config` to name, and satz refuses `--config <dir>` for a
-directory without one. The lines stream into `AppStore.create` as a command's do.
+directory without one. The lines stream into `AppStore.create` the way a command's stream into the estate's log.
 
 `init` is live and credentialed: what the form did not state it derives from the
 Application Default Credentials — the customer's domain and first administrator from the

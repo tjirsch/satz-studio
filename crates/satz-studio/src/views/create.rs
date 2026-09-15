@@ -82,6 +82,7 @@ pub fn CreateEstate() -> Element {
                         class: "create__folder-field",
                         supporting: problem.clone().unwrap_or_else(|| "An empty folder: satz creates the estate inside it".to_string()),
                         error: problem.is_some(),
+                        disabled: running,
                         oninput: move |v| target.set(v),
                     }
                     Button {
