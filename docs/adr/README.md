@@ -48,3 +48,4 @@ recognises the other.
 | [0008](0008-transcripts-live-outside-the-estate.md) | transcripts live under the app's data directory, never inside an estate | accepted |
 | [0009](0009-refusal-fallbacks-are-on-by-default.md) | refusal fallbacks are on by default, off by a Settings switch | accepted |
 | [0010](0010-claude-code-as-the-subscription-backend.md) | Claude Code as the subscription backend: the installed CLI driven over stdio, the estate's satz MCP server, the app's own approval card | accepted |
+| [0011](0011-the-licence-is-apache-2-0.md) | the licence is Apache 2.0: the express patent grant, contribution terms in §5, and a `NOTICE` for the material bundled under other licences | accepted |

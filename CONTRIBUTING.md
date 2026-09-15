@@ -145,5 +145,9 @@ the grammar repository first.
 
 ## Licence
 
-By contributing you agree that your contributions are licensed under the MIT
-Licence, as the rest of this repository is.
+The repository is under the Apache License 2.0 ([`LICENSE`](LICENSE)). A contribution
+you submit for inclusion in it is licensed under those same terms, by §5 of the licence
+itself; there is no separate agreement to sign and none is asked for.
+
+A change that bundles a file from somewhere else adds its line to [`NOTICE`](NOTICE) in
+the same pull request, with the licence it comes under and where that licence text sits.

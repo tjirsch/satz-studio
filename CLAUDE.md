@@ -23,6 +23,14 @@ the rules that apply to every change, whoever or whatever makes it.
   noreply address. CI runs it (`.github/workflows/names-gate.yml`); the hooks run it
   locally, enabled once per clone with `git config core.hooksPath .githooks`. What the
   gate cannot see is a NAME in prose — that is what review is for.
+- **The repository is under the Apache License 2.0** (`LICENSE`), and `NOTICE` is what
+  a redistribution carries with it: the copyright line, the licence paragraph, and
+  every piece of material bundled here under other terms — the Material Symbols font
+  (`crates/satz-studio/assets/fonts/`, Apache-2.0) and the vendored grammar
+  (`vendor/satz-tree-sitter/`, MIT, a separate repository). A change that bundles a
+  file from elsewhere adds its line to `NOTICE` in the same pull request. A
+  contribution is licensed under the same terms by §5 of the licence itself; no
+  separate agreement is asked for (ADR 0011).
 - **satz is pinned once.** The submodule `vendor/satz` and `MIN_SATZ`
   (`crates/satz-studio-core/src/satz/binary.rs`) name the same version, and a test
   holds them equal. Moving the pin is one pull request that moves all three: the
