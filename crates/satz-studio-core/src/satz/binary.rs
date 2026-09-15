@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use super::SatzError;
 
 /// The satz release the submodule `vendor/satz` is pinned to. The app refuses an older binary.
-pub const MIN_SATZ: &str = "0.58.1";
+pub const MIN_SATZ: &str = "0.59.0";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SatzBinary {
