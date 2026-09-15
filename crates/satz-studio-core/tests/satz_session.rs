@@ -83,6 +83,8 @@ async fn external_command_writes_an_executable_script_into_the_estate() {
         ])
         .unwrap();
     let text = std::fs::read_to_string(&script).unwrap();
+    // read before the file goes; only the unix assertion below reads it
+    #[cfg(unix)]
     let mode = std::fs::metadata(&script).unwrap().permissions();
     std::fs::remove_file(&script).unwrap();
     assert!(
