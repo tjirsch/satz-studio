@@ -1,0 +1,54 @@
+satz-studio
+Copyright 2026 Thomas Jirsch
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+This product bundles material from other works, each under its own licence.
+A redistribution of the source tree or of a built bundle carries them along
+with it.
+
+
+Material Symbols Rounded
+  crates/satz-studio/assets/fonts/MaterialSymbolsRounded.woff2
+
+  The variable icon font the window draws its glyphs from, from the Material
+  Symbols icon set. Licensed under the Apache License, Version 2.0; its licence
+  text is crates/satz-studio/assets/fonts/LICENSE.
+
+
+The tree-sitter grammar for Satz
+  vendor/satz-tree-sitter/src/parser.c, grammar.json, node-types.json
+
+  The generated parser the document layer reads with, copied from the grammar
+  repository <https://github.com/tjirsch/satz-tree-sitter> at the commit named in
+  vendor/satz-tree-sitter/COMMIT. That repository is separate from this one and
+  keeps its own terms: the MIT Licence, Copyright (c) 2026 Thomas Jirsch, whose
+  text is vendor/satz-tree-sitter/LICENSE.
+
+
+The tree-sitter runtime headers
+  vendor/satz-tree-sitter/src/tree_sitter/alloc.h, array.h, parser.h
+
+  Emitted beside every generated parser by tree-sitter and compiled into the core
+  crate with it. From the tree-sitter project
+  (<https://github.com/tree-sitter/tree-sitter>), under the MIT Licence.
+
+
+satz
+  vendor/satz, the pinned submodule
+
+  The tool this app drives. satz-core is a path dependency into that checkout, so
+  a built bundle contains it and a clone with submodules carries its source. It is
+  a separate repository under the Apache License, Version 2.0, Copyright 2026
+  Thomas Jirsch, with its own LICENSE and NOTICE. The provider-schema types in
+  crates/satz-studio-core/src/schema.rs are lifted from it under the same licence.

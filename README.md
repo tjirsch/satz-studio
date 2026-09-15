@@ -132,4 +132,6 @@ app does; what is still to do is planned outside the repository.
 
 ## Licence
 
-MIT, see [`LICENSE`](LICENSE).
+Apache License 2.0, see [`LICENSE`](LICENSE). [`NOTICE`](NOTICE) names the material
+this repository bundles under other terms — the Material Symbols font and the vendored
+tree-sitter grammar — and travels with a redistribution.

@@ -1,8 +1,9 @@
 //! The provider schema, as `satz update-schema` writes it into the estate's
 //! `schema_dir`: raw `tofu providers schema -json`. The types and the loader are lifted
-//! from satz `src/schema.rs` (MIT, `vendor/satz` at the pinned tag) — satz's binary has
-//! no library target, so the app carries its own copy, byte-for-byte in the types.
-//! Studio decodes the attribute type here as well ([`AttrType`]); satz leaves it raw.
+//! from satz `src/schema.rs` (Apache-2.0, `vendor/satz` at the pinned tag) — satz's
+//! binary has no library target, so the app carries its own copy, byte-for-byte in the
+//! types. Studio decodes the attribute type here as well ([`AttrType`]); satz leaves it
+//! raw.
 //!
 //! One departure from satz: a directory with no resource type in it is
 //! [`SchemaError::Missing`], never an empty registry. satz tolerates the absence because
