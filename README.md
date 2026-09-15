@@ -73,7 +73,7 @@ a fake CLI and need Python 3.
 | `tests/fixtures/` | an estate directory over satz's smoke estates, its `config.toml` pointing into the submodule; a test that writes copies it first |
 | `docs/` | [`architecture.md`](docs/architecture.md), [`ui.md`](docs/ui.md), [`verification.md`](docs/verification.md) and the decision records under [`adr/`](docs/adr/README.md) |
 | `scripts/` | the privacy gate (`check-names.sh`), the satz installer CI runs (`install-satz.sh`, the newest satz release verified against its SHA-256 sidecar and held to `MIN_SATZ` or newer), the verification harness (`e2e.sh`), the grammar refresh (`sync-grammar.sh`) |
-| `.github/workflows/` | `ci.yml` (formatting, clippy, tests, the verification harness, a build of the app; Linux on every push, macOS and Windows on a tag), `release.yml` (the bundles of the three operating systems on a tag) and `names-gate.yml` (the privacy gate over the tree and the commits) |
+| `.github/workflows/` | `ci.yml` (formatting, clippy, tests, the verification harness, a build of the app; Linux, macOS and Windows on every push), `release.yml` (the bundles of the three operating systems on a tag) and `names-gate.yml` (the privacy gate over the tree and the commits) |
 | `.githooks/` | the pre-commit and commit-msg hooks that run the gate locally |
 
 ## Release
@@ -100,9 +100,17 @@ The `.deb` and the `.AppImage` prompt nothing. The same bundle is built locally 
 `target/dx/satz-studio/bundle/`; `docs/verification.md` is what is checked before a
 tag.
 
+## Contributing
+
+[`CONTRIBUTING.md`](CONTRIBUTING.md) is the development setup, the checks CI runs and
+what a pull request needs. [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) applies to
+everyone taking part. [`SECURITY.md`](SECURITY.md) is how to report a vulnerability —
+privately, never in a public issue. [`CLAUDE.md`](CLAUDE.md) holds the working rules
+for anyone changing this repository, person or agent.
+
 ## Privacy
 
-This repository goes public, history included. Nothing shaped like private data enters
+This repository is public, history included. Nothing shaped like private data enters
 it: no customer, company or person; no directory id, organisation number, billing
 account, tenant id, e-mail address or repository path that is not one of satz's
 documented example values (`acme`, `example.com`, `C0example`, `123456789012`; the

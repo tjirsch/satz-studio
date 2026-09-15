@@ -33,10 +33,9 @@ is refused at startup (`SatzError::TooOld`), naming the version found and
 app speaks are that release's. Moving the pin is one change in three places: the
 submodule, `MIN_SATZ`, and the recorded reports under `tests/fixtures`.
 
-The repository is private until the first release and public after it. The history goes
-public with it, so the privacy discipline holds from the first commit: satz's
-`scripts/check-names.sh` runs as a hook and in CI, and every value in docs, tests and
-fixtures is one of satz's documented example values.
+The repository is public, history included, so the privacy discipline holds from the
+first commit: satz's `scripts/check-names.sh` runs as a hook and in CI, and every value
+in docs, tests and fixtures is one of satz's documented example values.
 
 ## Consequences
 
@@ -51,8 +50,9 @@ fixtures is one of satz's documented example values.
   and CI builds the binary from the submodule there. That is an item for satz, not
   something this repository works around.
 - Two repositories to keep in step; the pin is the only coupling, and it is explicit.
-- Private CI minutes are capped and macOS runners count tenfold, so pull requests run
-  on ubuntu only until the repository is public.
+- CI runs formatting, clippy, the tests and a build on ubuntu, macOS and Windows for
+  every push and pull request, so the app is held to the pinned satz on each of the
+  three systems it ships on.
 
 ## Pros and cons of the options
 

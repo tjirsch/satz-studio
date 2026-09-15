@@ -318,10 +318,10 @@ the newest because satz keeps only its five newest releases, so an installer ass
 pinned by tag is gone within days, and the app's contract is `MIN_SATZ` or newer. It
 also writes the runner's satz config (`self_update_frequency = "never"`) when none
 exists, so no update check runs while the tests read `--format json`. `platforms` (`macos-15`,
-`windows-2022`) runs only for a release tag or a manual dispatch while the repository
-is private; on Windows satz is built from the submodule, since satz has no Windows
-release. `.github/workflows/names-gate.yml` runs `scripts/check-names.sh` over the
-tree and over the commits each push or pull request adds.
+`windows-2022`) runs the same formatting, clippy, test and build steps on every push
+and pull request; on Windows satz is built from the submodule, since satz has no
+Windows release. `.github/workflows/names-gate.yml` runs `scripts/check-names.sh` over
+the tree and over the commits each push or pull request adds.
 
 ## 6. Decisions
 
