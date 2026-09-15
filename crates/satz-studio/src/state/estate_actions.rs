@@ -629,7 +629,7 @@ async fn reload_with(session: &Arc<EstateSession>, app: Store<AppStore>, carried
                     diagnostics.clone(),
                 )
                 .map(|model| (model, cst))
-                .map_err(|e| Diagnostic::error(e.to_string(), DiagSource::Compile))
+                .map_err(|e| Box::new(Diagnostic::error(e.to_string(), DiagSource::Compile)))
             })
         }
         Ok(Err(d)) => {
@@ -651,7 +651,7 @@ async fn reload_with(session: &Arc<EstateSession>, app: Store<AppStore>, carried
             estate.model().set(Some(Arc::new(model)));
             estate.cst().set(Some(Arc::new(cst)));
         }
-        Some(Err(d)) => diagnostics.push(d),
+        Some(Err(d)) => diagnostics.push(*d),
         None => {}
     }
     diagnostics.extend(carried);
