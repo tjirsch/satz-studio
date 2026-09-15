@@ -50,7 +50,7 @@ jobs:
       - name: clippy (warnings are errors)
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - name: tests
-        run: cargo test --workspace --locked
+        run: cargo test --workspace --locked --no-fail-fast
       - name: the verification harness (docs/verification.md)
         run: bash scripts/e2e.sh --ci
       - name: build the app
@@ -94,6 +94,6 @@ jobs:
       - name: clippy (warnings are errors)
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - name: tests
-        run: cargo test --workspace --locked
+        run: cargo test --workspace --locked --no-fail-fast
       - name: build the app
         run: cargo build -p satz-studio --locked
