@@ -1,7 +1,8 @@
 //! The satz driver: the binary and its version gate ([`binary`]), the CLI runner
 //! ([`cli`]), the MCP session over `satz mcp` ([`mcp`]), and one session per open
 //! estate that the Commands view and the agent share ([`session`]). [`reports`] are the
-//! JSON payloads satz prints with `--format json` and returns as `structuredContent`.
+//! JSON payloads a reporting command writes with `--format json` and the server returns
+//! as `structuredContent`.
 
 pub mod binary;
 pub mod cli;
@@ -72,12 +73,17 @@ pub enum SatzError {
         status: std::process::ExitStatus,
         stderr: String,
     },
-    #[error("`satz {command}` printed JSON this app does not understand: {source}")]
+    #[error("`satz {command}` answered with JSON this app does not understand: {source}")]
     Json {
         command: String,
         #[source]
         source: serde_json::Error,
     },
+    #[error(
+        "the estate's directories share no common root, so `satz mcp` cannot be confined to one: {}. On Windows this is an estate and a directory its config names — presets, schemas, an include — sitting on different drives; they have to be on one.",
+        dirs.iter().map(|p| p.display().to_string()).collect::<Vec<_>>().join(", ")
+    )]
+    NoCommonRoot { dirs: Vec<PathBuf> },
     #[error("satz mcp: {0}")]
     Mcp(String),
     #[error("{tool} refused: {text}")]

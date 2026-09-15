@@ -24,6 +24,20 @@ pub fn repo_root() -> PathBuf {
         .unwrap()
 }
 
+/// A temporary directory on the REPOSITORY's drive rather than the system one. A
+/// session's root is the longest common prefix of the estate's directory and every
+/// directory its config names, and those reach into `vendor/satz`; on Windows the
+/// system temporary directory is often on another drive, where a temporary estate and
+/// the submodule share no prefix at all and there is no root to confine `satz mcp` to.
+pub fn scratch() -> tempfile::TempDir {
+    let dir = repo_root().join("target").join("test-scratch");
+    std::fs::create_dir_all(&dir).unwrap();
+    tempfile::Builder::new()
+        .prefix("estate")
+        .tempdir_in(&dir)
+        .unwrap()
+}
+
 pub fn fixtures() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests")
@@ -175,7 +189,7 @@ pub struct SmokeCopy {
 }
 
 pub fn copy_smoke() -> SmokeCopy {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = scratch();
     let root = dir.path().canonicalize().unwrap();
     let yaml = root.join("yaml");
     std::fs::create_dir_all(&yaml).unwrap();

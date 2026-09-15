@@ -16,6 +16,8 @@ pub struct EstateSession {
     /// the main `.satz` file, absolute
     pub main: PathBuf,
     pub cli: SatzCli,
+    /// the boundary `satz mcp` is confined to, computed once by [`session_root`]
+    pub root: PathBuf,
     mcp: McpSession,
     write_lock: Mutex<()>,
 }
@@ -50,7 +52,7 @@ impl EstateSession {
             })?
         };
         let main = absolute(&dir.estate_path(&main))?;
-        let root = session_root(&dir, &main);
+        let root = session_root(&dir, &main)?;
         let mcp =
             McpSession::open(bin, &root, allow, utf8(&dir.config_path)?, utf8(&main)?).await?;
         let cli = SatzCli::new(bin.clone(), dir.dir.clone());
@@ -58,6 +60,7 @@ impl EstateSession {
             dir,
             main,
             cli,
+            root,
             mcp,
             write_lock: Mutex::new(()),
         }))
@@ -165,7 +168,12 @@ impl EstateSession {
 /// file's directory. For an estate whose config stays inside its directory this is the
 /// directory itself. `.` and `..` components are folded lexically, so a directory that
 /// does not exist yet (an `hcl_dir` before the first transpile) still counts.
-pub fn session_root(dir: &EstateDir, main: &Path) -> PathBuf {
+///
+/// Directories that share no component at all have no root to be confined to, and an
+/// empty path is not one: satz would be handed `--root ""`. That is
+/// [`SatzError::NoCommonRoot`], because the root is the boundary `satz mcp` enforces and
+/// a boundary nobody can compute is not a boundary to guess at.
+pub fn session_root(dir: &EstateDir, main: &Path) -> Result<PathBuf, SatzError> {
     let runtime = &dir.runtime;
     let mut dirs: Vec<&Path> = vec![&dir.dir];
     dirs.extend(
@@ -190,7 +198,10 @@ pub fn session_root(dir: &EstateDir, main: &Path) -> PathBuf {
             .count();
         prefix.truncate(common);
     }
-    prefix.iter().collect()
+    if prefix.is_empty() {
+        return Err(SatzError::NoCommonRoot { dirs: normalized });
+    }
+    Ok(prefix.iter().collect())
 }
 
 /// Fold `.` and `..` without touching the filesystem.
@@ -390,7 +401,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let dir = estate_in(tmp.path(), "yaml_dir = \"yaml\"\n");
         let main = tmp.path().join("yaml").join("C0example.satz");
-        assert_eq!(session_root(&dir, &main), tmp.path());
+        assert_eq!(session_root(&dir, &main).unwrap(), tmp.path());
     }
 
     #[test]
@@ -398,7 +409,7 @@ mod tests {
         let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join("..");
         let dir = EstateDir::open(&repo.join("tests").join("fixtures").join("smoke")).unwrap();
         let main = PathBuf::from(&dir.runtime.yaml_dir).join("smoke.satz");
-        assert_eq!(session_root(&dir, &main), normalize(&repo));
+        assert_eq!(session_root(&dir, &main).unwrap(), normalize(&repo));
     }
 
     #[test]
@@ -408,7 +419,23 @@ mod tests {
         std::fs::create_dir_all(&estate).unwrap();
         let dir = estate_in(&estate, "presets_dir = \"../../presets\"\n");
         let main = estate.join("yaml").join("C0example.satz");
-        assert_eq!(session_root(&dir, &main), tmp.path());
+        assert_eq!(session_root(&dir, &main).unwrap(), tmp.path());
+    }
+
+    #[test]
+    fn directories_that_share_no_root_are_refused_rather_than_rooted_at_nothing() {
+        // Two relative directories with nothing in common stand in for the drives of a
+        // Windows estate; the lexical fold never reaches the filesystem, so this is the
+        // same computation a `C:` estate with a `D:` presets directory performs.
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = estate_in(
+            tmp.path(),
+            "presets_dir = \"../../../../../../elsewhere\"\n",
+        );
+        let main = Path::new("somewhere").join("C0example.satz");
+        let e = session_root(&dir, &main).unwrap_err();
+        assert!(matches!(e, SatzError::NoCommonRoot { .. }), "{e:?}");
+        assert!(e.to_string().contains("share no common root"), "{e}");
     }
 
     #[test]

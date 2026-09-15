@@ -30,6 +30,7 @@ reqwest.workspace = true
 keyring.workspace = true
 keyring-core.workspace = true
 tree-sitter.workspace = true
+tempfile.workspace = true
 
 [target.'cfg(target_os = "macos")'.dependencies]
 apple-native-keyring-store.workspace = true
@@ -45,4 +46,3 @@ cc.workspace = true
 
 [dev-dependencies]
 proptest.workspace = true
-tempfile.workspace = true

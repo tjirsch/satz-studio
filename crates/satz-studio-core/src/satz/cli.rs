@@ -1,7 +1,7 @@
 //! Running the satz binary as a command: every call passes `--config <dir>` so paths
-//! resolve against the estate, stdout and stderr are streamed line by line, and
-//! `--format json` output is typed. This is for what MCP does not serve; the session
-//! ([`super::McpSession`]) is for what it does.
+//! resolve against the estate, stdout and stderr are streamed line by line, and a
+//! reporting command's JSON is read from the file it wrote. This is for what MCP does
+//! not serve; the session ([`super::McpSession`]) is for what it does.
 
 use std::path::PathBuf;
 use std::process::{ExitStatus, Stdio};
@@ -88,12 +88,31 @@ impl SatzCli {
         Ok(status)
     }
 
-    /// Run a command whose stdout is JSON (`--format json`) and type it; a non-zero
-    /// exit is an error carrying stderr, never a value.
-    pub async fn json<T: DeserializeOwned>(&self, args: &[String]) -> Result<T, SatzError> {
-        let command = args.join(" ");
+    /// Run a reporting command and type the report it wrote. A reporting command takes
+    /// one format and writes one file (satz's ADR 0021): `args` is the command and its
+    /// own arguments, and this appends `--format json` and an `--out` of its own — a
+    /// file in a temporary directory that is removed when the call returns, whichever
+    /// way it returns. A non-zero exit is an error carrying stderr, never a value; so
+    /// is an exit that wrote no file.
+    pub async fn json_report<T: DeserializeOwned>(&self, args: &[String]) -> Result<T, SatzError> {
+        let dir = tempfile::Builder::new()
+            .prefix("satz-studio-report")
+            .tempdir()
+            .map_err(|e| SatzError::Io {
+                context: "making a directory for a satz report".to_string(),
+                source: e,
+            })?;
+        let out = dir.path().join("report.json");
+        let mut argv = args.to_vec();
+        argv.extend([
+            "--format".to_string(),
+            "json".to_string(),
+            "--out".to_string(),
+            out.display().to_string(),
+        ]);
+        let command = argv.join(" ");
         let output = self
-            .command(args)
+            .command(&argv)
             .output()
             .await
             .map_err(|e| SatzError::Io {
@@ -107,7 +126,11 @@ impl SatzCli {
                 stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
             });
         }
-        serde_json::from_slice(&output.stdout).map_err(|e| SatzError::Json { command, source: e })
+        let written = tokio::fs::read(&out).await.map_err(|e| SatzError::Io {
+            context: format!("reading the report `satz {command}` wrote"),
+            source: e,
+        })?;
+        serde_json::from_slice(&written).map_err(|e| SatzError::Json { command, source: e })
     }
 }
 

@@ -89,16 +89,8 @@ fn variant(tmp: &TempDir, stem: &str, text: &str) -> PathBuf {
 async fn questions(config_dir: &Path, estate: &Path) -> QuestionsReport {
     let bin = SatzBinary::locate(None).await.unwrap();
     let cli = SatzCli::new(bin, config_dir.to_path_buf());
-    let args: Vec<String> = [
-        "questions",
-        &estate.display().to_string(),
-        "--format",
-        "json",
-    ]
-    .iter()
-    .map(|s| s.to_string())
-    .collect();
-    tokio::time::timeout(TIME_BOX, cli.json(&args))
+    let args = ["questions".to_string(), estate.display().to_string()];
+    tokio::time::timeout(TIME_BOX, cli.json_report(&args))
         .await
         .unwrap()
         .unwrap()

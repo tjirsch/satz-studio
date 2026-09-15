@@ -8,7 +8,7 @@
 //! `CancelCommand`.
 
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use dioxus::prelude::*;
@@ -32,7 +32,8 @@ use super::{
 pub enum EstateAction {
     /// questions, parse, params, schema, model — after every write and on demand
     Reload,
-    /// `satz --config <dir> <args…>`, streamed into the log
+    /// `satz --config <dir> <args…>`, streamed into the log; a reporting command's
+    /// file goes into the log after it, whole
     RunCommand(Vec<String>),
     CancelCommand,
     /// one MCP tool on this estate's session, its result into the log
@@ -369,6 +370,34 @@ fn rolled_back(app: Store<AppStore>, e: CommitError) -> Vec<Diagnostic> {
     }
 }
 
+/// Where a reporting command writes when the app names the file. satz's ADR 0021 gives
+/// every reporting command one `--format` and one `--out` and leaves the console empty,
+/// so the app names a file of its own, reads it into the log and removes it. A file the
+/// user named is theirs: it stays, and satz's own `wrote …` line names it in the log.
+pub fn reports_dir() -> PathBuf {
+    std::env::temp_dir().join("satz-studio-reports")
+}
+
+/// The file of [`reports_dir`] a run is about to write, from its arguments.
+fn app_report(args: &[String]) -> Option<PathBuf> {
+    let out = args
+        .iter()
+        .position(|a| a == "--out")
+        .and_then(|i| args.get(i + 1))?;
+    let path = PathBuf::from(out);
+    path.starts_with(reports_dir()).then_some(path)
+}
+
+/// The report a run wrote into [`reports_dir`]: its text, and the file gone. A command
+/// that exited zero and wrote nothing is a failure, not an empty report.
+fn take_report(path: &Path) -> Result<String, String> {
+    let text = std::fs::read_to_string(path)
+        .map_err(|e| format!("reading the report at {}: {e}", path.display()))?;
+    std::fs::remove_file(path)
+        .map_err(|e| format!("removing the report at {}: {e}", path.display()))?;
+    Ok(text)
+}
+
 /// The command line as the log header shows it.
 pub fn command_line(dir: &Path, args: &[String]) -> String {
     let mut parts = vec![
@@ -402,6 +431,13 @@ fn run_command(
         toast(app, ToastKind::Info, "a command is already running");
         return None;
     }
+    let report = app_report(&args);
+    if let Some(dir) = report.as_deref().and_then(Path::parent)
+        && let Err(e) = std::fs::create_dir_all(dir)
+    {
+        toast(app, ToastKind::Error, format!("{}: {e}", dir.display()));
+        return None;
+    }
     let token = CancellationToken::new();
     let (tx, mut lines) = tokio::sync::mpsc::channel::<CliLine>(256);
     let cli = session.cli.clone();
@@ -424,7 +460,7 @@ fn run_command(
             };
             estate.command_log().push(clean);
         }
-        let outcome = match join.await {
+        let mut outcome = match join.await {
             Ok(Ok(status)) => CommandOutcome {
                 ok: status.success(),
                 text: format!("exited with {status}"),
@@ -438,6 +474,18 @@ fn run_command(
                 text: format!("the command task failed: {e}"),
             },
         };
+        if outcome.ok
+            && let Some(path) = report
+        {
+            match take_report(&path) {
+                Ok(text) => {
+                    for line in text.lines() {
+                        estate.command_log().push(CliLine::Stdout(line.to_string()));
+                    }
+                }
+                Err(e) => outcome = CommandOutcome { ok: false, text: e },
+            }
+        }
         if !outcome.ok {
             toast(app, ToastKind::Error, outcome.text.clone());
         }
@@ -581,7 +629,7 @@ async fn reload_with(session: &Arc<EstateSession>, app: Store<AppStore>, carried
                     diagnostics.clone(),
                 )
                 .map(|model| (model, cst))
-                .map_err(|e| Diagnostic::error(e.to_string(), DiagSource::Compile))
+                .map_err(|e| Box::new(Diagnostic::error(e.to_string(), DiagSource::Compile)))
             })
         }
         Ok(Err(d)) => {
@@ -603,7 +651,7 @@ async fn reload_with(session: &Arc<EstateSession>, app: Store<AppStore>, carried
             estate.model().set(Some(Arc::new(model)));
             estate.cst().set(Some(Arc::new(cst)));
         }
-        Some(Err(d)) => diagnostics.push(d),
+        Some(Err(d)) => diagnostics.push(*d),
         None => {}
     }
     diagnostics.extend(carried);

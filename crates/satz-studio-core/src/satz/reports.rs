@@ -1,7 +1,7 @@
-//! The JSON satz prints with `--format json` and returns as `structuredContent` over
-//! MCP, typed. Shapes mirror satz `src/questions.rs` and `src/mcp.rs` at the pinned
-//! release: unknown fields are ignored (satz may add some), missing required fields
-//! fail loudly (satz removed one, and the pin must move).
+//! The JSON a reporting command writes with `--format json` and satz returns as
+//! `structuredContent` over MCP, typed. Shapes mirror satz `src/questions.rs` and
+//! `src/mcp.rs` at the pinned release: unknown fields are ignored (satz may add some),
+//! missing required fields fail loudly (satz removed one, and the pin must move).
 
 use std::collections::BTreeMap;
 
