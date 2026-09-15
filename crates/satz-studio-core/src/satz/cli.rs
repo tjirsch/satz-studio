@@ -1,9 +1,10 @@
-//! Running the satz binary as a command: every call passes `--config <dir>` so paths
-//! resolve against the estate, stdout and stderr are streamed line by line, and a
-//! reporting command's JSON is read from the file it wrote. This is for what MCP does
-//! not serve; the session ([`super::McpSession`]) is for what it does.
+//! Running the satz binary as a command: a call on an estate passes `--config <dir>` so
+//! paths resolve against it, stdout and stderr are streamed line by line, and a
+//! reporting command's JSON is read from the file it wrote. [`SatzCli::run_in`] is the
+//! one call that has no estate to point at yet. This is for what MCP does not serve;
+//! the session ([`super::McpSession`]) is for what it does.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{ExitStatus, Stdio};
 
 use serde::de::DeserializeOwned;
@@ -54,38 +55,29 @@ impl SatzCli {
         out: mpsc::Sender<CliLine>,
         cancel: CancellationToken,
     ) -> Result<ExitStatus, SatzError> {
-        let command = args.join(" ");
-        let mut child = self
-            .command(args)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .map_err(|e| SatzError::Io {
-                context: format!("spawning `satz {command}`"),
-                source: e,
-            })?;
-        let stdout = child.stdout.take().expect("stdout is piped");
-        let stderr = child.stderr.take().expect("stderr is piped");
-        let pump_out = tokio::spawn(pump(stdout, out.clone(), CliLine::Stdout));
-        let pump_err = tokio::spawn(pump(stderr, out, CliLine::Stderr));
+        stream(self.command(args), args.join(" "), out, cancel).await
+    }
 
-        let status = tokio::select! {
-            () = cancel.cancelled() => {
-                if let Err(e) = child.kill().await {
-                    // `kill` refuses a child that has already exited; that child is
-                    // reaped below, and anything else is a real failure.
-                    let exited = child.try_wait().map_err(|e| SatzError::Io { context: format!("waiting for `satz {command}`"), source: e })?.is_some();
-                    if !exited {
-                        return Err(SatzError::Io { context: format!("killing `satz {command}`"), source: e });
-                    }
-                }
-                join_pumps(pump_out, pump_err, &command).await?;
-                return Err(SatzError::Cancelled);
-            }
-            status = child.wait() => status.map_err(|e| SatzError::Io { context: format!("waiting for `satz {command}`"), source: e })?,
-        };
-        join_pumps(pump_out, pump_err, &command).await?;
-        Ok(status)
+    /// Run `satz <args…>` **in `dir`, with no `--config`**, streaming every line into
+    /// `out` exactly as [`Self::run`] does.
+    ///
+    /// `satz init` is what this exists for, and it is an associated function because at
+    /// that moment there is no estate to build a [`SatzCli`] around. `init` is the
+    /// command that WRITES `config.toml`, so the file every other call points at does
+    /// not exist yet: satz refuses `--config <dir>` for a directory holding no
+    /// `config.toml`, and the working directory is the whole of the address. Run there,
+    /// `init` creates `config.toml`, `yaml/`, `hcl/`, `schemas/`, `.gitignore` and the
+    /// estate file relative to it.
+    pub async fn run_in(
+        bin: &SatzBinary,
+        dir: &Path,
+        args: &[String],
+        out: mpsc::Sender<CliLine>,
+        cancel: CancellationToken,
+    ) -> Result<ExitStatus, SatzError> {
+        let mut cmd = Command::new(&bin.path);
+        cmd.args(args).current_dir(dir).kill_on_drop(true);
+        stream(cmd, args.join(" "), out, cancel).await
     }
 
     /// Run a reporting command and type the report it wrote. A reporting command takes
@@ -132,6 +124,46 @@ impl SatzCli {
         })?;
         serde_json::from_slice(&written).map_err(|e| SatzError::Json { command, source: e })
     }
+}
+
+/// Spawn one satz child and stream both its pipes into `out` until it exits.
+/// `command` is what the call looks like on the command line, for the error messages.
+async fn stream(
+    mut cmd: Command,
+    command: String,
+    out: mpsc::Sender<CliLine>,
+    cancel: CancellationToken,
+) -> Result<ExitStatus, SatzError> {
+    let mut child = cmd
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| SatzError::Io {
+            context: format!("spawning `satz {command}`"),
+            source: e,
+        })?;
+    let stdout = child.stdout.take().expect("stdout is piped");
+    let stderr = child.stderr.take().expect("stderr is piped");
+    let pump_out = tokio::spawn(pump(stdout, out.clone(), CliLine::Stdout));
+    let pump_err = tokio::spawn(pump(stderr, out, CliLine::Stderr));
+
+    let status = tokio::select! {
+        () = cancel.cancelled() => {
+            if let Err(e) = child.kill().await {
+                // `kill` refuses a child that has already exited; that child is
+                // reaped below, and anything else is a real failure.
+                let exited = child.try_wait().map_err(|e| SatzError::Io { context: format!("waiting for `satz {command}`"), source: e })?.is_some();
+                if !exited {
+                    return Err(SatzError::Io { context: format!("killing `satz {command}`"), source: e });
+                }
+            }
+            join_pumps(pump_out, pump_err, &command).await?;
+            return Err(SatzError::Cancelled);
+        }
+        status = child.wait() => status.map_err(|e| SatzError::Io { context: format!("waiting for `satz {command}`"), source: e })?,
+    };
+    join_pumps(pump_out, pump_err, &command).await?;
+    Ok(status)
 }
 
 /// Forward one pipe line by line. Once the receiver is gone the lines are read and

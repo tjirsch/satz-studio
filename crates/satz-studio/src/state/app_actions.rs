@@ -9,12 +9,13 @@ use dioxus::prelude::*;
 use futures_util::StreamExt;
 use satz_studio_core::estate::EstateDir;
 use satz_studio_core::llm::Credential;
-use satz_studio_core::satz::{EstateSession, SatzBinary, SatzError};
+use satz_studio_core::satz::{CliLine, EstateSession, InitOptions, SatzBinary, SatzCli, SatzError};
 use satz_studio_core::settings::Settings;
+use tokio_util::sync::CancellationToken;
 
 use super::{
-    AppStore, AppStoreStoreExt, CredentialStatus, EstateFile, EstateStore, EstateSummary,
-    OpenEstate, SatzStatus, ToastKind, toast,
+    AppStore, AppStoreStoreExt, CommandOutcome, CreateStoreStoreExt, CredentialStatus, EstateFile,
+    EstateStore, EstateSummary, OpenEstate, SatzStatus, ToastKind, quote, strip_ansi, toast,
 };
 
 pub enum AppAction {
@@ -28,6 +29,13 @@ pub enum AppAction {
         estate: PathBuf,
     },
     CloseEstate,
+    /// `satz init` in `dir` with no `--config`, streamed into the create log; on a run
+    /// that made one estate, that estate is opened
+    CreateEstate {
+        dir: PathBuf,
+        options: InitOptions,
+    },
+    CancelCreate,
     /// write the settings file, then locate satz again
     SaveSettings(Settings),
     ResolveCredential,
@@ -40,12 +48,23 @@ pub async fn app_coroutine(mut rx: UnboundedReceiver<AppAction>, app: Store<AppS
     if let Some(root) = app.root().cloned() {
         discover(app, root).await;
     }
+    // `init` is a live command against Google and can take a while; it streams from a
+    // task so this loop stays free to take `CancelCreate`, as a command does.
+    let mut creating: Option<CancellationToken> = None;
     while let Some(action) = rx.next().await {
         match action {
             AppAction::LocateSatz => locate(app).await,
             AppAction::Discover(root) => discover(app, root).await,
             AppAction::OpenEstate { config, estate } => open_estate(app, config, estate).await,
             AppAction::CloseEstate => close_estate(app),
+            AppAction::CreateEstate { dir, options } => {
+                creating = create_estate(app, dir, options);
+            }
+            AppAction::CancelCreate => {
+                if let Some(token) = creating.take() {
+                    token.cancel();
+                }
+            }
             // the toast said what went wrong; the view keeps the draft either way
             AppAction::SaveSettings(settings) => {
                 let _ = save_settings(app, settings).await;
@@ -200,6 +219,165 @@ async fn open_estate(app: Store<AppStore>, config: PathBuf, estate: PathBuf) {
         Err(e) => toast(app, ToastKind::Error, format!("{}: {e}", estate.display())),
     }
     app.opening().set(None);
+}
+
+/// The `satz init` run as it reads on a command line: the directory it runs in, then
+/// the command, because the working directory is the whole of the address — there is no
+/// `--config` on this call and no `config.toml` yet for one to name. An empty `dir` is
+/// the form before a folder has been chosen and yields the command alone.
+pub fn create_command_line(dir: &Path, args: &[String]) -> String {
+    let command: Vec<String> = std::iter::once("satz".to_string())
+        .chain(args.iter().map(|a| quote(a)))
+        .collect();
+    let command = command.join(" ");
+    if dir.as_os_str().is_empty() {
+        return command;
+    }
+    format!("cd {} && {command}", quote(&dir.display().to_string()))
+}
+
+/// `satz init` in `dir`. The target is checked first, the run streams into the create
+/// log, and what it made is READ from the directory afterwards — `init` names the estate
+/// file after a customer id it may have derived from the credentials, so the name is
+/// never predicted here.
+///
+/// Nothing the run derived leaves this function: the lines go into `create.log`, which
+/// lives as long as the window shows it, and the values themselves are in the estate
+/// satz wrote.
+fn create_estate(
+    app: Store<AppStore>,
+    dir: PathBuf,
+    options: InitOptions,
+) -> Option<CancellationToken> {
+    if app.create().running().cloned() {
+        toast(app, ToastKind::Info, "an estate is already being created");
+        return None;
+    }
+    let Some(bin) = app.satz().read().binary().cloned() else {
+        toast(
+            app,
+            ToastKind::Error,
+            "satz is not available — see the banner",
+        );
+        return None;
+    };
+    if let Err(e) = satz_studio_core::satz::init::check_target(&dir) {
+        toast(app, ToastKind::Error, e.to_string());
+        return None;
+    }
+
+    let args = options.argv();
+    let token = CancellationToken::new();
+    let (tx, mut lines) = tokio::sync::mpsc::channel::<CliLine>(256);
+    let child = token.clone();
+    let argv = args.clone();
+    let run_in = dir.clone();
+    let join = tokio::spawn(async move { SatzCli::run_in(&bin, &run_in, &argv, tx, child).await });
+
+    let create = app.create();
+    create.command().set(Some(create_command_line(&dir, &args)));
+    create.log().clear();
+    create.outcome().set(None);
+    create.running().set(true);
+    spawn(async move {
+        let mut last_stderr = None;
+        while let Some(line) = lines.recv().await {
+            let clean = match line {
+                CliLine::Stdout(s) => CliLine::Stdout(strip_ansi(&s)),
+                CliLine::Stderr(s) => {
+                    let s = strip_ansi(&s);
+                    if !s.trim().is_empty() {
+                        last_stderr = Some(s.clone());
+                    }
+                    CliLine::Stderr(s)
+                }
+            };
+            create.log().push(clean);
+        }
+        let ended = join.await;
+        // a cancel is what the user asked for, so it is the outcome chip and not a toast
+        let cancelled = matches!(ended, Ok(Err(SatzError::Cancelled)));
+        let outcome = match ended {
+            // satz said why on its own stderr; a status line alone would replace that
+            // sentence with a number
+            Ok(Ok(status)) if !status.success() => Some(CommandOutcome {
+                ok: false,
+                text: last_stderr.unwrap_or_else(|| format!("exited with {status}")),
+            }),
+            Ok(Ok(_)) => None,
+            Ok(Err(SatzError::Cancelled)) => Some(CommandOutcome {
+                ok: false,
+                text: "cancelled — the directory is left as satz left it".to_string(),
+            }),
+            Ok(Err(e)) => Some(CommandOutcome {
+                ok: false,
+                text: e.to_string(),
+            }),
+            Err(e) => Some(CommandOutcome {
+                ok: false,
+                text: format!("the create task failed: {e}"),
+            }),
+        };
+        let outcome = match outcome {
+            Some(failed) => failed,
+            None => created(app, &dir).await,
+        };
+        if !outcome.ok && !cancelled {
+            toast(app, ToastKind::Error, outcome.text.clone());
+        }
+        create.outcome().set(Some(outcome));
+        create.running().set(false);
+    });
+    Some(token)
+}
+
+/// What the finished run left in `dir`, and the estate opened when it made exactly one.
+async fn created(app: Store<AppStore>, dir: &Path) -> CommandOutcome {
+    let read = dir.to_path_buf();
+    let found = tokio::task::spawn_blocking(move || {
+        satz_studio_core::satz::init::created(&read).map_err(|e| e.to_string())
+    })
+    .await;
+    let (estate_dir, estates) = match found {
+        Ok(Ok(found)) => found,
+        Ok(Err(e)) => return CommandOutcome { ok: false, text: e },
+        Err(e) => {
+            return CommandOutcome {
+                ok: false,
+                text: format!("reading {}: {e}", dir.display()),
+            };
+        }
+    };
+    match estates.as_slice() {
+        // satz writes the directories and the config whatever happens, and the estate
+        // file only once it has a customer id — stated, or derived from the credentials
+        [] => CommandOutcome {
+            ok: false,
+            text: format!(
+                "satz wrote no estate file in {}: no customer id was stated and none could be derived. The log has what satz said.",
+                dir.display()
+            ),
+        },
+        [estate] => {
+            let name = estate
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            open_estate(app, estate_dir.config_path.clone(), estate.clone()).await;
+            CommandOutcome {
+                ok: true,
+                text: format!("created {name}"),
+            }
+        }
+        many => CommandOutcome {
+            ok: false,
+            text: format!(
+                "{} estate files in {} — open the one you want",
+                many.len(),
+                dir.display()
+            ),
+        },
+    }
 }
 
 /// Write the settings file, put them in the store and locate satz again. The one

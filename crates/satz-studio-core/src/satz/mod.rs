@@ -1,17 +1,19 @@
 //! The satz driver: the binary and its version gate ([`binary`]), the CLI runner
-//! ([`cli`]), the MCP session over `satz mcp` ([`mcp`]), and one session per open
-//! estate that the Commands view and the agent share ([`session`]). [`reports`] are the
-//! JSON payloads a reporting command writes with `--format json` and the server returns
-//! as `structuredContent`.
+//! ([`cli`]), `satz init` and what it leaves behind ([`init`]), the MCP session over
+//! `satz mcp` ([`mcp`]), and one session per open estate that the Commands view and the
+//! agent share ([`session`]). [`reports`] are the JSON payloads a reporting command
+//! writes with `--format json` and the server returns as `structuredContent`.
 
 pub mod binary;
 pub mod cli;
+pub mod init;
 pub mod mcp;
 pub mod reports;
 pub mod session;
 
 pub use binary::{MIN_SATZ, SatzBinary};
 pub use cli::{CliLine, SatzCli};
+pub use init::InitOptions;
 pub use mcp::{McpSession, ToolAnnotations, ToolInfo, ToolOutcome};
 pub use session::EstateSession;
 
@@ -84,6 +86,10 @@ pub enum SatzError {
         dirs.iter().map(|p| p.display().to_string()).collect::<Vec<_>>().join(", ")
     )]
     NoCommonRoot { dirs: Vec<PathBuf> },
+    #[error("{0}: no such directory — a new estate is created in a directory that exists")]
+    TargetMissing(PathBuf),
+    #[error("{0}: already holds a config.toml — open that estate instead of creating one over it")]
+    AlreadyAnEstate(PathBuf),
     #[error("satz mcp: {0}")]
     Mcp(String),
     #[error("{tool} refused: {text}")]

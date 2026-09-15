@@ -1,49 +1,19 @@
 //! `SatzBinary::locate`: the override, the search, the version gate — against fake
 //! binaries in a temporary directory and the installed satz.
 
-// the fake binaries are a unix fixture, and so are the only paths this file names
-#[cfg(unix)]
-use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use satz_studio_core::satz::{MIN_SATZ, SatzBinary, SatzError};
 
+// the fake binaries are a unix fixture, and so are the tests that use them
+#[cfg(unix)]
+#[path = "fixtures/satz/support.rs"]
+mod support;
+
+#[cfg(unix)]
+use support::fake;
+
 const TIME_BOX: Duration = Duration::from_secs(60);
-
-/// A script that answers `--version` with `body`'s output, proven runnable before it
-/// is handed to the code under test.
-///
-/// The proof is not ceremony. These tests run on threads of one process, and a thread
-/// that still holds a write handle to a file another thread is executing makes that
-/// exec fail with `ETXTBSY`. The window is short and the failure is a flake, so the
-/// helper runs the script itself until it starts, and only then returns.
-#[cfg(unix)]
-fn fake(dir: &Path, body: &str) -> PathBuf {
-    use std::os::unix::fs::PermissionsExt;
-    let path = dir.join("satz");
-    std::fs::write(&path, format!("#!/bin/sh\n{body}\n")).unwrap();
-    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
-    let deadline = std::time::Instant::now() + Duration::from_secs(10);
-    loop {
-        match std::process::Command::new(&path).arg("--version").output() {
-            // It ran: whatever it printed or exited with is the test's business.
-            Ok(_) => return path,
-            Err(e)
-                if e.raw_os_error() == Some(libc_etxtbsy())
-                    && std::time::Instant::now() < deadline =>
-            {
-                std::thread::sleep(Duration::from_millis(20));
-            }
-            Err(e) => panic!("{} is not runnable: {e}", path.display()),
-        }
-    }
-}
-
-/// `ETXTBSY`, the errno for executing a file somebody is still writing.
-#[cfg(unix)]
-fn libc_etxtbsy() -> i32 {
-    26
-}
 
 #[cfg(unix)]
 #[tokio::test]

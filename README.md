@@ -2,18 +2,22 @@
 
 A desktop app for [satz](https://github.com/tjirsch/satz), the tool that compiles an
 estate written in Satz to OpenTofu HCL and asks, through the `question` statements of
-its packs, what a customer decides. satz-studio runs that interview, edits the estate
-map and the estate files through a typed interface that keeps every comment and every
-line where it was, runs satz commands, and drives satz through Claude. An answer, a
-pack choice or an import id is written by satz's own writer; every other edit is
-checked by `satz transpile --check` before it replaces the file. macOS, Linux and
-Windows.
+its packs, what a customer decides. satz-studio creates an estate with `satz init` or
+opens one that exists, runs that interview, edits the estate map and the estate files
+through a typed interface that keeps every comment and every line where it was, runs
+satz commands, and drives satz through Claude. An answer, a pack choice or an import id
+is written by satz's own writer; every other edit is checked by `satz transpile --check`
+before it replaces the file. macOS, Linux and Windows.
 
-The headless core is complete: the document layer, the edit primitives and the write
-discipline, the provider schema and the view model, the satz driver, the Claude client
-and agent loop, transcripts, settings and diagnostics. The window has its shell and the
-Estates, Settings, Commands and Gallery views; the estate views (Interview, Params,
-Map, Resources) and the Chat view are built next.
+The Estates view is the way in, and it has two doors. **Create** runs `satz init` in a
+folder that holds no estate yet: satz writes `config.toml`, the directories and the
+estate file, deriving the customer's domain, directory id, organisation id, billing
+account and first administrator from the Application Default Credentials you are signed
+in with and saying where each value came from. The form asks for what satz cannot
+derive — the customer's short name above all — and offers the derivable values as
+overrides that are empty by default. The run streams into a log; when it made an estate,
+that estate opens. **Open** walks a folder for every `config.toml` under it and opens one
+of the estates beside it.
 
 ## What it needs
 
@@ -23,6 +27,12 @@ Map, Resources) and the Chat view are built next.
   at the path set in Settings, then on `PATH`, then at `~/.local/bin/satz`. An older
   binary is refused at startup, naming the version found. Nothing runs without satz;
   the app has no mode of its own.
+- **Application Default Credentials, for the live commands.** `satz init` behind Create,
+  `whoami`, `report-compliance` and everything else that reads a Google organisation run
+  on the credentials gcloud left behind (`gcloud auth application-default login`). satz
+  reads them and satz-studio owns no credential of its own. Without them `satz init`
+  still writes the directories and `config.toml`, says on its own stderr what it could
+  not derive, and writes an estate file only if you stated a customer id.
 - **The platform's webview.** Windows 10 and 11 ship WebView2. Linux needs
   `webkit2gtk-4.1` (Debian and Ubuntu: `libwebkit2gtk-4.1-0`; Ubuntu 22.04 ships only
   the 4.0 API and does not run it). macOS needs nothing.

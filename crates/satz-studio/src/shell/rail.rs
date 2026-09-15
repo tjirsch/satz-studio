@@ -39,7 +39,7 @@ pub fn NavigationRail() -> Element {
                         class: "rail-fab",
                         onclick: move |_| {
                             app.nav().set(View::Estates);
-                            pick_root(handle);
+                            pick_root(app, handle);
                         },
                     }
                 }
