@@ -8,18 +8,28 @@
 //! the argv (`InitOptions::argv`, in the module's own tests), where the child runs, and
 //! that no `--config` reaches it. A fake `satz` reports both back.
 
+use satz_studio_core::satz::SatzError;
+use satz_studio_core::satz::init::{check_target, created};
+
+// the fake satz is a shell script, so everything that drives one is a unix fixture and
+// so is what it needs
+#[cfg(unix)]
 use std::path::{Path, PathBuf};
+#[cfg(unix)]
 use std::time::Duration;
 
-use satz_studio_core::satz::init::{check_target, created};
-use satz_studio_core::satz::{CliLine, InitOptions, SatzBinary, SatzCli, SatzError};
+#[cfg(unix)]
+use satz_studio_core::satz::{CliLine, InitOptions, SatzBinary, SatzCli};
+#[cfg(unix)]
 use tokio::sync::mpsc;
+#[cfg(unix)]
 use tokio_util::sync::CancellationToken;
 
 #[cfg(unix)]
 #[path = "fixtures/satz/support.rs"]
 mod support;
 
+#[cfg(unix)]
 const TIME_BOX: Duration = Duration::from_secs(60);
 
 /// A binary record around a path. `locate` is not used: it would hold the fake to
