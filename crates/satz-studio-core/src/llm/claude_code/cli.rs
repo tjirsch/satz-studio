@@ -36,6 +36,11 @@ pub enum ClaudeCodeError {
         #[source]
         source: serde_json::Error,
     },
+    #[error(
+        "{} is a batch file, and a turn cannot be handed to one safely: Claude Code is given a JSON MCP configuration and a multi-line system prompt, and neither can be quoted for cmd.exe. Rust refuses to try (CVE-2024-24576) and working around it would re-open that hole, so satz-studio does not. Point Settings at Claude Code's own executable instead of the shim a package manager put on PATH.",
+        path.display()
+    )]
+    BatchFile { path: PathBuf },
     #[error("claude code: {0}")]
     Protocol(String),
     #[error("Claude Code is signed out — sign in from Settings, or run `claude auth login`")]
@@ -96,6 +101,16 @@ impl AuthStatus {
     }
 }
 
+/// Whether a path is a Windows batch file. `--version` would run through one, so the
+/// refusal cannot wait for a spawn that fails: it is the TURN that cannot be passed, and
+/// by then the operator is looking at a chat window. Judged by extension on every
+/// platform so the rule is testable off Windows too.
+fn is_batch_file(path: &Path) -> bool {
+    path.extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|e| e.eq_ignore_ascii_case("bat") || e.eq_ignore_ascii_case("cmd"))
+}
+
 /// The located Claude Code binary.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ClaudeCodeCli {
@@ -118,6 +133,9 @@ impl ClaudeCodeCli {
             }
             None => Self::first_on_path_or_home()?,
         };
+        if is_batch_file(&path) {
+            return Err(ClaudeCodeError::BatchFile { path });
+        }
         let output = run(&path, &["--version"]).await?;
         let version = parse_version(&output).ok_or_else(|| {
             ClaudeCodeError::Protocol(format!(

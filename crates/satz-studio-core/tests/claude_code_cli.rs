@@ -31,6 +31,40 @@ async fn an_override_that_is_not_there_names_itself_and_the_search_stops() {
 }
 
 #[tokio::test]
+async fn a_batch_file_is_refused_with_the_reason_and_what_to_do() {
+    // A turn hands Claude Code a JSON MCP configuration and a multi-line system prompt,
+    // and neither can be quoted for cmd.exe; Rust refuses to spawn a batch file with them
+    // (CVE-2024-24576) and the app refuses first, so the operator learns in Settings
+    // rather than when their first message fails. Judged by extension, so this runs
+    // everywhere rather than only on the platform that has batch files.
+    for name in ["claude.cmd", "claude.CMD", "claude.bat"] {
+        let tmp = tempfile::tempdir().unwrap();
+        let shim = tmp.path().join(name);
+        std::fs::write(&shim, "@echo off\r\n").unwrap();
+        let e = within(ClaudeCodeCli::locate(Some(&shim)))
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(&e, ClaudeCodeError::BatchFile { path } if path == &shim),
+            "{name}: {e:?}"
+        );
+        let said = e.to_string();
+        assert!(said.contains(name), "{said}");
+        assert!(said.contains("cmd.exe"), "{said}");
+        assert!(said.contains("executable"), "{said}");
+    }
+}
+
+#[tokio::test]
+async fn a_binary_that_is_not_a_batch_file_is_not_refused_for_its_name() {
+    // The rule is the extension and nothing else: a `claude.exe`, or a name with no
+    // extension at all, goes through.
+    let tmp = tempfile::tempdir().unwrap();
+    let cli = fake(tmp.path(), signed_out(), &[]).locate().await;
+    assert_eq!(cli.version, "2.1.270");
+}
+
+#[tokio::test]
 async fn a_binary_that_prints_no_version_is_an_error_naming_what_it_printed() {
     let tmp = tempfile::tempdir().unwrap();
     let mut extra = serde_json::Map::new();

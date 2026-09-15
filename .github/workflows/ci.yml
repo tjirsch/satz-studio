@@ -50,7 +50,7 @@ jobs:
       - name: clippy (warnings are errors)
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - name: tests
-        run: cargo test --workspace --locked
+        run: cargo test --workspace --locked --no-fail-fast
       - name: the verification harness (docs/verification.md)
         run: bash scripts/e2e.sh --ci
       - name: build the app
@@ -63,6 +63,15 @@ jobs:
         os: [macos-15, macos-15-intel, windows-2022]
     runs-on: ${{ matrix.os }}
     steps:
+      # GitHub's Windows runners default to core.autocrlf=true, which would check the
+      # `.satz` fixtures out with CRLF and break every assertion that compares bytes.
+      # It has to be set before the checkout, and globally, so `vendor/satz` — which
+      # carries most of the fixtures — is cloned the same way.
+      - name: keep line endings as they are committed
+        if: runner.os == 'Windows'
+        run: |
+          git config --global core.autocrlf false
+          git config --global core.eol lf
       - uses: actions/checkout@v4
         with:
           submodules: recursive
@@ -94,6 +103,6 @@ jobs:
       - name: clippy (warnings are errors)
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - name: tests
-        run: cargo test --workspace --locked
+        run: cargo test --workspace --locked --no-fail-fast
       - name: build the app
         run: cargo build -p satz-studio --locked
