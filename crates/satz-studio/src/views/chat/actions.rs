@@ -30,7 +30,7 @@ use super::state::{
     AgentStatus, ChatStore, ChatStoreStoreExt, ContextInput, EngineKind, apply_delta,
     estate_context, is_delta, replay,
 };
-use crate::state::{AppStore, AppStoreStoreExt, EstateStoreStoreExt};
+use crate::state::{AppStore, AppStoreStoreExt, EstateStoreStoreExt, save_settings};
 
 pub enum ChatAction {
     Send(String),
@@ -44,6 +44,9 @@ pub enum ChatAction {
     SetEffort(Effort),
     /// build the engine again — after a Claude Code sign-in, or a failed start
     Restart,
+    /// the empty state's "Use Claude Code": select that engine in the settings, save
+    /// them, and build the engine again
+    UseClaudeCode,
 }
 
 /// How many events the engine may run ahead of the view.
@@ -237,6 +240,7 @@ impl Chat {
             ChatAction::SetModel(model) => self.set_model(model).await,
             ChatAction::SetEffort(effort) => self.set_effort(effort),
             ChatAction::Restart => self.restart().await,
+            ChatAction::UseClaudeCode => self.use_claude_code().await,
         }
     }
 
@@ -438,6 +442,21 @@ impl Chat {
             None => self.chat.model().cloned(),
         };
         self.chat.write().reset_conversation(model);
+    }
+
+    /// Select the Claude Code engine and start the chat on it. The settings go through
+    /// the app's own saver, so the file and the store hold what Settings would hold;
+    /// a save that failed leaves the engine where it was and says so.
+    async fn use_claude_code(&mut self) {
+        if self.running.is_some() {
+            return self.fail("wait for the turn to end");
+        }
+        let mut settings = self.app_store.settings().cloned();
+        settings.provider = ProviderChoice::ClaudeCode { model: None };
+        match save_settings(self.app_store, settings).await {
+            Ok(()) => self.restart().await,
+            Err(e) => self.fail(e),
+        }
     }
 
     async fn new_transcript(&mut self) {

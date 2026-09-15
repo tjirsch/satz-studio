@@ -141,6 +141,40 @@
   font: var(--md-sys-typescale-label-large);
 }
 
+/* the engine that is ready leads the card; the API sources are the alternative */
+
+.chat__lead {
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  border-radius: var(--md-sys-shape-corner-large);
+  background: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-on-primary-container);
+}
+
+.chat__lead-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.chat__lead-account {
+  font: var(--md-sys-typescale-body-medium);
+  user-select: text;
+}
+
+.chat__alt {
+  margin-top: 4px;
+}
+
+.chat__note {
+  font: var(--md-sys-typescale-body-small);
+  color: var(--md-sys-color-on-surface-variant);
+  user-select: text;
+}
+
 /* ---- the conversation --------------------------------------------------------- */
 
 .chat__list {

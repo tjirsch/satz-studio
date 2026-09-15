@@ -55,7 +55,9 @@ nothing blocks in an event handler.
   each estate's `deployment_mode` on a blocking thread; the folder becomes
   `Settings.last_root`), `OpenEstate { config, estate }` (`EstateSession::open` with the
   Settings ceiling), `CloseEstate`, `SaveSettings` (the file, then satz again),
-  `ResolveCredential` and `StoreKey`.
+  `ResolveCredential` and `StoreKey`. `save_settings` is the one saver: the Chat view's
+  "Use Claude Code" awaits it directly rather than writing the file itself, and builds
+  its engine again only when the save returned.
 - **The estate coroutine** (`src/state/estate_actions.rs`, `EstateAction`) is started by
   `EstateHost` with the session and lives as long as the estate is open. On start and on
   `Reload` it calls `satz_questions` over the session, reads the main file, parses it,
@@ -105,13 +107,13 @@ the drawer or an outcome under the log.
 |---|---|---|
 | Estates | `src/views/estates.rs` | the folder (typed, or picked with the OS dialog), one card per `config.toml` with its estates, each with its deployment mode and an Open button; the open estate is marked and can be closed |
 | Commands | `src/views/commands.rs` | the palette (`PALETTE`): `transpile --check`, `transpile`, `questions`, `check-presets`, `iac-roles`, `update-schema`, `hcl-init`, `plan`, `require`, `report-compliance`, `get-presets`, `merge-presets`, and `apply` and `bootstrap` as command lines to copy or open in the terminal; each with its argument fields, the command line as it will run, Run and Cancel, the streamed log with stdout and stderr distinguished, and the session tools `satz_whoami`, `satz_transpile_check`, `satz_questions` as one click each |
-| Settings | `src/views/settings.rs` | every `Settings` field as a form: the satz path with the detected version, the MCP ceiling, auto-approve, the provider with base URL and model for the non-Claude ones, the Claude model, effort, fallbacks, transcripts, theme; Save writes the file and locates satz again; the credential card shows where the Claude credential comes from and stores a key in the keychain |
+| Settings | `src/views/settings.rs` | every `Settings` field as a form: the satz path with the detected version, the MCP ceiling, auto-approve, the provider with base URL and model for the non-Claude ones, the Claude model, effort, fallbacks, transcripts, theme; Save writes the file and locates satz again; the credential card shows where the Claude credential comes from, whether that engine is the one in use, and stores a key in the keychain; the Claude Code card shows the binary, the account and which engine is in use, with "Use this engine", "Sign in" and "Sign out" |
 | Gallery | `src/views/gallery.rs` | every component in its variants, light and dark side by side |
 | Interview | `src/views/interview.rs` | the questions report one question at a time, unanswered first with a "Show answered" switch: the pack's description when the pack changes, the prompt, the `why`, chips for reversal and blast, a warning banner on a one-way door, the recommendation when it differs from the offer, the field in the shape of the offered value as satz's `parse_answer` types an answer (a switch, a number field, a chip list, a text field that refuses a brace with satz's sentence), a `oneof` as filter chips with the chosen option's `why`; Accept or Answer, Skip, "Accept n defaults"; the progress from `summary`, the complete state, and the `rename_to` card when the last `satz_interview` returned one. Each answer is one `Answer` action |
 | Params | `src/views/params.rs` | one row per `ParamRow`, grouped by the asking question's pack (else "estate"): a typed field by `ParamKind` in value mode, or the Satz source in source mode — a row whose value carries a `{param}` or `${…}` opens there, with its parts as chips; the question's `why` as a tooltip, a one-way-door chip, a raw-line toggle showing the line; a commit on Enter, blur, a switch flip or a chip change is `CommitEdit(Edit::ReplaceParam)` with a `TypedValue` in value mode and `TypedValue::Raw` in source mode |
 | Map | `src/views/map.rs` | the `PackRow`s: the map row first — Off is a card with "Enable the map" (`EnableMap`), On a chip, Absent the merge-presets remedy — then sections by phase (the phase comment's first line; a line without one joins the section open at that point; every Absent row last under "Not in this file"), one card per gated line with its path, prompt and `why`, a switch bound to the gate (an answer through `Answer`; off keeps the commented line, satz never re-comments one) or one segmented button per `oneof` group over its options, a badge On/Off/Absent, "Run merge-presets" (`MergePresets`) on an Absent row, and the model's "line active, gate false" note inline on its row |
 | Resources | `src/views/resources.rs` | two panes: the tree of `ResourceNode`s (an icon per kind, a resource's name, `use` lines as leaves, branches collapsed below depth 2, a chip with the count of required attributes not written) and the selected node's card: kind, type, line, the missing required names, then one row per `AttrRow` — a typed field by `AttrType` (string, number, bool, a list of one of them; everything else and `Unknown` in source mode), locked rows dimmed with the reason (`import-id`, computed, not in the schema), source mode with its chips; a commit is `CommitEdit(Edit::ReplaceValue)`. Without a schema every row is locked and the header carries "Run update-schema". A row clicked in the drawer selects the node at its line |
-| Chat | — | a card saying the view is not part of this build; `src/views/mod.rs` and the `match` in `src/shell/mod.rs` are where a view is added |
+| Chat | `src/views/chat/` | the agent loop over the open estate: the rail of this estate's transcripts with "New" (empty on the Claude Code engine, which keeps its conversation in its own process), the turns as they stream with one card per tool call and the approval card, the composer with the model, the effort and the capability chips, and the usage footer. `mod.rs` holds the status card for the states the engine is not in — `Starting` a progress line, `NoCredential` and `NotSignedIn` the two empty states below, `Failed` the error with Open Settings |
 
 A view that works on an estate shows a card with a button to Estates while none is
 open.
@@ -227,14 +229,65 @@ alone.
 - **Snackbar host:** the toasts, three at most, a notice for five seconds and an error
   for twelve, each dismissable.
 
+### The two engines
+
+`Settings.provider` decides which engine the chat runs on: the Messages API, or the
+installed Claude Code CLI on the user's claude.ai subscription
+([ADR 0010](adr/0010-claude-code-as-the-subscription-backend.md)). Being signed in to
+Claude Code and running on Claude Code are two different statements, so every surface
+that shows one shows the other beside it. `EngineOffer` in `src/views/settings.rs` is
+that decision — `Checking`, `InUse`, `Ready`, `SignedOut`, `Absent` — and both views
+render from it.
+
+- **The Claude Code card (Settings).** The binary path with the located version as its
+  supporting text, then the state line: the account as `claude auth status` reported it
+  (`signed in as first.admin@example.com via claude.ai`) followed by `and in use` or
+  `not the selected engine`; `not signed in` and `no CLI to ask` in the error colour.
+  "Use this engine" appears only in the `Ready` state, sets the draft's provider to
+  Claude Code and saves through `AppAction::SaveSettings` — the same action the Save
+  button sends, so it saves the whole draft. The provider segmented control above stays
+  the primary selector; this button is a second door to it, not a second setting. "Sign
+  in" and "Sign out" write a one-shot script and open the user's terminal, because the
+  login opens a browser. The credential card carries the same second half of the
+  sentence: `in use` when the provider is Claude, `not the selected engine` otherwise.
+- **The chat's empty states.** `NoCredential` (the Messages API resolved no credential)
+  probes Claude Code once while the card renders — `ClaudeCodeCli::locate` then
+  `auth_status`, spawned from a `use_hook` so it runs once per mount and never on the
+  render. Signed in, the card leads with a primary-container block: "Claude Code is
+  ready", the account, and a filled "Use Claude Code" that selects that provider, saves
+  the settings and rebuilds the engine, with the four API sources and what each answered
+  below under "Or use the Messages API". Not signed in or not installed, the card is the
+  four sources as before plus one line naming Claude Code, the CLI's own reason when it
+  did not answer, and `claude auth login`. `NotSignedIn` (Claude Code selected, CLI
+  signed out) is its own card with "Sign in" and "Check again".
+- **The composer.** On Claude Code one assist chip, "tools run inside Claude Code": the
+  loop, the context window and the effort are Claude Code's, so the effort control is
+  hidden and the model field is disabled with "Claude Code takes its model from
+  Settings". On the API engine the chips name what the provider lacks — no thinking, no
+  effort, no caching — and a provider without tools gets a line above the input.
+- **The footer.** The turn's and the session's tokens, the model, and where the
+  transcript is kept ("not kept" on Claude Code). A `rate_limit_event` from the
+  subscription arrives as `AgentEvent::Notice` and shows there beside a
+  `data_thresholding` icon: how much of the five-hour or seven-day plan window is used
+  and when it resets.
+
+Deviations from the Material 3 specification these introduce:
+
+| surface | class | spec page | deviation |
+|---|---|---|---|
+| the empty state's lead | `.chat__lead` (in `chat.css`) | — (not a Material 3 component) | a primary-container block inside a filled card, to put the engine that is ready above the alternative; the spec has no nested-surface anatomy for this |
+| the state line | `.settings__status` (in `views.css`) | — (not a Material 3 component) | an icon, a sentence and a text button on one line inside a card |
+| the plan-utilization notice | `.chat__footer` (in `chat.css`) | — (not a Material 3 component) | a footer line, not a Material progress or badge; the plan windows arrive as text and are shown as text |
+
 ## The smoke walk
 
 The manual check of the estate views, over `tests/fixtures/smoke` (satz's own smoke
 estate, read from the pinned submodule — copy the estate to a scratch directory before
 a step that writes, as the fixture's `config.toml` says) and over a skeleton written by
 `satz interview <dir>/yaml/new.satz --create`, which is the estate every pack line
-starts commented in. No step needs a credential; every write is checked by
-`satz transpile --check` through the estate's `satz mcp` child.
+starts commented in. Every write is checked by `satz transpile --check` through the
+estate's `satz mcp` child. No step needs an API key; the last needs the Claude Code CLI
+installed and signed in, and nothing else.
 
 1. **Open.** Estates → the folder → Open. The top bar shows the file, "runs as the ADC
    identity", the schema chip with the provider and its type count; the rail shows the
@@ -266,3 +319,13 @@ starts commented in. No step needs a credential; every write is checked by
 7. **Missing schema.** Point a copy's `schema_dir` at an empty directory and open it:
    the schema chip is red, Resources locks every row with "no schema" and its header
    carries "Run update-schema", which runs in Commands.
+8. **Switch engines from the chat.** With `provider = "claude"` in `settings.toml`, no
+   `ANTHROPIC_API_KEY` in the environment and the Claude Code CLI signed in: Chat →
+   the card leads "Claude Code is ready" with the account, the four API sources below
+   under "Or use the Messages API" → "Use Claude Code" → the toast says "Settings
+   saved", the card goes, the composer shows "tools run inside Claude Code" and a
+   disabled model field, and `settings.toml` reads `kind = "claude_code"`. Settings →
+   the Claude Code card says "and in use" and offers no "Use this engine"; the
+   credential card says "not the selected engine". Sign the CLI out
+   (`claude auth logout`), set the provider back to Claude, reopen Chat: the card is
+   "No Claude credential" with one line naming `claude auth login`.

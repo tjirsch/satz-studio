@@ -1,6 +1,10 @@
 //! The Settings view: every field of `Settings` as a form, saved as one file; the
 //! detected satz beside its path; the credential's source and the keychain key; and
 //! the Claude Code CLI with the claude.ai account it is signed in to (ADR 0010).
+//!
+//! A card says which engine is IN USE, not only which account is signed in: a CLI that
+//! is signed in while another engine is selected is an offer, and [`EngineOffer`] is
+//! that decision. The Chat view's empty state renders from the same function.
 
 use std::path::PathBuf;
 
@@ -265,12 +269,19 @@ fn CredentialCard() -> Element {
         ),
         CredentialStatus::Error(e) => ("key_off", e.clone(), true),
     };
+    // the credential is the Messages API engine's; whether that engine is the one the
+    // chat runs on is the other half of the sentence
+    let in_use = match app.settings().read().provider {
+        ProviderChoice::Claude => "in use",
+        _ => "not the selected engine",
+    };
     rsx! {
         Card { variant: CardVariant::Outlined, class: "settings__card",
             h2 { class: "settings__heading", Icon { name: "vpn_key", size: 20 } "Claude credential" }
             p { class: "settings__status", class: if error { "settings__status--error" },
                 Icon { name: icon, size: 20 }
                 span { "{text}" }
+                span { class: "settings__label", "{in_use}" }
                 Button { variant: ButtonVariant::Text, onclick: move |_| handle.send(AppAction::ResolveCredential), "Check again" }
             }
             p { class: "settings__label", "Resolution order: ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN, the ant profile, the keychain. Nothing is written to the settings file." }
@@ -291,6 +302,90 @@ fn CredentialCard() -> Element {
     }
 }
 
+/// What the Claude Code engine is right now: the one decision the Settings card and
+/// the Chat view's empty state both render from. Being signed in and being the engine
+/// the chat runs on are two different statements, and this tells them apart.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum EngineOffer {
+    /// the CLI has not answered yet
+    Checking,
+    /// signed in, and Claude Code is the selected engine
+    InUse { account: String },
+    /// signed in, and another engine is selected: one button switches
+    Ready { account: String },
+    /// the CLI answered and is signed out
+    SignedOut,
+    /// no CLI answered: none is installed, or the path in Settings names nothing
+    Absent,
+}
+
+impl EngineOffer {
+    /// The CLI is signed in, whichever engine is selected.
+    pub fn signed_in(&self) -> bool {
+        matches!(self, EngineOffer::InUse { .. } | EngineOffer::Ready { .. })
+    }
+
+    /// The account, as `claude auth status` reported it; empty while there is none.
+    pub fn account(&self) -> &str {
+        match self {
+            EngineOffer::InUse { account } | EngineOffer::Ready { account } => account,
+            _ => "",
+        }
+    }
+
+    pub fn icon(&self) -> &'static str {
+        match self {
+            EngineOffer::Checking => "hourglass_empty",
+            EngineOffer::InUse { .. } => "check_circle",
+            EngineOffer::Ready { .. } => "account_circle",
+            EngineOffer::SignedOut | EngineOffer::Absent => "account_circle_off",
+        }
+    }
+
+    /// The card's state line: the account, and whether this engine is the one in use.
+    pub fn status_line(&self) -> String {
+        match self {
+            EngineOffer::Checking => "checking".to_string(),
+            EngineOffer::InUse { account } => format!("{account}, and in use"),
+            EngineOffer::Ready { account } => format!("{account}, not the selected engine"),
+            EngineOffer::SignedOut => "not signed in".to_string(),
+            EngineOffer::Absent => "no CLI to ask".to_string(),
+        }
+    }
+
+    /// There is nothing to run this engine on, so the line reads as a fault.
+    pub fn is_error(&self) -> bool {
+        matches!(self, EngineOffer::SignedOut | EngineOffer::Absent)
+    }
+}
+
+/// What the Claude Code card says, from what `claude auth status` answered and which
+/// engine the saved settings select. `None` is a CLI that did not answer.
+pub fn engine_offer(status: Option<&AuthStatus>, provider: &ProviderChoice) -> EngineOffer {
+    let Some(status) = status else {
+        return EngineOffer::Absent;
+    };
+    if !status.logged_in {
+        return EngineOffer::SignedOut;
+    }
+    let account = account_line(status);
+    match provider {
+        ProviderChoice::ClaudeCode { .. } => EngineOffer::InUse { account },
+        _ => EngineOffer::Ready { account },
+    }
+}
+
+/// The account `claude auth status` reported, as a sentence. The address is shown
+/// here and nowhere else — it is never logged and never written to the settings file.
+fn account_line(status: &AuthStatus) -> String {
+    match (&status.email, &status.auth_method) {
+        (Some(email), Some(method)) => format!("signed in as {email} via {method}"),
+        (Some(email), None) => format!("signed in as {email}"),
+        (None, Some(method)) => format!("signed in via {method}"),
+        (None, None) => "signed in".to_string(),
+    }
+}
+
 /// What the Claude Code CLI answered: the binary, and the account it is signed in to.
 #[derive(Clone, PartialEq)]
 enum ClaudeCodeProbe {
@@ -299,13 +394,14 @@ enum ClaudeCodeProbe {
     Failed(String),
 }
 
-/// The Claude Code CLI: where it is, which version, and which claude.ai account it is
-/// signed in to. Signing in and out run in the user's own terminal — the login opens a
-/// browser — and the app reads no credential of Claude Code's, only what
-/// `claude auth status` reports.
+/// The Claude Code CLI: where it is, which version, which claude.ai account it is
+/// signed in to, and whether it is the engine the chat runs on. Signing in and out run
+/// in the user's own terminal — the login opens a browser — and the app reads no
+/// credential of Claude Code's, only what `claude auth status` reports.
 #[component]
 fn ClaudeCodeCard(draft: Signal<Settings>) -> Element {
     let app = use_context::<Store<AppStore>>();
+    let handle = use_coroutine_handle::<AppAction>();
     let probe = use_signal(|| ClaudeCodeProbe::Checking);
     let check = move || {
         let path = draft.peek().claude_code_binary.clone();
@@ -333,21 +429,15 @@ fn ClaudeCodeCard(draft: Signal<Settings>) -> Element {
         ClaudeCodeProbe::Failed(e) => e.clone(),
     };
     let binary_error = matches!(found, ClaudeCodeProbe::Failed(_));
-    let (icon, account, signed_in) = match &found {
-        ClaudeCodeProbe::Checking => ("hourglass_empty", "checking".to_string(), false),
-        ClaudeCodeProbe::Failed(_) => ("account_circle_off", "no CLI to ask".to_string(), false),
-        ClaudeCodeProbe::Ready(_, status) if status.logged_in => (
-            "account_circle",
-            match (&status.email, &status.auth_method) {
-                (Some(email), Some(method)) => format!("signed in as {email} via {method}"),
-                (Some(email), None) => format!("signed in as {email}"),
-                (None, Some(method)) => format!("signed in via {method}"),
-                (None, None) => "signed in".to_string(),
-            },
-            true,
-        ),
-        ClaudeCodeProbe::Ready(..) => ("account_circle_off", "not signed in".to_string(), false),
+    // "in use" is the SAVED provider: that is what the chat builds its engine from,
+    // and the draft may hold a selection nobody has saved yet
+    let selected = app.settings().read().provider.clone();
+    let offer = match &found {
+        ClaudeCodeProbe::Checking => EngineOffer::Checking,
+        ClaudeCodeProbe::Ready(_, status) => engine_offer(Some(status), &selected),
+        ClaudeCodeProbe::Failed(_) => EngineOffer::Absent,
     };
+    let signed_in = offer.signed_in();
     let cli = match &found {
         ClaudeCodeProbe::Ready(cli, _) => Some(cli.clone()),
         _ => None,
@@ -356,6 +446,11 @@ fn ClaudeCodeCard(draft: Signal<Settings>) -> Element {
         if let Err(e) = ClaudeCodeCli::open_in_terminal(&line) {
             toast(app, ToastKind::Error, e.to_string());
         }
+    };
+    // the second door to the provider selector above: the same draft, the same save
+    let select = move |_| {
+        draft.write().provider = ProviderChoice::ClaudeCode { model: None };
+        handle.send(AppAction::SaveSettings(draft.peek().clone()));
     };
     rsx! {
         Card { variant: CardVariant::Outlined, class: "settings__card",
@@ -370,13 +465,21 @@ fn ClaudeCodeCard(draft: Signal<Settings>) -> Element {
                 oninput: move |v: String| draft.write().claude_code_binary = if v.trim().is_empty() { None } else { Some(PathBuf::from(v.trim())) },
                 onblur: move |_| check(),
             }
-            p { class: "settings__status", class: if !signed_in { "settings__status--error" },
-                Icon { name: icon, size: 20 }
-                span { "{account}" }
+            p { class: "settings__status", class: if offer.is_error() { "settings__status--error" },
+                Icon { name: offer.icon(), size: 20 }
+                span { "{offer.status_line()}" }
                 Button { variant: ButtonVariant::Text, onclick: move |_| check(), "Check again" }
             }
             p { class: "settings__label", "This engine runs on the claude.ai subscription the CLI is signed in to; no API key is used and none is stored. Signing in opens a browser from your terminal." }
             div { class: "settings__key",
+                if matches!(offer, EngineOffer::Ready { .. }) {
+                    Button {
+                        variant: ButtonVariant::Filled,
+                        icon: "swap_horiz",
+                        onclick: select,
+                        "Use this engine"
+                    }
+                }
                 if let Some(cli) = cli {
                     Button {
                         variant: ButtonVariant::Tonal,
@@ -401,5 +504,115 @@ fn ClaudeCodeCard(draft: Signal<Settings>) -> Element {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn status(logged_in: bool, email: Option<&str>, method: Option<&str>) -> AuthStatus {
+        AuthStatus {
+            logged_in,
+            auth_method: method.map(str::to_string),
+            api_provider: None,
+            email: email.map(str::to_string),
+        }
+    }
+
+    fn subscription() -> AuthStatus {
+        status(true, Some("first.admin@example.com"), Some("claude.ai"))
+    }
+
+    #[test]
+    fn a_signed_in_cli_is_in_use_only_when_claude_code_is_the_selected_engine() {
+        let account = "signed in as first.admin@example.com via claude.ai";
+        assert_eq!(
+            engine_offer(
+                Some(&subscription()),
+                &ProviderChoice::ClaudeCode { model: None }
+            ),
+            EngineOffer::InUse {
+                account: account.to_string()
+            }
+        );
+        for other in [
+            ProviderChoice::Claude,
+            ProviderChoice::Ollama {
+                base_url: "http://localhost:11434".to_string(),
+                model: "qwen3".to_string(),
+            },
+            ProviderChoice::OpenAiCompat {
+                base_url: "http://localhost:1234/v1".to_string(),
+                model: "local".to_string(),
+            },
+        ] {
+            assert_eq!(
+                engine_offer(Some(&subscription()), &other),
+                EngineOffer::Ready {
+                    account: account.to_string()
+                },
+                "{other:?} selected: the signed-in CLI is an offer, not the engine"
+            );
+        }
+    }
+
+    #[test]
+    fn the_state_line_says_signed_in_and_whether_that_engine_is_the_one_in_use() {
+        let in_use = engine_offer(
+            Some(&subscription()),
+            &ProviderChoice::ClaudeCode { model: None },
+        );
+        assert_eq!(
+            in_use.status_line(),
+            "signed in as first.admin@example.com via claude.ai, and in use"
+        );
+        assert!(!in_use.is_error());
+        let ready = engine_offer(Some(&subscription()), &ProviderChoice::Claude);
+        assert_eq!(
+            ready.status_line(),
+            "signed in as first.admin@example.com via claude.ai, not the selected engine"
+        );
+        assert!(!ready.is_error());
+        assert_eq!(
+            ready.account(),
+            "signed in as first.admin@example.com via claude.ai"
+        );
+    }
+
+    #[test]
+    fn a_signed_out_cli_an_absent_one_and_one_still_answering_are_three_states() {
+        let signed_out = engine_offer(Some(&status(false, None, None)), &ProviderChoice::Claude);
+        assert_eq!(signed_out, EngineOffer::SignedOut);
+        assert_eq!(signed_out.status_line(), "not signed in");
+        assert!(signed_out.is_error());
+        assert!(!signed_out.signed_in());
+
+        let absent = engine_offer(None, &ProviderChoice::ClaudeCode { model: None });
+        assert_eq!(absent, EngineOffer::Absent);
+        assert_eq!(absent.status_line(), "no CLI to ask");
+        assert!(absent.is_error());
+
+        // still answering is not a fault, and says nothing about an account
+        assert_eq!(EngineOffer::Checking.status_line(), "checking");
+        assert!(!EngineOffer::Checking.is_error());
+        assert_eq!(EngineOffer::Checking.account(), "");
+    }
+
+    #[test]
+    fn the_account_line_says_what_auth_status_reported_and_no_more() {
+        assert_eq!(
+            account_line(&subscription()),
+            "signed in as first.admin@example.com via claude.ai"
+        );
+        assert_eq!(
+            account_line(&status(true, Some("first.admin@example.com"), None)),
+            "signed in as first.admin@example.com"
+        );
+        assert_eq!(
+            account_line(&status(true, None, Some("claude.ai"))),
+            "signed in via claude.ai"
+        );
+        assert_eq!(account_line(&status(true, None, None)), "signed in");
     }
 }
