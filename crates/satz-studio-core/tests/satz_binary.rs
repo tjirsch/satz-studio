@@ -1,6 +1,8 @@
 //! `SatzBinary::locate`: the override, the search, the version gate — against fake
 //! binaries in a temporary directory and the installed satz.
 
+// the fake binaries are a unix fixture, and so are the only paths this file names
+#[cfg(unix)]
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
