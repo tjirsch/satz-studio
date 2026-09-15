@@ -168,6 +168,22 @@ pub fn fake_with(
         {
             use std::os::unix::fs::PermissionsExt;
             std::fs::set_permissions(&shim, std::fs::Permissions::from_mode(0o755)).unwrap();
+            // These tests run on threads of one process, and a thread still holding a write
+            // handle to a file another thread execs makes that exec fail with ETXTBSY (26).
+            // The window is short and the failure is a flake, so the shim is run until it
+            // starts — the same treatment `satz_binary.rs::fake` already gets.
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+            loop {
+                match std::process::Command::new(&shim).arg("--version").output() {
+                    Ok(_) => break,
+                    Err(e)
+                        if e.raw_os_error() == Some(26) && std::time::Instant::now() < deadline =>
+                    {
+                        std::thread::sleep(std::time::Duration::from_millis(20));
+                    }
+                    Err(e) => panic!("{} is not runnable: {e}", shim.display()),
+                }
+            }
         }
         shim
     };
