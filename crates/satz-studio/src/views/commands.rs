@@ -223,20 +223,20 @@ pub const PALETTE: &[CommandSpec] = &[
         external: false,
     },
     CommandSpec {
-        id: "iac-roles",
-        label: "iac-roles",
+        id: "update-prerequisites",
+        label: "update-prerequisites",
         icon: "admin_panel_settings",
-        description: "The roles the IaC service account needs against the roles the estate grants it.",
+        description: "What the estate's resource types oblige it to declare and does not: the roles its IaC service account is missing, and the APIs its infrastructure project does not enable.",
         // one of the two commands satz's ADR 0021 leaves on the console: the exit code
-        // is the answer and the text is the diagnosis, so it takes no `--out`
-        head: &["iac-roles"],
+        // is the answer and the text is the diagnosis, so it takes no `--out`.
+        // `--report-only` is fixed: the command writes the estate file by default, and
+        // a write from the palette would have to hold the session's write lock and
+        // reload the model, which `RunCommand` does neither of. The writing mode is
+        // the terminal's and the agent's (`satz_update_prerequisites`).
+        head: &["update-prerequisites"],
         estate: EstateArg::Positional,
-        tail: &["--format", "json"],
-        fields: &[Field::Flag {
-            key: "execute",
-            flag: "--execute",
-            label: "Write the missing roles into the estate file",
-        }],
+        tail: &["--report-only", "--format", "json"],
+        fields: &[],
         reports: false,
         external: false,
     },
@@ -883,7 +883,8 @@ mod tests {
     }
 
     /// satz's ADR 0021: a reporting command takes one `--format` and one `--out`, both
-    /// required. `iac-roles` is the one entry the ADR leaves on the console.
+    /// required. `update-prerequisites` is the one entry the ADR leaves on the console,
+    /// and the palette runs it read-only.
     #[test]
     fn every_reporting_command_names_a_format_and_a_destination() {
         let reporting: Vec<&str> = PALETTE.iter().filter(|s| s.reports).map(|s| s.id).collect();
@@ -901,14 +902,16 @@ mod tests {
                 s.id
             );
         }
-        let iac = spec("iac-roles");
-        assert!(!iac.reports);
-        assert_eq!(iac.tail, ["--format", "json"]);
-        assert!(
-            !built("iac-roles", "C0example.satz", &defaults(iac))
-                .iter()
-                .any(|a| a == "--out")
+        let prerequisites = spec("update-prerequisites");
+        assert!(!prerequisites.reports);
+        assert_eq!(prerequisites.tail, ["--report-only", "--format", "json"]);
+        let args = built(
+            "update-prerequisites",
+            "C0example.satz",
+            &defaults(prerequisites),
         );
+        assert!(!args.iter().any(|a| a == "--out"), "{args:?}");
+        assert!(args.iter().any(|a| a == "--report-only"), "{args:?}");
     }
 
     #[test]

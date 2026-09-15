@@ -101,8 +101,10 @@ A reporting command takes one `--format` and one `--out`, both required, and wri
 file instead of printing (satz's ADR 0021). The app names the destination: the file the
 command's own `--out` field names, which is the estate's and stays, else one under
 `reports_dir()` — the app's directory in the system temporary directory — which
-`RunCommand` reads into the log after the streamed lines and removes. `iac-roles` is the
-one command in the palette the ADR leaves on the console.
+`RunCommand` reads into the log after the streamed lines and removes. `update-prerequisites`
+is the one command in the palette the ADR leaves on the console, and the palette runs it
+with `--report-only`: the command writes the estate file by default, and a write from
+the palette would have to hold the session's write lock and reload the model.
 
 The shell (`src/shell/`) is the navigation rail with its badges, the top bar with the
 `runs_as`, deployment-mode, schema and satz-version chips, the `SatzBanner` while satz
