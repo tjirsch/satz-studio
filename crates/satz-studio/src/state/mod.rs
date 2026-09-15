@@ -24,7 +24,7 @@ use satz_studio_core::satz::{CliLine, EstateSession, SatzBinary};
 use satz_studio_core::settings::Settings;
 
 pub use ansi::strip_ansi;
-pub use app_actions::{AppAction, app_coroutine};
+pub use app_actions::{AppAction, app_coroutine, save_settings};
 pub use estate_actions::{EstateAction, command_line, estate_coroutine};
 pub use toast::{Toast, ToastKind, dismiss, enqueue};
 

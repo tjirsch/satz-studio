@@ -46,7 +46,10 @@ pub async fn app_coroutine(mut rx: UnboundedReceiver<AppAction>, app: Store<AppS
             AppAction::Discover(root) => discover(app, root).await,
             AppAction::OpenEstate { config, estate } => open_estate(app, config, estate).await,
             AppAction::CloseEstate => close_estate(app),
-            AppAction::SaveSettings(settings) => save_settings(app, settings).await,
+            // the toast said what went wrong; the view keeps the draft either way
+            AppAction::SaveSettings(settings) => {
+                let _ = save_settings(app, settings).await;
+            }
             AppAction::ResolveCredential => resolve_credential(app).await,
             AppAction::StoreKey(key) => store_key(app, key).await,
         }
@@ -199,14 +202,24 @@ async fn open_estate(app: Store<AppStore>, config: PathBuf, estate: PathBuf) {
     app.opening().set(None);
 }
 
-async fn save_settings(app: Store<AppStore>, settings: Settings) {
+/// Write the settings file, put them in the store and locate satz again. The one
+/// saver: the Settings view sends [`AppAction::SaveSettings`], and the Chat view's
+/// "Use Claude Code" button awaits this directly, because it must not rebuild the
+/// engine on settings that were not saved. A file that did not write is a toast and
+/// the sentence, so the caller can refuse to go on.
+pub async fn save_settings(app: Store<AppStore>, settings: Settings) -> Result<(), String> {
     match settings.save() {
         Ok(()) => {
             app.settings().set(settings);
             toast(app, ToastKind::Info, "Settings saved");
             locate(app).await;
+            Ok(())
         }
-        Err(e) => toast(app, ToastKind::Error, format!("settings not saved: {e}")),
+        Err(e) => {
+            let message = format!("settings not saved: {e}");
+            toast(app, ToastKind::Error, message.clone());
+            Err(message)
+        }
     }
 }
 
