@@ -70,10 +70,17 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - uses: cargo-bins/cargo-binstall@main
-      - name: dioxus-cli 0.7.10 (the release binary; built from source only when the runner has none)
+      - name: dioxus-cli 0.7.10 (the release binary for THIS host; built from source when there is none)
         shell: bash
+        # --targets is the host's own triple: without it cargo-binstall took the
+        # x86_64-apple-darwin build on an arm64 runner, and that binary loads an
+        # OpenSSL from the Intel Homebrew prefix, which an arm64 runner does not
+        # have — `dx --version` aborted. A host with no prebuilt binary falls
+        # through to `cargo install`, which compiles one.
         run: |
-          cargo binstall dioxus-cli --version 0.7.10 --no-confirm --disable-strategies compile \
+          host=$(rustc -vV | sed -n 's/^host: //p')
+          echo "host: $host"
+          cargo binstall dioxus-cli --version 0.7.10 --no-confirm --disable-strategies compile --targets "$host" \
             || cargo install dioxus-cli --version 0.7.10 --locked
           dx --version
       - name: dx bundle
