@@ -9,6 +9,14 @@ rust-version.workspace = true
 publish = false
 build = "build.rs"
 
+# The fake Claude Code CLI's Windows launcher. The app refuses a `.bat`/`.cmd`, so the
+# fake cannot be one either; integration tests find this through `CARGO_BIN_EXE_fake-claude`.
+[[bin]]
+name = "fake-claude"
+path = "tests/fixtures/claude_code/fake-claude-launcher.rs"
+test = false
+doc = false
+
 [dependencies]
 satz-core.workspace = true
 serde.workspace = true

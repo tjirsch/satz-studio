@@ -146,16 +146,12 @@ pub fn fake_with(
 
     let fake = fixtures().join("fake-claude.py");
     let path = if cfg!(windows) {
-        let shim = dir.join("claude.cmd");
-        std::fs::write(
-            &shim,
-            format!(
-                "@set FAKE_CLAUDE_CONFIG={}\r\n@python \"{}\" %*\r\n",
-                config.display(),
-                fake.display()
-            ),
-        )
-        .unwrap();
+        // Not a `.cmd`: the app refuses a batch file by design, because a turn's JSON MCP
+        // configuration and multi-line system prompt cannot be quoted for cmd.exe. The
+        // fake is the `fake-claude` launcher binary instead, copied beside the
+        // `fake-claude.json` it reads.
+        let shim = dir.join("claude.exe");
+        std::fs::copy(env!("CARGO_BIN_EXE_fake-claude"), &shim).unwrap();
         shim
     } else {
         let shim = dir.join("claude");
