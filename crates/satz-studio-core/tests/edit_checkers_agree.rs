@@ -24,6 +24,17 @@ fn key(diags: &[Diagnostic]) -> BTreeSet<Key> {
         .collect()
 }
 
+/// The diagnostic a test is about, by kind. A compile carries every finding the satz
+/// release makes over the estate — a prerequisite the fixture does not declare, a check
+/// a later version adds — so a test names the finding it asserts on instead of counting
+/// them.
+fn finding_of_kind<'a>(diags: &'a [Diagnostic], kind: &str) -> &'a Diagnostic {
+    diags
+        .iter()
+        .find(|d| d.kind.as_deref() == Some(kind))
+        .unwrap_or_else(|| panic!("no {kind} finding: {diags:?}"))
+}
+
 const BUDGET: &str = "presets/organization-budget.satz";
 
 #[tokio::test]
@@ -141,15 +152,14 @@ async fn a_refusal_is_the_same_findings_through_both_checkers() {
         panic!("the checkers did not both refuse a pack the estate asks for and does not use");
     };
     assert_eq!(key(&a), key(&b));
-    assert_eq!(a.len(), 1, "{a:?}");
-    assert_eq!(a[0].severity, Severity::Error);
-    assert_eq!(a[0].kind.as_deref(), Some("unadopted-pack"));
+    let pack = finding_of_kind(&a, "unadopted-pack");
+    assert_eq!(pack.severity, Severity::Error);
     assert!(
-        a[0].message.contains(&format!(
+        pack.message.contains(&format!(
             "`use_budget` is true and this estate has no line for `{BUDGET}` — run `satz merge-presets` to write it"
         )),
         "{}",
-        a[0].message
+        pack.message
     );
     std::fs::remove_file(&tmp).unwrap();
 }
@@ -164,17 +174,16 @@ async fn a_check_that_passes_carries_its_warnings_in_the_mcp_summary() {
     // the same finding at satz's default level: a warning, so the compile goes on
     let a = support::within(mcp.check(&tmp)).await.unwrap();
     assert!(!a.addresses.is_empty());
-    assert_eq!(a.findings.len(), 1, "{:?}", a.findings);
-    assert_eq!(a.findings[0].kind, "unadopted-pack");
+    let pack = a
+        .findings
+        .iter()
+        .find(|f| f.kind == "unadopted-pack")
+        .unwrap_or_else(|| panic!("no unadopted-pack finding: {:?}", a.findings));
     assert_eq!(
-        a.findings[0].severity,
+        pack.severity,
         satz_studio_core::satz::reports::FindingSeverity::Warning
     );
-    assert!(
-        a.findings[0].message.contains(BUDGET),
-        "{:?}",
-        a.findings[0]
-    );
+    assert!(pack.message.contains(BUDGET), "{pack:?}");
 
     // the CLI prints its findings as sentences and returns none, as with the addresses
     let b = support::within(cli.check(&tmp)).await.unwrap();

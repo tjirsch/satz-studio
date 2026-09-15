@@ -10,12 +10,11 @@ use satz_studio_core::satz::{Allow, McpSession, SatzBinary, SatzError};
 
 const TIME_BOX: Duration = Duration::from_secs(60);
 
-const TOOLS: [&str; 20] = [
+const TOOLS: [&str; 21] = [
     "satz_adopt",
     "satz_check_presets",
     "satz_estates",
     "satz_get_presets",
-    "satz_iac_roles",
     "satz_interview",
     "satz_merge_presets",
     "satz_open",
@@ -26,10 +25,12 @@ const TOOLS: [&str; 20] = [
     "satz_report_compliance",
     "satz_require",
     "satz_restrict",
+    "satz_review_pack",
     "satz_scan_checkov",
     "satz_transpile",
     "satz_transpile_check",
     "satz_triage",
+    "satz_update_prerequisites",
     "satz_whoami",
 ];
 

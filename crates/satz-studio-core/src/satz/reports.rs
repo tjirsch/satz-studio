@@ -183,7 +183,7 @@ pub struct Finding {
     pub severity: FindingSeverity,
     /// Which check spoke, kebab-case as satz writes it: `unadopted-pack`,
     /// `missing-required`, `written-reference`, `conflict`, `dry-run-conflict`,
-    /// `suppression`, `emit`, `iac-roles`, `providers`, `action`, `hcl-passthrough`.
+    /// `suppression`, `emit`, `prerequisites`, `providers`, `action`, `hcl-passthrough`.
     /// A `String` rather than an enum, so a kind satz adds is carried through instead
     /// of failing the whole result.
     pub kind: String,

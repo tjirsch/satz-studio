@@ -333,7 +333,7 @@ mod tests {
     fn a_note_without_a_group_keeps_its_message_verbatim() {
         let d = Diagnostic::from_finding(
             Path::new("/e/yaml"),
-            &finding(FindingSeverity::Note, "iac-roles"),
+            &finding(FindingSeverity::Note, "prerequisites"),
             DiagSource::Tool("satz_transpile_check".to_string()),
         );
         assert_eq!(d.severity, Severity::Note);

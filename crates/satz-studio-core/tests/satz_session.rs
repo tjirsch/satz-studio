@@ -49,7 +49,7 @@ async fn the_session_reads_the_identity_and_answers_a_tool_call() {
         None,
         "the smoke estate impersonates nothing"
     );
-    assert_eq!(session.tools().len(), 20);
+    assert_eq!(session.tools().len(), 21);
     assert!(session.tool_info("satz_questions").is_some());
     assert!(!session.instructions().is_empty());
     assert!(!session.guide().is_empty());
