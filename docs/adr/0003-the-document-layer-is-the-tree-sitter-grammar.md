@@ -18,7 +18,7 @@ It is the authority on what a file means, and stays that; it is not a document l
 
 The plan for the app proposed a hand-written lossless parser inside the app. Between the
 plan and the scaffold, a tree-sitter grammar for Satz came into existence in its own
-private repository, `satz-tree-sitter`: it mirrors satz's front-end token for token,
+repository of its own, `satz-tree-sitter`: it mirrors satz's front-end token for token,
 its gate is zero errors over every `.satz` file of a satz checkout, and satz's Zed
 extension pins a commit of it (satz ADR 0016, `vendor/satz/docs/adr/`). A tree-sitter
 tree is a lossless concrete syntax tree: every node has byte ranges, comments are
@@ -58,7 +58,7 @@ grammar repository, never worked around in the app.
 - The build needs a C compiler on every platform, which `cc` finds.
 - The grammar's known limit carries over: an `hcl { … }` body is a brace-balanced rule,
   so a heredoc with unbalanced braces inside one mis-parses the rest of that block.
-- The grammar repository is private; the vendored copy is what lets CI and a clone
+- The vendored copy is generated code, and it is what lets CI and a clone
   without access to it build the app.
 
 ## Pros and cons of the options
@@ -81,8 +81,9 @@ grammar repository, never worked around in the app.
 ### C — a git submodule of the grammar repository
 
 - **Good:** one pin, the same way satz is pinned.
-- **Bad:** the grammar repository is private, so CI and any clone without access
-  cannot fetch it, and the build fails before it starts.
+- **Bad:** the vendored parser is a copy, so a grammar change reaches the app only
+  when `scripts/sync-grammar.sh` is run and `COMMIT` moves; nothing fails while the
+  copy is behind the grammar.
 
 ### D — vendor the generated `src/`, compile it in `build.rs` *(chosen)*
 

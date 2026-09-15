@@ -11,10 +11,10 @@ name: ci
 # release: there it is built from the submodule vendor/satz instead, so the
 # same pinned source serves.
 #
-# `core` (Linux) runs on every push and pull request. `platforms` (macOS,
-# Windows) runs only for a release tag or a manual dispatch: the repository is
-# private for now and macOS runner minutes count tenfold. Once the repository is
-# public, remove that `if:` condition.
+# Both jobs run on every push and pull request: `core` on ubuntu and `platforms` on
+# macOS and Windows, which have their own webview, their own keyring store and, on
+# Windows, a satz built from the submodule. A release tag and a manual dispatch run
+# both as well, so release.yml bundles a tree they have passed on.
 
 on:
   push:
@@ -57,11 +57,10 @@ jobs:
         run: cargo build -p satz-studio --locked
 
   platforms:
-    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-15, windows-2022]
+        os: [macos-15, macos-15-intel, windows-2022]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4

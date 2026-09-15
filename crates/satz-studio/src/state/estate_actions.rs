@@ -541,16 +541,22 @@ async fn reload_with(session: &Arc<EstateSession>, app: Store<AppStore>, carried
 
     let main = session.main.clone();
     let dir = session.dir.clone();
+    // The error is boxed: a `Diagnostic` is a path, a message and a source, which is
+    // large enough that clippy refuses it as the `Err` of a `Result` returned by value.
     let parsed = tokio::task::spawn_blocking(move || {
-        let text = std::fs::read_to_string(&main)
-            .map_err(|e| Diagnostic::error(format!("{}: {e}", main.display()), DiagSource::Cst))?;
-        let cst =
-            Cst::parse(&text).map_err(|e| Diagnostic::error(e.to_string(), DiagSource::Cst))?;
+        let text = std::fs::read_to_string(&main).map_err(|e| {
+            Box::new(Diagnostic::error(
+                format!("{}: {e}", main.display()),
+                DiagSource::Cst,
+            ))
+        })?;
+        let cst = Cst::parse(&text)
+            .map_err(|e| Box::new(Diagnostic::error(e.to_string(), DiagSource::Cst)))?;
         let env = dir
             .params(&main)
-            .map_err(|e| Diagnostic::from_pipeline_error(&dir.dir, &e))?;
+            .map_err(|e| Box::new(Diagnostic::from_pipeline_error(&dir.dir, &e)))?;
         let registry = ResourceRegistry::load_all(&dir.schema_dir());
-        Ok::<_, Diagnostic>((cst, env, registry))
+        Ok::<_, Box<Diagnostic>>((cst, env, registry))
     })
     .await;
 
@@ -579,7 +585,7 @@ async fn reload_with(session: &Arc<EstateSession>, app: Store<AppStore>, carried
             })
         }
         Ok(Err(d)) => {
-            diagnostics.push(d);
+            diagnostics.push(*d);
             None
         }
         Err(e) => {

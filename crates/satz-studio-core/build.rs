@@ -1,6 +1,6 @@
 //! Compiles the generated tree-sitter parser for Satz (`vendor/satz-tree-sitter/src`,
 //! copied from the grammar repository at the commit named in
-//! `vendor/satz-tree-sitter/COMMIT`). The grammar repository is private, so its
+//! `vendor/satz-tree-sitter/COMMIT`). The grammar is vendored as generated code, so its
 //! generated `src/` is vendored rather than pulled as a submodule; `scripts/sync-grammar.sh`
 //! refreshes it.
 

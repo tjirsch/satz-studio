@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # sync-grammar.sh — refreshes the vendored tree-sitter grammar, vendor/satz-tree-sitter/,
-# from a checkout of the satz-tree-sitter repository (private, hence vendored): src/
+# from a checkout of the satz-tree-sitter repository (generated code, hence vendored): src/
 # whole (parser.c, grammar.json, node-types.json, tree_sitter/*.h), LICENSE, and
 # COMMIT — the checkout's HEAD, so the copy names what it was taken from.
 #
