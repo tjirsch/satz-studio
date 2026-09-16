@@ -179,7 +179,23 @@ async fn a_gate_bound_true_without_its_line_is_absent_and_the_check_names_the_pa
         .unwrap();
     let committed = support::within(proposed.commit(&mcp)).await.unwrap();
     let text = support::read(&main);
-    assert!(text.contains("\n  use_budget = true\n}\n"), "{text}");
+    // the block's last entry, laid out in its `=` column as satz's `bind` appends
+    let last = text
+        .split("\n}\n")
+        .next()
+        .and_then(|params| params.lines().last())
+        .unwrap_or_default();
+    assert_eq!(
+        last.split_once('=')
+            .map(|(name, value)| (name.trim(), value.trim())),
+        Some(("use_budget", "true")),
+        "{text}"
+    );
+    let shortname = text
+        .lines()
+        .find(|l| l.trim_start().starts_with("customer_shortname "))
+        .and_then(|l| l.find('='));
+    assert_eq!(last.find('='), shortname, "{text}");
     assert_eq!(committed.sha256, sha256_hex(text.as_bytes()));
 
     // and says so: a warning on stderr, which parses to a diagnostic naming the pack
@@ -275,7 +291,14 @@ async fn a_gate_bound_true_without_its_line_is_absent_and_the_check_names_the_pa
         .unwrap();
     support::within(proposed.commit(&strict)).await.unwrap();
     let off = support::read(&main);
-    assert!(off.contains("\n  use_budget = false\n"), "{off}");
+    assert_eq!(
+        off.lines()
+            .find(|l| l.trim_start().starts_with("use_budget "))
+            .and_then(|l| l.split_once('='))
+            .map(|(_, value)| value.trim()),
+        Some("false"),
+        "{off}"
+    );
     let es = EditSession::open(&main).unwrap();
     let proposed = es
         .apply(&[Edit::ReplaceParam {
