@@ -14,7 +14,9 @@
 # installer of the tagged GitHub release together with its SHA-256 sidecar
 # (`<hex>  satz-installer.sh`, or a bare hex), verifies the installer against the
 # sidecar — a missing sidecar is a failure, never a skipped check — runs it with
-# --no-modify-path (satz's install-path is ~/.local/bin) and prints the version of
+# SATZ_NO_MODIFY_PATH=1 in its environment, so no shell profile is edited (satz's
+# install-path is ~/.local/bin; the installer's --no-modify-path flag is deprecated
+# in favour of the variable) and prints the version of
 # the binary it installed, which must be the tag's.
 #
 # Windows: satz has no Windows release; exit 2. CI builds it from the submodule
@@ -93,7 +95,7 @@ actual=$(sha256 "$tmp/satz-installer.sh")
 [[ "$actual" == "$expected" ]] || die "SHA-256 mismatch for satz-installer.sh: sidecar $expected, downloaded $actual"
 echo "install-satz: satz-installer.sh verified ($actual)"
 
-sh "$tmp/satz-installer.sh" --no-modify-path
+SATZ_NO_MODIFY_PATH=1 sh "$tmp/satz-installer.sh"
 
 bin="$HOME/.local/bin/satz"
 [[ -x "$bin" ]] || die "the installer ran but $bin is not there"
