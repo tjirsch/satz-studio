@@ -69,13 +69,13 @@ impl SatzCli {
     /// `init` creates `config.toml`, `yaml/`, `hcl/`, `schemas/`, `.gitignore` and the
     /// estate file relative to it.
     pub async fn run_in(
-        bin: &SatzBinary,
+        satz: &Path,
         dir: &Path,
         args: &[String],
         out: mpsc::Sender<CliLine>,
         cancel: CancellationToken,
     ) -> Result<ExitStatus, SatzError> {
-        let mut cmd = Command::new(&bin.path);
+        let mut cmd = Command::new(satz);
         cmd.args(args).current_dir(dir).kill_on_drop(true);
         stream(cmd, args.join(" "), out, cancel).await
     }

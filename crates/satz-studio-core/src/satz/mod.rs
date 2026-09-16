@@ -55,9 +55,14 @@ pub enum SatzError {
     #[error("satz not found; tried {}", tried.iter().map(|p| p.display().to_string()).collect::<Vec<_>>().join(", "))]
     NotFound { tried: Vec<PathBuf> },
     #[error(
-        "satz {found} is too old: satz-studio needs {required} or newer — run `satz self-update`"
+        "satz {found} at {} is too old: satz-studio needs {required} or newer",
+        path.display()
     )]
     TooOld {
+        /// the binary that was found and refused — kept so the app can offer to update
+        /// the very binary it is refusing, which is the only thing the operator can do
+        /// about it from inside a window
+        path: PathBuf,
         found: semver::Version,
         required: semver::Version,
     },

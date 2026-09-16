@@ -17,8 +17,10 @@ use crate::components::{
     Button, ButtonVariant, Card, CardVariant, Icon, Segment, SegmentedButton, Switch, TextField,
 };
 use crate::state::{
-    AppAction, AppStore, AppStoreStoreExt, CredentialStatus, SatzStatus, ToastKind, toast,
+    AppAction, AppStore, AppStoreStoreExt, CredentialStatus, SatzStatus, ToastKind,
+    UpdateStoreStoreExt, toast,
 };
+use satz_studio_core::satz::CliLine;
 
 #[component]
 pub fn SettingsView() -> Element {
@@ -31,12 +33,21 @@ pub fn SettingsView() -> Element {
     let satz_text = match &satz {
         SatzStatus::Unknown => "locating satz".to_string(),
         SatzStatus::Located(bin) => format!("satz {} at {}", bin.version, bin.path.display()),
-        SatzStatus::TooOld { found, required } => {
+        SatzStatus::TooOld {
+            found, required, ..
+        } => {
             format!("satz {found} found; {required} or newer is needed")
         }
         SatzStatus::Missing(why) => why.clone(),
     };
     let satz_error = matches!(satz, SatzStatus::TooOld { .. } | SatzStatus::Missing(_));
+    // There is something to update whenever there is a binary — a too-old one included,
+    // which is the case that matters most.
+    let satz_updatable = app.satz().read().updatable().is_some();
+    let satz_updating = app.update().running().cloned();
+    let update_command = app.update().command().cloned();
+    let update_log = app.update().log().cloned();
+    let update_outcome = app.update().outcome().cloned();
     let file = settings_path()
         .map(|p| p.display().to_string())
         .unwrap_or_else(|e| e.to_string());
@@ -80,6 +91,50 @@ pub fn SettingsView() -> Element {
                         supporting: satz_text,
                         error: satz_error,
                         oninput: move |v: String| draft.write().satz_binary = if v.trim().is_empty() { None } else { Some(PathBuf::from(v.trim())) },
+                    }
+                    // satz owns its own updater, so the app runs it rather than fetching
+                    // anything: this is the same command the terminal instruction used to
+                    // name, with the browser it would otherwise open turned off.
+                    if satz_updatable {
+                        div { class: "settings__row",
+                            Button {
+                                variant: ButtonVariant::Tonal,
+                                disabled: satz_updating,
+                                onclick: move |_| handle.send(AppAction::UpdateSatz { check_only: false }),
+                                if satz_updating { "Updating satz…" } else { "Update satz" }
+                            }
+                            Button {
+                                variant: ButtonVariant::Text,
+                                disabled: satz_updating,
+                                onclick: move |_| handle.send(AppAction::UpdateSatz { check_only: true }),
+                                "Check only"
+                            }
+                            if satz_updating {
+                                Button { variant: ButtonVariant::Text, onclick: move |_| handle.send(AppAction::CancelUpdate), "Cancel" }
+                            }
+                        }
+                        if let Some(command) = update_command {
+                            Card { variant: CardVariant::Filled, class: "settings__log-card",
+                                code { class: "settings__log-title", "{command}" }
+                                if let Some(outcome) = update_outcome {
+                                    p {
+                                        class: if outcome.ok { "settings__log-outcome" } else { "settings__log-outcome settings__log-outcome--error" },
+                                        "{outcome.text}"
+                                    }
+                                }
+                                pre { class: "log",
+                                    for (i, line) in update_log.iter().enumerate() {
+                                        {
+                                            let (class, text) = match line {
+                                                CliLine::Stdout(s) => ("log__line", s),
+                                                CliLine::Stderr(s) => ("log__line log__line--stderr", s),
+                                            };
+                                            rsx! { span { key: "{i}", class: "{class}", "{text}\n" } }
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                     p { class: "settings__label", "Capability ceiling of every satz mcp this app starts" }
                     SegmentedButton {

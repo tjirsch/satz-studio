@@ -28,6 +28,15 @@ not in it.
   a settings file that does not parse is a full-screen refusal; a `schema_dir` without
   a schema is `SchemaStatus::Missing`; a file that changed on disk under an edit is
   refused, never merged; a JSON field satz removed fails the deserialisation.
+- **A refusal offers what can be done about it.** `SatzError::TooOld` carries the PATH of
+  the binary it refused, so the banner and Settings can run `satz self-update` on that very
+  binary — a too-old satz updating itself is the only way out of the refusal without
+  leaving the window. satz owns its updater (it checks GitHub, verifies the sha256 sidecar
+  and runs the installer), so the app runs the command and shows what it said rather than
+  fetching anything; it passes `--no-open-readme`, because a successful update otherwise
+  opens the documentation site in a browser, which is right on a terminal and wrong under a
+  window. The operator's own `self_update_frequency` is never written. The app does not
+  update ITSELF: that waits for code signing.
 - **Privacy.** The repository is public with its history: example values only, satz's
   gate on every commit. Transcripts live under the app's data directory, credentials in
   the OS keychain, nothing of either inside an estate.

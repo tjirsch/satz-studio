@@ -472,6 +472,42 @@
   font: var(--md-sys-typescale-title-medium);
 }
 
+/* The satz updater in Settings: a row of actions and the run's own log. `.log` itself
+   is shared with Create and Commands, so only the frame around it is here. */
+.settings__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.settings__log-card {
+  margin-top: 8px;
+  padding: 12px 16px 16px;
+  gap: 8px;
+  max-height: 320px;
+  overflow: auto;
+}
+
+.settings__log-title {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  user-select: text;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.settings__log-outcome {
+  margin: 4px 0 0;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.settings__log-outcome--error {
+  color: var(--md-sys-color-error);
+}
+
 .settings__label {
   font: var(--md-sys-typescale-body-small);
   color: var(--md-sys-color-on-surface-variant);
