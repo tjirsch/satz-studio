@@ -50,7 +50,8 @@ Two crates in one workspace, satz pinned once as the submodule `vendor/satz`
 | `src/schema.rs` | the provider schema as `satz update-schema` writes it, the types lifted from satz's `src/schema.rs`; `load_all` reads every `*.json` in `schema_dir` and is `SchemaError::Missing` for a directory that is absent or holds no resource type; `AttrType` decodes Terraform's type expression and prints it in Terraform's spelling | `ResourceRegistry`, `AttrType`, `BlockSchema`, `AttributeSchema`, `SchemaError` |
 | `src/model/` | the view model, built pure and rebuilt after every commit and reload: `outline.rs` classifies the blocks as satz's `EstateResolver` and `is_child` do, `params.rs` joins the `params { }` block with the questions, `packs.rs` derives the pack rows ([ADR 0007](adr/0007-pack-rows-are-derived-from-the-estate-file.md)), `value.rs` decodes a string as satz's lexer reads it | `EstateModel`, `ResourceNode`, `ResourceKind`, `AttrRow`, `ParamRow`, `PackRow`, `PackRowKind`, `LineState`, `Choice`, `SourceValue`, `StrPart`, `EditMode`, `SchemaStatus` |
 | `src/satz/binary.rs` | where satz is and which version: the Settings override, `PATH`, `~/.local/bin/satz`; the gate against `MIN_SATZ` | `SatzBinary`, `MIN_SATZ` |
-| `src/satz/cli.rs` | `satz --config <dir> <args…>` in the estate's directory, stdout and stderr streamed line by line and cancellable; `json_report` runs a reporting command with `--format json` and an `--out` of its own and types the file it wrote | `SatzCli`, `CliLine` |
+| `src/satz/cli.rs` | `satz --config <dir> <args…>` in the estate's directory, stdout and stderr streamed line by line and cancellable; `json_report` runs a reporting command with `--format json` and an `--out` of its own and types the file it wrote; `run_in` is the same streaming without a `--config`, in a working directory of its own, for the one command that runs before a `config.toml` exists | `SatzCli`, `CliLine` |
+| `src/satz/init.rs` | `satz init` as a typed thing: `InitOptions` renders the flags it was given to argv and passes nothing for a field left blank, so a blank field is the instruction to derive; `check_target` refuses a directory that is not there or already holds a `config.toml`; `created` reads what a finished run left, because `init` names the estate file after a customer id it may have derived and the name is not knowable in advance | `InitOptions`, `check_target`, `created` |
 | `src/satz/mcp.rs` | one `satz mcp` child per estate, spoken to with rmcp over stdio; every rmcp type stays inside this file | `McpSession`, `ToolInfo`, `ToolAnnotations`, `ToolOutcome` |
 | `src/satz/session.rs` | one session per open estate: the CLI runner, the MCP child, the write lock every writer takes, the identity from `satz_open`; `apply` and `bootstrap` as a one-shot script in the OS terminal | `EstateSession`, `session_root` |
 | `src/satz/reports.rs` | serde mirrors of what a reporting command writes with `--format json` and satz returns as `structuredContent`: unknown fields ignored, missing required fields fail; the questions report round-trips a recorded output of the pinned satz. `Finding` is satz's own list of what the compile found after the front end — a `CompileSummary` carries the warnings and notes it did not refuse on, a `Refusal` the ones it did; `kind` is the kebab-case word satz writes, kept as a `String` so a kind satz adds is carried instead of failing the result | `QuestionsReport`, `QuestionRow`, `InterviewArgs`, `InterviewReport`, `OpenReport`, `EstatesReport`, `CompileSummary`, `Finding`, `FindingSeverity`, `Refusal` |
@@ -90,8 +91,9 @@ fields are listed in `docs/ui.md`. Every side effect runs in one of two coroutin
 the stores are written from there only:
 
 - **the app coroutine** (`src/state/app_actions.rs`, `AppAction`): `LocateSatz`,
-  `Discover`, `OpenEstate`, `CloseEstate`, `SaveSettings`, `ResolveCredential`,
-  `StoreKey`; it locates satz at startup and walks `last_root`;
+  `Discover`, `OpenEstate`, `CloseEstate`, `CreateEstate`, `CancelCreate`,
+  `SaveSettings`, `ResolveCredential`, `StoreKey`; it locates satz at startup and walks
+  `last_root`;
 - **one coroutine per open estate** (`src/state/estate_actions.rs`, `EstateAction`),
   started by `EstateHost` in `src/shell/mod.rs` with the `Arc<EstateSession>` and
   living as long as the estate is open: `Reload`, `RunCommand`, `CancelCommand`,
@@ -108,16 +110,45 @@ the palette would have to hold the session's write lock and reload the model.
 
 The shell (`src/shell/`) is the navigation rail with its badges, the top bar with the
 `runs_as`, deployment-mode, schema and satz-version chips, the `SatzBanner` while satz
-is missing or too old, the diagnostics drawer and the snackbar host. The views that
-exist (`src/views/`) are Estates, Settings, Commands (`PALETTE`, fourteen commands with
-typed arguments, `apply` and `bootstrap` marked `external` and offered as a command
-line to copy or open in the terminal, `SESSION_TOOLS` as one click each) and Gallery;
-Interview, Params, Map, Resources and Chat render `NotBuilt` — U8 builds the estate
-views, U9 the chat.
+is missing or too old, the diagnostics drawer and the snackbar host.
+
+Estates is the way in, and the only one: a row of doors (`state::Door`) over the pane
+the chosen door opens. **Create** (`src/views/create.rs`) is the `satz init` form and
+its run log; **Open** (`src/views/estates.rs`) is the folder walk and its estate cards.
+A door is one `Door` variant, one card in the row and one arm of the view's `match`, so
+another way in joins by being added in those three places. The remaining views are
+Interview, Params, Map, Resources, Commands, Chat, Settings and Gallery.
 
 ## 4. Runtime views
 
-### 4a. Opening an estate
+### 4a. Creating and opening an estate
+
+An estate is created once and opened every time after that. Both end in the same place:
+an `EstateSession` on one `.satz` file.
+
+**Create** is `satz init` in a folder that holds no estate yet. The Create form builds
+an `InitOptions`, `check_target` refuses a folder that is not there or already carries a
+`config.toml`, and `SatzCli::run_in(bin, dir, argv, …)` runs the command with the folder
+as its working directory and **no `--config`** — `init` is what writes `config.toml`, so
+there is no file for a `--config` to name, and satz refuses `--config <dir>` for a
+directory without one. The lines stream into `AppStore.create` the way a command's stream into the estate's log.
+
+`init` is live and credentialed: what the form did not state it derives from the
+Application Default Credentials — the customer's domain and first administrator from the
+ADC identity, the directory id and organisation id from an `organizations:search`, the
+billing account from `billingAccounts.list` — and prints where each value came from.
+Those values are the customer's. They are written into the estate satz creates, shown in
+the run log while the window holds it, and put nowhere else: not in `Settings`, not in a
+transcript, not in a file of the app's own.
+
+When the run ends, `init::created(dir)` READS what it left — `EstateDir::open` plus
+`estates()` over the folder. The estate's name is never predicted: `init` names the file
+after the customer id, which it may have derived. Exactly one estate is opened as below.
+None is the honest answer that `init` had no customer id, stated or derivable, and wrote
+the directories and the config without an estate file; the run log carries what satz
+said and the folder is left as satz left it.
+
+**Open** is the folder walk:
 
 1. The Estates view walks a folder with `EstateDir::discover`; each `config.toml` is
    opened and its estates listed with their `deployment_mode`, on a blocking thread.

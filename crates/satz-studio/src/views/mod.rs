@@ -4,6 +4,7 @@
 
 pub mod chat;
 pub mod commands;
+pub mod create;
 pub mod estates;
 pub mod gallery;
 pub mod interview;

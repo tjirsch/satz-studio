@@ -24,8 +24,8 @@ use satz_studio_core::satz::{CliLine, EstateSession, SatzBinary};
 use satz_studio_core::settings::Settings;
 
 pub use ansi::strip_ansi;
-pub use app_actions::{AppAction, app_coroutine, save_settings};
-pub use estate_actions::{EstateAction, command_line, estate_coroutine, reports_dir};
+pub use app_actions::{AppAction, app_coroutine, create_command_line, save_settings};
+pub use estate_actions::{EstateAction, command_line, estate_coroutine, quote, reports_dir};
 pub use toast::{Toast, ToastKind, dismiss, enqueue};
 
 /// Where the satz binary stands, as the app coroutine found it at startup and after
@@ -122,6 +122,48 @@ impl View {
     }
 }
 
+/// The ways an estate reaches the app: the doors of the Estates view. Each is one card
+/// in its door row and one pane below it, so a door that joins later — the import of an
+/// estate that exists in another form — is a variant, a card and a pane, and no
+/// redesign.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Door {
+    /// `satz init` in a folder that holds no estate yet
+    Create,
+    /// a folder walked for the estates already in it
+    #[default]
+    Open,
+}
+
+impl Door {
+    pub const ALL: [Door; 2] = [Door::Create, Door::Open];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Door::Create => "Create",
+            Door::Open => "Open",
+        }
+    }
+
+    /// The Material Symbols ligature of the door.
+    pub fn icon(self) -> &'static str {
+        match self {
+            Door::Create => "add_home",
+            Door::Open => "folder_open",
+        }
+    }
+
+    /// The line under the door's name: what comes through it.
+    pub fn supporting(self) -> &'static str {
+        match self {
+            Door::Create => {
+                "A new estate, made by satz init: the config, the directories and the estate file, with what your credentials answer already in it."
+            }
+            Door::Open => "An estate that is already on disk: choose the folder that holds it.",
+        }
+    }
+}
+
 /// One `.satz` estate file found beside a `config.toml`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct EstateFile {
@@ -208,6 +250,25 @@ pub struct CommandOutcome {
     pub text: String,
 }
 
+/// One `satz init` run behind the Create door, reset when a run starts.
+///
+/// `init` derives a customer's organisation id, billing account and administrator
+/// address from the credentials and prints where each came from. Those lines are held
+/// here, in memory, for as long as the window shows them; they are written into the
+/// estate satz created and nowhere else — not into `Settings`, not into a transcript,
+/// not into a file of this app's own.
+#[derive(Store, Default)]
+pub struct CreateStore {
+    /// the streamed output of the run, ANSI stripped
+    pub log: Vec<CliLine>,
+    /// a run is in progress: Create is disabled, Cancel is enabled
+    pub running: bool,
+    /// the command line of the running or last run, for the log header
+    pub command: Option<String>,
+    /// how the last run ended
+    pub outcome: Option<CommandOutcome>,
+}
+
 #[derive(Store)]
 pub struct AppStore {
     pub settings: Settings,
@@ -221,10 +282,14 @@ pub struct AppStore {
     /// the estate file a session is being opened on
     pub opening: Option<PathBuf>,
     pub nav: View,
+    /// the door of the Estates view the pane below the row belongs to
+    pub door: Door,
     pub snackbar: VecDeque<Toast>,
     pub credential: CredentialStatus,
     pub drawer_open: bool,
     pub estate: EstateStore,
+    /// the `satz init` run behind the Create door
+    pub create: CreateStore,
 }
 
 impl AppStore {
@@ -239,10 +304,12 @@ impl AppStore {
             open: None,
             opening: None,
             nav: View::Estates,
+            door: Door::default(),
             snackbar: VecDeque::new(),
             credential: CredentialStatus::Unknown,
             drawer_open: false,
             estate: EstateStore::default(),
+            create: CreateStore::default(),
         }
     }
 }

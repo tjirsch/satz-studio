@@ -1,5 +1,10 @@
-//! The Estates view: choose a folder, see every `config.toml` under it with the
-//! estates beside each, and open one.
+//! The Estates view: the way into an estate, and the only one.
+//!
+//! It is a row of doors over the pane the chosen door opens. **Create** runs `satz init`
+//! in a folder that holds no estate yet ([`crate::views::create`]); **Open** is a folder
+//! walked for every `config.toml` under it, with the estates beside each. A door is one
+//! [`Door`] variant, one card in the row and one pane below it, so a third — Import —
+//! joins by being added in those three places.
 
 use std::path::PathBuf;
 
@@ -10,11 +15,14 @@ use crate::components::{
     LinearProgress, TextField,
 };
 use crate::state::{
-    AppAction, AppStore, AppStoreStoreExt, EstateFile, EstateSummary, ToastKind, View, toast,
+    AppAction, AppStore, AppStoreStoreExt, Door, EstateFile, EstateSummary, ToastKind, View, toast,
 };
+use crate::views::create::CreateEstate;
 
-/// Open the OS folder picker; a choice becomes [`AppAction::Discover`].
-pub fn pick_root(handle: Coroutine<AppAction>) {
+/// Open the OS folder picker; a choice becomes [`AppAction::Discover`]. The rail's FAB
+/// calls this too, so it puts the view on the Open door: that is the door it opens.
+pub fn pick_root(app: Store<AppStore>, handle: Coroutine<AppAction>) {
+    app.door().set(Door::Open);
     spawn(async move {
         if let Some(folder) = rfd::AsyncFileDialog::new()
             .set_title("Choose the folder that holds your estates")
@@ -28,6 +36,45 @@ pub fn pick_root(handle: Coroutine<AppAction>) {
 
 #[component]
 pub fn EstatesView() -> Element {
+    let app = use_context::<Store<AppStore>>();
+    let door = app.door().cloned();
+    rsx! {
+        div { class: "view estates",
+            h1 { class: "view__title", "Estates" }
+            div { class: "doors",
+                for d in Door::ALL {
+                    DoorCard { key: "{d.label()}", door: d, selected: d == door }
+                }
+            }
+            match door {
+                Door::Create => rsx! { CreateEstate {} },
+                Door::Open => rsx! { OpenPane {} },
+            }
+        }
+    }
+}
+
+/// One door of the row: a clickable card naming what comes through it.
+#[component]
+fn DoorCard(door: Door, selected: bool) -> Element {
+    let app = use_context::<Store<AppStore>>();
+    rsx! {
+        Card {
+            variant: if selected { CardVariant::Filled } else { CardVariant::Outlined },
+            class: if selected { "door door--selected" } else { "door" },
+            onclick: move |_| app.door().set(door),
+            Icon { name: door.icon().to_string(), size: 28, class: "door__icon" }
+            div { class: "door__text",
+                h2 { class: "door__title", "{door.label()}" }
+                p { class: "door__supporting", "{door.supporting()}" }
+            }
+        }
+    }
+}
+
+/// The Open door: a folder, every `config.toml` under it, and the estates beside each.
+#[component]
+fn OpenPane() -> Element {
     let app = use_context::<Store<AppStore>>();
     let handle = use_coroutine_handle::<AppAction>();
     let root = app.root().cloned();
@@ -48,8 +95,7 @@ pub fn EstatesView() -> Element {
     };
 
     rsx! {
-        div { class: "view estates",
-            h1 { class: "view__title", "Estates" }
+        div { class: "estates__open",
             div { class: "estates__toolbar",
                 TextField {
                     label: "Folder",
@@ -60,7 +106,7 @@ pub fn EstatesView() -> Element {
                     oninput: move |v| typed.set(v),
                     onenter: move |_| rescan(),
                 }
-                Button { icon: "folder_open", variant: ButtonVariant::Filled, onclick: move |_| pick_root(handle), "Choose folder" }
+                Button { icon: "folder_open", variant: ButtonVariant::Filled, onclick: move |_| pick_root(app, handle), "Choose folder" }
                 Button { icon: "refresh", variant: ButtonVariant::Tonal, disabled: discovering, onclick: move |_| rescan(), "Rescan" }
             }
             if discovering {

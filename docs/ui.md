@@ -36,9 +36,11 @@ so a log line re-renders the log and not the rail:
 | `root`, `estates`, `discovering` | the folder the Estates view walks and every `config.toml` under it with the estates beside each |
 | `open`, `opening` | the `OpenEstate` (its `Arc<EstateSession>`, main file, `runs_as`, deployment mode) and the estate a session is being opened on |
 | `nav` | the `View` the rail shows |
+| `door` | the `Door` of the Estates view the pane below its door row belongs to: `Create` or `Open` |
 | `snackbar` | the toast queue (`VecDeque<Toast>`, three visible) |
 | `credential` | what `Credential::resolve` answered |
 | `drawer_open` | the diagnostics drawer |
+| `create` | the `CreateStore`: the one `satz init` run behind the Create door — `log`, `running`, `command`, `outcome`, reset when a run starts. What `init` derives from the credentials is in these lines while the window shows them and in the estate satz wrote; it reaches no file of the app's own |
 | `estate` | the `EstateStore`: `model`, `cst` (the main file's document tree as read at the last reload — the views slice a value's source text and a line's text from it), `questions`, `interview` (what the last `satz_interview` call returned; `rename_to` is read from it), `diagnostics`, `command_log`, `running`, `last_command`, `outcome`, `loading` — reset when an estate opens or closes |
 
 `DiagnosticSelection(Signal<Option<Diagnostic>>)` is a second context: the drawer sets
@@ -54,8 +56,13 @@ nothing blocks in an event handler.
   one, and then serves `LocateSatz`, `Discover(folder)` (the walk, the config parse and
   each estate's `deployment_mode` on a blocking thread; the folder becomes
   `Settings.last_root`), `OpenEstate { config, estate }` (`EstateSession::open` with the
-  Settings ceiling), `CloseEstate`, `SaveSettings` (the file, then satz again),
-  `ResolveCredential` and `StoreKey`. `save_settings` is the one saver: the Chat view's
+  Settings ceiling), `CloseEstate`, `CreateEstate { dir, options }`, `CancelCreate`,
+  `SaveSettings` (the file, then satz again), `ResolveCredential` and `StoreKey`.
+  `CreateEstate` checks the target, runs `satz init` in it through `SatzCli::run_in`
+  from a task so the loop stays free for `CancelCreate`, streams the lines into
+  `create.log`, and then reads what the run left with `init::created`: one estate is
+  opened, none is the outcome saying `init` had no customer id to name a file after, and
+  a non-zero exit carries satz's own last line rather than a status number. `save_settings` is the one saver: the Chat view's
   "Use Claude Code" awaits it directly rather than writing the file itself, and builds
   its engine again only when the save returned.
 - **The estate coroutine** (`src/state/estate_actions.rs`, `EstateAction`) is started by
@@ -105,7 +112,8 @@ the drawer or an outcome under the log.
 
 | view | file | what it does |
 |---|---|---|
-| Estates | `src/views/estates.rs` | the folder (typed, or picked with the OS dialog), one card per `config.toml` with its estates, each with its deployment mode and an Open button; the open estate is marked and can be closed |
+| Estates | `src/views/estates.rs` | the way in: a row of door cards (`state::Door`) over the pane the chosen door opens. **Open** is the folder (typed, or picked with the OS dialog), one card per `config.toml` with its estates, each with its deployment mode and an Open button; the open estate is marked and can be closed. The rail's FAB picks a folder and puts the view on this door |
+| Create | `src/views/create.rs` | the **Create** door: the folder the new estate goes in, picked or typed, refused while it is not there or already holds a `config.toml`; the fields satz cannot derive (customer shortname, default region, the Terraform tool as a segmented button, the Google provider set as a switch, extra providers as a chip list); the customer id and the billing account as overrides, empty by default and each saying which live call answers it when it is left blank; the command line as it will run; Create and Cancel; and the run log with stdout and stderr distinguished, a line saying what satz derives is printed there and kept nowhere else, and the outcome chip — satz's own last line when the run refused |
 | Commands | `src/views/commands.rs` | the palette (`PALETTE`): `transpile --check`, `transpile`, `questions`, `check-presets`, `update-prerequisites`, `update-schema`, `hcl-init`, `plan`, `require`, `report-compliance`, `get-presets`, `merge-presets`, and `apply` and `bootstrap` as command lines to copy or open in the terminal; each with its argument fields — a reporting command's format as a segmented button — the command line as it will run, Run and Cancel, the streamed log with stdout and stderr distinguished, followed by the file a reporting command wrote where the app named it, and the session tools `satz_whoami`, `satz_transpile_check`, `satz_questions` as one click each |
 | Settings | `src/views/settings.rs` | every `Settings` field as a form: the satz path with the detected version, the MCP ceiling, auto-approve, the provider with base URL and model for the non-Claude ones, the Claude model, effort, fallbacks, transcripts, theme; Save writes the file and locates satz again; the credential card shows where the Claude credential comes from, whether that engine is the one in use, and stores a key in the keychain; the Claude Code card shows the binary, the account and which engine is in use, with "Use this engine", "Sign in" and "Sign out" |
 | Gallery | `src/views/gallery.rs` | every component in its variants, light and dark side by side |
@@ -190,6 +198,7 @@ works offline.
 | `Tree`, `TreeItem` | `.m-tree` | — (not a Material 3 component) | a nested list with a disclosure per branch, styled with list-item tokens; a `trailing` slot at the row's end |
 | `ChipList` | `.chip-list` (in `views.css`) | — (input chips over a text field) | the values of a list as removable input chips, a field that adds one on Enter or blur, several with commas |
 | `TypedField` | — | — (composes `Switch`, `TextField`, `ChipList`) | one field in the shape satz reads a value in (`FieldKind`: bool, number, list, text) over a `Draft`; a brace in a text and a non-number in a number field are refused under the field with satz's sentence, and `oncommit` fires only for a draft without a problem |
+| door card | `.door` (in `views.css`) | <https://m3.material.io/components/cards/specs> | a `Card` with `onclick` carrying an icon, a title and a supporting line; the chosen door is the filled variant on the primary container. One per `Door`, in the Estates view |
 | `SourceChips` | `.source-chips` (in `views.css`) | — (assist chips over literal text) | a value as satz reads it: a `{param}` chip with what it resolves to, a `${…}` reference chip, the literal text between |
 | `Badge` | `.m-badge` | <https://m3.material.io/components/badges/specs> | — |
 | `LinearProgress`, `CircularProgress` | `.m-linear-progress`, `.m-circular-progress` | <https://m3.material.io/components/progress-indicators/specs> | the linear indicator has the Expressive stop indicator; the wavy Expressive variant is not drawn |
@@ -203,12 +212,13 @@ No Material Web Components and no other library are used: the components are Dio
 components over these classes. The Gallery view is the checklist: every Material
 component above in every variant, in the light and the dark scheme side by side; the
 three composites (`ChipList`, `TypedField`, `SourceChips`) are seen in the estate views
-and their classes live in `views.css`, so `components.css` stays the Material anatomies
-alone.
+and the door card in Estates, and their classes live in `views.css`, so
+`components.css` stays the Material anatomies alone.
 
 ### Shell
 
-- **Navigation rail:** the "Open estate" FAB in the FAB slot; one destination per view
+- **Navigation rail:** the "Open estate" FAB in the FAB slot, which puts the Estates
+  view on its Open door and opens the folder picker; one destination per view
   — Estates `home_storage`, Interview `quiz`, Params `tune`, Map `map`, Resources
   `account_tree`, Commands `terminal`, Chat `chat`, Settings `settings`, Gallery
   `palette`. While an estate is open, Interview carries the count of unanswered
