@@ -39,7 +39,7 @@ recognises the other.
 | | decision | status |
 |---|---|---|
 | [0001](0001-dioxus-desktop-on-the-webview-renderer.md) | Dioxus 0.7 desktop on the webview renderer | accepted |
-| [0002](0002-a-separate-repository-with-satz-pinned-once.md) | a separate repository, with satz pinned once as a submodule and the binary required at a minimum version | accepted |
+| [0002](0002-a-separate-repository-with-satz-pinned-once.md) | a separate repository, with satz pinned once as a submodule and the binary required at a minimum version | accepted; the minimum's rule superseded by 0014 |
 | [0003](0003-the-document-layer-is-the-tree-sitter-grammar.md) | the document layer is the tree-sitter grammar of Satz, vendored and compiled in; satz-core stays the authority on meaning | accepted |
 | [0004](0004-claude-natively-other-providers-adapt-into-its-message-model.md) | Claude natively: the Messages API wire types are the app's message model, and other providers adapt into it | accepted |
 | [0005](0005-tool-approval-by-mcp-annotation-and-the-capability-ceiling.md) | tool approval by the MCP annotations satz declares; the capability ceiling stays satz's | accepted |
@@ -51,3 +51,4 @@ recognises the other.
 | [0011](0011-the-licence-is-apache-2-0.md) | the licence is Apache 2.0: the express patent grant, contribution terms in §5, and a `NOTICE` for the material bundled under other licences | accepted |
 | [0012](0012-migrate-hands-off-to-the-terminal.md) | `migrate` hands off to the terminal with `apply` and `bootstrap`; `bootstrap --dry-run` is a check that runs in the app | accepted |
 | [0013](0013-the-claude-code-stream-log-is-verbatim-off-by-default-and-bounded.md) | the Claude Code stream log is verbatim, off by default, one file per conversation, and bounded | accepted |
+| [0014](0014-a-newer-satz-is-a-notice-and-the-app-looks-for-releases.md) | a satz newer than the build runs and is a notice, not a gate; `MIN_SATZ` is the oldest satz the build works with and rises only for a breakage or a use; the app looks for releases of itself and of satz once per launch and says so in the title and the top bar | accepted |

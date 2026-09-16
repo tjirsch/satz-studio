@@ -3,6 +3,8 @@
 
 use std::time::Duration;
 
+#[cfg(unix)]
+use satz_studio_core::satz::Ahead;
 use satz_studio_core::satz::{MIN_SATZ, SatzBinary, SatzError};
 
 // the fake binaries are a unix fixture, and so are the tests that use them
@@ -44,6 +46,41 @@ async fn an_old_fake_is_refused_as_too_old() {
         }
         other => panic!("expected TooOld, got {other:?}"),
     }
+}
+
+/// A fake satz at `version`, located the way the app locates the binary Settings name.
+#[cfg(unix)]
+async fn located_at(version: &semver::Version) -> Result<SatzBinary, SatzError> {
+    let tmp = tempfile::tempdir().unwrap();
+    let path = fake(tmp.path(), &format!("echo 'satz {version}'"));
+    tokio::time::timeout(TIME_BOX, SatzBinary::locate(Some(&path)))
+        .await
+        .unwrap()
+}
+
+/// The driver is permissive upward: a satz newer than the build's is located, not refused,
+/// and says by which kind of release it is newer; the app runs it and tells the operator.
+/// CI installs the NEWEST satz release on purpose, so every test that locates the real
+/// binary sees a newer satz on the day after a satz release — which is why nothing refuses
+/// it. The versions are derived from the vendored satz so the test holds across pin moves.
+#[cfg(unix)]
+#[tokio::test]
+async fn a_fake_at_the_pin_or_newer_is_located_and_says_how_far_ahead_it_is() {
+    let built = SatzBinary::built_against();
+
+    let pinned = located_at(&built).await.unwrap();
+    assert_eq!(pinned.version, built);
+    assert_eq!(pinned.ahead_of_build(), None);
+
+    let patch = semver::Version::new(built.major, built.minor, built.patch + 1);
+    let newer_patch = located_at(&patch).await.unwrap();
+    assert_eq!(newer_patch.version, patch);
+    assert_eq!(newer_patch.ahead_of_build(), Some(Ahead::Patch));
+
+    let minor = semver::Version::new(built.major, built.minor + 1, 0);
+    let newer_minor = located_at(&minor).await.unwrap();
+    assert_eq!(newer_minor.version, minor);
+    assert_eq!(newer_minor.ahead_of_build(), Some(Ahead::Minor));
 }
 
 #[cfg(unix)]

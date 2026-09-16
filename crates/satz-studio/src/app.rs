@@ -1,11 +1,15 @@
 //! The root component: the stores, the app coroutine, the stylesheets and the font,
-//! the theme attribute on the document root, and the shell around the current view.
+//! the theme attribute on the document root, the window's title, and the shell around the
+//! current view.
 
 use dioxus::prelude::*;
 use satz_studio_core::settings::{Settings, Theme, settings_path};
 
 use crate::shell::Shell;
-use crate::state::{AppStore, AppStoreStoreExt, DiagnosticSelection, app_coroutine};
+use crate::state::{
+    AppStore, AppStoreStoreExt, DiagnosticSelection, StudioLookStoreStoreExt, UpdateStoreStoreExt,
+    app_coroutine, satz_available, studio_available, window_title,
+};
 
 const TOKENS: Asset = asset!("/assets/css/tokens.css");
 const BASE: Asset = asset!("/assets/css/base.css");
@@ -66,6 +70,20 @@ fn Studio(settings: Settings) -> Element {
                 }
             }
         });
+    });
+
+    // The window's title is the app and its version, then what the launch looks found
+    // available — the title bar is the one place outside the page an operator sees it.
+    use_effect(move || {
+        let look = app.studio_look().outcome().cloned();
+        let found = app.update().found().cloned();
+        let satz = app.satz().cloned();
+        let studio = studio_available(look.as_ref()).map(|(v, _)| v.clone());
+        let satz_update = satz
+            .binary()
+            .and_then(|b| satz_available(found.as_ref(), Some(&b.version)))
+            .cloned();
+        dioxus::desktop::window().set_title(&window_title(studio.as_ref(), satz_update.as_ref()));
     });
 
     // The theme lives on the document root so `body` and every portal see the same tokens.

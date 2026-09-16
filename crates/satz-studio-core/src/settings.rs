@@ -13,6 +13,10 @@ use crate::satz::Allow;
 pub struct Settings {
     /// an explicit path to the satz binary; otherwise `PATH`, then `~/.local/bin/satz`
     pub satz_binary: Option<PathBuf>,
+    /// the satz release newer than the one this build is tested against whose notice the
+    /// operator dismissed, as `satz --version` names it; the notice comes back for any other
+    /// newer release. It permits and refuses nothing: a newer satz runs either way
+    pub dismissed_satz: Option<String>,
     /// an explicit path to the Claude Code binary; otherwise `PATH`, then
     /// `~/.local/bin/claude`. Read only when the provider is Claude Code.
     pub claude_code_binary: Option<PathBuf>,
@@ -39,6 +43,7 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             satz_binary: None,
+            dismissed_satz: None,
             claude_code_binary: None,
             claude_code_log: false,
             mcp_allow: Allow::ReadWrite,

@@ -51,13 +51,13 @@ change and its documentation together — a change to what the app does updates
    has an empty `vendor/satz` and does not build; `git submodule update --init`
    fills it.
 3. **The `satz` binary**, at `MIN_SATZ` or newer (`pub const MIN_SATZ` in
-   `crates/satz-studio-core/src/satz/binary.rs`, the version the submodule is pinned
-   to). `bash scripts/install-satz.sh` installs the newest satz release, verified
-   against its SHA-256 sidecar and held to that floor, into `~/.local/bin`. An older
-   binary is refused at startup and by the tests that drive it. satz has no Windows
-   release: there, build it from the submodule with
-   `cargo build --release --manifest-path vendor/satz/Cargo.toml` and put
-   `vendor/satz/target/release` on `PATH`.
+   `crates/satz-studio-core/src/satz/binary.rs`, the oldest satz the app works with,
+   at or below the version the submodule is pinned to). `bash scripts/install-satz.sh`
+   installs the newest satz release, verified against its SHA-256 sidecar and held to
+   that floor, into `~/.local/bin`. An older binary is refused at startup and by the
+   tests that drive it. satz has no Windows release: there, build it from the
+   submodule with `cargo build --release --manifest-path vendor/satz/Cargo.toml` and
+   put `vendor/satz/target/release` on `PATH`.
 4. **dioxus-cli 0.7.10**, for running and bundling the app:
    `cargo install dioxus-cli@0.7.10` or `cargo binstall dioxus-cli@0.7.10`. Then
    `dx serve --package satz-studio` runs the app with hot reload and

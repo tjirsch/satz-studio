@@ -8,6 +8,8 @@
 mod ansi;
 mod app_actions;
 mod estate_actions;
+mod install;
+mod pace;
 mod toast;
 
 use std::collections::VecDeque;
@@ -19,19 +21,30 @@ use satz_studio_core::cst::Cst;
 use satz_studio_core::diag::Diagnostic;
 use satz_studio_core::estate::HclState;
 use satz_studio_core::git::WorkTree;
+use satz_studio_core::github::StudioUpdate;
 use satz_studio_core::llm::CredentialSource;
 use satz_studio_core::model::EstateModel;
 use satz_studio_core::satz::reports::{InterviewReport, QuestionsReport};
+use satz_studio_core::satz::self_update::SatzRelease;
 use satz_studio_core::satz::{CliLine, EstateSession, ImportReport, SatzBinary};
 use satz_studio_core::settings::Settings;
 
 pub use ansi::strip_ansi;
 pub use app_actions::{AppAction, app_coroutine, run_line, save_settings};
 pub use estate_actions::{EstateAction, command_line, estate_coroutine, quote, reports_dir};
+pub use pace::{
+    STUDIO_VERSION, ahead_sentence, install_offer, newer_satz_sentence, satz_available,
+    satz_notice, satz_release_sentence, studio_available, studio_look_sentence, window_title,
+};
 pub use toast::{Toast, ToastKind, dismiss, enqueue};
 
 /// Where the satz binary stands, as the app coroutine found it at startup and after
 /// every settings save.
+///
+/// `binary()` answers for [`SatzStatus::Located`] alone, and every way an estate is
+/// opened, created, imported or chatted with asks it first. A satz NEWER than the build is
+/// `Located` too: the app copes with it and [`satz_notice`] tells the operator, and the one
+/// version it refuses is an older one (ADR 0014).
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum SatzStatus {
     #[default]
@@ -43,7 +56,10 @@ pub enum SatzStatus {
         found: String,
         required: String,
     },
+    /// no satz anywhere the search looks
     Missing(String),
+    /// a satz that exists and does not run, or prints no version
+    Unusable(String),
 }
 
 impl SatzStatus {
@@ -61,7 +77,7 @@ impl SatzStatus {
         match self {
             SatzStatus::Located(b) => Some(&b.path),
             SatzStatus::TooOld { path, .. } => Some(path),
-            SatzStatus::Unknown | SatzStatus::Missing(_) => None,
+            SatzStatus::Unknown | SatzStatus::Missing(_) | SatzStatus::Unusable(_) => None,
         }
     }
 }
@@ -367,6 +383,38 @@ pub struct UpdateStore {
     pub command: Option<String>,
     /// how the last run ended
     pub outcome: Option<CommandOutcome>,
+    /// what the last `--check-only` run found — the one the app runs once at launch, or one
+    /// the operator asked for — kept for the session and cleared when an update installs
+    pub found: Option<Result<SatzRelease, String>>,
+    /// why no check ran at launch, when none did: the operator's satz config says
+    /// `self_update_frequency = "never"`, or could not be read
+    pub not_checked: Option<String>,
+}
+
+/// The look for a newer satz-studio: once at launch, and again when asked. A look reads
+/// the latest release on GitHub and compares it with this build; it downloads nothing,
+/// runs nothing and writes nothing, and its result is kept for the session.
+#[derive(Store, Default)]
+pub struct StudioLookStore {
+    /// a look is in flight
+    pub looking: bool,
+    /// what the last look found, or why it failed, as the sentence to show
+    pub outcome: Option<Result<StudioUpdate, String>>,
+}
+
+/// The run of satz's own installer, offered while no satz is found. Same shape as
+/// [`UpdateStore`]: one streamed run with an outcome — here preceded by the download and
+/// the check against the SHA-256 sidecar, whose lines lead the log.
+#[derive(Store, Default)]
+pub struct InstallStore {
+    /// the streamed output of the run, ANSI stripped
+    pub log: Vec<CliLine>,
+    /// a run is in progress
+    pub running: bool,
+    /// what is being run, for the log header
+    pub command: Option<String>,
+    /// how the last run ended
+    pub outcome: Option<CommandOutcome>,
 }
 
 #[derive(Store)]
@@ -394,8 +442,13 @@ pub struct AppStore {
     pub create: CreateStore,
     /// the `satz import` run behind the Import door
     pub import: ImportStore,
-    /// the `satz self-update` run offered by the banner and by Settings
+    /// the `satz self-update` run offered by the banner, the top bar and Settings, and the
+    /// `--check-only` run the app makes once at launch
     pub update: UpdateStore,
+    /// the look for a newer satz-studio: once at launch, again from Settings
+    pub studio_look: StudioLookStore,
+    /// satz's installer, offered by the banner and by Settings while no satz is found
+    pub install: InstallStore,
 }
 
 impl AppStore {
@@ -419,6 +472,8 @@ impl AppStore {
             create: CreateStore::default(),
             import: ImportStore::default(),
             update: UpdateStore::default(),
+            studio_look: StudioLookStore::default(),
+            install: InstallStore::default(),
         }
     }
 }

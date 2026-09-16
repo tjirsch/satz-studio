@@ -35,8 +35,43 @@ not in it.
   and runs the installer), so the app runs the command and shows what it said rather than
   fetching anything; it passes `--no-open-readme`, because a successful update otherwise
   opens the documentation site in a browser, which is right on a terminal and wrong under a
-  window. The operator's own `self_update_frequency` is never written. The app does not
-  update ITSELF: that waits for code signing.
+  window. The operator's own `self_update_frequency` is never written. With no satz at all,
+  the banner and Settings run satz's own installer (`satz::install`, below). The app does
+  not update ITSELF: that waits for code signing. It looks for a newer satz-studio release
+  and offers its page.
+- **The app copes with a newer satz and tells the operator**
+  ([ADR 0014](adr/0014-a-newer-satz-is-a-notice-and-the-app-looks-for-releases.md)).
+  `MIN_SATZ` is the oldest satz this build works with, and a satz below it is the one
+  run-time refusal. `SatzBinary::built_against()` is the satz the build is built and tested
+  against — the version of the submodule, read from its manifest as the crate compiles —
+  and `ahead_of_build()` says whether a located satz is past it by a patch or by a minor,
+  satz's own reading of a release (satz ADR 0010, `vendor/satz/docs/adr/`): a minor is one
+  after which an estate may need edits, be refused, or plan differently. A newer satz is
+  `SatzStatus::Located` and every estate opens; the banner states the gap until the
+  operator dismisses it for that version (`Settings.dismissed_satz`). Nothing refuses a
+  newer satz, because CI installs the NEWEST satz release on purpose: on the day after a
+  satz release every test that locates the real binary sees a newer satz, and a red run
+  then is the alarm answered with a satz-studio patch release.
+- **`MIN_SATZ` rises for a reason, not with the pin.** It may sit below the submodule's
+  satz; `min_satz_is_not_newer_than_the_submodule` holds it at or below. It rises only
+  when (1) a satz release breaks the app, which a satz-studio patch release answers the
+  same day, or (2) the app starts using something a later satz introduced — a flag, a
+  tool, a report field — whose tests are what make that version the requirement. A routine
+  pin bump moves the submodule and the recorded reports and leaves `MIN_SATZ` alone:
+  raising it with every bump would refuse a satz the app still works with and send the
+  operator to update for nothing. The accepted cost is that the minimum is not run against
+  itself: satz keeps only its five newest releases, so CI cannot install the minimum to test
+  it, and the minimum rests on (1) and (2) rather than on a run against that exact
+  version.
+- **The app looks for releases on its own, once per launch** — never on a timer, the
+  result kept for the session. It reads the latest satz-studio release from GitHub
+  (`github::look_for_studio_update`) and runs `satz self-update --check-only` on the satz
+  in use, because satz owns its updater. The satz check is skipped when the operator's satz
+  config (`~/.config/satz/satz.toml`) says `self_update_frequency = "never"`: satz may not
+  look unprompted, and the app does not look on its behalf. The window title carries the
+  app's version and "update available" for either release; the top bar carries the same
+  as chips that act — the satz-studio chip opens the release page, the satz chip runs
+  `satz self-update`. A look that fails says why in Settings and raises no toast.
 - **Privacy.** The repository is public with its history: example values only, satz's
   gate on every commit. Transcripts live under the app's data directory, credentials in
   the OS keychain, nothing of either inside an estate.
@@ -59,8 +94,10 @@ Two crates in one workspace, satz pinned once as the submodule `vendor/satz`
 | `src/schema.rs` | the provider schema as `satz update-schema` writes it, the types lifted from satz's `src/schema.rs`; `load_all` reads every `*.json` in `schema_dir` and is `SchemaError::Missing` for a directory that is absent or holds no resource type; `AttrType` decodes Terraform's type expression and prints it in Terraform's spelling | `ResourceRegistry`, `AttrType`, `BlockSchema`, `AttributeSchema`, `SchemaError` |
 | `src/model/` | the view model, built pure and rebuilt after every commit and reload: `outline.rs` classifies the blocks as satz's `EstateResolver` and `is_child` do, `params.rs` joins the `params { }` block with the questions and holds `answer_kind`, the shape an interview answer is typed in, `packs.rs` derives the pack rows ([ADR 0007](adr/0007-pack-rows-are-derived-from-the-estate-file.md)), `value.rs` decodes a string as satz's lexer reads it, and `hcl_blocks` reads the file's `hcl` statements with whether each carries a `trust` reason | `EstateModel`, `ResourceNode`, `ResourceKind`, `AttrRow`, `ParamRow`, `ParamKind`, `PackRow`, `PackRowKind`, `LineState`, `Choice`, `SourceValue`, `StrPart`, `EditMode`, `HclBlock`, `SchemaStatus`, `answer_kind` |
 | `src/git.rs` | what `satz merge-presets` needs from git: it edits the estate file in place and asks `git status` in the estate file's directory for the undo, refusing outside a work tree or without git. `WorkTree::read` asks `git rev-parse --is-inside-work-tree` in that directory — a repository above it counts — and answers `Inside`, `Outside` with git's own words, or `NoGit`; `init_steps` are `git init -b main`, `git add -A` and one commit naming the estate; `run` streams one git command's lines and is cancellable | `WorkTree`, `GitError`, `init_steps`, `run` |
-| `src/satz/binary.rs` | where satz is and which version: the Settings override, `PATH`, `~/.local/bin/satz`; the gate against `MIN_SATZ` | `SatzBinary`, `MIN_SATZ` |
-| `src/satz/cli.rs` | `satz --config <dir> <args…>` in the estate's directory, stdout and stderr streamed line by line and cancellable; `json_report` runs a reporting command with `--format json` and an `--out` of its own and types the file it wrote; `run_in` is the same streaming without a `--config`, in a working directory of its own, for the one command that runs before a `config.toml` exists | `SatzCli`, `CliLine` |
+| `src/satz/binary.rs` | where satz is and which version: the Settings override, `PATH`, `~/.local/bin/satz`; the gate that refuses a satz older than `MIN_SATZ`, the oldest satz this build works with; `built_against` is the submodule's satz version, and `ahead_of_build` reads a satz past it as a patch or a minor ahead and refuses nothing | `SatzBinary`, `MIN_SATZ`, `Ahead` |
+| `src/satz/self_update.rs` | what `satz self-update --check-only` printed, read narrowly: the `Latest version:` line against the version of the satz asked, and the `Release:` line when there is one — an output without the line is an error quoting it; `unprompted_checks_allowed` reads `self_update_frequency` from the operator's `~/.config/satz/satz.toml` as satz reads it, a missing file or key being `always` and a file that does not parse an error | `SatzRelease`, `read_check`, `unprompted_checks_allowed` |
+| `src/satz/install.rs` | satz's own cargo-dist installer for an operator with no satz: the installer and its `satz-installer.sh.sha256` sidecar are the assets of ONE `releases/latest` object, so a release published between two downloads cannot pair them; `VerifiedInstaller::verify` is the only way to hold the script, and only on a matching SHA-256; `run` writes it into a private temporary directory and runs it with `sh`, `SATZ_NO_MODIFY_PATH=1` (the installer otherwise adds `~/.local/bin` to `PATH` in the shell profiles, and `locate` searches there without it) and stdin closed, streamed and cancellable. No `run` exists on Windows, where satz publishes no build | `VerifiedInstaller`, `InstallError`, `fetch_verified`, `supported` |
+| `src/satz/cli.rs` | `satz --config <dir> <args…>` in the estate's directory, stdout and stderr streamed line by line and cancellable, by the one streaming helper the installer's run shares; `json_report` runs a reporting command with `--format json` and an `--out` of its own and types the file it wrote; `run_in` is the same streaming without a `--config`, in a working directory of its own, for the one command that runs before a `config.toml` exists | `SatzCli`, `CliLine` |
 | `src/satz/init.rs` | `satz init` as a typed thing: `InitOptions` renders the flags it was given to argv and passes nothing for a field left blank, so a blank field is the instruction to derive; `check_target` refuses a directory that is not there or already holds a `config.toml`; `created` reads what a finished run left, because `init` names the estate file after a customer id it may have derived and the name is not knowable in advance | `InitOptions`, `check_target`, `created` |
 | `src/satz/mcp.rs` | one `satz mcp` child per estate, spoken to with rmcp over stdio; every rmcp type stays inside this file | `McpSession`, `ToolInfo`, `ToolAnnotations`, `ToolOutcome` |
 | `src/satz/session.rs` | one session per open estate: the CLI runner, the MCP child, the write lock every writer takes, the identity from `satz_open`; `apply` and `bootstrap` as a one-shot script in the OS terminal | `EstateSession`, `session_root` |
@@ -72,7 +109,8 @@ Two crates in one workspace, satz pinned once as the submodule `vendor/satz`
 | `src/llm/provider/` | the providers that are not Claude, mapping the Claude-shaped request into their wire format and their stream back; `Capabilities` says what each drops | `ChatProvider`, `StreamEvent`, `Capabilities`, `OpenAiCompat`, `Ollama` |
 | `src/llm/claude_code/` | the Claude Code engine ([ADR 0010](adr/0010-claude-code-as-the-subscription-backend.md)): `cli.rs` where the binary is, its version and `claude auth status`; `events.rs` the lines the CLI writes, typed; `session.rs` one process per estate, its command line, the turn, the approval round trip and the interrupt; `log.rs` the stream log ([ADR 0013](adr/0013-the-claude-code-stream-log-is-verbatim-off-by-default-and-bounded.md)) | `ClaudeCodeCli`, `AuthStatus`, `ClaudeCodeError`, `CcLine`, `Session`, `SessionOptions`, `StreamLog`, `StreamLogConfig`, `Channel` |
 | `src/transcript.rs` | conversations as JSONL under the app's data directory, outside the estate ([ADR 0008](adr/0008-transcripts-live-outside-the-estate.md)) | `TranscriptStore`, `Transcript`, `TranscriptHeader` |
-| `src/settings.rs` | `<config dir>/satz-studio/settings.toml`: a missing file is the first run, a broken one is an error; no credential in it; `data_dir` is where transcripts, the Claude Code stream logs and the one-shot scripts go | `Settings`, `ProviderChoice`, `Theme`, `settings_path`, `data_dir` |
+| `src/github.rs` | the latest release of a repository through GitHub's unauthenticated REST API, always `releases/latest` and never a tag; `look_for_studio_update` compares satz-studio's with the running version and downloads nothing; a 403 or 429 from the API is `RateLimited` with the reset, a connection that fails is `Unreachable`, a 404 is `NoRelease` | `Release`, `Asset`, `GithubError`, `StudioUpdate`, `latest_release`, `download`, `look_for_studio_update` |
+| `src/settings.rs` | `<config dir>/satz-studio/settings.toml`: a missing file is the first run, a broken one is an error; no credential in it; `dismissed_satz` is the satz release newer than the build whose notice the operator dismissed, and it permits and refuses nothing; `data_dir` is where transcripts, the Claude Code stream logs and the one-shot scripts go | `Settings`, `ProviderChoice`, `Theme`, `settings_path`, `data_dir` |
 | `src/diag.rs` | the one diagnostic type: `Diagnostic::from_finding` turns one of satz's findings into it — the severity mapped, the `kind` carried, a relative file resolved against the estate's directory, the group's header in front of the message — and `parse_satz_output` reads what satz prints when there is no finding to read (`file:line: msg`, `satz: line N: msg`, the severity prefixes, the banner dropped, an indented line continuing the one above) | `Diagnostic`, `Severity`, `DiagSource`, `parse_satz_output` |
 
 `build.rs` compiles `vendor/satz-tree-sitter/src/parser.c` (and `scanner.c` when the
@@ -103,8 +141,10 @@ the stores are written from there only:
 
 - **the app coroutine** (`src/state/app_actions.rs`, `AppAction`): `LocateSatz`,
   `Discover`, `OpenEstate`, `CloseEstate`, `CreateEstate`, `CancelCreate`,
-  `ImportEstate`, `CancelImport`, `UpdateSatz`, `CancelUpdate`, `SaveSettings`,
-  `ResolveCredential`, `StoreKey`; it locates satz at startup and walks `last_root`;
+  `ImportEstate`, `CancelImport`, `UpdateSatz`, `CancelUpdate`, `DismissSatzNotice`,
+  `LookForStudioUpdate`, `InstallSatz`, `CancelInstall`, `SaveSettings`,
+  `ResolveCredential`, `StoreKey`; at startup it locates satz, makes the two release looks
+  and walks `last_root`;
 - **one coroutine per open estate** (`src/state/estate_actions.rs`, `EstateAction`),
   started by `EstateHost` in `src/shell/mod.rs` with the `Arc<EstateSession>` and
   living as long as the estate is open: `Reload`, `RunCommand`, `CancelCommand`,
@@ -129,8 +169,9 @@ separate palette entry that creates nothing and runs in the app, which is what t
 Overview's day-0 row offers.
 
 The shell (`src/shell/`) is the navigation rail with its badges, the top bar with the
-`runs_as` and satz-version chips and the actions beside them, the `SatzBanner` while
-satz is missing or too old, the diagnostics drawer, the commands palette and the
+`runs_as`, satz-studio-version and satz-version chips and the actions beside them, the
+`SatzBanner` while satz is missing, too old or does not run, and as a notice while it is
+newer than the build, the diagnostics drawer, the commands palette and the
 snackbar host.
 
 The Start screen is the way in, and the only one: a row of doors (`state::Door`) over
@@ -242,7 +283,10 @@ nowhere else.
    `~/.local/bin/satz`; the first candidate that exists is run with `--version` and
    held to `MIN_SATZ`, and the search never continues past a candidate that exists but
    does not run. `SatzError::TooOld` is the banner naming the version found and
-   `satz self-update`.
+   `satz self-update`; `NotFound` is `SatzStatus::Missing`, whose banner offers satz's
+   installer; any other failure is `SatzStatus::Unusable`. A satz that is located is
+   `SatzStatus::Located`, whatever newer release it is, and only `Located` opens an
+   estate; `satz_notice` is the banner's notice for a satz past the build's.
 3. `EstateSession::open(bin, dir, main, allow)` resolves `main` as satz resolves a name
    on the command line, makes it absolute, and spawns `satz mcp --root <root> --allow
    <allow>` through `McpSession::open`. `<root>` is `session_root`: the longest common
@@ -483,7 +527,9 @@ warnings`, `cargo test --workspace --locked` and `cargo build -p satz-studio --l
 its SHA-256 sidecar, refuses an installer without one, and refuses a release below
 `MIN_SATZ`; a tag given as its one argument installs that release instead. It follows
 the newest because satz keeps only its five newest releases, so an installer asset
-pinned by tag is gone within days, and the app's contract is `MIN_SATZ` or newer. It
+pinned by tag is gone within days, and a red run the day satz releases is the alarm that
+the app has fallen behind. That is why nothing refuses a newer satz and no test that
+locates the real binary asserts it is at the build's satz exactly. It
 also writes the runner's satz config (`self_update_frequency = "never"`) when none
 exists, so no update check reaches GitHub while the tests drive satz. `platforms` (`macos-15`,
 `windows-2022`) runs the same formatting, clippy, test and build steps on every push
@@ -508,6 +554,7 @@ the tree and over the commits each push or pull request adds.
 | [0011](adr/0011-the-licence-is-apache-2-0.md) | the licence is Apache 2.0, with `NOTICE` for the material bundled under other terms |
 | [0012](adr/0012-migrate-hands-off-to-the-terminal.md) | `migrate` hands off to the terminal with `apply` and `bootstrap`; `bootstrap --dry-run` is a check that runs in the app |
 | [0013](adr/0013-the-claude-code-stream-log-is-verbatim-off-by-default-and-bounded.md) | the Claude Code stream log is verbatim, off by default, one file per conversation, and bounded to ten files of 16 MiB |
+| [0014](adr/0014-a-newer-satz-is-a-notice-and-the-app-looks-for-releases.md) | a satz newer than the build runs and is a notice, not a gate; the app looks for releases of itself and of satz once per launch and says so in the title and the top bar |
 
 ## 7. Not built, and why
 

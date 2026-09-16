@@ -1,6 +1,8 @@
 # 0002 — a separate repository, with satz pinned once
 
-- **Status:** accepted
+- **Status:** accepted; its rule that `MIN_SATZ` names the submodule's tag is superseded
+  by [ADR 0014](0014-a-newer-satz-is-a-notice-and-the-app-looks-for-releases.md), where
+  `MIN_SATZ` is the oldest satz the build works with
 - **Date:** 2026-09-13
 - **Deciders:** the maintainer
 
