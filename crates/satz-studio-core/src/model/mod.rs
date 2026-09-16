@@ -5,7 +5,8 @@
 //!
 //! Three walks over one file, each in its own module: [`outline`] classifies the blocks
 //! as satz's `EstateResolver` and `split_body` do, [`params`] reads the `params { }`
-//! block beside the questions report, and [`packs`] derives the pack rows from the
+//! block beside the questions report and the shape of every resolved param, which is
+//! what an answer is typed in ([`answer_kind`]), and [`packs`] derives the pack rows from the
 //! `use` lines, the report and the resolved params — no copy of satz's `PACK_LINES`.
 //! [`value`] decodes a value the way satz's lexer reads it.
 
@@ -14,7 +15,7 @@ mod packs;
 mod params;
 mod value;
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use satz_core::pipeline::Env;
@@ -24,6 +25,7 @@ use crate::diag::Diagnostic;
 use crate::satz::reports::{QuestionRow, QuestionsReport};
 use crate::schema::{AttrType, ResourceRegistry};
 
+pub use params::answer_kind;
 pub use value::{decode_string, truthy};
 
 /// The map pack: the `use` line every other pack line's question is declared behind.
@@ -141,12 +143,27 @@ pub struct AttrRow {
     pub line: u32,
 }
 
+/// The shape satz's `interview::parse_answer` reads an answer in: a bool, a number, a
+/// list of strings, else a string.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ParamKind {
     Bool,
     Number,
     List,
     String,
+}
+
+impl ParamKind {
+    /// The shape of a value as `parse_answer` reads an answer like it: an object, a
+    /// string and null are all a string.
+    pub fn of_json(value: &serde_json::Value) -> ParamKind {
+        match value {
+            serde_json::Value::Bool(_) => ParamKind::Bool,
+            serde_json::Value::Number(_) => ParamKind::Number,
+            serde_json::Value::Array(_) => ParamKind::List,
+            _ => ParamKind::String,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -240,6 +257,10 @@ pub struct EstateModel {
     pub hcl: Vec<HclBlock>,
     pub diagnostics: Vec<Diagnostic>,
     pub schema: SchemaStatus,
+    /// the shape of every param the fold binds — the estate's own and every pack's it
+    /// uses, the first definition winning as satz folds them — by name: what a question
+    /// that offers no value is answered in ([`answer_kind`])
+    pub shapes: BTreeMap<String, ParamKind>,
 }
 
 /// A value the grammar accepted and satz's lexer rules cannot read — a disagreement
@@ -294,6 +315,7 @@ impl EstateModel {
             hcl: hcl_blocks(cst),
             diagnostics,
             schema,
+            shapes: params::shapes(env),
         })
     }
 }

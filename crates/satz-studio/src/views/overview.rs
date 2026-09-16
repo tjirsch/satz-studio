@@ -6,7 +6,8 @@
 //! nothing left in it. Nothing is saved: there is no workflow to resume, no step to be
 //! trapped in, and no record of how the estate reached the app. An estate that was
 //! created, one that was imported and one that was opened show the same list, because
-//! the same facts are true of them.
+//! the same facts are true of them — whether git holds the estate in a repository
+//! included, which is a fact of the directory and not of the door it came through.
 //!
 //! [`owed`] is the whole derivation, pure over [`Facts`], so what the card says is
 //! testable without a window.
@@ -14,6 +15,7 @@
 use dioxus::prelude::*;
 use satz_studio_core::diag::Diagnostic;
 use satz_studio_core::estate::HclState;
+use satz_studio_core::git::WorkTree;
 use satz_studio_core::model::{EstateModel, LineState, PackRowKind, SchemaStatus};
 use satz_studio_core::satz::reports::QuestionsReport;
 
@@ -28,6 +30,9 @@ pub struct Facts<'a> {
     pub estate: &'a str,
     pub deployment_mode: Option<&'a str>,
     pub hcl: HclState,
+    /// whether git holds the estate file's directory in a work tree; `None` until the
+    /// first reload has asked
+    pub work_tree: Option<&'a WorkTree>,
     pub questions: Option<&'a QuestionsReport>,
     pub model: Option<&'a EstateModel>,
     pub diagnostics: &'a [Diagnostic],
@@ -52,6 +57,9 @@ pub enum Remedy {
     },
     /// `satz merge-presets`, under the estate's write lock
     Merge,
+    /// `git init -b main`, `git add -A` and one commit in the estate directory, run when
+    /// the operator presses it and never on the app's own account
+    InitRepository,
 }
 
 /// One thing the estate still owes.
@@ -69,6 +77,32 @@ pub struct Owed {
 /// that is read, never on a mode the app remembers.
 pub fn owed(f: &Facts) -> Vec<Owed> {
     let mut out = Vec::new();
+
+    // The undo every later preset update needs. `satz merge-presets` edits the estate file
+    // in place and asks git whether that edit can be taken back; outside a work tree, or
+    // with no git to ask, it refuses. `satz init` makes no repository, so this is owed
+    // from the first minute and would otherwise surface at the first preset update.
+    match f.work_tree {
+        Some(WorkTree::Outside(said)) => out.push(Owed {
+            id: "repository",
+            icon: "commit",
+            title: "The estate is not in a git repository".to_string(),
+            detail: format!(
+                "`satz merge-presets` edits the estate in place and uses git as the undo of that edit, so outside a repository it refuses and the estate cannot take preset updates. git says: {said}\nThe button runs `git init -b main`, `git add -A` and one commit in the estate directory, with the identity git is configured with. `git add -A` commits everything the directory's `.gitignore` does not exclude, which is why it refuses a directory without one."
+            ),
+            remedies: vec![Remedy::InitRepository],
+        }),
+        Some(WorkTree::NoGit(error)) => out.push(Owed {
+            id: "repository",
+            icon: "commit",
+            title: "git is not available".to_string(),
+            detail: format!(
+                "`satz merge-presets` uses git as the undo of its edit to the estate and refuses without it, so the estate cannot take preset updates until git is installed and on the PATH. {error}"
+            ),
+            remedies: Vec::new(),
+        }),
+        Some(WorkTree::Inside) | None => {}
+    }
 
     // Day 0. The app cannot see a live organisation without calling one, so this rests
     // on what is here: a cloud estate keeps its state in the bucket `bootstrap`
@@ -245,11 +279,13 @@ pub fn OverviewView() -> Element {
     let questions = app.estate().questions().cloned();
     let diagnostics = app.estate().diagnostics().cloned();
     let hcl = app.estate().hcl().cloned();
+    let work_tree = app.estate().work_tree().cloned();
     let last_command = app.estate().last_command().cloned();
     let owed = owed(&Facts {
         estate: &open.name,
         deployment_mode: open.deployment_mode.as_deref(),
         hcl,
+        work_tree: work_tree.as_ref(),
         questions: questions.as_ref(),
         model: model.as_deref(),
         diagnostics: &diagnostics,
@@ -263,7 +299,7 @@ pub fn OverviewView() -> Element {
                     Icon { name: "task_alt", size: 32, filled: true, class: "overview__clear-icon" }
                     div {
                         h2 { class: "overview__clear-title", "Nothing is owed" }
-                        p { "Every question is answered, every pack the map asks for has a line, the schema is there and the HCL directory has been through an init. What is left is the work you came for." }
+                        p { "The estate is in a git repository, every question is answered, every pack the map asks for has a line, the schema is there and the HCL directory has been through an init. What is left is the work you came for." }
                     }
                 }
             } else {
@@ -312,6 +348,15 @@ pub fn OverviewView() -> Element {
                                                     icon,
                                                     onclick: move |_| handle.send(EstateAction::OpenInTerminal(args.clone())),
                                                     "{label}"
+                                                }
+                                            },
+                                            Remedy::InitRepository => rsx! {
+                                                Button {
+                                                    key: "{i}",
+                                                    variant: ButtonVariant::Filled,
+                                                    icon: "commit",
+                                                    onclick: move |_| handle.send(EstateAction::InitRepository),
+                                                    "Create the repository"
                                                 }
                                             },
                                             Remedy::Merge => rsx! {
@@ -398,6 +443,7 @@ mod tests {
             hcl: Vec::new(),
             diagnostics: Vec::new(),
             schema,
+            shapes: Default::default(),
         }
     }
 
@@ -448,6 +494,7 @@ mod tests {
             estate: "C0example.satz",
             deployment_mode: mode,
             hcl,
+            work_tree: Some(&WorkTree::Inside),
             questions: q,
             model: m,
             diagnostics: d,
@@ -646,5 +693,61 @@ mod tests {
             ))
             .is_empty()
         );
+    }
+
+    #[test]
+    fn an_estate_outside_a_repository_owes_one_with_the_fix_offered_and_git_s_own_words() {
+        let q = questions(0, 0);
+        let m = model(vec![pack(PackRowKind::Map, LineState::On)], loaded());
+        let hcl = HclState {
+            transpiled: true,
+            initialised: true,
+        };
+        let outside = WorkTree::Outside(
+            "fatal: not a git repository (or any of the parent directories): .git".to_string(),
+        );
+        let mut f = facts(None, hcl, Some(&q), Some(&m), &[]);
+        f.work_tree = Some(&outside);
+        let rows = owed(&f);
+        assert_eq!(ids(&rows), ["repository"]);
+        assert_eq!(rows[0].remedies, [Remedy::InitRepository]);
+        assert!(rows[0].detail.contains("fatal: not a git repository"));
+        assert!(rows[0].detail.contains("merge-presets"));
+    }
+
+    /// Without git the directory is neither in a repository nor out of one: the row says
+    /// git is missing and offers no button, because the button would run git.
+    #[test]
+    fn without_git_the_row_names_git_and_offers_nothing_to_press() {
+        let q = questions(0, 0);
+        let m = model(vec![pack(PackRowKind::Map, LineState::On)], loaded());
+        let hcl = HclState {
+            transpiled: true,
+            initialised: true,
+        };
+        let missing = WorkTree::NoGit("running git: No such file or directory".to_string());
+        let mut f = facts(None, hcl, Some(&q), Some(&m), &[]);
+        f.work_tree = Some(&missing);
+        let rows = owed(&f);
+        assert_eq!(ids(&rows), ["repository"]);
+        assert_eq!(rows[0].title, "git is not available");
+        assert!(rows[0].remedies.is_empty());
+        assert!(rows[0].detail.contains("No such file or directory"));
+    }
+
+    /// Inside a work tree, its own or one above it, and before the first reload has
+    /// asked, nothing is owed for it.
+    #[test]
+    fn a_repository_or_a_fact_not_yet_read_owes_nothing() {
+        let q = questions(0, 0);
+        let m = model(vec![pack(PackRowKind::Map, LineState::On)], loaded());
+        let hcl = HclState {
+            transpiled: true,
+            initialised: true,
+        };
+        let mut f = facts(None, hcl, Some(&q), Some(&m), &[]);
+        assert!(owed(&f).is_empty());
+        f.work_tree = None;
+        assert!(owed(&f).is_empty());
     }
 }

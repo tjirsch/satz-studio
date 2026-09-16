@@ -9,8 +9,8 @@
 # MIN_SATZ is read from crates/satz-studio-core/src/satz/binary.rs, the one place it
 # is defined; satz is taken from PATH, else from ~/.local/bin/satz, as the app takes
 # it. The tests are `cargo test -p satz-studio-core --locked --test 'e2e_*'`:
-# tests/e2e_interview.rs, tests/e2e_map.rs, tests/e2e_edit.rs and tests/e2e_import.rs,
-# each creating its own temporary estate over vendor/satz. No live import runs: the
+# tests/e2e_interview.rs, tests/e2e_map.rs, tests/e2e_edit.rs, tests/e2e_import.rs and
+# tests/e2e_answer_shapes.rs, each creating its own temporary estate over vendor/satz. No live import runs: the
 # import tests drive the Terraform HCL and legacy YAML shapes, which read files.
 # docs/verification.md says what they prove.
 #

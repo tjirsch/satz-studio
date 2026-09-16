@@ -57,7 +57,8 @@ Two crates in one workspace, satz pinned once as the submodule `vendor/satz`
 | `src/cst/` | the lossless document layer over the vendored tree-sitter grammar ([ADR 0003](adr/0003-the-document-layer-is-the-tree-sitter-grammar.md)); `grammar.rs` exposes the compiled parser, `build.rs` walks the tree into nodes with byte spans, `uses.rs` and `render.rs` read the pack lines and write values | `Cst`, `Node`, `NodeKind`, `Span`, `UseLine`, `UseState`, `TypedValue`, `StyleCtx`, `scan_uses`, `render_value`, `style_of`, `grammar::language` |
 | `src/edit/` | the edit primitives and the write discipline (section 4b): `apply.rs` the splice and its proof, `commit.rs` the temp file and the rename, `check.rs` the two checkers, `snapshot.rs` the delegated write | `Edit`, `EditSession`, `Proposed`, `Committed`, `Rollback`, `Checker`, `CheckFailure`, `McpChecker`, `CliChecker`, `Snapshot`, `sha256_hex` |
 | `src/schema.rs` | the provider schema as `satz update-schema` writes it, the types lifted from satz's `src/schema.rs`; `load_all` reads every `*.json` in `schema_dir` and is `SchemaError::Missing` for a directory that is absent or holds no resource type; `AttrType` decodes Terraform's type expression and prints it in Terraform's spelling | `ResourceRegistry`, `AttrType`, `BlockSchema`, `AttributeSchema`, `SchemaError` |
-| `src/model/` | the view model, built pure and rebuilt after every commit and reload: `outline.rs` classifies the blocks as satz's `EstateResolver` and `is_child` do, `params.rs` joins the `params { }` block with the questions, `packs.rs` derives the pack rows ([ADR 0007](adr/0007-pack-rows-are-derived-from-the-estate-file.md)), `value.rs` decodes a string as satz's lexer reads it, and `hcl_blocks` reads the file's `hcl` statements with whether each carries a `trust` reason | `EstateModel`, `ResourceNode`, `ResourceKind`, `AttrRow`, `ParamRow`, `PackRow`, `PackRowKind`, `LineState`, `Choice`, `SourceValue`, `StrPart`, `EditMode`, `HclBlock`, `SchemaStatus` |
+| `src/model/` | the view model, built pure and rebuilt after every commit and reload: `outline.rs` classifies the blocks as satz's `EstateResolver` and `is_child` do, `params.rs` joins the `params { }` block with the questions and holds `answer_kind`, the shape an interview answer is typed in, `packs.rs` derives the pack rows ([ADR 0007](adr/0007-pack-rows-are-derived-from-the-estate-file.md)), `value.rs` decodes a string as satz's lexer reads it, and `hcl_blocks` reads the file's `hcl` statements with whether each carries a `trust` reason | `EstateModel`, `ResourceNode`, `ResourceKind`, `AttrRow`, `ParamRow`, `ParamKind`, `PackRow`, `PackRowKind`, `LineState`, `Choice`, `SourceValue`, `StrPart`, `EditMode`, `HclBlock`, `SchemaStatus`, `answer_kind` |
+| `src/git.rs` | what `satz merge-presets` needs from git: it edits the estate file in place and asks `git status` in the estate file's directory for the undo, refusing outside a work tree or without git. `WorkTree::read` asks `git rev-parse --is-inside-work-tree` in that directory — a repository above it counts — and answers `Inside`, `Outside` with git's own words, or `NoGit`; `init_steps` are `git init -b main`, `git add -A` and one commit naming the estate; `run` streams one git command's lines and is cancellable | `WorkTree`, `GitError`, `init_steps`, `run` |
 | `src/satz/binary.rs` | where satz is and which version: the Settings override, `PATH`, `~/.local/bin/satz`; the gate against `MIN_SATZ` | `SatzBinary`, `MIN_SATZ` |
 | `src/satz/cli.rs` | `satz --config <dir> <args…>` in the estate's directory, stdout and stderr streamed line by line and cancellable; `json_report` runs a reporting command with `--format json` and an `--out` of its own and types the file it wrote; `run_in` is the same streaming without a `--config`, in a working directory of its own, for the one command that runs before a `config.toml` exists | `SatzCli`, `CliLine` |
 | `src/satz/init.rs` | `satz init` as a typed thing: `InitOptions` renders the flags it was given to argv and passes nothing for a field left blank, so a blank field is the instruction to derive; `check_target` refuses a directory that is not there or already holds a `config.toml`; `created` reads what a finished run left, because `init` names the estate file after a customer id it may have derived and the name is not knowable in advance | `InitOptions`, `check_target`, `created` |
@@ -108,7 +109,7 @@ the stores are written from there only:
   started by `EstateHost` in `src/shell/mod.rs` with the `Arc<EstateSession>` and
   living as long as the estate is open: `Reload`, `RunCommand`, `CancelCommand`,
   `RunTool`, `OpenInTerminal`, `Answer`, `AcceptDefaults`, `WritePrerequisites`,
-  `CommitEdit`, `EnableMap`, `MergePresets`, `Close`.
+  `CommitEdit`, `EnableMap`, `MergePresets`, `InitRepository`, `Close`.
 
 A reporting command takes one `--format` and one `--out`, both required, and writes one
 file instead of printing (satz's ADR 0021). The app names the destination: the file the
@@ -144,7 +145,13 @@ With an estate open the window is ordered by the job: **Overview**, **Decisions*
 rail. Overview (`src/views/overview.rs`) derives what the estate still owes from its own
 state on every render — `owed()` over `Facts`, pure and unit-tested — and shows nothing
 when the list is empty; nothing about how the estate reached the app is remembered, so
-created, imported and opened estates show the same list. Commands stopped being a
+created, imported and opened estates show the same list. That includes the repository:
+`satz init` makes none, and `satz merge-presets` refuses outside one, so whether git
+holds the estate file's directory is read at every reload (`WorkTree::read`) and an
+estate outside a repository owes one from its first minute, with `InitRepository` —
+`git init -b main`, `git add -A`, one commit, streamed — as the button that makes it.
+The app runs git only when that button is pressed, and sets no identity for the
+commit. Commands stopped being a
 destination: `PALETTE` is a table and `CommandDeck` renders any group of it, so Checks
 and Deploy each gather their own and the palette over the window (⌘K) holds them all.
 The Gallery is behind `SATZ_STUDIO_DEBUG`. `docs/ui.md` is the whole map, including why
@@ -257,7 +264,7 @@ nowhere else.
    A child that has exited is `SatzError::Closed` on the next call; an initialize that
    fails is `SatzError::Mcp` carrying what satz said before it died.
 5. The estate coroutine's `Reload` builds the model: `HclState::read(hcl_dir)`;
-   `satz_questions` over the session for the `QuestionsReport`; then, on a blocking
+   `WorkTree::read` of the estate file's directory; `satz_questions` over the session for the `QuestionsReport`; then, on a blocking
    thread, the main file read, `Cst::parse`, `EstateDir::params` and
    `ResourceRegistry::load_all(schema_dir)`; then `EstateModel::build(main, cst, schema,
    env, questions, diagnostics)`, where `schema` is `Result<&ResourceRegistry, &Path>`
@@ -275,7 +282,13 @@ read-only. `ResourceNode.missing_required` lists the schema's required attribute
 blocks the node lacks, minus what satz derives from the position. An `AttrRow` is
 locked when it is `import-id`, computed-only, or inside an `Unknown` block; a value
 carrying an interpolation, a reference or an object is edited in `EditMode::Source`. A
-`ParamRow` joins its question; a param that gates a pack line, and every option of a
+`ParamRow` joins its question. `EstateModel::shapes` is the `ParamKind` of every param
+the fold binds — the estate's own and every pack's it uses — and `answer_kind` is the
+shape an interview answer is typed in: the offered value's, as satz's `parse_answer`
+reads an answer, and for a question that offers nothing its param's shape in the fold.
+satz offers no empty value, so a param a pack declares `[]` offers nothing and is still
+a list; `tests/e2e_answer_shapes.rs` holds every question of every pack under
+`vendor/satz/presets` to its declaration. A param that gates a pack line, and every option of a
 `oneof`, is a pack row instead. A `PackRow` is `PackRowKind::Map`
 (the `presets/estate-map.satz` line, `Choice::Line`) or `PackRowKind::Choice` with
 `Choice::Bool { current, default }` or `Choice::OneofOption { group, selected }`; its

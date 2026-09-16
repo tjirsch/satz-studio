@@ -2,9 +2,12 @@
 //! unanswered ones first. Every answer is one `satz_interview` call through the estate
 //! coroutine, and the view re-renders from the reloaded report. The walk remembers the
 //! questions it moved away from, so Back returns to one whether it is answered by then
-//! or not; with "Show answered" on, every question is listed beside the card.
+//! or not; with "Show answered" on, every question is listed beside the card. A typed
+//! answer's field has the shape `answer_kind` gives it: the offered value's, else the
+//! shape its param is declared with, so a list that offers nothing is still a list.
 
 use dioxus::prelude::*;
+use satz_studio_core::model::answer_kind;
 use satz_studio_core::satz::reports::{
     Blast, OptionRow, QuestionKind, QuestionRow, QuestionState, Reversal,
 };
@@ -203,6 +206,7 @@ pub fn DecisionsView() -> Element {
     let report = app.estate().questions().cloned();
     let interview = app.estate().interview().cloned();
     let loading = app.estate().loading().cloned();
+    let model = app.estate().model().cloned();
     let mut show_answered = use_signal(|| false);
     let mut walk = use_signal(Walk::default);
 
@@ -244,6 +248,12 @@ pub fn DecisionsView() -> Element {
     let i = walk.read().position(&list);
     let can_back = walk.read().can_go_back();
     let current = list.get(i).cloned();
+    // the field's shape; `None` when nothing is offered and the estate's params did not
+    // resolve, so the declared shape is not known
+    let field = current
+        .as_ref()
+        .and_then(|q| answer_kind(q, model.as_deref().map(|m| &m.shapes)))
+        .map(FieldKind::of_param);
     let previous_pack = i
         .checked_sub(1)
         .and_then(|p| list.get(p))
@@ -307,6 +317,7 @@ pub fn DecisionsView() -> Element {
                         QuestionCard {
                             key: "{q.subject}",
                             question: q,
+                            field,
                             previous_pack,
                             position: (i + 1, list.len()),
                             loading,
@@ -397,6 +408,7 @@ fn WalkButtons(
 #[component]
 fn QuestionCard(
     question: QuestionRow,
+    field: Option<FieldKind>,
     previous_pack: Option<String>,
     position: (usize, usize),
     loading: bool,
@@ -455,10 +467,13 @@ fn QuestionCard(
                         span { "The pack recommends: " code { "{r}" } ". The offered value still applies unless you change it." }
                     }
                 }
-                match q.kind {
-                    QuestionKind::Param => rsx! {
+                match (q.kind, field) {
+                    (QuestionKind::Param, Some(kind)) => rsx! {
                         ParamAnswer {
+                            // a shape that arrives with the model starts the field afresh
+                            key: "{kind:?}",
                             question: q.clone(),
+                            kind,
                             loading,
                             can_back,
                             onback: move |_| onback.call(()),
@@ -466,7 +481,21 @@ fn QuestionCard(
                             onanswer: move |_| onanswer.call(()),
                         }
                     },
-                    QuestionKind::Oneof => rsx! {
+                    (QuestionKind::Param, None) => rsx! {
+                        div { class: "interview__answer",
+                            p { class: "interview__hint",
+                                if loading {
+                                    "The estate is being read; the field follows, in the shape this answer is written in."
+                                } else {
+                                    "This question offers no value, and the estate's params did not resolve, so the shape its answer is written in is not known. The drawer says why."
+                                }
+                            }
+                            div { class: "interview__actions",
+                                WalkButtons { state: q.state, can_back, onback: move |_| onback.call(()), onskip: move |_| onskip.call(()) }
+                            }
+                        }
+                    },
+                    (QuestionKind::Oneof, _) => rsx! {
                         OneofAnswer {
                             question: q.clone(),
                             loading,
@@ -490,6 +519,7 @@ fn QuestionCard(
 #[component]
 fn ParamAnswer(
     question: QuestionRow,
+    kind: FieldKind,
     loading: bool,
     can_back: bool,
     onback: EventHandler<()>,
@@ -498,18 +528,18 @@ fn ParamAnswer(
 ) -> Element {
     let handle = use_coroutine_handle::<EstateAction>();
     let q = question;
-    let kind = FieldKind::of_json(q.offered());
+    let offers = q.offered().is_some();
     let initial = Draft::of_json(q.offered(), kind);
     let mut draft = use_signal(|| initial.clone());
     let problem = draft().problem(kind, &q.subject);
-    let empty_text = matches!(draft(), Draft::Text(ref t) if t.trim().is_empty());
     let unchanged = draft() == initial;
-    let accept = unchanged && q.offered().is_some();
-    let can_send = problem.is_none() && !loading && !(empty_text && q.offered().is_none());
+    let accept = unchanged && offers;
+    // nothing typed is no answer to a question that offers nothing
+    let can_send = problem.is_none() && !loading && (offers || !draft().is_empty());
     let subject = q.subject.clone();
     let send = move || {
         let d = draft();
-        if d.problem(kind, &subject).is_none() {
+        if d.problem(kind, &subject).is_none() && (offers || !d.is_empty()) {
             onanswer.call(());
             handle.send(EstateAction::Answer {
                 subject: subject.clone(),
@@ -519,6 +549,9 @@ fn ParamAnswer(
     };
     let field_subject = q.subject.clone();
     let field_hint = match (q.offered(), q.blocking) {
+        (None, true) if matches!(kind, FieldKind::List(_)) => {
+            "no default — at least one value is needed".to_string()
+        }
         (None, true) => "no default — a value is needed".to_string(),
         (None, false) => String::new(),
         (Some(v), _) if q.state == QuestionState::Answered => {
@@ -535,7 +568,7 @@ fn ParamAnswer(
                 subject: field_subject,
                 disabled: loading,
                 supporting: field_hint,
-                commit_unchanged: q.offered().is_some(),
+                commit_unchanged: offers,
                 onchange: move |d: Draft| draft.set(d),
                 oncommit: {
                     let send = send.clone();

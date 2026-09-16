@@ -1091,6 +1091,7 @@ mod tests {
             schema: satz_studio_core::model::SchemaStatus::Missing(PathBuf::from(
                 "/estates/acme/schema",
             )),
+            shapes: Default::default(),
         };
         let questions = QuestionsReport {
             estate: "C0example.satz".into(),
