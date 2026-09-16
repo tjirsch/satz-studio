@@ -1,4 +1,4 @@
-//! The Create door of the Estates view: the form behind `satz init`, and the run.
+//! The Create door of the Start screen: the form behind `satz init`, and the run.
 //!
 //! `init` is a live command. It reads the Application Default Credentials and derives
 //! the customer's domain, directory id, organisation id, billing account and first
@@ -127,7 +127,7 @@ pub fn CreateEstate() -> Element {
                     },
                 }
                 p { class: "create__note",
-                    "--defaults google writes google and google-beta into config.toml and runs the Terraform tool for each provider's schema, so that tool has to be installed. Without it the estate still uses both providers, and the Commands view's update-schema fetches the schema later."
+                    "--defaults google writes google and google-beta into config.toml and runs the Terraform tool for each provider's schema, so that tool has to be installed. Without it the estate still uses both providers, and the update-schema command fetches the schema later."
                 }
                 ChipList {
                     label: "Extra providers",

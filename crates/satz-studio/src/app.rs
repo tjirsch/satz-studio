@@ -46,6 +46,28 @@ fn Studio(settings: Settings) -> Element {
     use_context_provider(|| DiagnosticSelection(Signal::new(None)));
     use_coroutine(move |rx| app_coroutine(rx, app));
 
+    // The commands palette opens on ⌘K / Ctrl+K. The listener is the WINDOW's: a
+    // keydown inside a text field never reaches a handler above it. It is installed
+    // here, in the component that mounts once, so opening a second estate does not
+    // leave a second listener behind.
+    use_hook(move || {
+        spawn(async move {
+            let mut keys = document::eval(
+                r#"window.addEventListener("keydown", (e) => {
+                       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+                           e.preventDefault();
+                           dioxus.send("palette");
+                       }
+                   });"#,
+            );
+            while let Ok(event) = keys.recv::<String>().await {
+                if event == "palette" && app.open().read().is_some() {
+                    app.palette_open().toggle();
+                }
+            }
+        });
+    });
+
     // The theme lives on the document root so `body` and every portal see the same tokens.
     use_effect(move || {
         let theme = app.settings().read().theme;

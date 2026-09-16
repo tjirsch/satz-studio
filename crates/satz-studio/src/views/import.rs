@@ -1,4 +1,4 @@
-//! The Import door of the Estates view: the form behind `satz import`, the run, and the
+//! The Import door of the Start screen: the form behind `satz import`, the run, and the
 //! report it printed.
 //!
 //! Two things shape this form. `satz import` imports INTO a project, so a folder that is
@@ -513,7 +513,7 @@ fn ImportReportCard(report: ImportReport, outcome: Option<CommandOutcome>) -> El
             if let (true, Some(handle)) = (ok, estate) {
                 div { class: "import__next",
                     p { class: "import__note",
-                        "satz says it itself: review the file, then transpile and plan. The transpile is one click and its output is in Commands, where the plan runs too."
+                        "satz says it itself: review the file, then transpile and plan. The check is one click and its output is in Checks, where the compile and the catalogs live; the plan is in Deploy."
                     }
                     Button {
                         variant: ButtonVariant::Filled,
@@ -523,7 +523,7 @@ fn ImportReportCard(report: ImportReport, outcome: Option<CommandOutcome>) -> El
                                 name: "satz_transpile_check".to_string(),
                                 args: serde_json::Map::new(),
                             });
-                            app.nav().set(View::Commands);
+                            app.nav().set(View::Checks);
                         },
                         "Check it compiles"
                     }

@@ -44,6 +44,21 @@
   font: var(--md-sys-typescale-headline-small);
 }
 
+.view__lead {
+  font: var(--md-sys-typescale-body-medium);
+  color: var(--md-sys-color-on-surface-variant);
+  max-width: 90ch;
+}
+
+/* One half of a destination that holds two: the Estate view's tabs render these. */
+.pane {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
 /* banner */
 
 .banner {
@@ -733,10 +748,6 @@
 }
 
 /* ---- commands ----------------------------------------------------------------- */
-
-.commands {
-  height: 100%;
-}
 
 .commands__layout {
   display: grid;
@@ -1486,10 +1497,6 @@
 
 /* ---- resources ---------------------------------------------------------------- */
 
-.resources {
-  height: 100%;
-}
-
 .resources__head {
   display: flex;
   align-items: center;
@@ -1594,4 +1601,189 @@
 
 .node-detail__none {
   color: var(--md-sys-color-on-surface-variant);
+}
+
+/* ---- overview ----------------------------------------------------------------- */
+
+.overview__owed,
+.overview__identity {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.overview__owed-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 8px;
+}
+
+.overview__owed-title {
+  font: var(--md-sys-typescale-title-medium);
+}
+
+.overview__row {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 16px 0;
+  border-top: 1px solid var(--md-sys-color-surface-variant);
+  flex-wrap: wrap;
+}
+
+.overview__row-icon {
+  color: var(--md-sys-color-primary);
+  margin-top: 2px;
+}
+
+.overview__row-text {
+  flex: 1 1 340px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.overview__row-title {
+  font: var(--md-sys-typescale-title-small);
+}
+
+.overview__row-detail {
+  font: var(--md-sys-typescale-body-medium);
+  color: var(--md-sys-color-on-surface-variant);
+  max-width: 90ch;
+}
+
+.overview__row-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.overview__clear {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.overview__clear-icon {
+  color: var(--md-sys-color-primary);
+}
+
+.overview__clear-title {
+  font: var(--md-sys-typescale-title-medium);
+}
+
+.overview__facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 8px 24px;
+  margin: 0;
+  font: var(--md-sys-typescale-body-medium);
+}
+
+.overview__facts dt {
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.overview__facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.overview__facts code {
+  font-family: var(--md-ref-typeface-mono);
+  user-select: text;
+}
+
+/* ---- estate ------------------------------------------------------------------- */
+
+.estate {
+  height: 100%;
+}
+
+.estate__head {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.estate__file {
+  font-family: var(--md-ref-typeface-mono);
+  color: var(--md-sys-color-on-surface-variant);
+  user-select: text;
+}
+
+/* ---- checks and deploy -------------------------------------------------------- */
+
+.checks,
+.deploy {
+  height: 100%;
+}
+
+.checks__prerequisites {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.checks__head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.checks__title {
+  font: var(--md-sys-typescale-title-medium);
+}
+
+.checks__finding {
+  font: var(--md-sys-typescale-body-medium);
+  white-space: pre-wrap;
+  user-select: text;
+}
+
+.checks__note {
+  font: var(--md-sys-typescale-body-medium);
+  color: var(--md-sys-color-on-surface-variant);
+  max-width: 90ch;
+}
+
+.checks__actions {
+  display: flex;
+  gap: 8px;
+  padding-top: 8px;
+}
+
+.deploy__state {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.deploy__dir {
+  font-family: var(--md-ref-typeface-mono);
+  color: var(--md-sys-color-on-surface-variant);
+  user-select: text;
+}
+
+/* ---- command palette ---------------------------------------------------------- */
+
+.m-dialog.command-palette {
+  max-width: min(1120px, 92vw);
+  width: min(1120px, 92vw);
+  max-height: 86vh;
+}
+
+.command-palette .m-dialog__body {
+  display: flex;
+  min-height: 0;
+  overflow: auto;
+}
+
+.command-palette .commands__layout {
+  flex: 1 1 auto;
 }

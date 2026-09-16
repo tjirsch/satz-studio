@@ -1086,6 +1086,7 @@ mod tests {
             params: Vec::new(),
             packs: Vec::new(),
             uses: Vec::new(),
+            hcl: Vec::new(),
             diagnostics: Vec::new(),
             schema: satz_studio_core::model::SchemaStatus::Missing(PathBuf::from(
                 "/estates/acme/schema",

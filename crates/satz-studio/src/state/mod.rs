@@ -17,6 +17,7 @@ use std::sync::Arc;
 use dioxus::prelude::*;
 use satz_studio_core::cst::Cst;
 use satz_studio_core::diag::Diagnostic;
+use satz_studio_core::estate::HclState;
 use satz_studio_core::llm::CredentialSource;
 use satz_studio_core::model::EstateModel;
 use satz_studio_core::satz::reports::{InterviewReport, QuestionsReport};
@@ -64,42 +65,61 @@ impl SatzStatus {
     }
 }
 
-/// The destinations of the navigation rail, in rail order.
+/// Where the window can stand. The rail's order is the order of the work on an estate:
+/// what it owes, what it has not decided, which packs it runs, what it declares, what
+/// judges it, what hands it off — then the two secondary destinations at the foot of
+/// the rail.
+///
+/// [`View::Start`] is not a rail destination: it is the screen with the three doors,
+/// where the window stands while no estate is open. Switching estates is the top bar's
+/// action, not a place.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum View {
     #[default]
-    Estates,
-    Interview,
-    Params,
-    Map,
-    Resources,
-    Commands,
+    Start,
+    /// what this estate still owes, derived from its own state
+    Overview,
+    /// the questions its packs declare and it has not answered
+    Decisions,
+    /// the pack lines: which are in, which are off, which the file has no line for
+    Packs,
+    /// the estate file itself: its params and its resource tree
+    Estate,
+    /// what judges the estate: the compile, the goal view, the evidence report
+    Checks,
+    /// what hands it off: the HCL directory, the plan, the apply, the state migration
+    Deploy,
     Chat,
     Settings,
+    /// a development route, reachable only with `SATZ_STUDIO_DEBUG` set
     Gallery,
 }
 
 impl View {
-    pub const ALL: [View; 9] = [
-        View::Estates,
-        View::Interview,
-        View::Params,
-        View::Map,
-        View::Resources,
-        View::Commands,
-        View::Chat,
-        View::Settings,
-        View::Gallery,
+    /// The primary destinations, in rail order. Six, and Material 3 allows three to
+    /// seven — `docs/ui.md` says what a seventh would cost.
+    pub const PRIMARY: [View; 6] = [
+        View::Overview,
+        View::Decisions,
+        View::Packs,
+        View::Estate,
+        View::Checks,
+        View::Deploy,
     ];
+
+    /// The secondary group, bottom-aligned in the rail. Chat needs an estate; Settings
+    /// is the one destination that stands without one.
+    pub const SECONDARY: [View; 2] = [View::Chat, View::Settings];
 
     pub fn label(self) -> &'static str {
         match self {
-            View::Estates => "Estates",
-            View::Interview => "Interview",
-            View::Params => "Params",
-            View::Map => "Map",
-            View::Resources => "Resources",
-            View::Commands => "Commands",
+            View::Start => "Estates",
+            View::Overview => "Overview",
+            View::Decisions => "Decisions",
+            View::Packs => "Packs",
+            View::Estate => "Estate",
+            View::Checks => "Checks",
+            View::Deploy => "Deploy",
             View::Chat => "Chat",
             View::Settings => "Settings",
             View::Gallery => "Gallery",
@@ -109,12 +129,13 @@ impl View {
     /// The Material Symbols ligature of the destination.
     pub fn icon(self) -> &'static str {
         match self {
-            View::Estates => "home_storage",
-            View::Interview => "quiz",
-            View::Params => "tune",
-            View::Map => "map",
-            View::Resources => "account_tree",
-            View::Commands => "terminal",
+            View::Start => "home_storage",
+            View::Overview => "dashboard",
+            View::Decisions => "quiz",
+            View::Packs => "inventory_2",
+            View::Estate => "description",
+            View::Checks => "fact_check",
+            View::Deploy => "rocket_launch",
             View::Chat => "chat",
             View::Settings => "settings",
             View::Gallery => "palette",
@@ -125,17 +146,24 @@ impl View {
     pub fn needs_estate(self) -> bool {
         matches!(
             self,
-            View::Interview
-                | View::Params
-                | View::Map
-                | View::Resources
-                | View::Commands
+            View::Overview
+                | View::Decisions
+                | View::Packs
+                | View::Estate
+                | View::Checks
+                | View::Deploy
                 | View::Chat
         )
     }
 }
 
-/// The ways an estate reaches the app: the doors of the Estates view. Each is one card
+/// The development routes — the Gallery — are behind `SATZ_STUDIO_DEBUG`: the component
+/// checklist is for whoever changes the components, not for an operator's rail.
+pub fn debug_routes() -> bool {
+    std::env::var_os("SATZ_STUDIO_DEBUG").is_some_and(|v| !v.is_empty())
+}
+
+/// The ways an estate reaches the app: the doors of the Start screen. Each is one card
 /// in its door row and one pane below it.
 ///
 /// The row reads from nothing to an estate: **Create** makes one where there is none,
@@ -197,7 +225,7 @@ pub struct EstateFile {
     pub deployment_mode: Result<Option<String>, String>,
 }
 
-/// One `config.toml` the Estates view found, with the estates beside it.
+/// One `config.toml` the Start screen found, with the estates beside it.
 #[derive(Debug, Clone, PartialEq)]
 pub struct EstateSummary {
     pub config: PathBuf,
@@ -262,8 +290,11 @@ pub struct EstateStore {
     pub last_command: Option<String>,
     /// how the last command or tool call ended
     pub outcome: Option<CommandOutcome>,
-    /// the estate is being reloaded (questions, parse, model)
+    /// the estate is being reloaded (questions, parse, model, the compile's own check)
     pub loading: bool,
+    /// what the generated HCL directory holds, read at every reload: the Overview says
+    /// what is still owed from it
+    pub hcl: HclState,
 }
 
 /// How a command or a tool call ended, shown under the log.
@@ -338,7 +369,7 @@ pub struct UpdateStore {
 pub struct AppStore {
     pub settings: Settings,
     pub satz: SatzStatus,
-    /// the folder the Estates view walks
+    /// the folder the Start screen walks
     pub root: Option<PathBuf>,
     pub estates: Vec<EstateSummary>,
     /// a walk is in progress
@@ -347,8 +378,10 @@ pub struct AppStore {
     /// the estate file a session is being opened on
     pub opening: Option<PathBuf>,
     pub nav: View,
-    /// the door of the Estates view the pane below the row belongs to
+    /// the door of the Start screen the pane below the row belongs to
     pub door: Door,
+    /// the command palette is over the window
+    pub palette_open: bool,
     pub snackbar: VecDeque<Toast>,
     pub credential: CredentialStatus,
     pub drawer_open: bool,
@@ -372,8 +405,9 @@ impl AppStore {
             discovering: false,
             open: None,
             opening: None,
-            nav: View::Estates,
+            nav: View::default(),
             door: Door::default(),
+            palette_open: false,
             snackbar: VecDeque::new(),
             credential: CredentialStatus::Unknown,
             drawer_open: false,
@@ -400,4 +434,70 @@ pub fn toast(app: Store<AppStore>, kind: ToastKind, text: impl Into<String>) {
         tokio::time::sleep(after).await;
         dismiss(&mut app.snackbar().write(), id);
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Material 3 puts three to seven destinations in a navigation rail. Six primary
+    /// ones and a bottom-aligned group of two is inside the pattern because the group
+    /// is secondary; a seventh PRIMARY destination is not, and the answer then is a
+    /// navigation drawer rather than a smaller font (`docs/ui.md`).
+    #[test]
+    fn the_rail_stays_inside_the_navigation_rail_pattern() {
+        assert!(
+            (3..=7).contains(&View::PRIMARY.len()),
+            "{} primary destinations",
+            View::PRIMARY.len()
+        );
+        assert_eq!(View::SECONDARY.len(), 2);
+    }
+
+    #[test]
+    fn every_primary_destination_works_on_an_estate_and_settings_is_the_one_that_does_not() {
+        for view in View::PRIMARY {
+            assert!(view.needs_estate(), "{view:?}");
+        }
+        let without: Vec<View> = View::SECONDARY
+            .into_iter()
+            .filter(|v| !v.needs_estate())
+            .collect();
+        assert_eq!(without, [View::Settings]);
+    }
+
+    /// The Start screen and the Gallery are places the window can stand and not
+    /// destinations of the rail: the first is where it stands with no estate open, the
+    /// second is a development route.
+    #[test]
+    fn the_start_screen_and_the_gallery_are_in_neither_group() {
+        for view in [View::Start, View::Gallery] {
+            assert!(!View::PRIMARY.contains(&view), "{view:?}");
+            assert!(!View::SECONDARY.contains(&view), "{view:?}");
+        }
+    }
+
+    #[test]
+    fn no_two_destinations_share_a_label_or_an_icon() {
+        let all = [
+            View::Start,
+            View::Overview,
+            View::Decisions,
+            View::Packs,
+            View::Estate,
+            View::Checks,
+            View::Deploy,
+            View::Chat,
+            View::Settings,
+            View::Gallery,
+        ];
+        let mut labels: Vec<&str> = all.iter().map(|v| v.label()).collect();
+        labels.sort_unstable();
+        labels.dedup();
+        assert_eq!(labels.len(), all.len());
+        let mut icons: Vec<&str> = all.iter().map(|v| v.icon()).collect();
+        icons.sort_unstable();
+        icons.dedup();
+        assert_eq!(icons.len(), all.len());
+    }
 }

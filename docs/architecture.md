@@ -53,17 +53,17 @@ Two crates in one workspace, satz pinned once as the submodule `vendor/satz`
 
 | module | responsibility | main public types |
 |---|---|---|
-| `src/estate.rs` | an estate directory as satz sees it: `config.toml` read into `ToolConfig` with satz's defaults and resolved against its own directory; `discover` walks a folder for every `config.toml` (depth 6, at most 200, skipping `hcl/`, `target/`, `evidence/`, `node_modules/` and dot-directories); `estates` lists the `.satz` files in `yaml_dir` that declare an `estate`, skipping a checked temp file (`is_checked_temp`); `loader` resolves `use "…"` as satz does (the file's directory, then `include_dirs`); `params` and `deployment_mode` read the resolved params without a schema | `EstateDir`, `ToolConfig`, `EstateError`, `declares_an_estate` |
+| `src/estate.rs` | an estate directory as satz sees it: `config.toml` read into `ToolConfig` with satz's defaults and resolved against its own directory; `discover` walks a folder for every `config.toml` (depth 6, at most 200, skipping `hcl/`, `target/`, `evidence/`, `node_modules/` and dot-directories); `estates` lists the `.satz` files in `yaml_dir` that declare an `estate`, skipping a checked temp file (`is_checked_temp`); `loader` resolves `use "…"` as satz does (the file's directory, then `include_dirs`); `params` and `deployment_mode` read the resolved params without a schema; `HclState::read` answers two facts about `hcl_dir` and no more — `main.tf` is there, so the estate has been transpiled here, and `.terraform` is there, so the tool's init has run | `EstateDir`, `ToolConfig`, `EstateError`, `HclState`, `declares_an_estate` |
 | `src/cst/` | the lossless document layer over the vendored tree-sitter grammar ([ADR 0003](adr/0003-the-document-layer-is-the-tree-sitter-grammar.md)); `grammar.rs` exposes the compiled parser, `build.rs` walks the tree into nodes with byte spans, `uses.rs` and `render.rs` read the pack lines and write values | `Cst`, `Node`, `NodeKind`, `Span`, `UseLine`, `UseState`, `TypedValue`, `StyleCtx`, `scan_uses`, `render_value`, `style_of`, `grammar::language` |
 | `src/edit/` | the edit primitives and the write discipline (section 4b): `apply.rs` the splice and its proof, `commit.rs` the temp file and the rename, `check.rs` the two checkers, `snapshot.rs` the delegated write | `Edit`, `EditSession`, `Proposed`, `Committed`, `Rollback`, `Checker`, `CheckFailure`, `McpChecker`, `CliChecker`, `Snapshot`, `sha256_hex` |
 | `src/schema.rs` | the provider schema as `satz update-schema` writes it, the types lifted from satz's `src/schema.rs`; `load_all` reads every `*.json` in `schema_dir` and is `SchemaError::Missing` for a directory that is absent or holds no resource type; `AttrType` decodes Terraform's type expression and prints it in Terraform's spelling | `ResourceRegistry`, `AttrType`, `BlockSchema`, `AttributeSchema`, `SchemaError` |
-| `src/model/` | the view model, built pure and rebuilt after every commit and reload: `outline.rs` classifies the blocks as satz's `EstateResolver` and `is_child` do, `params.rs` joins the `params { }` block with the questions, `packs.rs` derives the pack rows ([ADR 0007](adr/0007-pack-rows-are-derived-from-the-estate-file.md)), `value.rs` decodes a string as satz's lexer reads it | `EstateModel`, `ResourceNode`, `ResourceKind`, `AttrRow`, `ParamRow`, `PackRow`, `PackRowKind`, `LineState`, `Choice`, `SourceValue`, `StrPart`, `EditMode`, `SchemaStatus` |
+| `src/model/` | the view model, built pure and rebuilt after every commit and reload: `outline.rs` classifies the blocks as satz's `EstateResolver` and `is_child` do, `params.rs` joins the `params { }` block with the questions, `packs.rs` derives the pack rows ([ADR 0007](adr/0007-pack-rows-are-derived-from-the-estate-file.md)), `value.rs` decodes a string as satz's lexer reads it, and `hcl_blocks` reads the file's `hcl` statements with whether each carries a `trust` reason | `EstateModel`, `ResourceNode`, `ResourceKind`, `AttrRow`, `ParamRow`, `PackRow`, `PackRowKind`, `LineState`, `Choice`, `SourceValue`, `StrPart`, `EditMode`, `HclBlock`, `SchemaStatus` |
 | `src/satz/binary.rs` | where satz is and which version: the Settings override, `PATH`, `~/.local/bin/satz`; the gate against `MIN_SATZ` | `SatzBinary`, `MIN_SATZ` |
 | `src/satz/cli.rs` | `satz --config <dir> <args…>` in the estate's directory, stdout and stderr streamed line by line and cancellable; `json_report` runs a reporting command with `--format json` and an `--out` of its own and types the file it wrote; `run_in` is the same streaming without a `--config`, in a working directory of its own, for the one command that runs before a `config.toml` exists | `SatzCli`, `CliLine` |
 | `src/satz/init.rs` | `satz init` as a typed thing: `InitOptions` renders the flags it was given to argv and passes nothing for a field left blank, so a blank field is the instruction to derive; `check_target` refuses a directory that is not there or already holds a `config.toml`; `created` reads what a finished run left, because `init` names the estate file after a customer id it may have derived and the name is not knowable in advance | `InitOptions`, `check_target`, `created` |
 | `src/satz/mcp.rs` | one `satz mcp` child per estate, spoken to with rmcp over stdio; every rmcp type stays inside this file | `McpSession`, `ToolInfo`, `ToolAnnotations`, `ToolOutcome` |
 | `src/satz/session.rs` | one session per open estate: the CLI runner, the MCP child, the write lock every writer takes, the identity from `satz_open`; `apply` and `bootstrap` as a one-shot script in the OS terminal | `EstateSession`, `session_root` |
-| `src/satz/reports.rs` | serde mirrors of what a reporting command writes with `--format json` and satz returns as `structuredContent`: unknown fields ignored, missing required fields fail; the questions report round-trips a recorded output of the pinned satz. `Finding` is satz's own list of what the compile found after the front end — a `CompileSummary` carries the warnings and notes it did not refuse on, a `Refusal` the ones it did; `kind` is the kebab-case word satz writes, kept as a `String` so a kind satz adds is carried instead of failing the result | `QuestionsReport`, `QuestionRow`, `InterviewArgs`, `InterviewReport`, `OpenReport`, `EstatesReport`, `CompileSummary`, `Finding`, `FindingSeverity`, `Refusal` |
+| `src/satz/reports.rs` | serde mirrors of what a reporting command writes with `--format json` and satz returns as `structuredContent`: unknown fields ignored, missing required fields fail; the questions report round-trips a recorded output of the pinned satz. `Finding` is satz's own list of what the compile found after the front end — a `CompileSummary` carries the warnings and notes it did not refuse on, a `Refusal` the ones it did; `kind` is the kebab-case word satz writes, kept as a `String` so a kind satz adds is carried instead of failing the result | `QuestionsReport`, `QuestionRow`, `InterviewArgs`, `InterviewReport`, `PrerequisitesResult`, `OpenReport`, `EstatesReport`, `CompileSummary`, `Finding`, `FindingSeverity`, `Refusal` |
 | `src/satz/mod.rs` | the capability ceiling and the one error type of the driver | `Allow`, `SatzError` |
 | `src/llm/claude/` | Claude natively ([ADR 0004](adr/0004-claude-natively-other-providers-adapt-into-its-message-model.md)): `types.rs` the Messages API wire types as the app's only message model and `body()`, `sse.rs` the event-stream decoder and the assembler, `client.rs` the HTTPS client, `error.rs` the one error type | `Request`, `Response`, `Message`, `ContentBlock`, `SystemBlock`, `ToolDef`, `StopReason`, `StopDetails`, `Usage`, `Effort`, `ClaudeClient`, `ClaudeError` |
 | `src/llm/agent/` | the agent loop over a `ToolHost`, the approval gate, and `bridge.rs`: MCP tools as Claude tool definitions and outcomes back as `tool_result` blocks | `Agent`, `AgentEvent`, `Approval`, `ToolHost`, `EstateContext`, `tool_defs`, `tool_result` |
@@ -101,12 +101,13 @@ the stores are written from there only:
 
 - **the app coroutine** (`src/state/app_actions.rs`, `AppAction`): `LocateSatz`,
   `Discover`, `OpenEstate`, `CloseEstate`, `CreateEstate`, `CancelCreate`,
-  `SaveSettings`, `ResolveCredential`, `StoreKey`; it locates satz at startup and walks
-  `last_root`;
+  `ImportEstate`, `CancelImport`, `UpdateSatz`, `CancelUpdate`, `SaveSettings`,
+  `ResolveCredential`, `StoreKey`; it locates satz at startup and walks `last_root`;
 - **one coroutine per open estate** (`src/state/estate_actions.rs`, `EstateAction`),
   started by `EstateHost` in `src/shell/mod.rs` with the `Arc<EstateSession>` and
   living as long as the estate is open: `Reload`, `RunCommand`, `CancelCommand`,
-  `RunTool`, `OpenInTerminal`, `Close`.
+  `RunTool`, `OpenInTerminal`, `Answer`, `AcceptDefaults`, `WritePrerequisites`,
+  `CommitEdit`, `EnableMap`, `MergePresets`, `Close`.
 
 A reporting command takes one `--format` and one `--out`, both required, and writes one
 file instead of printing (satz's ADR 0021). The app names the destination: the file the
@@ -115,18 +116,38 @@ command's own `--out` field names, which is the estate's and stays, else one und
 `RunCommand` reads into the log after the streamed lines and removes. `update-prerequisites`
 is the one command in the palette the ADR leaves on the console, and the palette runs it
 with `--report-only`: the command writes the estate file by default, and a write from
-the palette would have to hold the session's write lock and reload the model.
+the palette would hold no write lock and reload no model. The writing run is offered in
+Checks instead, as `EstateAction::WritePrerequisites` — `satz_update_prerequisites
+{report_only: false}` through the delegated-write discipline of section 4b.
+
+`apply`, `bootstrap` and `migrate` run in the user's own terminal
+([ADR 0006](adr/0006-apply-and-bootstrap-run-in-the-users-terminal.md),
+[ADR 0012](adr/0012-migrate-hands-off-to-the-terminal.md)); `bootstrap --dry-run` is a
+separate palette entry that creates nothing and runs in the app, which is what the
+Overview's day-0 row offers.
 
 The shell (`src/shell/`) is the navigation rail with its badges, the top bar with the
-`runs_as`, deployment-mode, schema and satz-version chips, the `SatzBanner` while satz
-is missing or too old, the diagnostics drawer and the snackbar host.
+`runs_as` and satz-version chips and the actions beside them, the `SatzBanner` while
+satz is missing or too old, the diagnostics drawer, the commands palette and the
+snackbar host.
 
-Estates is the way in, and the only one: a row of doors (`state::Door`) over the pane
-the chosen door opens. **Create** (`src/views/create.rs`) is the `satz init` form and
-its run log; **Open** (`src/views/estates.rs`) is the folder walk and its estate cards.
-A door is one `Door` variant, one card in the row and one arm of the view's `match`, so
-another way in joins by being added in those three places. The remaining views are
-Interview, Params, Map, Resources, Commands, Chat, Settings and Gallery.
+The Start screen is the way in, and the only one: a row of doors (`state::Door`) over
+the pane the chosen door opens. **Create** (`src/views/create.rs`) is the `satz init`
+form and its run log; **Import** (`src/views/import.rs`) is the `satz import` form, its
+plan and satz's report; **Open** (`src/views/estates.rs`) is the folder walk and its
+estate cards. A door is one `Door` variant, one card in the row and one arm of the
+view's `match`, so another way in joins by being added in those three places.
+
+With an estate open the window is ordered by the job: **Overview**, **Decisions**,
+**Packs**, **Estate**, **Checks**, **Deploy**, then Chat and Settings at the foot of the
+rail. Overview (`src/views/overview.rs`) derives what the estate still owes from its own
+state on every render — `owed()` over `Facts`, pure and unit-tested — and shows nothing
+when the list is empty; nothing about how the estate reached the app is remembered, so
+created, imported and opened estates show the same list. Commands stopped being a
+destination: `PALETTE` is a table and `CommandDeck` renders any group of it, so Checks
+and Deploy each gather their own and the palette over the window (⌘K) holds them all.
+The Gallery is behind `SATZ_STUDIO_DEBUG`. `docs/ui.md` is the whole map, including why
+six primary destinations is the limit of the navigation-rail pattern.
 
 ## 4. Runtime views
 
@@ -206,7 +227,7 @@ nowhere else.
 
 **Open** is the folder walk:
 
-1. The Estates view walks a folder with `EstateDir::discover`; each `config.toml` is
+1. The Start screen walks a folder with `EstateDir::discover`; each `config.toml` is
    opened and its estates listed with their `deployment_mode`, on a blocking thread.
 2. `SatzBinary::locate(override)` takes the Settings path when it is set (a path that
    does not exist is `SatzError::NotFound` naming it), else `satz` on `PATH`, else
@@ -234,13 +255,19 @@ nowhere else.
    from now on, `stderr_backlog()` returns the last 256 lines, `pid()` names the child.
    A child that has exited is `SatzError::Closed` on the next call; an initialize that
    fails is `SatzError::Mcp` carrying what satz said before it died.
-5. The estate coroutine's `Reload` builds the model: `satz_questions` over the session
-   for the `QuestionsReport`; then, on a blocking thread, the main file read,
-   `Cst::parse`, `EstateDir::params` and `ResourceRegistry::load_all(schema_dir)`; then
-   `EstateModel::build(main, cst, schema, env, questions, diagnostics)`, where `schema`
-   is `Result<&ResourceRegistry, &Path>` and the `Err` arm becomes
-   `SchemaStatus::Missing`. The same build runs after every commit and on the top bar's
-   Reload; no file watcher runs.
+5. The estate coroutine's `Reload` builds the model: `HclState::read(hcl_dir)`;
+   `satz_questions` over the session for the `QuestionsReport`; then, on a blocking
+   thread, the main file read, `Cst::parse`, `EstateDir::params` and
+   `ResourceRegistry::load_all(schema_dir)`; then `EstateModel::build(main, cst, schema,
+   env, questions, diagnostics)`, where `schema` is `Result<&ResourceRegistry, &Path>`
+   and the `Err` arm becomes `SchemaStatus::Missing`. A reload that built a model then
+   runs `satz_transpile_check` and folds the compile's own findings into the
+   diagnostics — a prerequisite the estate does not declare, a required argument the
+   provider wants, raw HCL nobody has reviewed are data satz has and the app has no
+   other way to learn. It is skipped when the front end already refused, whose message
+   the check would only repeat, and when the reload follows a write, whose check has
+   just run and whose findings are carried in. The same build runs after every commit
+   and on the top bar's Reload; no file watcher runs.
 
 The model is derived, never guessed: a key the schema does not know is `Unknown` and
 read-only. `ResourceNode.missing_required` lists the schema's required attributes and
@@ -441,6 +468,8 @@ the tree and over the commits each push or pull request adds.
 | [0008](adr/0008-transcripts-live-outside-the-estate.md) | transcripts live under the app's data directory, never inside an estate |
 | [0009](adr/0009-refusal-fallbacks-are-on-by-default.md) | refusal fallbacks are on by default, off by a Settings switch |
 | [0010](adr/0010-claude-code-as-the-subscription-backend.md) | Claude Code as the subscription backend: the installed CLI driven over stdio, the estate's satz MCP server, the app's own approval card |
+| [0011](adr/0011-the-licence-is-apache-2-0.md) | the licence is Apache 2.0, with `NOTICE` for the material bundled under other terms |
+| [0012](adr/0012-migrate-hands-off-to-the-terminal.md) | `migrate` hands off to the terminal with `apply` and `bootstrap`; `bootstrap --dry-run` is a check that runs in the app |
 
 ## 7. Not built, and why
 

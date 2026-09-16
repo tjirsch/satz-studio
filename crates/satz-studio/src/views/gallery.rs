@@ -90,6 +90,7 @@ fn Sheet(theme: String) -> Element {
     let mut radio = use_signal(|| 0u8);
     let mut text = use_signal(|| "C0example.satz".to_string());
     let mut segment = use_signal(|| "cloud".to_string());
+    let mut tab = use_signal(|| 0u8);
     let mut dialog_open = use_signal(|| false);
     let mut filter_on = use_signal(|| true);
     let mut selected_row = use_signal(|| 0usize);
@@ -225,6 +226,14 @@ fn Sheet(theme: String) -> Element {
             }
 
             section { class: "sheet__section",
+                h3 { "Tabs" }
+                Tabs {
+                    Tab { label: "Params (12)", icon: "tune", selected: tab() == 0, onclick: move |_| tab.set(0) }
+                    Tab { label: "Resources (31)", icon: "account_tree", selected: tab() == 1, badge: 2, onclick: move |_| tab.set(1) }
+                }
+            }
+
+            section { class: "sheet__section",
                 h3 { "Dialog" }
                 Button { variant: ButtonVariant::Tonal, icon: "open_in_full", onclick: move |_| dialog_open.set(true), "Open dialog" }
                 Dialog {
@@ -280,8 +289,8 @@ fn Sheet(theme: String) -> Element {
                     div { class: "sheet__rail",
                         NavRail {
                             fab: rsx! { Fab { icon: "folder_open", label: "", onclick: |_| {} } },
-                            NavRailItem { icon: "home_storage", label: "Estates", selected: true, onclick: |_| {} }
-                            NavRailItem { icon: "quiz", label: "Interview", badge: 4, onclick: |_| {} }
+                            NavRailItem { icon: "dashboard", label: "Overview", selected: true, badge: 3, onclick: |_| {} }
+                            NavRailItem { icon: "quiz", label: "Decisions", badge: 4, onclick: |_| {} }
                             NavRailItem { icon: "settings", label: "Settings", onclick: |_| {} }
                         }
                     }

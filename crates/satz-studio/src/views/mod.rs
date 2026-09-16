@@ -3,13 +3,17 @@
 //! line's text, sliced from the document tree the reload keeps in the store.
 
 pub mod chat;
+pub mod checks;
 pub mod commands;
 pub mod create;
+pub mod deploy;
+pub mod estate;
 pub mod estates;
 pub mod gallery;
 pub mod import;
 pub mod interview;
 pub mod map;
+pub mod overview;
 pub mod params;
 pub mod resources;
 pub mod settings;

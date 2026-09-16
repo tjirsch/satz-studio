@@ -30,7 +30,7 @@ pub enum DiagSource {
     Compile,
     /// `satz transpile --check`, run by the app before a write lands
     Check,
-    /// a satz command run from the Commands view, by name
+    /// a satz command run from a command deck, by name
     Command(String),
     /// a tool over MCP refused, by name
     Tool(String),

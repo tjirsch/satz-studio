@@ -12,8 +12,8 @@ pub fn NoEstate(view: View) -> Element {
             Card { variant: CardVariant::Filled, class: "placeholder__card",
                 Icon { name: view.icon().to_string(), size: 48, class: "placeholder__icon" }
                 h2 { "{view.label()}" }
-                p { "This view works on an open estate." }
-                Button { icon: "home_storage", onclick: move |_| app.nav().set(View::Estates), "Open an estate" }
+                p { "This destination works on an open estate." }
+                Button { icon: "home_storage", onclick: move |_| app.nav().set(View::Start), "Open an estate" }
             }
         }
     }

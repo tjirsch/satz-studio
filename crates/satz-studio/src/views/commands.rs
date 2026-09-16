@@ -1,6 +1,14 @@
-//! The Commands view: the satz commands studio runs, each with its argument fields,
-//! the streamed log of the one running, and — for `apply` and `bootstrap` — the command
-//! line to copy or to open in the OS terminal.
+//! The satz commands studio runs: one table, [`PALETTE`], with each command's argument
+//! fields, and the pieces that render it — a deck of entries with the form and the
+//! shared log ([`CommandDeck`]), the log on its own ([`CommandLog`]), and the palette
+//! over the window ([`CommandPalette`]).
+//!
+//! The commands are grouped by the job: [`CHECKS`] is what judges the estate and
+//! [`DEPLOY`] is what hands it off, each a destination of its own. The palette holds
+//! every entry, including the ones neither destination gathers, and opens on ⌘K /
+//! Ctrl+K. `apply`, `bootstrap` and `migrate` are command lines to copy or to open in
+//! the OS terminal ([ADR 0006](../../../../docs/adr/0006-apply-and-bootstrap-run-in-the-users-terminal.md),
+//! [ADR 0012](../../../../docs/adr/0012-migrate-hands-off-to-the-terminal.md)).
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -9,8 +17,8 @@ use dioxus::prelude::*;
 use satz_studio_core::satz::CliLine;
 
 use crate::components::{
-    Button, ButtonVariant, Card, CardVariant, Chip, ChipKind, Icon, LinearProgress, List, ListItem,
-    Segment, SegmentedButton, Switch, TextField, Tooltip,
+    Button, ButtonVariant, Card, CardVariant, Chip, ChipKind, Dialog, Icon, LinearProgress, List,
+    ListItem, Segment, SegmentedButton, Switch, TextField, Tooltip,
 };
 use crate::state::{
     AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt, ToastKind, command_line,
@@ -424,6 +432,18 @@ pub const PALETTE: &[CommandSpec] = &[
         external: false,
     },
     CommandSpec {
+        id: "bootstrap-check",
+        label: "bootstrap --dry-run",
+        icon: "fact_check",
+        description: "Day 0, read-only: the plan satz would carry out, the identity your credentials resolve to, and the permission pre-flight. It creates nothing.",
+        head: &["bootstrap"],
+        estate: EstateArg::Positional,
+        tail: &["--dry-run"],
+        fields: &[],
+        reports: false,
+        external: false,
+    },
+    CommandSpec {
         id: "apply",
         label: "apply",
         icon: "rocket_launch",
@@ -440,29 +460,71 @@ pub const PALETTE: &[CommandSpec] = &[
         external: true,
     },
     CommandSpec {
+        id: "migrate",
+        label: "migrate",
+        icon: "swap_horiz",
+        description: "Move the estate between local and cloud state: it rewrites deployment_mode in the file, transpiles again and copies the state to the other backend — in your terminal.",
+        head: &["migrate"],
+        estate: EstateArg::Positional,
+        tail: &[],
+        fields: &[Field::Choice {
+            key: "mode",
+            flag: "--mode",
+            label: "Target mode",
+            options: &["local", "cloud"],
+            default: "cloud",
+        }],
+        reports: false,
+        external: true,
+    },
+    CommandSpec {
         id: "bootstrap",
         label: "bootstrap",
         icon: "foundation",
-        description: "Day 0: folder, project, billing link, core APIs and the state bucket, after a permission pre-flight — in your terminal.",
+        description: "Day 0: folder, project, billing link, core APIs and the state bucket, created as you — in your terminal.",
         head: &["bootstrap"],
         estate: EstateArg::Positional,
         tail: &[],
         fields: &[
             Field::Flag {
-                key: "dry_run",
-                flag: "--dry-run",
-                label: "Dry run: print the plan and run the pre-flight, create nothing",
-            },
-            Field::Flag {
                 key: "greenfield",
                 flag: "--greenfield",
                 label: "Greenfield: materialise a not-yet-existing organisation",
+            },
+            Field::Flag {
+                key: "no_default_grants",
+                flag: "--no-default-grants",
+                label: "Never widen your own IAM: report the roles an administrator must grant, and stop",
             },
         ],
         reports: false,
         external: true,
     },
 ];
+
+/// The palette entries the Checks destination gathers: what judges the estate.
+pub const CHECKS: &[&str] = &[
+    "transpile-check",
+    "update-prerequisites",
+    "require",
+    "report-compliance",
+    "bootstrap-check",
+];
+
+/// The palette entries the Deploy destination gathers: what hands the estate off.
+pub const DEPLOY: &[&str] = &[
+    "transpile",
+    "hcl-init",
+    "plan",
+    "apply",
+    "migrate",
+    "bootstrap",
+];
+
+/// The spec an id names.
+pub fn spec_of(id: &str) -> Option<&'static CommandSpec> {
+    PALETTE.iter().find(|s| s.id == id)
+}
 
 /// The initial field values of a spec: positionals and choices at their default,
 /// everything else empty.
@@ -583,126 +645,129 @@ pub fn build_args(
     Ok(args)
 }
 
+/// One group of palette entries: the list of them, the argument form of the chosen
+/// one, its command line as it will run, and the shared log. Checks and Deploy are two
+/// of these over their own ids; the palette is one over every id.
 #[component]
-pub fn CommandsView() -> Element {
+pub fn CommandDeck(ids: Vec<&'static str>, #[props(default)] tools: bool) -> Element {
     let app = use_context::<Store<AppStore>>();
     let handle = use_coroutine_handle::<EstateAction>();
+    let specs: Vec<&'static CommandSpec> = ids.iter().filter_map(|id| spec_of(id)).collect();
     let mut selected = use_signal(|| 0usize);
-    let mut values = use_signal(|| defaults(&PALETTE[0]));
-    let spec = PALETTE[selected()];
+    let first = specs.first().copied();
+    let mut values = use_signal(move || first.map(defaults).unwrap_or_default());
     let open = app.open().cloned();
-    let Some(open) = open else {
+    let (Some(open), Some(spec)) = (open, specs.get(selected()).copied()) else {
         return rsx! {};
     };
     let running = app.estate().running().cloned();
-    let log = app.estate().command_log().cloned();
-    let last = app.estate().last_command().cloned();
-    let outcome = app.estate().outcome().cloned();
-    let built = build_args(&spec, &open.name, &values(), &report_path(&spec, &values()));
+    let built = build_args(spec, &open.name, &values(), &report_path(spec, &values()));
     let preview = built
         .as_ref()
         .map(|args| command_line(&open.dir, args))
         .unwrap_or_else(|e| e.clone());
 
     rsx! {
-        div { class: "view commands",
-            h1 { class: "view__title", "Commands" }
-            div { class: "commands__layout",
-                Card { variant: CardVariant::Filled, class: "commands__palette",
-                    List {
-                        for (i, s) in PALETTE.iter().enumerate() {
-                            ListItem {
-                                key: "{s.id}",
-                                headline: s.label.to_string(),
-                                supporting: if s.external { "in your terminal".to_string() } else { String::new() },
-                                selected: i == selected(),
-                                leading: rsx! { Icon { name: s.icon.to_string(), size: 20 } },
-                                onclick: move |_| {
+        div { class: "commands__layout",
+            Card { variant: CardVariant::Filled, class: "commands__palette",
+                List {
+                    for (i, s) in specs.iter().enumerate() {
+                        ListItem {
+                            key: "{s.id}",
+                            headline: s.label.to_string(),
+                            supporting: if s.external { "in your terminal".to_string() } else { String::new() },
+                            selected: i == selected(),
+                            leading: rsx! { Icon { name: s.icon.to_string(), size: 20 } },
+                            onclick: {
+                                let spec = *s;
+                                move |_| {
                                     selected.set(i);
-                                    values.set(defaults(&PALETTE[i]));
+                                    values.set(defaults(spec));
+                                }
+                            },
+                        }
+                    }
+                }
+            }
+            div { class: "commands__work",
+                Card { variant: CardVariant::Outlined, class: "commands__form",
+                    h2 { class: "commands__heading", Icon { name: spec.icon.to_string(), size: 22 } "{spec.label}" }
+                    p { class: "commands__description", "{spec.description}" }
+                    for f in spec.fields {
+                        {
+                            let key = f.key().to_string();
+                            let current = values().get(&key).cloned().unwrap_or_default();
+                            match *f {
+                                Field::Flag { label, .. } => rsx! {
+                                    Switch { key: "{key}", label: label.to_string(), checked: current == "true", onchange: move |v: bool| { values.write().insert(key.clone(), v.to_string()); } }
+                                },
+                                Field::Choice { label, options, .. } => rsx! {
+                                    p { key: "{key}", class: "commands__label", "{label}" }
+                                    SegmentedButton {
+                                        options: options.iter().map(|o| Segment::new(*o, *o)).collect::<Vec<_>>(),
+                                        selected: current,
+                                        onselect: move |v: String| { values.write().insert(key.clone(), v); },
+                                    }
+                                },
+                                Field::Option { label, placeholder, .. } => rsx! {
+                                    TextField { key: "{key}", label: label.to_string(), value: current, placeholder: placeholder.to_string(), monospace: true, oninput: move |v: String| { values.write().insert(key.clone(), v); } }
+                                },
+                                Field::Positional { label, .. } => rsx! {
+                                    TextField { key: "{key}", label: label.to_string(), value: current, monospace: true, error: values().get(&key).map(|v| v.trim().is_empty()).unwrap_or(true), oninput: move |v: String| { values.write().insert(key.clone(), v); } }
+                                },
+                                Field::Trailing { label, placeholder, .. } => rsx! {
+                                    TextField { key: "{key}", label: label.to_string(), value: current, placeholder: placeholder.to_string(), monospace: true, oninput: move |v: String| { values.write().insert(key.clone(), v); } }
                                 },
                             }
                         }
                     }
-                }
-                div { class: "commands__work",
-                    Card { variant: CardVariant::Outlined, class: "commands__form",
-                        h2 { class: "commands__heading", Icon { name: spec.icon.to_string(), size: 22 } "{spec.label}" }
-                        p { class: "commands__description", "{spec.description}" }
-                        for f in spec.fields {
-                            {
-                                let key = f.key().to_string();
-                                let current = values().get(&key).cloned().unwrap_or_default();
-                                match *f {
-                                    Field::Flag { label, .. } => rsx! {
-                                        Switch { key: "{key}", label: label.to_string(), checked: current == "true", onchange: move |v: bool| { values.write().insert(key.clone(), v.to_string()); } }
-                                    },
-                                    Field::Choice { label, options, .. } => rsx! {
-                                        p { key: "{key}", class: "commands__label", "{label}" }
-                                        SegmentedButton {
-                                            options: options.iter().map(|o| Segment::new(*o, *o)).collect::<Vec<_>>(),
-                                            selected: current,
-                                            onselect: move |v: String| { values.write().insert(key.clone(), v); },
-                                        }
-                                    },
-                                    Field::Option { label, placeholder, .. } => rsx! {
-                                        TextField { key: "{key}", label: label.to_string(), value: current, placeholder: placeholder.to_string(), monospace: true, oninput: move |v: String| { values.write().insert(key.clone(), v); } }
-                                    },
-                                    Field::Positional { label, .. } => rsx! {
-                                        TextField { key: "{key}", label: label.to_string(), value: current, monospace: true, error: values().get(&key).map(|v| v.trim().is_empty()).unwrap_or(true), oninput: move |v: String| { values.write().insert(key.clone(), v); } }
-                                    },
-                                    Field::Trailing { label, placeholder, .. } => rsx! {
-                                        TextField { key: "{key}", label: label.to_string(), value: current, placeholder: placeholder.to_string(), monospace: true, oninput: move |v: String| { values.write().insert(key.clone(), v); } }
-                                    },
-                                }
+                    code { class: "commands__preview", "{preview}" }
+                    div { class: "commands__actions",
+                        if spec.external {
+                            Button {
+                                variant: ButtonVariant::Tonal,
+                                icon: "content_copy",
+                                disabled: built.is_err(),
+                                onclick: {
+                                    let preview = preview.clone();
+                                    move |_| copy_to_clipboard(app, &preview)
+                                },
+                                "Copy"
                             }
-                        }
-                        code { class: "commands__preview", "{preview}" }
-                        div { class: "commands__actions",
-                            if spec.external {
-                                Button {
-                                    variant: ButtonVariant::Tonal,
-                                    icon: "content_copy",
-                                    disabled: built.is_err(),
-                                    onclick: {
-                                        let preview = preview.clone();
-                                        move |_| copy_to_clipboard(app, &preview)
-                                    },
-                                    "Copy"
-                                }
-                                Button {
-                                    variant: ButtonVariant::Filled,
-                                    icon: "open_in_new",
-                                    disabled: built.is_err(),
-                                    onclick: {
-                                        let built = built.clone();
-                                        move |_| {
-                                            if let Ok(args) = &built {
-                                                handle.send(EstateAction::OpenInTerminal(args.clone()));
-                                            }
+                            Button {
+                                variant: ButtonVariant::Filled,
+                                icon: "open_in_new",
+                                disabled: built.is_err(),
+                                onclick: {
+                                    let built = built.clone();
+                                    move |_| {
+                                        if let Ok(args) = &built {
+                                            handle.send(EstateAction::OpenInTerminal(args.clone()));
                                         }
-                                    },
-                                    "Open in terminal"
-                                }
-                            } else {
-                                Button {
-                                    variant: ButtonVariant::Filled,
-                                    icon: "play_arrow",
-                                    disabled: running || built.is_err(),
-                                    onclick: {
-                                        let built = built.clone();
-                                        move |_| {
-                                            if let Ok(args) = &built {
-                                                handle.send(EstateAction::RunCommand(args.clone()));
-                                            }
-                                        }
-                                    },
-                                    "Run"
-                                }
-                                Button { variant: ButtonVariant::Outlined, icon: "stop", disabled: !running, onclick: move |_| handle.send(EstateAction::CancelCommand), "Cancel" }
+                                    }
+                                },
+                                "Open in terminal"
                             }
+                        } else {
+                            Button {
+                                variant: ButtonVariant::Filled,
+                                icon: "play_arrow",
+                                disabled: running || built.is_err(),
+                                onclick: {
+                                    let built = built.clone();
+                                    move |_| {
+                                        if let Ok(args) = &built {
+                                            handle.send(EstateAction::RunCommand(args.clone()));
+                                        }
+                                    }
+                                },
+                                "Run"
+                            }
+                            Button { variant: ButtonVariant::Outlined, icon: "stop", disabled: !running, onclick: move |_| handle.send(EstateAction::CancelCommand), "Cancel" }
                         }
                     }
+                }
+                if tools {
                     Card { variant: CardVariant::Outlined, class: "commands__tools",
                         h2 { class: "commands__heading", Icon { name: "handyman", size: 22 } "Session tools" }
                         p { class: "commands__description", "One call on this estate's satz mcp session, as the agent would make it; the result lands in the log." }
@@ -720,32 +785,65 @@ pub fn CommandsView() -> Element {
                             }
                         }
                     }
-                    Card { variant: CardVariant::Filled, class: "commands__log-card",
-                        div { class: "commands__log-header",
-                            Icon { name: "terminal", size: 20 }
-                            code { class: "commands__log-title", {last.unwrap_or_else(|| "no command run yet".to_string())} }
-                            span { class: "grow" }
-                            if let Some(o) = &outcome {
-                                Chip { kind: ChipKind::Assist, icon: if o.ok { "check_circle" } else { "error" }, label: o.text.clone(), error: !o.ok }
-                            }
-                        }
-                        if running {
-                            LinearProgress {}
-                        }
-                        pre { class: "log",
-                            for (i, line) in log.iter().enumerate() {
-                                {
-                                    let (class, text) = match line {
-                                        CliLine::Stdout(s) => ("log__line", s),
-                                        CliLine::Stderr(s) => ("log__line log__line--stderr", s),
-                                    };
-                                    rsx! { span { key: "{i}", class: "{class}", "{text}\n" } }
-                                }
-                            }
-                        }
+                }
+                CommandLog {}
+            }
+        }
+    }
+}
+
+/// The streamed output of the last command or tool call, with its command line and its
+/// outcome. There is one log per estate, so every destination that runs something shows
+/// the same card.
+#[component]
+pub fn CommandLog() -> Element {
+    let app = use_context::<Store<AppStore>>();
+    let running = app.estate().running().cloned();
+    let log = app.estate().command_log().cloned();
+    let last = app.estate().last_command().cloned();
+    let outcome = app.estate().outcome().cloned();
+    rsx! {
+        Card { variant: CardVariant::Filled, class: "commands__log-card",
+            div { class: "commands__log-header",
+                Icon { name: "terminal", size: 20 }
+                code { class: "commands__log-title", {last.unwrap_or_else(|| "no command run yet".to_string())} }
+                span { class: "grow" }
+                if let Some(o) = &outcome {
+                    Chip { kind: ChipKind::Assist, icon: if o.ok { "check_circle" } else { "error" }, label: o.text.clone(), error: !o.ok }
+                }
+            }
+            if running {
+                LinearProgress {}
+            }
+            pre { class: "log",
+                for (i, line) in log.iter().enumerate() {
+                    {
+                        let (class, text) = match line {
+                            CliLine::Stdout(s) => ("log__line", s),
+                            CliLine::Stderr(s) => ("log__line log__line--stderr", s),
+                        };
+                        rsx! { span { key: "{i}", class: "{class}", "{text}\n" } }
                     }
                 }
             }
+        }
+    }
+}
+
+/// The command palette: every satz command the app runs, over the window, opened with
+/// ⌘K / Ctrl+K or the top bar's button. It is not a destination — the work happens in
+/// Checks and Deploy — and it is where a command that belongs to neither still lives.
+#[component]
+pub fn CommandPalette() -> Element {
+    let app = use_context::<Store<AppStore>>();
+    let ids: Vec<&'static str> = PALETTE.iter().map(|s| s.id).collect();
+    rsx! {
+        Dialog {
+            open: true,
+            title: "Commands".to_string(),
+            class: "command-palette".to_string(),
+            ondismiss: move |_| app.palette_open().set(false),
+            CommandDeck { ids, tools: true }
         }
     }
 }
@@ -872,14 +970,33 @@ mod tests {
         );
     }
 
+    /// The three that change a live organisation from a terminal, and the read-only
+    /// day-0 check that does not: `bootstrap --dry-run` is its own entry precisely so
+    /// that checking day 0 is one click in the app and doing it is a hand-off.
     #[test]
-    fn only_apply_and_bootstrap_run_outside_the_app() {
+    fn only_apply_migrate_and_bootstrap_run_outside_the_app() {
         let external: Vec<&str> = PALETTE
             .iter()
             .filter(|s| s.external)
             .map(|s| s.id)
             .collect();
-        assert_eq!(external, ["apply", "bootstrap"]);
+        assert_eq!(external, ["apply", "migrate", "bootstrap"]);
+        assert!(!spec("bootstrap-check").external);
+        assert_eq!(
+            built("bootstrap-check", "C0example.satz", &BTreeMap::new()),
+            ["bootstrap", "C0example.satz", "--dry-run"]
+        );
+    }
+
+    /// Every id a destination gathers is an entry of the palette, and every entry is
+    /// reachable: the palette itself lists them all, so a command that belongs to
+    /// neither destination is still one keystroke away.
+    #[test]
+    fn the_destinations_name_entries_that_exist() {
+        for id in CHECKS.iter().chain(DEPLOY.iter()) {
+            assert!(spec_of(id).is_some(), "{id}");
+        }
+        assert!(spec_of("no-such-command").is_none());
     }
 
     /// satz's ADR 0021: a reporting command takes one `--format` and one `--out`, both

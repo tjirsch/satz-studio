@@ -9,7 +9,7 @@ satz commands, and drives satz through Claude. An answer, a pack choice or an im
 is written by satz's own writer; every other edit is checked by `satz transpile --check`
 before it replaces the file. macOS, Linux and Windows.
 
-The Estates view is the way in, and it has three doors. **Create** runs `satz init` in a
+The start screen is the way in, and it has three doors. **Create** runs `satz init` in a
 folder that holds no estate yet: satz writes `config.toml`, the directories and the
 estate file, deriving the customer's domain, directory id, organisation id, billing
 account and first administrator from the Application Default Credentials you are signed
@@ -31,6 +31,23 @@ reason for each, and its warnings.
 
 **Open** walks a folder for every `config.toml` under it and opens one of the estates
 beside it.
+
+Once an estate is open the window is ordered by the job, and the rail reads in that
+order: **Overview**, what this estate still owes; **Decisions**, the questions its packs
+declare and it has not answered; **Packs**, which packs it runs; **Estate**, the file
+itself — its params and its resource tree; **Checks**, what judges it, from the compile
+to the compliance catalogs; **Deploy**, what hands it off. Chat and Settings sit at the
+foot of the rail. Switching estates is the top bar's "Switch estate", beside the estate
+it names, and every satz command the app runs is one keystroke away in the commands
+palette (⌘K, Ctrl+K on Windows and Linux).
+
+The Overview is one card, and it lists what the estate owes — day 0 unconfirmed,
+questions unanswered, a pack the map asks for and the file has no line for, no provider
+schema, prerequisites the compile found undeclared, raw HCL nobody has reviewed, an HCL
+directory nothing has planned against. Every row is derived from the estate as it is on
+the screen, so it cannot go stale, and the card is gone when there is nothing in it.
+Nothing about how an estate reached the app is remembered: created, imported and opened
+estates show the same list, because the same facts are true of them.
 
 ## What it needs
 

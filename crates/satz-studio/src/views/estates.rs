@@ -1,4 +1,4 @@
-//! The Estates view: the way into an estate, and the only one.
+//! The Start screen: the way into an estate, and the only one.
 //!
 //! It is a row of doors over the pane the chosen door opens. **Create** runs `satz init`
 //! in a folder that holds no estate yet ([`crate::views::create`]); **Import** runs
@@ -17,7 +17,7 @@ use crate::components::{
     LinearProgress, TextField,
 };
 use crate::state::{
-    AppAction, AppStore, AppStoreStoreExt, Door, EstateFile, EstateSummary, ToastKind, View, toast,
+    AppAction, AppStore, AppStoreStoreExt, Door, EstateFile, EstateSummary, ToastKind, toast,
 };
 use crate::views::create::CreateEstate;
 use crate::views::import::ImportEstate;
@@ -219,10 +219,7 @@ fn EstateRow(config: PathBuf, estate: EstateFile) -> Element {
                     variant: ButtonVariant::Filled,
                     icon: "login",
                     disabled: busy,
-                    onclick: move |_| {
-                        handle.send(AppAction::OpenEstate { config: config.clone(), estate: path.clone() });
-                        app.nav().set(View::Estates);
-                    },
+                    onclick: move |_| handle.send(AppAction::OpenEstate { config: config.clone(), estate: path.clone() }),
                     "Open"
                 }
             }

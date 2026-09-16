@@ -1,4 +1,5 @@
-//! The Resources view: the outline as a tree, and the selected node's attributes as
+//! The Resources pane of the Estate destination: the outline as a tree, and the
+//! selected node's attributes as
 //! typed fields. A commit is one `Edit::ReplaceValue` through the app's own writer.
 //! Without a provider schema every row is untyped and locked until `update-schema`.
 
@@ -111,7 +112,7 @@ fn lock_reason(row: &AttrRow, block_editable: bool) -> Option<&'static str> {
 }
 
 #[component]
-pub fn ResourcesView() -> Element {
+pub fn ResourcesPane() -> Element {
     let app = use_context::<Store<AppStore>>();
     let handle = use_coroutine_handle::<EstateAction>();
     let selection = use_context::<DiagnosticSelection>();
@@ -140,8 +141,7 @@ pub fn ResourcesView() -> Element {
 
     let (Some(model), Some(cst)) = (model, cst) else {
         return rsx! {
-            div { class: "view resources",
-                h1 { class: "view__title", "Resources" }
+            div { class: "pane resources",
                 Card { variant: CardVariant::Filled, class: "resources__empty",
                     Icon { name: "account_tree", size: 48, class: "placeholder__icon" }
                     p { "The estate model is not available — the drawer says why." }
@@ -171,9 +171,8 @@ pub fn ResourcesView() -> Element {
         .unwrap_or_default();
 
     rsx! {
-        div { class: "view resources",
+        div { class: "pane resources",
             div { class: "resources__head",
-                h1 { class: "view__title", "Resources" }
                 span { class: "grow" }
                 if let Some(dir) = &missing_schema {
                     div { class: "resources__no-schema", role: "alert",
