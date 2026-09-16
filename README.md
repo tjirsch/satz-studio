@@ -9,15 +9,28 @@ satz commands, and drives satz through Claude. An answer, a pack choice or an im
 is written by satz's own writer; every other edit is checked by `satz transpile --check`
 before it replaces the file. macOS, Linux and Windows.
 
-The Estates view is the way in, and it has two doors. **Create** runs `satz init` in a
+The Estates view is the way in, and it has three doors. **Create** runs `satz init` in a
 folder that holds no estate yet: satz writes `config.toml`, the directories and the
 estate file, deriving the customer's domain, directory id, organisation id, billing
 account and first administrator from the Application Default Credentials you are signed
 in with and saying where each value came from. The form asks for what satz cannot
 derive — the customer's short name above all — and offers the derivable values as
 overrides that are empty by default. The run streams into a log; when it made an estate,
-that estate opens. **Open** walks a folder for every `config.toml` under it and opens one
-of the estates beside it.
+that estate opens.
+
+**Import** runs `satz import` over infrastructure that already exists: a
+`tofu show -json` document, a live organisation, folder or project, a Terraform HCL file
+or directory, or a file in the legacy YAML dialect. The source decides the shape and the
+shape decides the flags, so the form shows the options of the chosen source and no
+others. `satz import` imports INTO a project, so a folder that is not an estate yet gets
+`satz init` first; the form says which of the two it will do and shows both command lines
+before it runs. What satz wrote is read back out of the directory rather than guessed at,
+and the estate it wrote opens. Beside the log the result carries satz's own report split
+into what it wrote, what it skipped and why, the params it could not derive with its
+reason for each, and its warnings.
+
+**Open** walks a folder for every `config.toml` under it and opens one of the estates
+beside it.
 
 ## What it needs
 
@@ -28,6 +41,7 @@ of the estates beside it.
   binary is refused at startup, naming the version found. Nothing runs without satz;
   the app has no mode of its own.
 - **Application Default Credentials, for the live commands.** `satz init` behind Create,
+  `satz import` from a live scope behind Import,
   `whoami`, `report-compliance` and everything else that reads a Google organisation run
   on the credentials gcloud left behind (`gcloud auth application-default login`). satz
   reads them and satz-studio owns no credential of its own. Without them `satz init`

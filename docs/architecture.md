@@ -130,10 +130,11 @@ Interview, Params, Map, Resources, Commands, Chat, Settings and Gallery.
 
 ## 4. Runtime views
 
-### 4a. Creating and opening an estate
+### 4a. Creating, importing and opening an estate
 
-An estate is created once and opened every time after that. Both end in the same place:
-an `EstateSession` on one `.satz` file.
+An estate is created once, or imported once out of what already exists, and opened every
+time after that. All three end in the same place: an `EstateSession` on one `.satz`
+file.
 
 **Create** is `satz init` in a folder that holds no estate yet. The Create form builds
 an `InitOptions`, `check_target` refuses a folder that is not there or already carries a
@@ -156,6 +157,52 @@ after the customer id, which it may have derived. Exactly one estate is opened a
 None is the honest answer that `init` had no customer id, stated or derivable, and wrote
 the directories and the config without an estate file; the run log carries what satz
 said and the folder is left as satz left it.
+
+**Import** is `satz import`, and it is two commands rather than one. `satz import`
+imports INTO a project: run in a directory that holds no `config.toml` it refuses and
+creates nothing. `import::plan(dir)` is that decision — `ImportPlan::Import` for a
+directory that already holds one, `ImportPlan::InitThenImport` for one that does not —
+and it is read from disk in the runner, never taken from the form, so a form filled in
+before the folder changed cannot run an `init` over an estate or skip one that is needed.
+The two-step path runs `satz init` first with the Terraform tool and the provider-schema
+set the form carries, then the import, both through `SatzCli::run_in` and both streaming
+into `AppStore.import`.
+
+The SOURCE decides the shape and the shape decides the flags. `ImportOptions::argv`
+renders `--only`, `--exclude`, `--all`, `--on-collision`, `--customer-shortname`,
+`--output` and `--verbose` for a state document or a live scope, `--wrap-all` for
+Terraform HCL, and `--gate`, `--kind` and `--fork` for the legacy YAML dialect — never a
+flag of another shape. `--into` is not among them: importing only what an open estate
+does not already declare grows an estate that is open, which is not what this door does.
+The source is checked in two halves. `ImportOptions::check_source_exists` is the cheap
+one the form asks on every keystroke: the source is there, and a live scope is one.
+`ImportOptions::check_source` adds the state shape's own — satz reads what
+`tofu show -json` writes and tells it from a raw `.tfstate` by `values.root_module`, and
+answering that means parsing the document, which for a real organisation is megabytes. So
+the runner asks it once, before a child is spawned, and the form states the requirement
+under the field; the refusal is not learnt by failing a run.
+
+What the run wrote is READ BACK. The file name differs by shape — `discovered.satz` from
+a state document or a live scope, `imported-hcl.satz` from Terraform, `<stem>.satz`
+beside the source from YAML — and `--output` moves it again, so
+`ImportOptions::write_dirs` names the directories this shape writes into, `satz_files`
+hashes the `.satz` files there before the import, and `written_since` answers the files
+that are new or whose bytes changed. The hash rather than a listing is what makes a
+second import over the same `discovered.satz` read as a file written. Exactly one written
+file declaring an estate is the estate that opens; a written file that declares none is a
+converted pack and opens nothing, which the outcome says; no written file at all is a
+failure whatever the exit status was.
+
+`satz import` has no `--format json`, so the report is its console output.
+`ImportReport::of` splits the streamed lines — everything on stdout, plus the stderr
+lines satz marks `warning:`, `error:` or `import:` — into what it wrote, what it skipped
+with the reasons and levers satz names, the params it could not derive with satz's own
+reason for each, its warnings, and the rest, in order. It rewrites no line and drops
+none: a section that stops matching moves its line to `rest`. A live import also prints
+what it read from the credentials — an organisation id, a directory id, a billing
+account, an administrator's address. That is the same class of value `init` derives and
+the same rule holds: into the estate satz wrote, into the run log the window shows, and
+nowhere else.
 
 **Open** is the folder walk:
 

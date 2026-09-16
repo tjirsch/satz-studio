@@ -1,10 +1,12 @@
 //! The Estates view: the way into an estate, and the only one.
 //!
 //! It is a row of doors over the pane the chosen door opens. **Create** runs `satz init`
-//! in a folder that holds no estate yet ([`crate::views::create`]); **Open** is a folder
-//! walked for every `config.toml` under it, with the estates beside each. A door is one
-//! [`Door`] variant, one card in the row and one pane below it, so a third — Import —
-//! joins by being added in those three places.
+//! in a folder that holds no estate yet ([`crate::views::create`]); **Import** runs
+//! `satz import` over what already exists, with an `init` in front of it where the folder
+//! is not an estate yet ([`crate::views::import`]); **Open** is a folder walked for every
+//! `config.toml` under it, with the estates beside each. A door is one [`Door`] variant,
+//! one card in the row and one pane below it, and joins by being added in those three
+//! places.
 
 use std::path::PathBuf;
 
@@ -18,6 +20,7 @@ use crate::state::{
     AppAction, AppStore, AppStoreStoreExt, Door, EstateFile, EstateSummary, ToastKind, View, toast,
 };
 use crate::views::create::CreateEstate;
+use crate::views::import::ImportEstate;
 
 /// Open the OS folder picker; a choice becomes [`AppAction::Discover`]. The rail's FAB
 /// calls this too, so it puts the view on the Open door: that is the door it opens.
@@ -48,6 +51,7 @@ pub fn EstatesView() -> Element {
             }
             match door {
                 Door::Create => rsx! { CreateEstate {} },
+                Door::Import => rsx! { ImportEstate {} },
                 Door::Open => rsx! { OpenPane {} },
             }
         }

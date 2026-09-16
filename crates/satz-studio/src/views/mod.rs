@@ -7,6 +7,7 @@ pub mod commands;
 pub mod create;
 pub mod estates;
 pub mod gallery;
+pub mod import;
 pub mod interview;
 pub mod map;
 pub mod params;

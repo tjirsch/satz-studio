@@ -20,11 +20,11 @@ use satz_studio_core::diag::Diagnostic;
 use satz_studio_core::llm::CredentialSource;
 use satz_studio_core::model::EstateModel;
 use satz_studio_core::satz::reports::{InterviewReport, QuestionsReport};
-use satz_studio_core::satz::{CliLine, EstateSession, SatzBinary};
+use satz_studio_core::satz::{CliLine, EstateSession, ImportReport, SatzBinary};
 use satz_studio_core::settings::Settings;
 
 pub use ansi::strip_ansi;
-pub use app_actions::{AppAction, app_coroutine, create_command_line, save_settings};
+pub use app_actions::{AppAction, app_coroutine, run_line, save_settings};
 pub use estate_actions::{EstateAction, command_line, estate_coroutine, quote, reports_dir};
 pub use toast::{Toast, ToastKind, dismiss, enqueue};
 
@@ -136,24 +136,30 @@ impl View {
 }
 
 /// The ways an estate reaches the app: the doors of the Estates view. Each is one card
-/// in its door row and one pane below it, so a door that joins later — the import of an
-/// estate that exists in another form — is a variant, a card and a pane, and no
-/// redesign.
+/// in its door row and one pane below it.
+///
+/// The row reads from nothing to an estate: **Create** makes one where there is none,
+/// **Import** makes one out of infrastructure that already exists in another form, and
+/// **Open** takes one that is already written.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Door {
     /// `satz init` in a folder that holds no estate yet
     Create,
+    /// `satz import` over a state file, a live scope, Terraform HCL or a legacy YAML
+    /// file — with `satz init` first when the folder is not an estate yet
+    Import,
     /// a folder walked for the estates already in it
     #[default]
     Open,
 }
 
 impl Door {
-    pub const ALL: [Door; 2] = [Door::Create, Door::Open];
+    pub const ALL: [Door; 3] = [Door::Create, Door::Import, Door::Open];
 
     pub fn label(self) -> &'static str {
         match self {
             Door::Create => "Create",
+            Door::Import => "Import",
             Door::Open => "Open",
         }
     }
@@ -162,6 +168,7 @@ impl Door {
     pub fn icon(self) -> &'static str {
         match self {
             Door::Create => "add_home",
+            Door::Import => "move_to_inbox",
             Door::Open => "folder_open",
         }
     }
@@ -171,6 +178,9 @@ impl Door {
         match self {
             Door::Create => {
                 "A new estate, made by satz init: the config, the directories and the estate file, with what your credentials answer already in it."
+            }
+            Door::Import => {
+                "An estate made by satz import out of what exists: a tofu show -json document, a live organisation, folder or project, Terraform HCL, or a legacy YAML file."
             }
             Door::Open => "An estate that is already on disk: choose the folder that holds it.",
         }
@@ -282,6 +292,33 @@ pub struct CreateStore {
     pub outcome: Option<CommandOutcome>,
 }
 
+/// The `satz import` run behind the Import door, reset when a run starts.
+///
+/// Same four fields as [`CreateStore`] — it is the same kind of thing, one streamed run
+/// with an outcome — plus the report satz printed, which is the whole point of the run:
+/// what it wrote, what it could not derive and what it left out.
+///
+/// The privacy rule of [`CreateStore`] holds here word for word, and a live import makes
+/// it matter more: the run prints the organisation id, the customer directory id, the
+/// billing account and an administrator's address it derived from the credentials. Those
+/// lines live here, in memory, for as long as the window shows them; they are written
+/// into the estate satz created and nowhere else — not into `Settings`, not into a
+/// transcript, not into a file of this app's own.
+#[derive(Store, Default)]
+pub struct ImportStore {
+    /// the streamed output of the run, ANSI stripped — `satz init` too, on the two-step
+    /// path, so the log is the whole sequence
+    pub log: Vec<CliLine>,
+    /// a run is in progress: Import is disabled, Cancel is enabled
+    pub running: bool,
+    /// the command line, or the two of them, of the running or last run
+    pub command: Option<String>,
+    /// how the last run ended
+    pub outcome: Option<CommandOutcome>,
+    /// satz's own import report, split out of what the import run printed
+    pub report: ImportReport,
+}
+
 /// The `satz self-update` run: satz owns its own updater, so the app only runs it and
 /// shows what it said. Same shape as [`CreateStore`], because it is the same kind of
 /// thing — one streamed command with an outcome.
@@ -318,6 +355,8 @@ pub struct AppStore {
     pub estate: EstateStore,
     /// the `satz init` run behind the Create door
     pub create: CreateStore,
+    /// the `satz import` run behind the Import door
+    pub import: ImportStore,
     /// the `satz self-update` run offered by the banner and by Settings
     pub update: UpdateStore,
 }
@@ -340,6 +379,7 @@ impl AppStore {
             drawer_open: false,
             estate: EstateStore::default(),
             create: CreateStore::default(),
+            import: ImportStore::default(),
             update: UpdateStore::default(),
         }
     }

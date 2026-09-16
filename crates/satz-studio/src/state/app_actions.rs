@@ -9,14 +9,18 @@ use dioxus::prelude::*;
 use futures_util::StreamExt;
 use satz_studio_core::estate::EstateDir;
 use satz_studio_core::llm::Credential;
-use satz_studio_core::satz::{CliLine, EstateSession, InitOptions, SatzBinary, SatzCli, SatzError};
+use satz_studio_core::satz::import::{ImportPlan, satz_files, written_since};
+use satz_studio_core::satz::{
+    CliLine, EstateSession, ImportOptions, ImportReport, InitOptions, SatzBinary, SatzCli,
+    SatzError,
+};
 use satz_studio_core::settings::Settings;
 use tokio_util::sync::CancellationToken;
 
 use super::{
     AppStore, AppStoreStoreExt, CommandOutcome, CreateStoreStoreExt, CredentialStatus, EstateFile,
-    EstateStore, EstateSummary, OpenEstate, SatzStatus, ToastKind, UpdateStoreStoreExt, quote,
-    strip_ansi, toast,
+    EstateStore, EstateSummary, ImportStoreStoreExt, OpenEstate, SatzStatus, ToastKind,
+    UpdateStoreStoreExt, quote, strip_ansi, toast,
 };
 
 pub enum AppAction {
@@ -37,6 +41,16 @@ pub enum AppAction {
         options: InitOptions,
     },
     CancelCreate,
+    /// `satz import` in `dir`, streamed into the import log, preceded by `satz init`
+    /// when `dir` holds no `config.toml` yet; the estate the import wrote is opened
+    ImportEstate {
+        dir: PathBuf,
+        options: ImportOptions,
+        /// what the `satz init` half runs with, used only when `dir` is not an estate
+        /// yet — the directory decides, never the form
+        init: InitOptions,
+    },
+    CancelImport,
     /// `satz self-update` on the satz that is installed, streamed into the update log,
     /// followed by locating satz again so the new version is the one in use. satz owns
     /// its own updater; the app only runs it. `check_only` passes `--check-only`, which
@@ -60,6 +74,7 @@ pub async fn app_coroutine(mut rx: UnboundedReceiver<AppAction>, app: Store<AppS
     // `init` is a live command against Google and can take a while; it streams from a
     // task so this loop stays free to take `CancelCreate`, as a command does.
     let mut creating: Option<CancellationToken> = None;
+    let mut importing: Option<CancellationToken> = None;
     let mut updating: Option<CancellationToken> = None;
     while let Some(action) = rx.next().await {
         match action {
@@ -72,6 +87,14 @@ pub async fn app_coroutine(mut rx: UnboundedReceiver<AppAction>, app: Store<AppS
             }
             AppAction::CancelCreate => {
                 if let Some(token) = creating.take() {
+                    token.cancel();
+                }
+            }
+            AppAction::ImportEstate { dir, options, init } => {
+                importing = import_estate(app, dir, options, init);
+            }
+            AppAction::CancelImport => {
+                if let Some(token) = importing.take() {
                     token.cancel();
                 }
             }
@@ -343,11 +366,12 @@ async fn open_estate(app: Store<AppStore>, config: PathBuf, estate: PathBuf) {
     app.opening().set(None);
 }
 
-/// The `satz init` run as it reads on a command line: the directory it runs in, then
+/// A run IN a directory as it reads on a command line: the directory it runs in, then
 /// the command, because the working directory is the whole of the address — there is no
-/// `--config` on this call and no `config.toml` yet for one to name. An empty `dir` is
-/// the form before a folder has been chosen and yields the command alone.
-pub fn create_command_line(dir: &Path, args: &[String]) -> String {
+/// `--config` on these calls and, before `init`, no `config.toml` yet for one to name.
+/// An empty `dir` is a form before a folder has been chosen and yields the command
+/// alone. Create and Import both preview their runs with it.
+pub fn run_line(dir: &Path, args: &[String]) -> String {
     let command: Vec<String> = std::iter::once("satz".to_string())
         .chain(args.iter().map(|a| quote(a)))
         .collect();
@@ -398,7 +422,7 @@ fn create_estate(
         tokio::spawn(async move { SatzCli::run_in(&bin.path, &run_in, &argv, tx, child).await });
 
     let create = app.create();
-    create.command().set(Some(create_command_line(&dir, &args)));
+    create.command().set(Some(run_line(&dir, &args)));
     create.log().clear();
     create.outcome().set(None);
     create.running().set(true);
@@ -501,6 +525,287 @@ async fn created(app: Store<AppStore>, dir: &Path) -> CommandOutcome {
             ),
         },
     }
+}
+
+// ---- the Import door -----------------------------------------------------------
+//
+// `satz import` imports INTO a project — run where there is no `config.toml` it refuses
+// and creates nothing. So the door is two steps, and the DIRECTORY decides which:
+// `ImportPlan` is read from disk in the runner, never taken from the form, so a form
+// filled in before the folder changed cannot run an `init` over an estate or skip one
+// that is needed.
+//
+// What the run wrote is read back rather than predicted: the file name differs by shape
+// and `--output` moves it again, so the `.satz` files of the directories the shape writes
+// into are hashed before the import and compared after. Exactly one of them declaring an
+// estate is the estate that opens; none at all is a failure, whatever the exit status
+// said.
+//
+// Nothing the run derived leaves here. A live import prints the organisation id, the
+// customer directory id, the billing account and an administrator's address it read from
+// the credentials: those lines go into the import log, which lives as long as the window
+// shows it, and the values themselves are in the estate satz wrote.
+
+/// `satz import` in `dir`, with `satz init` first when `dir` holds no `config.toml`.
+///
+/// Everything that can refuse before a child is spawned does: satz is there, no run is in
+/// flight, the directory exists, and the source is one this shape can read — which is
+/// where a raw `.tfstate` is turned away with satz's own sentence rather than after a
+/// run.
+pub fn import_estate(
+    app: Store<AppStore>,
+    dir: PathBuf,
+    options: ImportOptions,
+    init: InitOptions,
+) -> Option<CancellationToken> {
+    if app.import().running().cloned() {
+        toast(app, ToastKind::Info, "an import is already running");
+        return None;
+    }
+    let Some(bin) = app.satz().read().binary().cloned() else {
+        toast(
+            app,
+            ToastKind::Error,
+            "satz is not available — see the banner",
+        );
+        return None;
+    };
+    let plan = match satz_studio_core::satz::import::plan(&dir) {
+        Ok(plan) => plan,
+        Err(e) => {
+            toast(app, ToastKind::Error, e.to_string());
+            return None;
+        }
+    };
+    if let Err(e) = options.check_source(&dir) {
+        toast(app, ToastKind::Error, e.to_string());
+        return None;
+    }
+
+    let init_args = init.argv();
+    let import_args = options.argv();
+    let command = match plan {
+        ImportPlan::Import => run_line(&dir, &import_args),
+        ImportPlan::InitThenImport => format!(
+            "{}\n{}",
+            run_line(&dir, &init_args),
+            run_line(&dir, &import_args)
+        ),
+    };
+
+    let token = CancellationToken::new();
+    let store = app.import();
+    store.command().set(Some(command));
+    store.log().clear();
+    store.outcome().set(None);
+    store.report().set(ImportReport::default());
+    store.running().set(true);
+
+    let satz = bin.path.clone();
+    let child = token.clone();
+    spawn(async move {
+        let (outcome, cancelled) = run_import(app, satz, dir, plan, init, options, child).await;
+        // a cancel is what the user asked for, so it is the outcome chip and not a toast
+        if !outcome.ok && !cancelled {
+            toast(app, ToastKind::Error, outcome.text.clone());
+        }
+        app.import().outcome().set(Some(outcome));
+        app.import().running().set(false);
+    });
+    Some(token)
+}
+
+/// The sequence: `init` when the plan says so, the directories read before the import,
+/// the import, its report, and the estate it wrote. The second half of the answer is
+/// whether the operator cancelled, which is an outcome and not an error to raise.
+async fn run_import(
+    app: Store<AppStore>,
+    satz: PathBuf,
+    dir: PathBuf,
+    plan: ImportPlan,
+    init: InitOptions,
+    options: ImportOptions,
+    cancel: CancellationToken,
+) -> (CommandOutcome, bool) {
+    let failed = |text: String| (CommandOutcome { ok: false, text }, false);
+    if plan == ImportPlan::InitThenImport {
+        let end = stream_into_import_log(app, &satz, &dir, &init.argv(), cancel.clone()).await;
+        if let Some(failure) = end.failure {
+            if failure.cancelled {
+                return (
+                    CommandOutcome {
+                        ok: false,
+                        text: failure.text,
+                    },
+                    true,
+                );
+            }
+            // the import never ran, and on this path that is the thing to say first
+            return failed(format!(
+                "satz init refused, so nothing was imported: {}",
+                failure.text
+            ));
+        }
+    }
+
+    // `init` has written config.toml by now, whichever way this got here
+    let estate = match EstateDir::open(&dir) {
+        Ok(estate) => estate,
+        Err(e) => return failed(e.to_string()),
+    };
+    let dirs = options.write_dirs(&estate);
+    let before = match read_import_dirs(dirs.clone(), satz_files).await {
+        Ok(before) => before,
+        Err(text) => return failed(text),
+    };
+
+    let end = stream_into_import_log(app, &satz, &dir, &options.argv(), cancel).await;
+    app.import().report().set(ImportReport::of(&end.lines));
+    if let Some(failure) = end.failure {
+        return (
+            CommandOutcome {
+                ok: false,
+                text: failure.text,
+            },
+            failure.cancelled,
+        );
+    }
+
+    let written =
+        match read_import_dirs(dirs.clone(), move |dirs| written_since(&before, dirs)).await {
+            Ok(written) => written,
+            Err(text) => return failed(text),
+        };
+    let estates: Vec<PathBuf> = written
+        .iter()
+        .filter(|w| w.declares_estate)
+        .map(|w| w.path.clone())
+        .collect();
+    let names = |paths: &[PathBuf]| {
+        paths
+            .iter()
+            .map(|p| {
+                p.file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .into_owned()
+            })
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    let done = |text: String| (CommandOutcome { ok: true, text }, false);
+    match (written.len(), estates.len()) {
+        // satz exited zero and left nothing behind: the log says what it did, and this
+        // is not an import that quietly succeeded
+        (0, _) => failed(format!(
+            "satz wrote no .satz file in {} — the report and the log have what it said",
+            dirs.iter()
+                .map(|d| d.display().to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        )),
+        (_, 1) => {
+            let estate_file = estates[0].clone();
+            let name = estate_file
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .into_owned();
+            open_estate(app, estate.config_path.clone(), estate_file).await;
+            done(format!("imported {name}"))
+        }
+        // a converted pack is a file, not an estate: there is nothing to open, and
+        // saying so is better than opening something else
+        (_, 0) => done(format!(
+            "wrote {} — no estate is declared there, so nothing was opened",
+            names(&written.iter().map(|w| w.path.clone()).collect::<Vec<_>>())
+        )),
+        (_, many) => done(format!(
+            "{many} estate files written ({}) — open the one you want",
+            names(&estates)
+        )),
+    }
+}
+
+/// The import's write directories read on a blocking thread, with the failure as the
+/// sentence it will be shown as.
+async fn read_import_dirs<T, F>(dirs: Vec<PathBuf>, read: F) -> Result<T, String>
+where
+    T: Send + 'static,
+    F: FnOnce(&[PathBuf]) -> Result<T, satz_studio_core::estate::EstateError> + Send + 'static,
+{
+    match tokio::task::spawn_blocking(move || read(&dirs)).await {
+        Ok(Ok(value)) => Ok(value),
+        Ok(Err(e)) => Err(e.to_string()),
+        Err(e) => Err(format!("reading what the import wrote: {e}")),
+    }
+}
+
+/// How one command of the sequence ended.
+struct RunEnd {
+    /// why it did not finish. `None` is a clean exit.
+    failure: Option<Failure>,
+    /// every line it streamed, which is what the import report is read out of
+    lines: Vec<CliLine>,
+}
+
+/// A command that did not finish: what to show, and whether the operator asked for it.
+struct Failure {
+    /// satz's own last stderr line, the cancel, or the status
+    text: String,
+    cancelled: bool,
+}
+
+/// One satz command in `dir`, streamed into the import log and collected.
+async fn stream_into_import_log(
+    app: Store<AppStore>,
+    satz: &Path,
+    dir: &Path,
+    args: &[String],
+    cancel: CancellationToken,
+) -> RunEnd {
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<CliLine>(256);
+    let (satz, dir, argv) = (satz.to_path_buf(), dir.to_path_buf(), args.to_vec());
+    let join = tokio::spawn(async move { SatzCli::run_in(&satz, &dir, &argv, tx, cancel).await });
+
+    let store = app.import();
+    let mut lines = Vec::new();
+    let mut last_stderr = None;
+    while let Some(line) = rx.recv().await {
+        let clean = match line {
+            CliLine::Stdout(s) => CliLine::Stdout(strip_ansi(&s)),
+            CliLine::Stderr(s) => {
+                let s = strip_ansi(&s);
+                if !s.trim().is_empty() {
+                    last_stderr = Some(s.clone());
+                }
+                CliLine::Stderr(s)
+            }
+        };
+        store.log().push(clean.clone());
+        lines.push(clean);
+    }
+    let refused = |text: String| {
+        Some(Failure {
+            text,
+            cancelled: false,
+        })
+    };
+    let failure = match join.await {
+        // satz said why on its own stderr; a status line alone would replace that
+        // sentence with a number
+        Ok(Ok(status)) if !status.success() => {
+            refused(last_stderr.unwrap_or_else(|| format!("exited with {status}")))
+        }
+        Ok(Ok(_)) => None,
+        Ok(Err(SatzError::Cancelled)) => Some(Failure {
+            text: "cancelled — the folder is left as satz left it".to_string(),
+            cancelled: true,
+        }),
+        Ok(Err(e)) => refused(e.to_string()),
+        Err(e) => refused(format!("the import task failed: {e}")),
+    };
+    RunEnd { failure, lines }
 }
 
 /// Write the settings file, put them in the store and locate satz again. The one

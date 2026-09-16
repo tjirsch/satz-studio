@@ -453,6 +453,186 @@
   color: var(--md-sys-color-on-surface-variant);
 }
 
+/* ---- import (the Import door) --------------------------------------------------
+   Two panes, the form and the result, in the anatomy the Create door uses: the same
+   run, the same log, and one card more for the report satz printed. */
+
+.import {
+  display: grid;
+  grid-template-columns: minmax(360px, 1fr) minmax(360px, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+@media (max-width: 1100px) {
+  .import {
+    grid-template-columns: 1fr;
+  }
+}
+
+.import__form {
+  gap: 16px;
+}
+
+.import__result {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.import__heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font: var(--md-sys-typescale-title-medium);
+}
+
+.import__subheading {
+  font: var(--md-sys-typescale-title-small);
+  color: var(--md-sys-color-on-surface-variant);
+  margin-top: 8px;
+}
+
+.import__description,
+.import__note {
+  font: var(--md-sys-typescale-body-small);
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.import__label {
+  font: var(--md-sys-typescale-body-small);
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.import__plan {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px 16px;
+  border-radius: var(--md-sys-shape-corner-medium);
+  background: var(--md-sys-color-secondary-container);
+  color: var(--md-sys-color-on-secondary-container);
+  font: var(--md-sys-typescale-body-small);
+}
+
+.import__folder,
+.import__source {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.import__folder .m-button,
+.import__source .m-button {
+  margin-top: 8px;
+}
+
+.import__folder-field,
+.import__source-field {
+  flex: 1 1 320px;
+}
+
+.import__preview {
+  display: block;
+  padding: 12px 16px;
+  border-radius: var(--md-sys-shape-corner-small);
+  background: var(--md-sys-color-surface-container);
+  white-space: pre-wrap;
+  word-break: break-all;
+  user-select: text;
+}
+
+.import__actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.import__report {
+  gap: 12px;
+}
+
+.import__section {
+  border-left: 4px solid var(--md-sys-color-outline-variant);
+  padding-left: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.import__section--skipped {
+  border-left-color: var(--md-sys-color-tertiary);
+}
+
+.import__section--not-derivable {
+  border-left-color: var(--md-sys-color-secondary);
+}
+
+.import__section--warning {
+  border-left-color: var(--md-sys-color-error);
+}
+
+.import__section--wrote {
+  border-left-color: var(--md-sys-color-primary);
+}
+
+.import__section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font: var(--md-sys-typescale-title-small);
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.import__section-lines {
+  margin: 0;
+  font: var(--md-sys-typescale-body-small);
+  font-family: var(--md-ref-typeface-mono);
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+}
+
+.import__next {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.import__log-card {
+  min-height: 240px;
+  padding: 12px 16px 16px;
+  gap: 8px;
+}
+
+.import__log-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.import__log-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  user-select: text;
+}
+
+.import__privacy {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font: var(--md-sys-typescale-body-small);
+  color: var(--md-sys-color-on-surface-variant);
+}
+
 /* ---- settings ----------------------------------------------------------------- */
 
 .settings__grid {
