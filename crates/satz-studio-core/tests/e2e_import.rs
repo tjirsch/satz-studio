@@ -111,11 +111,14 @@ async fn the_hcl_shape_writes_an_estate_the_read_back_finds() {
     assert!(report.wrote[0].contains("imported-hcl.satz"));
     // satz's own "what to do next" sentence, which the result screen shows
     assert!(report.wrote[0].contains("tofu plan"), "{:?}", report.wrote);
+    // the file and the line, not the separator between them: satz writes the path the
+    // way the platform does, and a test that pinned `src/main.tf` would fail on Windows
+    // for no reason
     assert!(
         report
             .rest
             .iter()
-            .any(|l| l.contains("promoted") && l.contains("src/main.tf:")),
+            .any(|l| l.contains("promoted") && l.contains("main.tf:1")),
         "the promoted block, with its file and line: {:?}",
         report.rest
     );
