@@ -69,8 +69,9 @@ Two crates in one workspace, satz pinned once as the submodule `vendor/satz`
 | `src/llm/agent/` | the agent loop over a `ToolHost`, the approval gate, and `bridge.rs`: MCP tools as Claude tool definitions and outcomes back as `tool_result` blocks | `Agent`, `AgentEvent`, `Approval`, `ToolHost`, `EstateContext`, `tool_defs`, `tool_result` |
 | `src/llm/auth.rs` | where a credential comes from; the keychain entry `satz-studio` / `anthropic-api-key` | `Credential`, `CredentialSource` |
 | `src/llm/provider/` | the providers that are not Claude, mapping the Claude-shaped request into their wire format and their stream back; `Capabilities` says what each drops | `ChatProvider`, `StreamEvent`, `Capabilities`, `OpenAiCompat`, `Ollama` |
+| `src/llm/claude_code/` | the Claude Code engine ([ADR 0010](adr/0010-claude-code-as-the-subscription-backend.md)): `cli.rs` where the binary is, its version and `claude auth status`; `events.rs` the lines the CLI writes, typed; `session.rs` one process per estate, its command line, the turn, the approval round trip and the interrupt; `log.rs` the stream log ([ADR 0013](adr/0013-the-claude-code-stream-log-is-verbatim-off-by-default-and-bounded.md)) | `ClaudeCodeCli`, `AuthStatus`, `ClaudeCodeError`, `CcLine`, `Session`, `SessionOptions`, `StreamLog`, `StreamLogConfig`, `Channel` |
 | `src/transcript.rs` | conversations as JSONL under the app's data directory, outside the estate ([ADR 0008](adr/0008-transcripts-live-outside-the-estate.md)) | `TranscriptStore`, `Transcript`, `TranscriptHeader` |
-| `src/settings.rs` | `<config dir>/satz-studio/settings.toml`: a missing file is the first run, a broken one is an error; no credential in it; `data_dir` is where transcripts and the one-shot scripts go | `Settings`, `ProviderChoice`, `Theme`, `settings_path`, `data_dir` |
+| `src/settings.rs` | `<config dir>/satz-studio/settings.toml`: a missing file is the first run, a broken one is an error; no credential in it; `data_dir` is where transcripts, the Claude Code stream logs and the one-shot scripts go | `Settings`, `ProviderChoice`, `Theme`, `settings_path`, `data_dir` |
 | `src/diag.rs` | the one diagnostic type: `Diagnostic::from_finding` turns one of satz's findings into it — the severity mapped, the `kind` carried, a relative file resolved against the estate's directory, the group's header in front of the message — and `parse_satz_output` reads what satz prints when there is no finding to read (`file:line: msg`, `satz: line N: msg`, the severity prefixes, the banner dropped, an indented line continuing the one above) | `Diagnostic`, `Severity`, `DiagSource`, `parse_satz_output` |
 
 `build.rs` compiles `vendor/satz-tree-sitter/src/parser.c` (and `scanner.c` when the
@@ -361,9 +362,16 @@ this section is the API engine.
   ([ADR 0009](adr/0009-refusal-fallbacks-are-on-by-default.md)).
 - **Stream.** `ClaudeClient` posts to `{base_url}/v1/messages` with `x-api-key` or a
   bearer token and the betas a request needs in one `anthropic-beta` header.
-  `SseDecoder` and `Assembler` fold the events into a `Response`; a tool's input is
-  parsed at `content_block_stop`, and every complete block arrives as
-  `StreamEvent::BlockStop { index, block }`. A request is retried at most twice, on a
+  `SseDecoder` and `Assembler` fold the events into a `Response`, and every complete
+  block arrives as `StreamEvent::BlockStop { index, block }`. A tool's input arrives as
+  `input_json_delta` fragments that are concatenated as they come — each forwarded as
+  `StreamEvent::ToolInputDelta` for display, none parsed — and parsed once, at
+  `content_block_stop` (`sse::tool_input`). A buffer with nothing in it, which is what a
+  tool called without arguments leaves (no fragment, or one empty `partial_json`), is the
+  input the block opened with, `{}`. A buffer with something in it that is not JSON is
+  `ClaudeError::Stream` naming the tool and showing the buffer, quoted, whole up to 240
+  characters and otherwise its first 160 and last 80, with its length in bytes.
+  `OpenAiCompat` and `Ollama` close their tool calls by the same function. A request is retried at most twice, on a
   rate limit, an overload, a server error or a connection failure, and only before the
   first byte of its stream. `ContentBlock` types the five block kinds the code reads;
   every other block is `ContentBlock::Other`, carried and replayed verbatim.
@@ -418,7 +426,7 @@ Code's and asks it nothing but `claude auth status --json`.
   `can_use_tool` control requests, and a `result` line ending the turn.
 - **The translation.** `stream_event` payloads go through the same `Assembler` the API
   engine uses — a new one per `message_start`, since one turn is many assistant
-  messages — and its `StreamEvent`s become `TextDelta`, `ThinkingDelta`,
+  messages, and the tool input rule of section 4c with it — and its `StreamEvent`s become `TextDelta`, `ThinkingDelta`,
   `ToolUseStarted` and `ToolInputDelta` under the name satz gives the tool, with the
   `mcp__satz__` prefix stripped. A `tool_result` block becomes `ToolResult`, a
   `can_use_tool` request becomes `ToolCallPending` whose answer is the control response
@@ -430,6 +438,22 @@ Code's and asks it nothing but `claude auth status --json`.
   app keeps no transcript for this engine — Claude Code holds the conversation, "New"
   starts a fresh process, and the model comes from Settings because it is an argument of
   that process.
+- **A failure** is the session's `ClaudeCodeError`, returned from `run_turn` and sent as
+  `AgentEvent::Failed` through the one conversion into `ClaudeError::ClaudeCode`, which
+  carries the error's own message: a stream the assembler refused reads `claude code:
+  stream: …`, with the prefix once.
+- **The stream log** ([ADR 0013](adr/0013-the-claude-code-stream-log-is-verbatim-off-by-default-and-bounded.md)).
+  With `Settings.claude_code_log` on, `SessionOptions.log` names
+  `<data dir>/satz-studio/logs/claude-code/` and the session writes one file per process,
+  `<created>.log`; with it off, which is the default, nothing is written. A record is one
+  line, `<RFC 3339 instant>\t<channel>\t<line>`: `stdout` every line the CLI writes,
+  recorded before it is parsed; `stdin` every line the app writes; `stderr` every line
+  of the CLI's standard error, read on its own task; `studio` the app's own — the header
+  (the app and CLI versions, the binary, the estate, the command line) and, when a spawn
+  or a turn ends in an error, that error. Nothing is redacted. A file stops recording at
+  16 MiB with a last line saying so, and opening a log deletes the oldest so that ten
+  remain. A write that fails fails the turn, naming the file. `awk -F'\t' '$2 ==
+  "stdout"' <file> | cut -f3-` gives the stream back as the CLI wrote it.
 
 ## 5. Deployment and CI
 
@@ -470,6 +494,7 @@ the tree and over the commits each push or pull request adds.
 | [0010](adr/0010-claude-code-as-the-subscription-backend.md) | Claude Code as the subscription backend: the installed CLI driven over stdio, the estate's satz MCP server, the app's own approval card |
 | [0011](adr/0011-the-licence-is-apache-2-0.md) | the licence is Apache 2.0, with `NOTICE` for the material bundled under other terms |
 | [0012](adr/0012-migrate-hands-off-to-the-terminal.md) | `migrate` hands off to the terminal with `apply` and `bootstrap`; `bootstrap --dry-run` is a check that runs in the app |
+| [0013](adr/0013-the-claude-code-stream-log-is-verbatim-off-by-default-and-bounded.md) | the Claude Code stream log is verbatim, off by default, one file per conversation, and bounded to ten files of 16 MiB |
 
 ## 7. Not built, and why
 

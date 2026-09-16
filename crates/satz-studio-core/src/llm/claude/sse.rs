@@ -192,16 +192,18 @@ enum Building {
     ToolUse {
         id: String,
         name: String,
+        /// the input `content_block_start` carried: `{}` on every stream the API sends
         input: serde_json::Value,
+        /// the `input_json_delta` fragments so far, concatenated and never parsed
         json: String,
-        deltas: bool,
     },
     Other(serde_json::Value),
 }
 
 /// Folds the SSE events of one response into a [`Response`] and yields the
 /// [`StreamEvent`]s as they arrive. A tool's input is the `input_json_delta`s of its
-/// block concatenated and parsed at `content_block_stop`, never string-matched.
+/// block concatenated and parsed once, at `content_block_stop` ([`tool_input`]) — never
+/// per fragment, never string-matched.
 pub struct Assembler {
     id: Option<String>,
     model: String,
@@ -306,7 +308,6 @@ impl Assembler {
                             name,
                             input,
                             json: String::new(),
-                            deltas: false,
                         }
                     }
                     _ => Building::Other(content_block),
@@ -335,10 +336,9 @@ impl Assembler {
                     ("signature_delta", Building::Thinking { signature, .. }) => {
                         signature.push_str(&field_str(&delta, "signature"))
                     }
-                    ("input_json_delta", Building::ToolUse { json, deltas, .. }) => {
+                    ("input_json_delta", Building::ToolUse { json, .. }) => {
                         let piece = field_str(&delta, "partial_json");
                         json.push_str(&piece);
-                        *deltas = true;
                         out.push(StreamEvent::ToolInputDelta {
                             index,
                             partial_json: piece,
@@ -371,17 +371,8 @@ impl Assembler {
                         name,
                         input,
                         json,
-                        deltas,
                     } => {
-                        let input = if deltas {
-                            serde_json::from_str(&json).map_err(|e| {
-                                ClaudeError::Stream(format!(
-                                    "the input of tool `{name}` is not JSON: {e}"
-                                ))
-                            })?
-                        } else {
-                            input
-                        };
+                        let input = tool_input(&name, &json, input)?;
                         ContentBlock::ToolUse { id, name, input }
                     }
                     Building::Other(value) => ContentBlock::Other(value),
@@ -482,6 +473,47 @@ impl Assembler {
             ))),
         }
     }
+}
+
+/// A tool call's input, once its block is complete: `buffer` is every input fragment the
+/// stream sent for it, concatenated.
+///
+/// A buffer with nothing in it is the input the block opened with — `{}` — and not a
+/// parse: a tool called without arguments streams no fragment, or one empty
+/// `partial_json`, and either leaves nothing to parse. A buffer with something in it is
+/// parsed whole, and when it is not JSON the error names the tool and shows what the
+/// stream sent ([`raw_excerpt`]), so the message alone says what arrived.
+pub(crate) fn tool_input(
+    name: &str,
+    buffer: &str,
+    opened_with: serde_json::Value,
+) -> Result<serde_json::Value, ClaudeError> {
+    if buffer.trim().is_empty() {
+        return Ok(opened_with);
+    }
+    serde_json::from_str(buffer).map_err(|e| {
+        ClaudeError::Stream(format!(
+            "the input of tool `{name}` is not JSON ({e}); the stream sent {}",
+            raw_excerpt(buffer)
+        ))
+    })
+}
+
+/// The first and the last characters of a raw buffer shown in an error.
+const EXCERPT_HEAD: usize = 160;
+const EXCERPT_TAIL: usize = 80;
+
+/// A raw buffer as an error message shows it: quoted with its escapes visible, whole
+/// when it is short, its head and its tail when it is not — a buffer cut off by a broken
+/// stream is broken at its end — and its length in bytes either way.
+fn raw_excerpt(raw: &str) -> String {
+    let chars = raw.chars().count();
+    if chars <= EXCERPT_HEAD + EXCERPT_TAIL {
+        return format!("{raw:?} ({} bytes)", raw.len());
+    }
+    let head: String = raw.chars().take(EXCERPT_HEAD).collect();
+    let tail: String = raw.chars().skip(chars - EXCERPT_TAIL).collect();
+    format!("{head:?} … {tail:?} ({} bytes)", raw.len())
 }
 
 fn field_str(value: &serde_json::Value, key: &str) -> String {

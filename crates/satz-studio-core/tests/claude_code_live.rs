@@ -45,6 +45,7 @@ async fn a_real_turn_reads_the_estate_through_the_satz_tools() {
         auto_approve_writes: false,
         satz_binary: satz_binary().await,
         allow: Allow::Read,
+        log: None,
     };
     let mut session = within(Session::spawn(&cli, Arc::clone(&estate), options))
         .await

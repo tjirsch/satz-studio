@@ -198,7 +198,7 @@ fn write_line<T: serde::Serialize>(
 }
 
 /// Now, as `YYYY-MM-DDTHH:MM:SS.ffffffZ`.
-fn rfc3339_now() -> String {
+pub(crate) fn rfc3339_now() -> String {
     let since = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("the clock is after 1970");

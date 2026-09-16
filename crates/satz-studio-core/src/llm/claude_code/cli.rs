@@ -53,6 +53,15 @@ pub enum ClaudeCodeError {
 
 impl From<ClaudeCodeError> for ClaudeError {
     fn from(e: ClaudeCodeError) -> Self {
+        ClaudeError::from(&e)
+    }
+}
+
+/// The one conversion into the app's error: the message as the variant prints it, once.
+/// A failure is carried as it is and never wrapped in another variant first — each
+/// variant prints its own prefix, and a wrapped one prints it twice.
+impl From<&ClaudeCodeError> for ClaudeError {
+    fn from(e: &ClaudeCodeError) -> Self {
         match e {
             ClaudeCodeError::Cancelled => ClaudeError::Cancelled,
             other => ClaudeError::ClaudeCode(other.to_string()),

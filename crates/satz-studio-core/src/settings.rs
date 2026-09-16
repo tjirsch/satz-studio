@@ -16,6 +16,9 @@ pub struct Settings {
     /// an explicit path to the Claude Code binary; otherwise `PATH`, then
     /// `~/.local/bin/claude`. Read only when the provider is Claude Code.
     pub claude_code_binary: Option<PathBuf>,
+    /// write every line a Claude Code session exchanges to a log under the app's data
+    /// directory (`llm::claude_code::log`); read when a session starts
+    pub claude_code_log: bool,
     /// the capability ceiling every `satz mcp` this app starts is given
     pub mcp_allow: Allow,
     /// run non-destructive write tools the agent asks for without an approval card
@@ -37,6 +40,7 @@ impl Default for Settings {
         Self {
             satz_binary: None,
             claude_code_binary: None,
+            claude_code_log: false,
             mcp_allow: Allow::ReadWrite,
             auto_approve_writes: false,
             provider: ProviderChoice::Claude,
@@ -107,8 +111,8 @@ pub fn settings_path() -> Result<PathBuf, SettingsError> {
     Ok(dir.join("satz-studio").join("settings.toml"))
 }
 
-/// `<data dir>/satz-studio` — transcripts and one-shot command scripts live here,
-/// never inside an estate.
+/// `<data dir>/satz-studio` — transcripts, the Claude Code stream logs and one-shot
+/// command scripts live here, never inside an estate.
 pub fn data_dir() -> Result<PathBuf, SettingsError> {
     let dir = dirs::data_dir().ok_or(SettingsError::NoConfigDir)?;
     Ok(dir.join("satz-studio"))
@@ -167,6 +171,15 @@ mod tests {
         let s = Settings::default();
         s.save_to(&path).unwrap();
         assert_eq!(Settings::load_from(&path).unwrap(), s);
+    }
+
+    #[test]
+    fn the_claude_code_log_is_off_until_it_is_switched_on() {
+        assert!(!Settings::default().claude_code_log);
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("settings.toml");
+        std::fs::write(&path, "claude_code_log = true\n").unwrap();
+        assert!(Settings::load_from(&path).unwrap().claude_code_log);
     }
 
     #[test]
