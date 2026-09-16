@@ -1163,6 +1163,37 @@
   color: var(--md-sys-color-on-surface-variant);
 }
 
+/* The card, and with "Show answered" on the list of every question beside it: the
+   list-detail layout, the list scrolling on its own so the card stays in view. */
+.interview__walk {
+  display: grid;
+  grid-template-columns: minmax(0, 880px);
+  gap: 16px;
+  align-items: start;
+}
+
+.interview__walk--listed {
+  grid-template-columns: minmax(360px, 880px) minmax(280px, 420px);
+}
+
+.interview__list {
+  position: sticky;
+  top: 0;
+  max-height: calc(100vh - 160px);
+  overflow: auto;
+  padding: 0;
+}
+
+@media (max-width: 1100px) {
+  .interview__walk--listed {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .interview__list {
+    position: static;
+  }
+}
+
 .interview__question {
   display: flex;
   flex-direction: column;
