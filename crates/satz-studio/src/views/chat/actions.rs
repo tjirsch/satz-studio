@@ -14,7 +14,9 @@ use std::sync::Arc;
 
 use dioxus::prelude::*;
 use futures_util::StreamExt;
-use satz_studio_core::llm::claude_code::{ClaudeCodeCli, Session as CcSession, SessionOptions};
+use satz_studio_core::llm::claude_code::{
+    ClaudeCodeCli, Session as CcSession, SessionOptions, StreamLogConfig,
+};
 use satz_studio_core::llm::{
     Agent, AgentEvent, Approval, Capabilities, ChatProvider, ClaudeClient, ClaudeError, Credential,
     Effort, EstateContext, Message, Ollama, OpenAiCompat,
@@ -626,6 +628,16 @@ async fn claude_code(
             "satz is not available, and Claude Code is given the estate's satz MCP server — see the banner".to_string(),
         ));
     };
+    let log = if settings.claude_code_log {
+        let dir = StreamLogConfig::default_dir().map_err(|e| {
+            AgentStatus::Failed(format!(
+                "the Claude Code log is on and has nowhere to go: {e}; switch it off in Settings to chat without it"
+            ))
+        })?;
+        Some(StreamLogConfig::new(dir))
+    } else {
+        None
+    };
     let options = SessionOptions {
         model,
         max_turns: None,
@@ -633,6 +645,7 @@ async fn claude_code(
         auto_approve_writes: settings.auto_approve_writes,
         satz_binary,
         allow: settings.mcp_allow,
+        log,
     };
     let spawned = CcSession::spawn(&cli, Arc::clone(session), options)
         .await

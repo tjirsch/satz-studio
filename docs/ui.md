@@ -154,7 +154,7 @@ and not a value.
 | Checks | `src/views/checks.rs` | what judges the estate: the `CHECKS` deck — `transpile --check`, `update-prerequisites` (`--report-only`, fixed), `require`, `report-compliance`, `bootstrap --dry-run` — with the session tools. When the last compile found prerequisites undeclared, a card above it carries each finding and "Write them into the estate", which is `WritePrerequisites`: satz's own writer under the write lock, checked and reloaded like an answer |
 | Deploy | `src/views/deploy.rs` | what hands the estate off: the `hcl_dir` path with two chips saying whether `main.tf` is written and whether the directory is initialised, then the `DEPLOY` deck — `transpile`, `hcl-init`, `plan` in the app; `apply`, `migrate`, `bootstrap` as command lines to copy or open in the terminal |
 | Chat | `src/views/chat/` | the agent loop over the open estate: the rail of this estate's transcripts with "New" (empty on the Claude Code engine, which keeps its conversation in its own process), the turns as they stream with one card per tool call and the approval card, the composer with the model, the effort and the capability chips, and the usage footer. `mod.rs` holds the status card for the states the engine is not in — `Starting` a progress line, `NoCredential` and `NotSignedIn` the two empty states below, `Failed` the error with Open Settings |
-| Settings | `src/views/settings.rs` | every `Settings` field as a form: the satz path with the detected version, the MCP ceiling, auto-approve, the provider with base URL and model for the non-Claude ones, the Claude model, effort, fallbacks, transcripts, theme; Save writes the file and locates satz again; the credential card shows where the Claude credential comes from, whether that engine is the one in use, and stores a key in the keychain; the Claude Code card shows the binary, the account and which engine is in use, with "Use this engine", "Sign in" and "Sign out"; beside the satz path, "Update satz" and "Check only" run `satz self-update` (with `--no-open-readme`, so a successful update does not open a browser) and stream it into a log card, and satz is located again once it installs |
+| Settings | `src/views/settings.rs` | every `Settings` field as a form: the satz path with the detected version, the MCP ceiling, auto-approve, the provider with base URL and model for the non-Claude ones, the Claude model, effort, fallbacks, transcripts, theme; Save writes the file and locates satz again; the credential card shows where the Claude credential comes from, whether that engine is the one in use, and stores a key in the keychain; the Claude Code card shows the binary, the account and which engine is in use, with "Use this engine", "Sign in" and "Sign out", and the stream log switch with "Reveal logs"; beside the satz path, "Update satz" and "Check only" run `satz self-update` (with `--no-open-readme`, so a successful update does not open a browser) and stream it into a log card, and satz is located again once it installs |
 | Commands | `src/views/commands.rs` | not a destination: `PALETTE` is the table of every satz command the app runs, and `CommandDeck` renders any group of them — the list, the chosen entry's argument fields (a reporting command's format as a segmented button), the command line as it will run, Run and Cancel, and `CommandLog`, the streamed log with stdout and stderr distinguished, followed by the file a reporting command wrote where the app named it. `CommandPalette` is every entry in a dialog over the window, on ⌘K / Ctrl+K or the top bar's button, with the session tools `satz_whoami`, `satz_transpile_check`, `satz_questions` as one click each. `CHECKS` and `DEPLOY` are the two groups the destinations gather |
 | Gallery | `src/views/gallery.rs` | every component in its variants, light and dark side by side. A development route: the rail offers it only with `SATZ_STUDIO_DEBUG` set, and nothing else navigates to it |
 
@@ -315,8 +315,17 @@ render from it.
   button sends, so it saves the whole draft. The provider segmented control above stays
   the primary selector; this button is a second door to it, not a second setting. "Sign
   in" and "Sign out" write a one-shot script and open the user's terminal, because the
-  login opens a browser. The credential card carries the same second half of the
-  sentence: `in use` when the provider is Claude, `not the selected engine` otherwise.
+  login opens a browser. Below them, the switch "Log every line Claude Code and the app
+  exchange" edits `claude_code_log` in the draft, saved with the rest; under it one
+  sentence says what a log holds — "The log holds the estate's contents, its resource
+  names and everything you type, and never leaves this machine." — and a state line
+  (`.settings__status`, a `folder` icon) gives the bounds from `log::MAX_FILES` and
+  `log::MAX_BYTES` (one file per conversation, the ten newest kept, each up to 16 MiB,
+  applied from the next conversation) beside a text button "Reveal logs", which creates `<data dir>/satz-studio/logs/claude-code/` when it
+  is not there and opens it with `open::that`, the opener "Show file" uses; a failure is
+  an error toast naming the directory. The credential card carries the same second half
+  of the sentence: `in use` when the provider is Claude, `not the selected engine`
+  otherwise.
 - **The chat's empty states.** `NoCredential` (the Messages API resolved no credential)
   probes Claude Code once while the card renders — `ClaudeCodeCli::locate` then
   `auth_status`, spawned from a `use_hook` so it runs once per mount and never on the
@@ -343,7 +352,7 @@ Deviations from the Material 3 specification these introduce:
 | surface | class | spec page | deviation |
 |---|---|---|---|
 | the empty state's lead | `.chat__lead` (in `chat.css`) | — (not a Material 3 component) | a primary-container block inside a filled card, to put the engine that is ready above the alternative; the spec has no nested-surface anatomy for this |
-| the state line | `.settings__status` (in `views.css`) | — (not a Material 3 component) | an icon, a sentence and a text button on one line inside a card |
+| the state line | `.settings__status` (in `views.css`) | — (not a Material 3 component) | an icon, a sentence and a text button on one line inside a card; the Claude Code card has two, the account and the log's bounds |
 | the plan-utilization notice | `.chat__footer` (in `chat.css`) | — (not a Material 3 component) | a footer line, not a Material progress or badge; the plan windows arrive as text and are shown as text |
 
 ## The smoke walk
@@ -354,8 +363,8 @@ a step that writes, as the fixture's `config.toml` says) and over a skeleton wri
 `satz interview <dir>/yaml/new.satz --create`, which is the estate every pack line
 starts commented in. Every write is checked by `satz transpile --check` through the
 estate's `satz mcp` child. No step needs an API key; the first runs `satz init`, which
-reads the Application Default Credentials where there are any; the last needs the Claude
-Code CLI installed and signed in, and nothing else. Nothing in the walk changes a live
+reads the Application Default Credentials where there are any; the last two need the
+Claude Code CLI installed and signed in, and nothing else, and neither sends a message. Nothing in the walk changes a live
 organisation: `bootstrap` and `apply` are read as command lines, never run.
 
 1. **Import.** Import → an empty folder → Terraform HCL → a directory
@@ -419,3 +428,11 @@ organisation: `bootstrap` and `apply` are read as command lines, never run.
     credential card says "not the selected engine". Sign the CLI out
     (`claude auth logout`), set the provider back to Claude, reopen Chat: the card is
     "No Claude credential" with one line naming `claude auth login`.
+13. **The stream log.** With the Claude Code CLI signed in and Claude Code the selected
+    engine: Settings → the Claude Code card → switch "Log every line Claude Code and the
+    app exchange" on → Save → Chat → "New" → Settings → "Reveal logs" → the file manager
+    opens `logs/claude-code/` under the app's data directory, holding one `.log` named
+    after the instant the session started. Its first line is a `studio` record naming
+    the estate and the command line, then a `stdin` record with the initialize request
+    and a `stdout` record with its answer, each line exactly as it went over the pipe.
+    Switch the log off → Save → "New": no new file appears.

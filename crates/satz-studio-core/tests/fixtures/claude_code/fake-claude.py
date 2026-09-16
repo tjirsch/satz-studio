@@ -20,6 +20,7 @@ tests running at the same time. Its keys, all optional:
 A recorded stream is one JSON object per line, each of:
 
   {"emit": {...}}                                   print that object
+  {"stderr": "<text>"}                              write that line to stderr
   {"await_control": "<id>", "allow": [...], "deny": [...]}
                                                     block until the client answers the
                                                     control request <id>, then print
@@ -191,6 +192,9 @@ def replay(path, client):
     for step in steps:
         if "emit" in step:
             emit(step["emit"])
+        elif "stderr" in step:
+            sys.stderr.write(step["stderr"] + "\n")
+            sys.stderr.flush()
         elif "await_interrupt" in step:
             if not client.interrupted.wait(timeout=60):
                 fail("the client never sent the interrupt request")

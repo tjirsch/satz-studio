@@ -17,6 +17,7 @@ use tokio_util::sync::CancellationToken;
 
 use super::StreamEvent;
 use super::claude::error::{ClaudeError, from_status};
+use super::claude::sse::tool_input;
 use super::claude::types::{ContentBlock, Message, Role, StopReason, ToolDef};
 
 /// The whole request, connection to the last body byte.
@@ -142,17 +143,16 @@ impl Blocks {
         self.calls.len()
     }
 
-    /// Close every tool call: the arguments parsed (none is `{}`), one event each.
+    /// Close every tool call: the arguments parsed once, by the rule the Messages API
+    /// assembler keeps (none is `{}`), one event each.
     pub(crate) fn close_calls(&mut self) -> Result<Vec<StreamEvent>, ClaudeError> {
         let mut events = Vec::new();
         for (index, id, name, arguments) in self.calls.drain(..) {
-            let input = if arguments.trim().is_empty() {
-                serde_json::Value::Object(Default::default())
-            } else {
-                serde_json::from_str(&arguments).map_err(|e| {
-                    ClaudeError::Stream(format!("the arguments of tool `{name}` are not JSON: {e}"))
-                })?
-            };
+            let input = tool_input(
+                &name,
+                &arguments,
+                serde_json::Value::Object(Default::default()),
+            )?;
             events.push(StreamEvent::BlockStop {
                 index,
                 block: ContentBlock::ToolUse { id, name, input },

@@ -13,15 +13,19 @@
 //! - [`events`] — the lines the CLI writes, typed.
 //! - [`session`] — one process per estate: the command line, the turn, the approval
 //!   round trip, the interrupt.
+//! - [`log`] — the stream log: every line a session exchanged, verbatim, when Settings
+//!   turns it on.
 //!
 //! [`AgentEvent`]: crate::llm::AgentEvent
 
 pub mod cli;
 pub mod events;
+pub mod log;
 pub mod session;
 
 pub use cli::{AuthStatus, ClaudeCodeCli, ClaudeCodeError};
 pub use events::{CcLine, RateLimit};
+pub use log::{Channel, StreamLog, StreamLogConfig};
 pub use session::{
     Session, SessionOptions, allowed_tools, command_args, mcp_config, system_prompt,
 };

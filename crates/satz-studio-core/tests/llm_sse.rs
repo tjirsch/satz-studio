@@ -317,3 +317,158 @@ fn an_event_the_code_does_not_read_is_an_error() {
         matches!(assembler.feed(&event), Err(ClaudeError::Stream(m)) if m.contains("message_compaction"))
     );
 }
+
+/// One stream event as the API sends it, from its JSON.
+fn wire(value: serde_json::Value) -> SseEvent {
+    SseEvent {
+        event: value["type"].as_str().expect("a typed event").to_string(),
+        data: value.to_string(),
+    }
+}
+
+/// An assembler with one `tool_use` block open at index 0.
+fn open_tool(name: &str) -> Assembler {
+    let mut assembler = Assembler::new();
+    assembler
+        .feed(&wire(serde_json::json!({"type": "message_start", "message": {"id": "msg_01", "model": "claude-opus-5", "usage": {"input_tokens": 1, "output_tokens": 1}}})))
+        .expect("a start");
+    assembler
+        .feed(&wire(serde_json::json!({"type": "content_block_start", "index": 0, "content_block": {"type": "tool_use", "id": "toolu_01", "name": name, "input": {}}})))
+        .expect("a tool block");
+    assembler
+}
+
+fn input_delta(piece: &str) -> SseEvent {
+    wire(
+        serde_json::json!({"type": "content_block_delta", "index": 0, "delta": {"type": "input_json_delta", "partial_json": piece}}),
+    )
+}
+
+fn block_stop() -> SseEvent {
+    wire(serde_json::json!({"type": "content_block_stop", "index": 0}))
+}
+
+#[test]
+fn a_tool_called_without_arguments_has_the_empty_object_for_its_input() {
+    // block 0 carries one empty `partial_json`, block 1 carries no delta at all: both are
+    // a call without arguments
+    let bytes = fixture("tool_turn_no_arguments.sse");
+    let (events, response) = run(&bytes, 6).expect("an empty input is not a parse");
+    assert_eq!(run(&bytes, bytes.len()).expect("assembles").1, response);
+    let empty = serde_json::json!({});
+    assert_eq!(
+        response.content,
+        vec![
+            ContentBlock::ToolUse {
+                id: "toolu_01CheckExample".to_string(),
+                name: "satz_transpile_check".to_string(),
+                input: empty.clone(),
+            },
+            ContentBlock::ToolUse {
+                id: "toolu_01EstatesExample".to_string(),
+                name: "satz_estates".to_string(),
+                input: empty,
+            },
+        ]
+    );
+    assert!(events.contains(&StreamEvent::ToolInputDelta {
+        index: 0,
+        partial_json: String::new()
+    }));
+    assert_eq!(response.stop_reason, StopReason::ToolUse);
+
+    // fragments of whitespace alone are no JSON either
+    let mut assembler = open_tool("satz_estates");
+    assembler.feed(&input_delta(" ")).expect("a fragment");
+    assembler.feed(&input_delta("\n")).expect("a fragment");
+    assert!(matches!(
+        assembler.feed(&block_stop()).expect("the block stops").as_slice(),
+        [StreamEvent::BlockStop { block: ContentBlock::ToolUse { input, .. }, .. }] if input == &serde_json::json!({})
+    ));
+}
+
+#[test]
+fn input_fragments_are_folded_as_they_come_and_parsed_only_at_the_block_stop() {
+    let fragments = [
+        "",
+        "{\"ans",
+        "wers\"",
+        ": {\"deployment_",
+        "mode\"",
+        ": \"clo",
+        "ud\"",
+        "}",
+        "}",
+    ];
+    let mut assembler = open_tool("satz_interview");
+    for piece in fragments {
+        let out = assembler
+            .feed(&input_delta(piece))
+            .expect("a fragment is never parsed on its own");
+        assert_eq!(
+            out,
+            vec![StreamEvent::ToolInputDelta {
+                index: 0,
+                partial_json: piece.to_string()
+            }],
+            "{piece:?} yields its delta and nothing else"
+        );
+    }
+    assert_eq!(
+        assembler
+            .feed(&block_stop())
+            .expect("the whole input parses"),
+        vec![StreamEvent::BlockStop {
+            index: 0,
+            block: ContentBlock::ToolUse {
+                id: "toolu_01".to_string(),
+                name: "satz_interview".to_string(),
+                input: serde_json::json!({"answers": {"deployment_mode": "cloud"}}),
+            }
+        }]
+    );
+}
+
+#[test]
+fn an_input_that_is_not_json_names_the_tool_and_shows_what_the_stream_sent() {
+    let raw = "{\"answers\": {\"deployment_";
+    let mut assembler = open_tool("satz_interview");
+    assembler.feed(&input_delta(raw)).expect("a fragment");
+    let Err(ClaudeError::Stream(message)) = assembler.feed(&block_stop()) else {
+        panic!("a cut input is a stream error");
+    };
+    assert!(
+        message.starts_with("the input of tool `satz_interview` is not JSON (EOF"),
+        "{message}"
+    );
+    assert!(
+        message.ends_with(&format!("the stream sent {raw:?} ({} bytes)", raw.len())),
+        "{message}"
+    );
+
+    // a long buffer shows its head and its tail, not all of it
+    let long = format!(
+        "{{\"answers\": {{\"note\": \"{}\", \"cut_here\": ",
+        "a".repeat(4000)
+    );
+    let mut assembler = open_tool("satz_interview");
+    assembler.feed(&input_delta(&long)).expect("a fragment");
+    let Err(ClaudeError::Stream(message)) = assembler.feed(&block_stop()) else {
+        panic!("a cut input is a stream error");
+    };
+    assert!(
+        message.len() < 600,
+        "{} characters: {message}",
+        message.len()
+    );
+    assert!(
+        message.contains("{\\\"answers\\\": {\\\"note\\\""),
+        "{message}"
+    );
+    assert!(message.contains("\\\"cut_here\\\": \""), "{message}");
+    assert!(message.contains(" … "), "{message}");
+    assert!(
+        message.ends_with(&format!("({} bytes)", long.len())),
+        "{message}"
+    );
+}

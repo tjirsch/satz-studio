@@ -452,9 +452,13 @@ enum ClaudeCodeProbe {
 /// The Claude Code CLI: where it is, which version, which claude.ai account it is
 /// signed in to, and whether it is the engine the chat runs on. Signing in and out run
 /// in the user's own terminal — the login opens a browser — and the app reads no
-/// credential of Claude Code's, only what `claude auth status` reports.
+/// credential of Claude Code's, only what `claude auth status` reports. The stream log
+/// switch and "Reveal logs" are here too: the log is this engine's alone.
 #[component]
 fn ClaudeCodeCard(draft: Signal<Settings>) -> Element {
+    use satz_studio_core::llm::claude_code::StreamLogConfig;
+    use satz_studio_core::llm::claude_code::log::{MAX_BYTES, MAX_FILES};
+
     let app = use_context::<Store<AppStore>>();
     let handle = use_coroutine_handle::<AppAction>();
     let probe = use_signal(|| ClaudeCodeProbe::Checking);
@@ -507,6 +511,24 @@ fn ClaudeCodeCard(draft: Signal<Settings>) -> Element {
         draft.write().provider = ProviderChoice::ClaudeCode { model: None };
         handle.send(AppAction::SaveSettings(draft.peek().clone()));
     };
+    // the directory exists before a session has written into it, so the file manager
+    // opens on the place the logs go rather than failing on a path that is not there yet
+    let reveal_logs = move |_| {
+        let opened = StreamLogConfig::default_dir()
+            .map_err(|e| e.to_string())
+            .and_then(|dir| {
+                std::fs::create_dir_all(&dir)
+                    .and_then(|()| open::that(&dir))
+                    .map_err(|e| format!("{}: {e}", dir.display()))
+            });
+        if let Err(e) = opened {
+            toast(app, ToastKind::Error, e);
+        }
+    };
+    let log_bounds = format!(
+        "One file per conversation under the app's data directory, the {MAX_FILES} newest kept, each up to {} MiB; a change applies from the next conversation.",
+        MAX_BYTES / (1024 * 1024)
+    );
     rsx! {
         Card { variant: CardVariant::Outlined, class: "settings__card",
             h2 { class: "settings__heading", Icon { name: "terminal", size: 20 } "Claude Code" }
@@ -526,6 +548,13 @@ fn ClaudeCodeCard(draft: Signal<Settings>) -> Element {
                 Button { variant: ButtonVariant::Text, onclick: move |_| check(), "Check again" }
             }
             p { class: "settings__label", "This engine runs on the claude.ai subscription the CLI is signed in to; no API key is used and none is stored. Signing in opens a browser from your terminal." }
+            Switch { label: "Log every line Claude Code and the app exchange", checked: draft().claude_code_log, onchange: move |v| draft.write().claude_code_log = v }
+            p { class: "settings__label", "The log holds the estate's contents, its resource names and everything you type, and never leaves this machine." }
+            p { class: "settings__status",
+                Icon { name: "folder", size: 20 }
+                span { class: "settings__label grow", "{log_bounds}" }
+                Button { variant: ButtonVariant::Text, icon: "folder_open", onclick: reveal_logs, "Reveal logs" }
+            }
             div { class: "settings__key",
                 if matches!(offer, EngineOffer::Ready { .. }) {
                     Button {

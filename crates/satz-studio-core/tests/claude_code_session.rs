@@ -5,8 +5,8 @@
 use std::sync::Arc;
 
 use satz_studio_core::llm::claude_code::{
-    ClaudeCodeError, Session, SessionOptions, allowed_tools, command_args, mcp_config,
-    system_prompt,
+    ClaudeCodeError, Session, SessionOptions, StreamLogConfig, allowed_tools, command_args,
+    mcp_config, system_prompt,
 };
 use satz_studio_core::llm::{AgentEvent, Approval, StopReason};
 use satz_studio_core::satz::{Allow, EstateSession};
@@ -45,6 +45,7 @@ async fn options(auto_approve_writes: bool) -> SessionOptions {
         auto_approve_writes,
         satz_binary: satz_binary().await,
         allow: Allow::ReadWrite,
+        log: None,
     }
 }
 
@@ -118,18 +119,31 @@ async fn start_with(
     auto_approve_writes: bool,
     extra: serde_json::Map<String, serde_json::Value>,
 ) -> Running {
+    start_on(scripts, extra, options(auto_approve_writes).await).await
+}
+
+/// A session whose stream log goes to `logs`.
+async fn start_logged(scripts: &[&str], logs: &std::path::Path) -> Running {
+    let opts = SessionOptions {
+        log: Some(StreamLogConfig::new(logs.to_path_buf())),
+        ..options(false).await
+    };
+    start_on(scripts, serde_json::Map::new(), opts).await
+}
+
+async fn start_on(
+    scripts: &[&str],
+    extra: serde_json::Map<String, serde_json::Value>,
+    opts: SessionOptions,
+) -> Running {
     let smoke = copy_smoke();
     let estate = smoke.open().await;
     let tmp = tempfile::tempdir().unwrap();
     let fake = fake_with(tmp.path(), signed_in(), scripts, extra);
     let cli = fake.locate().await;
-    let session = within(Session::spawn(
-        &cli,
-        Arc::clone(&estate),
-        options(auto_approve_writes).await,
-    ))
-    .await
-    .expect("the session spawns");
+    let session = within(Session::spawn(&cli, Arc::clone(&estate), opts))
+        .await
+        .expect("the session spawns");
     Running {
         _smoke: smoke,
         _tmp: tmp,
@@ -277,6 +291,8 @@ async fn a_text_turn_streams_its_deltas_and_ends_with_the_usage() {
         Some("11111111-1111-1111-1111-111111111111")
     );
     assert_eq!(running.session.model(), Some("claude-opus-5"));
+    // no log was asked for, so none is kept
+    assert!(running.session.log_path().is_none());
 
     // the app initialized the control protocol and sent the message as one user line
     let written = running.fake.stdin();
@@ -552,4 +568,280 @@ async fn a_fake_that_rejects_the_command_line_fails_the_spawn_with_what_it_said(
         e.to_string().contains("closed its output"),
         "a CLI that ends without a result is an error: {e}"
     );
+}
+
+/// The records of a stream log: its channel and its line, in order.
+fn log_records(path: &std::path::Path) -> Vec<(String, String)> {
+    std::fs::read_to_string(path)
+        .expect("the log is there")
+        .lines()
+        .map(|record| {
+            let mut fields = record.splitn(3, '\t');
+            let _at = fields.next().expect("an instant");
+            (
+                fields.next().expect("a channel").to_string(),
+                fields.next().expect("a line").to_string(),
+            )
+        })
+        .collect()
+}
+
+#[tokio::test]
+async fn a_tool_called_without_arguments_completes_the_turn() {
+    // `satz_transpile_check` takes no required argument; the stream opens its block with
+    // `input: {}` and sends one `input_json_delta` whose `partial_json` is empty
+    let mut running = start(&["no-argument-tool"], false).await;
+    let (result, seen) = turn(
+        &mut running.session,
+        "is the monitoring api enabled",
+        Approval::Deny,
+        false,
+    )
+    .await;
+    result.expect("an input with nothing in it is `{}`, not a stream error");
+    assert_eq!(
+        seen,
+        vec![
+            Seen::Started,
+            Seen::ToolUseStarted("satz_transpile_check".into()),
+            Seen::ToolInputDelta(String::new()),
+            Seen::Result {
+                name: "satz_transpile_check".into(),
+                is_error: false,
+                body: serde_json::json!({
+                    "estate": "smoke.satz",
+                    "addresses": ["google_folder.example"],
+                    "written": [],
+                    "findings": [],
+                })
+                .to_string(),
+            },
+            Seen::Started,
+            Seen::Text("It compiles.".into()),
+            Seen::TurnDone(StopReason::EndTurn),
+        ]
+    );
+    // a read-only tool is pre-approved: no card, no answer written
+    assert!(
+        running
+            .fake
+            .stdin()
+            .iter()
+            .all(|l| l["type"] != "control_response")
+    );
+    running.session.close().await;
+}
+
+#[tokio::test]
+async fn a_write_tool_called_without_arguments_is_allowed_with_the_empty_object() {
+    let mut running = start(&["no-argument-write"], false).await;
+    let (result, seen) = turn(&mut running.session, "transpile it", Approval::Once, false).await;
+    result.expect("the turn ends");
+    assert!(
+        seen.contains(&Seen::Pending("satz_transpile".into())),
+        "{seen:?}"
+    );
+    assert_eq!(seen.last(), Some(&Seen::TurnDone(StopReason::EndTurn)));
+    let answer = running
+        .fake
+        .stdin()
+        .into_iter()
+        .find(|l| l["type"] == "control_response")
+        .expect("the app answered the request");
+    assert_eq!(answer["response"]["response"]["behavior"], "allow");
+    assert_eq!(
+        answer["response"]["response"]["updatedInput"],
+        serde_json::json!({})
+    );
+    running.session.close().await;
+}
+
+#[tokio::test]
+async fn arguments_split_across_fragments_are_parsed_once_at_the_block_stop() {
+    // one argument object in nine fragments: an empty one, then cuts inside a key,
+    // between a key and its colon, inside a value, and before each closing brace
+    let fragments = [
+        "",
+        "{\"ans",
+        "wers\"",
+        ": {\"deployment_",
+        "mode\"",
+        ": \"clo",
+        "ud\"",
+        "}",
+        "}",
+    ];
+    let whole = serde_json::json!({"answers": {"deployment_mode": "cloud"}});
+    // not one fragment is JSON on its own: a parse per fragment would fail the turn
+    assert!(
+        fragments
+            .iter()
+            .all(|f| serde_json::from_str::<serde_json::Value>(f).is_err())
+    );
+
+    let mut running = start(&["split-fragments"], false).await;
+    let (result, seen) = turn(
+        &mut running.session,
+        "answer the deployment mode",
+        Approval::Once,
+        false,
+    )
+    .await;
+    result.expect("the fragments are folded, and parsed once at content_block_stop");
+    let forwarded: Vec<&str> = seen
+        .iter()
+        .filter_map(|s| match s {
+            Seen::ToolInputDelta(piece) => Some(piece.as_str()),
+            _ => None,
+        })
+        .collect();
+    // every fragment reaches the view as it arrived, in order
+    assert_eq!(forwarded, fragments);
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&forwarded.concat()).unwrap(),
+        whole
+    );
+    assert!(
+        seen.contains(&Seen::Pending("satz_interview".into())),
+        "{seen:?}"
+    );
+    assert_eq!(seen.last(), Some(&Seen::TurnDone(StopReason::EndTurn)));
+    let answer = running
+        .fake
+        .stdin()
+        .into_iter()
+        .find(|l| l["type"] == "control_response")
+        .expect("the app answered the request");
+    assert_eq!(answer["response"]["response"]["updatedInput"], whole);
+    running.session.close().await;
+}
+
+#[tokio::test]
+async fn an_input_that_is_not_json_fails_the_turn_naming_the_tool_and_what_arrived() {
+    let mut running = start(&["malformed-input"], false).await;
+    let (result, seen) = turn(&mut running.session, "answer it", Approval::Deny, false).await;
+    let e = result.unwrap_err();
+    let Some(Seen::Failed(said)) = seen.last() else {
+        panic!("the turn failed: {seen:?}");
+    };
+    // the event carries the session's error as it is, prefixed once
+    assert_eq!(said, &e.to_string());
+    assert_eq!(said.matches("claude code:").count(), 1, "{said}");
+    assert!(
+        said.starts_with(
+            "claude code: stream: the input of tool `mcp__satz__satz_interview` is not JSON ("
+        ),
+        "{said}"
+    );
+    let raw = "{\"answers\": {\"deployment_mode\": ";
+    assert!(
+        said.ends_with(&format!("the stream sent {raw:?} ({} bytes)", raw.len())),
+        "{said}"
+    );
+    running.session.close().await;
+}
+
+#[tokio::test]
+async fn the_log_records_every_line_verbatim_and_ends_with_what_the_app_made_of_it() {
+    let logs = tempfile::tempdir().unwrap();
+    let mut running = start_logged(&["malformed-input"], logs.path()).await;
+    let (result, _) = turn(
+        &mut running.session,
+        "is the monitoring api enabled",
+        Approval::Deny,
+        false,
+    )
+    .await;
+    let e = result.unwrap_err();
+    let path = running
+        .session
+        .log_path()
+        .expect("the log is on")
+        .to_path_buf();
+    assert_eq!(path.parent(), Some(logs.path()));
+    let records = log_records(&path);
+
+    // the header names the estate and the command line the session runs
+    assert_eq!(records[0].0, "studio");
+    let header: serde_json::Value = serde_json::from_str(&records[0].1).unwrap();
+    assert!(
+        header["estate"].as_str().unwrap().ends_with("smoke.satz"),
+        "{header}"
+    );
+    assert!(
+        header["args"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|a| a == "stream-json"),
+        "{header}"
+    );
+
+    // what the app wrote: the initialize request, then the message as it was typed
+    let stdin: Vec<serde_json::Value> = records
+        .iter()
+        .filter(|(channel, _)| channel == "stdin")
+        .map(|(_, line)| serde_json::from_str(line).unwrap())
+        .collect();
+    assert_eq!(stdin[0]["request"]["subtype"], "initialize");
+    assert_eq!(
+        stdin[1]["message"]["content"],
+        "is the monitoring api enabled"
+    );
+
+    // what the CLI wrote, byte for byte: the fake prints with Python's separators, which
+    // no re-serialisation by this app produces
+    let stdout: Vec<&str> = records
+        .iter()
+        .filter(|(channel, _)| channel == "stdout")
+        .map(|(_, line)| line.as_str())
+        .collect();
+    assert!(
+        stdout.iter().all(|l| l.starts_with("{\"type\": \"")),
+        "{stdout:?}"
+    );
+    let cut = stdout
+        .iter()
+        .position(|l| l.contains(r#""partial_json": "mode\": ""#))
+        .expect("the second fragment, as it arrived");
+    assert!(stdout[cut - 1].contains(r#""partial_json": "{\"answers\": {\"deployment_""#));
+    let stop = stdout
+        .iter()
+        .position(|l| l.contains("content_block_stop"))
+        .expect("the block's stop, which the parser refused");
+    assert!(stop > cut);
+
+    // the app's note on it is the last record, after the line it could not fold
+    let (channel, note) = records.last().unwrap();
+    assert_eq!(channel, "studio");
+    assert_eq!(note, &format!("the turn ended: {e}"));
+    running.session.close().await;
+}
+
+#[tokio::test]
+async fn the_log_carries_what_the_cli_wrote_on_stderr() {
+    let logs = tempfile::tempdir().unwrap();
+    let mut running = start_logged(&["no-argument-tool"], logs.path()).await;
+    let (result, _) = turn(&mut running.session, "check", Approval::Deny, false).await;
+    result.expect("the turn ends");
+    let path = running
+        .session
+        .log_path()
+        .expect("the log is on")
+        .to_path_buf();
+    // stderr is read on a task of its own, so its line may land after the turn's last
+    let wanted = (
+        "stderr".to_string(),
+        "a note the CLI wrote on its standard error".to_string(),
+    );
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    while !log_records(&path).contains(&wanted) {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "no stderr record: {:?}",
+            log_records(&path)
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    running.session.close().await;
 }

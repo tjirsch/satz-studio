@@ -51,12 +51,20 @@ carry a claim the harness relies on.
 | The CLI's `CompileRefusal { message, findings }` in its `Debug` form decodes to the same findings, `Some`/`None` fields and escaped quotes included; a shape the parser does not know is one diagnostic with the raw payload; a refused tool result reads its findings from `structuredContent`, falls to its text without them, and is an error on a payload of another shape | `src/edit/check.rs` | `a_compile_refusal_rendered_with_debug_becomes_one_diagnostic_per_finding`, `a_relative_file_in_a_finding_resolves_against_the_estates_directory`, `a_refusal_shape_the_parser_does_not_know_is_one_diagnostic_with_the_payload`, `the_mcp_refusal_reads_its_structured_findings_and_falls_to_the_text_without_them` |
 | The agent loop over a scripted provider and a mock host: tool call → result → end of turn, a denied tool is an `is_error` result, a cancelled turn is rolled back whole | `tests/llm_agent.rs` | all |
 | The SSE fixtures assemble to the expected responses; the request body carries the breakpoints and headers per credential; the error table | `tests/llm_sse.rs`, `tests/llm_request.rs`, `tests/llm_errors.rs` | all |
+| A tool called without arguments has `{}` for its input, whether its block carried one empty `input_json_delta` or none, and fragments of whitespace alone are `{}` too | `tests/llm_sse.rs` | `a_tool_called_without_arguments_has_the_empty_object_for_its_input` |
+| An argument object cut into nine fragments — an empty one, inside a key, between a key and its colon, inside a value, before each closing brace — yields one `ToolInputDelta` per fragment and nothing else, and parses whole at `content_block_stop` | `tests/llm_sse.rs` | `input_fragments_are_folded_as_they_come_and_parsed_only_at_the_block_stop` |
+| An input that is not JSON is a stream error naming the tool and quoting what the stream sent with its length in bytes; a long one shows its head and its tail and stays under 600 characters | `tests/llm_sse.rs` | `an_input_that_is_not_json_names_the_tool_and_shows_what_the_stream_sent` |
+| Through the fake Claude Code CLI: `satz_transpile_check` called without arguments (one empty `partial_json`) completes the turn with its result and `TurnDone`; a write tool called without arguments raises the card and is allowed with `updatedInput: {}` | `tests/claude_code_session.rs` | `a_tool_called_without_arguments_completes_the_turn`, `a_write_tool_called_without_arguments_is_allowed_with_the_empty_object` |
+| Through the fake: the nine-fragment argument object completes the turn, each fragment forwarded as it arrived, the card's answer carrying the whole object | `tests/claude_code_session.rs` | `arguments_split_across_fragments_are_parsed_once_at_the_block_stop` |
+| Through the fake: a cut-off input fails the turn with `AgentEvent::Failed` whose message is the session's error, `claude code:` once, the tool named and the raw buffer quoted | `tests/claude_code_session.rs` | `an_input_that_is_not_json_fails_the_turn_naming_the_tool_and_what_arrived` |
+| The stream log: with a directory given, the file opens with the `studio` header, records the initialize request and the typed message as `stdin`, every line of the fake's stdout byte for byte before parsing, the CLI's stderr as `stderr`, and ends with the error the turn ended with; without one, the session keeps no log | `tests/claude_code_session.rs` | `the_log_records_every_line_verbatim_and_ends_with_what_the_app_made_of_it`, `the_log_carries_what_the_cli_wrote_on_stderr`, `a_text_turn_streams_its_deltas_and_ends_with_the_usage` |
+| A log record is the line byte for byte behind its instant and channel; a file stops at its bound with one line saying so; opening a log keeps the newest and deletes only files named as logs; the setting is off by default | `src/llm/claude_code/log.rs`, `src/settings.rs` | all |
 
 ## 2. The manual smoke walk
 
 The estate views are checked by hand: [`ui.md`](ui.md), section "The smoke walk" —
-nine steps over the fixture estate, a skeleton and a Terraform directory, no credential
-needed. It is the
+thirteen steps over the fixture estate, a skeleton and a Terraform directory; no API key
+is needed, and the last two need the Claude Code CLI signed in. It is the
 check of the window over what the harness proves of the core.
 
 ## 3. Checks that need a credential or a machine

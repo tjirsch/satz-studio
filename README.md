@@ -76,7 +76,11 @@ estates show the same list, because the same facts are true of them.
     account (`claude auth login`), which runs the chat on that subscription with no API
     key. The app reads no credential of Claude Code's — only whether it is signed in —
     and gives it the open estate's own satz tools, with the same approval card every
-    write passes. Settings shows the account and signs in and out for you.
+    write passes. Settings shows the account and signs in and out for you. A switch
+    there keeps a log of every line a Claude Code session exchanges, for diagnosing a
+    failed turn: off by default, one file per conversation under the app's data
+    directory, the ten newest kept at up to 16 MiB each. It holds the estate's contents
+    and what you type, and stays on your machine.
 
   Every other view works without either.
 
