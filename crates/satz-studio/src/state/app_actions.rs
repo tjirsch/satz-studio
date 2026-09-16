@@ -15,7 +15,8 @@ use tokio_util::sync::CancellationToken;
 
 use super::{
     AppStore, AppStoreStoreExt, CommandOutcome, CreateStoreStoreExt, CredentialStatus, EstateFile,
-    EstateStore, EstateSummary, OpenEstate, SatzStatus, ToastKind, quote, strip_ansi, toast,
+    EstateStore, EstateSummary, OpenEstate, SatzStatus, ToastKind, UpdateStoreStoreExt, quote,
+    strip_ansi, toast,
 };
 
 pub enum AppAction {
@@ -36,6 +37,14 @@ pub enum AppAction {
         options: InitOptions,
     },
     CancelCreate,
+    /// `satz self-update` on the satz that is installed, streamed into the update log,
+    /// followed by locating satz again so the new version is the one in use. satz owns
+    /// its own updater; the app only runs it. `check_only` passes `--check-only`, which
+    /// reports without installing.
+    UpdateSatz {
+        check_only: bool,
+    },
+    CancelUpdate,
     /// write the settings file, then locate satz again
     SaveSettings(Settings),
     ResolveCredential,
@@ -51,6 +60,7 @@ pub async fn app_coroutine(mut rx: UnboundedReceiver<AppAction>, app: Store<AppS
     // `init` is a live command against Google and can take a while; it streams from a
     // task so this loop stays free to take `CancelCreate`, as a command does.
     let mut creating: Option<CancellationToken> = None;
+    let mut updating: Option<CancellationToken> = None;
     while let Some(action) = rx.next().await {
         match action {
             AppAction::LocateSatz => locate(app).await,
@@ -65,6 +75,14 @@ pub async fn app_coroutine(mut rx: UnboundedReceiver<AppAction>, app: Store<AppS
                     token.cancel();
                 }
             }
+            AppAction::UpdateSatz { check_only } => {
+                updating = update_satz(app, check_only);
+            }
+            AppAction::CancelUpdate => {
+                if let Some(token) = updating.take() {
+                    token.cancel();
+                }
+            }
             // the toast said what went wrong; the view keeps the draft either way
             AppAction::SaveSettings(settings) => {
                 let _ = save_settings(app, settings).await;
@@ -73,6 +91,105 @@ pub async fn app_coroutine(mut rx: UnboundedReceiver<AppAction>, app: Store<AppS
             AppAction::StoreKey(key) => store_key(app, key).await,
         }
     }
+}
+
+/// `satz self-update`, streamed into the update log, then satz is located again.
+///
+/// satz owns its own updater — it checks GitHub, verifies the sha256 sidecar and runs the
+/// installer — so the app runs that and shows what it said rather than fetching anything
+/// itself. Two things it must get right. `--no-open-readme`, because without it a
+/// successful update opens the documentation site in a browser behind the operator, which
+/// is satz's right behaviour on a terminal and the wrong one under a window. And the
+/// binary it runs is [`SatzStatus::updatable`], which answers for a satz that is TOO OLD
+/// as well as a current one: a too-old satz updating itself is the entire point of the
+/// offer, and the path is the one the refusal carried.
+///
+/// The operator's `self_update_frequency` is theirs; this writes no satz configuration.
+fn update_satz(app: Store<AppStore>, check_only: bool) -> Option<CancellationToken> {
+    let Some(path) = app.satz().read().updatable().map(Path::to_path_buf) else {
+        toast(
+            app,
+            ToastKind::Error,
+            "there is no satz to update — see the banner",
+        );
+        return None;
+    };
+    let mut args = vec!["self-update".to_string(), "--no-open-readme".to_string()];
+    if check_only {
+        args.push("--check-only".to_string());
+    }
+    // `self-update` reads no estate, so the working directory only has to exist; the
+    // temporary directory always does, and nothing is written into it.
+    let dir = std::env::temp_dir();
+    let token = CancellationToken::new();
+    let (tx, mut lines) = tokio::sync::mpsc::channel::<CliLine>(256);
+    let child = token.clone();
+    let argv = args.clone();
+    let satz = path.clone();
+    let join = tokio::spawn(async move { SatzCli::run_in(&satz, &dir, &argv, tx, child).await });
+
+    let update = app.update();
+    update
+        .command()
+        .set(Some(format!("{} {}", path.display(), args.join(" "))));
+    update.log().clear();
+    update.outcome().set(None);
+    update.running().set(true);
+    spawn(async move {
+        let mut last_stderr = None;
+        while let Some(line) = lines.recv().await {
+            let clean = match line {
+                CliLine::Stdout(s) => CliLine::Stdout(strip_ansi(&s)),
+                CliLine::Stderr(s) => {
+                    let s = strip_ansi(&s);
+                    if !s.trim().is_empty() {
+                        last_stderr = Some(s.clone());
+                    }
+                    CliLine::Stderr(s)
+                }
+            };
+            update.log().push(clean);
+        }
+        let ended = join.await;
+        let cancelled = matches!(ended, Ok(Err(SatzError::Cancelled)));
+        let outcome = match ended {
+            Ok(Ok(status)) if !status.success() => CommandOutcome {
+                ok: false,
+                text: last_stderr.unwrap_or_else(|| format!("exited with {status}")),
+            },
+            Ok(Ok(_)) if check_only => CommandOutcome {
+                ok: true,
+                text: "checked — the log has what satz found".to_string(),
+            },
+            Ok(Ok(_)) => CommandOutcome {
+                ok: true,
+                text: "satz updated".to_string(),
+            },
+            Ok(Err(SatzError::Cancelled)) => CommandOutcome {
+                ok: false,
+                text: "cancelled — satz is as it was".to_string(),
+            },
+            Ok(Err(e)) => CommandOutcome {
+                ok: false,
+                text: e.to_string(),
+            },
+            Err(e) => CommandOutcome {
+                ok: false,
+                text: format!("the update task failed: {e}"),
+            },
+        };
+        if !outcome.ok && !cancelled {
+            toast(app, ToastKind::Error, outcome.text.clone());
+        }
+        let installed = outcome.ok && !check_only;
+        app.update().outcome().set(Some(outcome));
+        app.update().running().set(false);
+        // The version on disk changed, so the one the app holds is stale.
+        if installed {
+            locate(app).await;
+        }
+    });
+    Some(token)
 }
 
 /// Drop the session: the estate host unmounts and its coroutine with it.
@@ -85,7 +202,12 @@ async fn locate(app: Store<AppStore>) {
     let override_path = app.settings().read().satz_binary.clone();
     let status = match SatzBinary::locate(override_path.as_deref()).await {
         Ok(bin) => SatzStatus::Located(bin),
-        Err(SatzError::TooOld { found, required }) => SatzStatus::TooOld {
+        Err(SatzError::TooOld {
+            path,
+            found,
+            required,
+        }) => SatzStatus::TooOld {
+            path,
             found: found.to_string(),
             required: required.to_string(),
         },
@@ -272,7 +394,8 @@ fn create_estate(
     let child = token.clone();
     let argv = args.clone();
     let run_in = dir.clone();
-    let join = tokio::spawn(async move { SatzCli::run_in(&bin, &run_in, &argv, tx, child).await });
+    let join =
+        tokio::spawn(async move { SatzCli::run_in(&bin.path, &run_in, &argv, tx, child).await });
 
     let create = app.create();
     create.command().set(Some(create_command_line(&dir, &args)));

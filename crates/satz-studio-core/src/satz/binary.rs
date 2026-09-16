@@ -93,7 +93,11 @@ impl SatzBinary {
     pub fn check(path: PathBuf, found: semver::Version) -> Result<SatzBinary, SatzError> {
         let required = semver::Version::parse(MIN_SATZ).expect("MIN_SATZ is a version");
         if found < required {
-            return Err(SatzError::TooOld { found, required });
+            return Err(SatzError::TooOld {
+                path,
+                found,
+                required,
+            });
         }
         Ok(SatzBinary {
             path,
@@ -117,10 +121,19 @@ mod tests {
 
     #[test]
     fn an_older_binary_is_refused_by_version() {
-        let e =
-            SatzBinary::check(PathBuf::from("satz"), semver::Version::new(0, 51, 1)).unwrap_err();
-        assert!(matches!(e, SatzError::TooOld { .. }), "{e}");
-        assert!(e.to_string().contains("self-update"));
+        let e = SatzBinary::check(PathBuf::from("/opt/satz"), semver::Version::new(0, 51, 1))
+            .unwrap_err();
+        let SatzError::TooOld { ref path, .. } = e else {
+            panic!("expected TooOld, got {e:?}");
+        };
+        assert_eq!(path, &PathBuf::from("/opt/satz"));
+        // The message names the binary and both versions. It does NOT tell the operator to
+        // run `satz self-update`: the app offers that, on this path, rather than printing a
+        // terminal instruction into a window.
+        let said = e.to_string();
+        assert!(said.contains("/opt/satz"), "{said}");
+        assert!(said.contains("0.51.1"), "{said}");
+        assert!(said.contains(MIN_SATZ), "{said}");
     }
 
     /// The submodule `vendor/satz` is the one pin: `MIN_SATZ` must be the version it

@@ -24,10 +24,23 @@ async fn an_old_fake_is_refused_as_too_old() {
         .await
         .unwrap()
         .unwrap_err();
+    let said = err.to_string();
     match err {
-        SatzError::TooOld { found, required } => {
+        SatzError::TooOld {
+            path: refused,
+            found,
+            required,
+        } => {
             assert_eq!(found, semver::Version::new(0, 51, 1));
             assert_eq!(required, semver::Version::parse(MIN_SATZ).unwrap());
+            // The refusal names the binary it refused. The app offers to run
+            // `self-update` on exactly that one, which is the only way out of the refusal
+            // without leaving the window, so losing the path here would cost the offer.
+            assert_eq!(refused, path);
+            assert!(
+                said.contains(&refused.display().to_string()),
+                "the message names the binary: {said}"
+            );
         }
         other => panic!("expected TooOld, got {other:?}"),
     }

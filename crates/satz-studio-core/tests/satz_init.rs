@@ -55,7 +55,7 @@ async fn run_in(bin: &SatzBinary, dir: &Path, args: &[String]) -> (bool, Vec<Cli
     });
     let status = tokio::time::timeout(
         TIME_BOX,
-        SatzCli::run_in(bin, dir, args, tx, CancellationToken::new()),
+        SatzCli::run_in(&bin.path, dir, args, tx, CancellationToken::new()),
     )
     .await
     .unwrap()
@@ -171,9 +171,9 @@ async fn a_run_that_hangs_is_cancelled() {
         let cancel = cancel.clone();
         let bin = bin.clone();
         let dir = target.path().to_path_buf();
-        tokio::spawn(
-            async move { SatzCli::run_in(&bin, &dir, &["init".to_string()], tx, cancel).await },
-        )
+        tokio::spawn(async move {
+            SatzCli::run_in(&bin.path, &dir, &["init".to_string()], tx, cancel).await
+        })
     };
     tokio::time::sleep(Duration::from_millis(50)).await;
     cancel.cancel();

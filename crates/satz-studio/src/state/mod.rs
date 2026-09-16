@@ -11,7 +11,7 @@ mod estate_actions;
 mod toast;
 
 use std::collections::VecDeque;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use dioxus::prelude::*;
@@ -36,6 +36,8 @@ pub enum SatzStatus {
     Unknown,
     Located(SatzBinary),
     TooOld {
+        /// the binary that was refused — `satz self-update` is run on this one
+        path: PathBuf,
         found: String,
         required: String,
     },
@@ -47,6 +49,17 @@ impl SatzStatus {
         match self {
             SatzStatus::Located(b) => Some(b),
             _ => None,
+        }
+    }
+
+    /// The satz that `self-update` would be run on. A binary that is too old is still a
+    /// binary that can update itself — that is the whole point of offering it — so this
+    /// answers for `TooOld` as well as `Located`, and for nothing else.
+    pub fn updatable(&self) -> Option<&Path> {
+        match self {
+            SatzStatus::Located(b) => Some(&b.path),
+            SatzStatus::TooOld { path, .. } => Some(path),
+            SatzStatus::Unknown | SatzStatus::Missing(_) => None,
         }
     }
 }
@@ -269,6 +282,21 @@ pub struct CreateStore {
     pub outcome: Option<CommandOutcome>,
 }
 
+/// The `satz self-update` run: satz owns its own updater, so the app only runs it and
+/// shows what it said. Same shape as [`CreateStore`], because it is the same kind of
+/// thing — one streamed command with an outcome.
+#[derive(Store, Default)]
+pub struct UpdateStore {
+    /// the streamed output of the run, ANSI stripped
+    pub log: Vec<CliLine>,
+    /// a run is in progress
+    pub running: bool,
+    /// the command line of the running or last run, for the log header
+    pub command: Option<String>,
+    /// how the last run ended
+    pub outcome: Option<CommandOutcome>,
+}
+
 #[derive(Store)]
 pub struct AppStore {
     pub settings: Settings,
@@ -290,6 +318,8 @@ pub struct AppStore {
     pub estate: EstateStore,
     /// the `satz init` run behind the Create door
     pub create: CreateStore,
+    /// the `satz self-update` run offered by the banner and by Settings
+    pub update: UpdateStore,
 }
 
 impl AppStore {
@@ -310,6 +340,7 @@ impl AppStore {
             drawer_open: false,
             estate: EstateStore::default(),
             create: CreateStore::default(),
+            update: UpdateStore::default(),
         }
     }
 }
