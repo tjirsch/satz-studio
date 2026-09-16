@@ -18,7 +18,7 @@ use satz_studio_core::cst::{Cst, NodeKind, Span, UseState, scan_uses};
 use satz_studio_core::diag::Diagnostic;
 use satz_studio_core::edit::{Committed, McpChecker, Snapshot};
 use satz_studio_core::estate::EstateDir;
-use satz_studio_core::model::{EstateModel, MAP_PATH};
+use satz_studio_core::model::{EstateModel, MAP_PATH, PackDecls};
 use satz_studio_core::satz::reports::{InterviewArgs, InterviewReport, QuestionsReport};
 use satz_studio_core::satz::{Allow, CliLine, EstateSession, SatzBinary, SatzCli};
 use satz_studio_core::schema::ResourceRegistry;
@@ -325,20 +325,22 @@ pub async fn enable_map(session: &Arc<EstateSession>) -> Committed {
 }
 
 /// The model as the app's reload builds it: the questions over the session, the main
-/// file parsed, the params resolved, the schema loaded, and `diagnostics` as what the
-/// compile said.
+/// file parsed, the params resolved, the schema loaded, what the files the estate reads
+/// declare between its choices, and `diagnostics` as what the compile said.
 pub async fn model(session: &EstateSession, diagnostics: Vec<Diagnostic>) -> EstateModel {
     let report = questions(session).await;
     let text = read(&session.main);
     let cst = Cst::parse(&text).unwrap();
     let env = session.dir.params(&session.main).unwrap();
     let registry = ResourceRegistry::load_all(&session.dir.schema_dir()).unwrap();
+    let decls = PackDecls::read(&session.main, &cst, &session.dir.loader(&session.main));
     EstateModel::build(
         &session.main,
         &cst,
         Ok(&registry),
         &env,
         &report,
+        &decls,
         diagnostics,
     )
     .unwrap()

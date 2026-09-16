@@ -22,7 +22,7 @@ use satz_studio_core::edit::{
 };
 use satz_studio_core::estate::HclState;
 use satz_studio_core::git::{self, WorkTree};
-use satz_studio_core::model::{EstateModel, MAP_PATH};
+use satz_studio_core::model::{EstateModel, MAP_PATH, PackDecls};
 use satz_studio_core::satz::reports::{
     InterviewArgs, InterviewReport, PrerequisitesResult, QuestionsReport,
 };
@@ -837,12 +837,15 @@ async fn reload_with(session: &Arc<EstateSession>, app: Store<AppStore>, carried
             .params(&main)
             .map_err(|e| Box::new(Diagnostic::from_pipeline_error(&dir.dir, &e)))?;
         let registry = ResourceRegistry::load_all(&dir.schema_dir());
-        Ok::<_, Box<Diagnostic>>((cst, env, registry))
+        // what the packs declare between the choices is read here, off the async task,
+        // with the loader the params fold above used
+        let decls = PackDecls::read(&main, &cst, &dir.loader(&main));
+        Ok::<_, Box<Diagnostic>>((cst, env, registry, decls))
     })
     .await;
 
     let built = match parsed {
-        Ok(Ok((cst, env, registry))) => {
+        Ok(Ok((cst, env, registry, decls))) => {
             let schema_dir = session.dir.schema_dir();
             let registry = match registry {
                 Ok(r) => Some(r),
@@ -859,6 +862,7 @@ async fn reload_with(session: &Arc<EstateSession>, app: Store<AppStore>, carried
                     registry.as_ref().ok_or(schema_dir.as_path()),
                     &env,
                     q,
+                    &decls,
                     diagnostics.clone(),
                 )
                 .map(|model| (model, cst))

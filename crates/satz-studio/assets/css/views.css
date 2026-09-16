@@ -1517,6 +1517,34 @@
   background: var(--md-sys-color-surface-container-low);
 }
 
+.pack-tree {
+  grid-column: 1 / -1;
+}
+
+.pack-tree__warn,
+.pack-tree__follows {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+}
+
+.pack-tree__warn {
+  color: var(--md-sys-color-error);
+}
+
+.pack-tree__warn code,
+.pack-tree__follows code {
+  font-size: 12px;
+  user-select: text;
+}
+
+.pack-tree__phase {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* ---- resources ---------------------------------------------------------------- */
 
 .resources__head {

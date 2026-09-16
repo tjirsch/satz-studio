@@ -8,7 +8,7 @@ use std::time::Duration;
 use satz_core::pipeline::Env;
 use satz_studio_core::cst::Cst;
 use satz_studio_core::estate::EstateDir;
-use satz_studio_core::model::{EditMode, EstateModel, ParamKind, ParamRow, SourceValue};
+use satz_studio_core::model::{EditMode, EstateModel, PackDecls, ParamKind, ParamRow, SourceValue};
 use satz_studio_core::satz::reports::{
     QuestionKind, QuestionState, QuestionsReport, QuestionsSummary,
 };
@@ -47,7 +47,17 @@ async fn showcase_params_carry_their_questions_and_leave_the_gates_out() {
     let cst = Cst::parse(&text).unwrap();
     let env = estate.params(&main).unwrap();
     let registry = ResourceRegistry::load_all(&estate.schema_dir()).unwrap();
-    let m = EstateModel::build(&main, &cst, Ok(&registry), &env, &report, Vec::new()).unwrap();
+    let decls = PackDecls::read(&main, &cst, &estate.loader(&main));
+    let m = EstateModel::build(
+        &main,
+        &cst,
+        Ok(&registry),
+        &env,
+        &report,
+        &decls,
+        Vec::new(),
+    )
+    .unwrap();
 
     let names: Vec<&str> = m.params.iter().map(|r| r.name.as_str()).collect();
     assert_eq!(
@@ -140,6 +150,7 @@ fn a_reference_takes_the_shape_of_what_it_resolves_to() {
         Err(Path::new("/nowhere")),
         &env,
         &report,
+        &PackDecls::default(),
         Vec::new(),
     )
     .unwrap();
