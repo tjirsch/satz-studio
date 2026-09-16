@@ -131,7 +131,55 @@ pub(super) fn apply(cst: &Cst, edits: &[Edit]) -> Result<String, EditError> {
     if let Some(line) = first_difference(&old, &fresh) {
         return Err(EditError::ChangedElsewhere { line });
     }
-    Ok(new)
+    if names.is_empty() {
+        return Ok(new);
+    }
+
+    // 5. An append lays the block out as satz's `bind` does after one, and that layout
+    //    moves whitespace only: the tree before and after it is the same node for node.
+    let laid_out = align_params(&new);
+    satz_core::satz::parse(&laid_out).map_err(|e| EditError::Syntax {
+        line: e.line as u32,
+        message: e.msg,
+    })?;
+    let unaligned: Vec<Sig> = new_signatures(&after, &[], None)
+        .into_iter()
+        .map(|(s, _)| s)
+        .collect();
+    let aligned = new_signatures(&Cst::parse(&laid_out)?, &[], None);
+    if let Some(line) = first_difference(&unaligned, &aligned) {
+        return Err(EditError::ChangedElsewhere { line });
+    }
+    Ok(laid_out)
+}
+
+/// The params block as `satz fmt` lays it out, spliced into text whose rest is left
+/// alone — what satz's `bind` does after it appends an answer, so the `=` column of the
+/// block survives the append, a column a hand edit had already broken included. Text
+/// the formatter cannot read comes back as it came, as it does in satz.
+fn align_params(text: &str) -> String {
+    let Ok(formatted) = satz_core::fmt::format(text) else {
+        return text.to_string();
+    };
+    match (params_inner(text), params_inner(&formatted)) {
+        (Some((open, close)), Some((fopen, fclose))) => format!(
+            "{}{}{}",
+            &text[..open],
+            &formatted[fopen..fclose],
+            &text[close..]
+        ),
+        _ => text.to_string(),
+    }
+}
+
+/// The params block between its `{` and its `}`, as byte offsets.
+fn params_inner(text: &str) -> Option<(usize, usize)> {
+    let cst = Cst::parse(text).ok()?;
+    let params = cst.params()?;
+    let close = closing_brace(&cst, params).ok()?;
+    let start = cst.node(params).span.start;
+    let open = start + text[start..close].find('{')? + 1;
+    Some((open, close))
 }
 
 /// The value node an edit targets: the node itself when it is a value, the value of
@@ -338,7 +386,7 @@ mod tests {
     }
 
     #[test]
-    fn an_absent_param_is_appended_as_bind_appends_it() {
+    fn an_absent_param_is_appended_and_the_block_laid_out_as_bind_does() {
         let cst = cst();
         let out = apply(
             &cst,
@@ -354,14 +402,19 @@ mod tests {
             ],
         )
         .unwrap();
+        // the block as `satz fmt` lays it out — the comment one space after its value —
+        // and the rest of the file as it was
         assert_eq!(
             out,
-            SRC.replace("  b = 1\n}", "  b = 1\n  c = true\n  d = [\"p\"]\n}")
+            SRC.replace(
+                "  a = \"x\"   # kept\n  b = 1\n}",
+                "  a = \"x\" # kept\n  b = 1\n  c = true\n  d = [\"p\"]\n}"
+            )
         );
     }
 
     #[test]
-    fn a_block_that_closes_on_the_entry_line_gets_a_newline_first() {
+    fn a_block_that_closes_on_the_entry_line_is_opened_by_the_append() {
         let cst = Cst::parse("estate e\nparams { a = 1 }\n").unwrap();
         let out = apply(
             &cst,
@@ -371,7 +424,24 @@ mod tests {
             }],
         )
         .unwrap();
-        assert_eq!(out, "estate e\nparams { a = 1 \n  b = 2\n}\n");
+        assert_eq!(out, "estate e\nparams {\n  a = 1\n  b = 2\n}\n");
+    }
+
+    #[test]
+    fn an_append_to_a_block_a_hand_edit_misaligned_restores_its_column() {
+        let src = "estate e\n\nparams {\n  region = \"eu\"\n  zone     = \"eu-a\"\n}\n";
+        let out = apply(
+            &Cst::parse(src).unwrap(),
+            &[Edit::ReplaceParam {
+                name: "project".into(),
+                value: TypedValue::Str("p".into()),
+            }],
+        )
+        .unwrap();
+        assert_eq!(
+            out,
+            "estate e\n\nparams {\n  region  = \"eu\"\n  zone    = \"eu-a\"\n  project = \"p\"\n}\n"
+        );
     }
 
     #[test]

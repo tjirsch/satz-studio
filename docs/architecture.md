@@ -268,12 +268,15 @@ value }`:
    absolute, and records the bytes, their sha256 and the `Cst`.
 2. `EditSession::apply(edits)` renders each value with `render_value` in the
    `style_of` its node and splices it over the node's span only; a param the block does
-   not bind is appended before its `}` as satz's `bind` appends it. The proof is in two
+   not bind is appended before its `}` as satz's `bind` appends it, and the params block
+   is then laid out by `satz_core::fmt::format`, the rest of the file untouched — what
+   `bind` does after an append, so both write the same bytes. The proof is in two
    parts: `satz_core::satz::parse` must accept the new text (`EditError::Syntax`), and
    the new tree must equal the old one in a walk of node signatures where each edited
    value stands as a hole and each appended param as one entry; any other difference
-   is `EditError::ChangedElsewhere` naming the line. Two edits on one node, one inside
-   another, and two appends of one name are refused.
+   is `EditError::ChangedElsewhere` naming the line. The layout is held to the same
+   walk against the text before it. Two edits on one node, one inside another, and two
+   appends of one name are refused.
 3. `Proposed::commit(&dyn Checker)`: a sha256 on disk that is not the session's is
    `Rollback::ChangedOnDisk`, no merge; the text is written to `<stem>.studio-tmp.satz`
    beside the file, so `use` and `include_dirs` resolve identically and the name keeps
