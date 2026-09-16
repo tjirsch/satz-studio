@@ -21,7 +21,7 @@ of the estates beside it.
 
 ## What it needs
 
-- **`satz` 0.59.0 or newer.** `MIN_SATZ` in `crates/satz-studio-core/src/satz/binary.rs`
+- **`satz` 0.59.1 or newer.** `MIN_SATZ` in `crates/satz-studio-core/src/satz/binary.rs`
   names the version, the same release the submodule `vendor/satz` is pinned to. Install
   satz with its installer or bring it up to date with `satz self-update`. The app looks
   at the path set in Settings, then on `PATH`, then at `~/.local/bin/satz`. An older
