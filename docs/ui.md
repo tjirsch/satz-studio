@@ -7,15 +7,17 @@ anatomies are `assets/css/`.
 ## 1. Structure
 
 ```
-App (src/app.rs)            the stores, the app coroutine, the stylesheets, the theme
+App (src/app.rs)            the stores, the app coroutine, the stylesheets, the theme,
+│                           the ⌘K listener on the window
 └─ Shell (src/shell/)
    └─ EstateHost             one per open estate: owns the estate coroutine
       └─ Frame
-         ├─ NavigationRail   destinations, "Open estate" FAB, badges
-         ├─ TopBar           estate, runs_as, deployment mode, schema, satz version
+         ├─ NavigationRail   six primary destinations, Chat and Settings at the foot
+         ├─ TopBar           estate, runs_as, satz version, palette, reload, switch
          ├─ SatzBanner       satz missing or too old
          ├─ Content          the view of `AppStore.nav`
          ├─ DiagnosticsDrawer
+         ├─ CommandPalette   over the window while `AppStore.palette_open`
          └─ SnackbarHost
 ```
 
@@ -33,15 +35,16 @@ so a log line re-renders the log and not the rail:
 |---|---|
 | `settings` | the `Settings` as saved; the Settings view edits a draft and saves it whole |
 | `satz` | `SatzStatus`: `Unknown` while locating, `Located(SatzBinary)`, `TooOld { found, required }`, `Missing(why)` |
-| `root`, `estates`, `discovering` | the folder the Estates view walks and every `config.toml` under it with the estates beside each |
+| `root`, `estates`, `discovering` | the folder the Start screen walks and every `config.toml` under it with the estates beside each |
 | `open`, `opening` | the `OpenEstate` (its `Arc<EstateSession>`, main file, `runs_as`, deployment mode) and the estate a session is being opened on |
-| `nav` | the `View` the rail shows |
-| `door` | the `Door` of the Estates view the pane below its door row belongs to: `Create` or `Open` |
+| `nav` | the `View` the window stands on |
+| `door` | the `Door` of the Start screen the pane below its door row belongs to: `Create`, `Import` or `Open` |
+| `palette_open` | the commands palette is over the window |
 | `snackbar` | the toast queue (`VecDeque<Toast>`, three visible) |
 | `credential` | what `Credential::resolve` answered |
 | `drawer_open` | the diagnostics drawer |
 | `create` | the `CreateStore`: the one `satz init` run behind the Create door — `log`, `running`, `command`, `outcome`, reset when a run starts. What `init` derives from the credentials is in these lines while the window shows them and in the estate satz wrote; it reaches no file of the app's own |
-| `estate` | the `EstateStore`: `model`, `cst` (the main file's document tree as read at the last reload — the views slice a value's source text and a line's text from it), `questions`, `interview` (what the last `satz_interview` call returned; `rename_to` is read from it), `diagnostics`, `command_log`, `running`, `last_command`, `outcome`, `loading` — reset when an estate opens or closes |
+| `estate` | the `EstateStore`: `model`, `cst` (the main file's document tree as read at the last reload — the views slice a value's source text and a line's text from it), `questions`, `interview` (what the last `satz_interview` call returned; `rename_to` is read from it), `diagnostics`, `command_log`, `running`, `last_command`, `outcome`, `loading`, `hcl` (the `HclState` of `hcl_dir`: whether `main.tf` is there and whether it has been initialised) — reset when an estate opens or closes |
 
 `DiagnosticSelection(Signal<Option<Diagnostic>>)` is a second context: the drawer sets
 it when a row is clicked, the estate views read it.
@@ -58,6 +61,9 @@ nothing blocks in an event handler.
   `Settings.last_root`), `OpenEstate { config, estate }` (`EstateSession::open` with the
   Settings ceiling), `CloseEstate`, `CreateEstate { dir, options }`, `CancelCreate`,
   `SaveSettings` (the file, then satz again), `ResolveCredential` and `StoreKey`.
+  `OpenEstate` puts the window on `View::Overview` when the session opens and
+  `CloseEstate` puts it back on `View::Start` — the window has nowhere to stand without
+  an estate, so closing one IS switching estates.
   `CreateEstate` checks the target, runs `satz init` in it through `SatzCli::run_in`
   from a task so the loop stays free for `CancelCreate`, streams the lines into
   `create.log`, and then reads what the run left with `init::created`: one estate is
@@ -67,9 +73,15 @@ nothing blocks in an event handler.
   its engine again only when the save returned.
 - **The estate coroutine** (`src/state/estate_actions.rs`, `EstateAction`) is started by
   `EstateHost` with the session and lives as long as the estate is open. On start and on
-  `Reload` it calls `satz_questions` over the session, reads the main file, parses it,
-  resolves the params and loads the schema on a blocking thread, builds the
-  `EstateModel`, and writes the model, the questions and the diagnostics.
+  `Reload` it reads `hcl_dir` into `estate.hcl`, calls `satz_questions` over the session,
+  reads the main file, parses it, resolves the params and loads the schema on a blocking
+  thread, builds the `EstateModel`, and writes the model, the questions and the
+  diagnostics. A reload that built a model then runs `satz_transpile_check` and adds
+  what the compile found — a prerequisite the estate does not declare, a required
+  argument the provider wants, raw HCL nobody has reviewed — as diagnostics of source
+  `check`. It is skipped when the front end already refused (the refusal has said why,
+  and the check would say it twice) and when the reload follows a write, whose own check
+  has just run and whose findings are carried in.
   `RunCommand(args)` runs `satz --config <dir> <args…>` in a tokio task and streams its
   lines, ANSI stripped, into `command_log` from a local task, so the loop stays free for
   `CancelCommand`. `RunTool { name, args }` calls one MCP tool and puts its text and its
@@ -101,6 +113,10 @@ nothing blocks in an event handler.
     under the delegated-write discipline: the bytes recorded, the real path checked, a
     refusal restored. Nothing else is ever uncommented by the app; satz does that on a
     yes.
+  - `WritePrerequisites` is the same delegated write over `satz_update_prerequisites
+    {report_only: false}`: satz works out offline which roles the IaC service account
+    lacks and which APIs the infra project does not enable, and writes both into the
+    estate. `delegated_write` is the one implementation the two share.
   - `MergePresets` calls `satz_merge_presets` for a pack row the file has no line for,
     with the outcome in the command log as `RunTool` puts it.
 
@@ -110,22 +126,41 @@ the drawer or an outcome under the log.
 
 ### Views
 
+The window is ordered by the job, not by what was built when. With an estate open the
+rail reads **Overview, Decisions, Packs, Estate, Checks, Deploy**, then Chat and
+Settings at its foot; with none open it carries Settings alone and the window stands on
+the Start screen.
+
+**Decisions and Packs/Estate are not duplicates, and this is the rule that says so:**
+Decisions is the WORKLIST — what the estate has not decided yet, one question at a time,
+with what each costs to change later. Packs and Estate are the STATE — which packs the
+file runs, which params it binds, which resources it declares. A param that answers a
+question is editable in both, on purpose: the question is where the choice is explained,
+the file is where it lives. It is the same rule as "one fact, one place" — a param that
+GATES a pack line shows in Packs and not in Estate, because there it is a pack choice
+and not a value.
+
 | view | file | what it does |
 |---|---|---|
-| Estates | `src/views/estates.rs` | the way in: a row of three door cards (`state::Door`) over the pane the chosen door opens. **Open** is the folder (typed, or picked with the OS dialog), one card per `config.toml` with its estates, each with its deployment mode and an Open button; the open estate is marked and can be closed. The rail's FAB picks a folder and puts the view on this door |
+| Start | `src/views/estates.rs` | the way in: a row of three door cards (`state::Door`) over the pane the chosen door opens. **Open** is the folder (typed, or picked with the OS dialog), one card per `config.toml` with its estates, each with its deployment mode and an Open button; the open estate is marked and can be closed. It is where the window stands with no estate open, and where closing one returns it |
 | Create | `src/views/create.rs` | the **Create** door: the folder the new estate goes in, picked or typed, refused while it is not there or already holds a `config.toml`; the fields satz cannot derive (customer shortname, default region, the Terraform tool as a segmented button, the Google provider set as a switch, extra providers as a chip list); the customer id and the billing account as overrides, empty by default and each saying which live call answers it when it is left blank; the command line as it will run; Create and Cancel; and the run log with stdout and stderr distinguished, a line saying what satz derives is printed there and kept nowhere else, and the outcome chip — satz's own last line when the run refused |
 | Import | `src/views/import.rs` | the **Import** door: the folder the import runs in, picked or typed, with a line saying which of the two things will happen — `satz import` alone, or `satz init` first because the folder holds no `config.toml`; the source as a segmented button over the four shapes (state document, live scope, Terraform HCL, legacy YAML) with the source field and its picker below, each shape saying in its supporting line what it reads — the state one that it is `tofu show -json` output and not a raw `.tfstate`; then the flags of that shape alone (only/exclude/all, the collision rule, the customer shortname, the output file and `--verbose` for state and live; wrap-all for HCL; kind, gate and fork for YAML); the Terraform tool and the provider-schema switch when the init half runs; the command line, or both of them, as they will run; Import and Cancel; and, beside the log, satz's report split into what it wrote, what it skipped, the params it could not derive and its warnings, with "Check it compiles" running `satz_transpile_check` on the estate that opened |
-| Commands | `src/views/commands.rs` | the palette (`PALETTE`): `transpile --check`, `transpile`, `questions`, `check-presets`, `update-prerequisites`, `update-schema`, `hcl-init`, `plan`, `require`, `report-compliance`, `get-presets`, `merge-presets`, and `apply` and `bootstrap` as command lines to copy or open in the terminal; each with its argument fields — a reporting command's format as a segmented button — the command line as it will run, Run and Cancel, the streamed log with stdout and stderr distinguished, followed by the file a reporting command wrote where the app named it, and the session tools `satz_whoami`, `satz_transpile_check`, `satz_questions` as one click each |
-| Settings | `src/views/settings.rs` | every `Settings` field as a form: the satz path with the detected version, the MCP ceiling, auto-approve, the provider with base URL and model for the non-Claude ones, the Claude model, effort, fallbacks, transcripts, theme; Save writes the file and locates satz again; the credential card shows where the Claude credential comes from, whether that engine is the one in use, and stores a key in the keychain; the Claude Code card shows the binary, the account and which engine is in use, with "Use this engine", "Sign in" and "Sign out"; beside the satz path, "Update satz" and "Check only" run `satz self-update` (with `--no-open-readme`, so a successful update does not open a browser) and stream it into a log card, and satz is located again once it installs |
-| Gallery | `src/views/gallery.rs` | every component in its variants, light and dark side by side |
-| Interview | `src/views/interview.rs` | the questions report one question at a time, unanswered first with a "Show answered" switch: the pack's description when the pack changes, the prompt, the `why`, chips for reversal and blast, a warning banner on a one-way door, the recommendation when it differs from the offer, the field in the shape of the offered value as satz's `parse_answer` types an answer (a switch, a number field, a chip list, a text field that refuses a brace with satz's sentence), a `oneof` as filter chips with the chosen option's `why`; Accept or Answer, then the next question; Back to the question last left — the one just answered included, switching "Show answered" on when it is answered — and Skip, which reads Next on a question that is answered or not asked; "Accept n defaults"; with "Show answered" on, the list-detail layout: every question beside the card, its prompt, subject and answer, the one on the card selected, a click opening it, the list scrolling on its own and moving below the card in a narrow window; the progress from `summary`, the complete state, and the `rename_to` card when the last `satz_interview` returned one. Each answer is one `Answer` action |
-| Params | `src/views/params.rs` | one row per `ParamRow`, grouped by the asking question's pack (else "estate"): a typed field by `ParamKind` in value mode, or the Satz source in source mode — a row whose value carries a `{param}` or `${…}` opens there, with its parts as chips; the question's `why` as a tooltip, a one-way-door chip, a raw-line toggle showing the line; a commit on Enter, blur, a switch flip or a chip change is `CommitEdit(Edit::ReplaceParam)` with a `TypedValue` in value mode and `TypedValue::Raw` in source mode |
-| Map | `src/views/map.rs` | the `PackRow`s: the map row first — Off is a card with "Enable the map" (`EnableMap`), On a chip, Absent the merge-presets remedy — then sections by phase (the phase comment's first line; a line without one joins the section open at that point; every Absent row last under "Not in this file"), one card per gated line with its path, prompt and `why`, a switch bound to the gate (an answer through `Answer`; off keeps the commented line, satz never re-comments one) or one segmented button per `oneof` group over its options, a badge On/Off/Absent, "Run merge-presets" (`MergePresets`) on an Absent row, and the model's "line active, gate false" note inline on its row |
-| Resources | `src/views/resources.rs` | two panes: the tree of `ResourceNode`s (an icon per kind, a resource's name, `use` lines as leaves, branches collapsed below depth 2, a chip with the count of required attributes not written) and the selected node's card: kind, type, line, the missing required names, then one row per `AttrRow` — a typed field by `AttrType` (string, number, bool, a list of one of them; everything else and `Unknown` in source mode), locked rows dimmed with the reason (`import-id`, computed, not in the schema), source mode with its chips; a commit is `CommitEdit(Edit::ReplaceValue)`. Without a schema every row is locked and the header carries "Run update-schema". A row clicked in the drawer selects the node at its line |
+| Overview | `src/views/overview.rs` | one card of what the estate still owes, derived on every render by `owed()` over `Facts` — day 0 unconfirmed, questions unanswered, the map off or absent, pack choices with no line, no provider schema, prerequisites the compile found undeclared, raw HCL without a `trust` reason, an HCL directory that has not been compiled or not been initialised — each row with what to do about it: a destination, a command run here, a terminal hand-off, or `merge-presets`. The card is absent when the list is empty. Below it the estate's own facts (file, directory, deployment mode, schema, HCL directory) and, once something has run, the shared command log |
+| Decisions | `src/views/interview.rs` | the questions report one question at a time, unanswered first with a "Show answered" switch: the pack's description when the pack changes, the prompt, the `why`, chips for reversal and blast, a warning banner on a one-way door, the recommendation when it differs from the offer, the field in the shape of the offered value as satz's `parse_answer` types an answer (a switch, a number field, a chip list, a text field that refuses a brace with satz's sentence), a `oneof` as filter chips with the chosen option's `why`; Accept or Answer, then the next question; Back to the question last left — the one just answered included, switching "Show answered" on when it is answered — and Skip, which reads Next on a question that is answered or not asked; "Accept n defaults"; with "Show answered" on, the list-detail layout: every question beside the card, its prompt, subject and answer, the one on the card selected, a click opening it, the list scrolling on its own and moving below the card in a narrow window; the progress from `summary`, the complete state, and the `rename_to` card when the last `satz_interview` returned one. Each answer is one `Answer` action |
+| Packs | `src/views/map.rs` | the `PackRow`s: the map row first — Off is a card with "Enable the map" (`EnableMap`), On a chip, Absent the merge-presets remedy — then sections by phase (the phase comment's first line; a line without one joins the section open at that point; every Absent row last under "Not in this file"), one card per gated line with its path, prompt and `why`, a switch bound to the gate (an answer through `Answer`; off keeps the commented line, satz never re-comments one) or one segmented button per `oneof` group over its options, a badge On/Off/Absent, "Run merge-presets" (`MergePresets`) on an Absent row and once for the whole library beside the map chip, and the model's "line active, gate false" note inline on its row |
+| Estate | `src/views/estate.rs` | the main file in two tabs, `ParamsPane` and `ResourcesPane`, with the counts on each. A diagnostic chosen in the drawer opens the Resources tab, where its line is |
+| Estate · Params | `src/views/params.rs` | one row per `ParamRow`, grouped by the asking question's pack (else "estate"): a typed field by `ParamKind` in value mode, or the Satz source in source mode — a row whose value carries a `{param}` or `${…}` opens there, with its parts as chips; the question's `why` as a tooltip, a one-way-door chip, a raw-line toggle showing the line; a commit on Enter, blur, a switch flip or a chip change is `CommitEdit(Edit::ReplaceParam)` with a `TypedValue` in value mode and `TypedValue::Raw` in source mode |
+| Estate · Resources | `src/views/resources.rs` | two panes: the tree of `ResourceNode`s (an icon per kind, a resource's name, `use` lines as leaves, branches collapsed below depth 2, a chip with the count of required attributes not written) and the selected node's card: kind, type, line, the missing required names, then one row per `AttrRow` — a typed field by `AttrType` (string, number, bool, a list of one of them; everything else and `Unknown` in source mode), locked rows dimmed with the reason (`import-id`, computed, not in the schema), source mode with its chips; a commit is `CommitEdit(Edit::ReplaceValue)`. Without a schema every row is locked and the header carries "Run update-schema". A row clicked in the drawer selects the node at its line |
+| Checks | `src/views/checks.rs` | what judges the estate: the `CHECKS` deck — `transpile --check`, `update-prerequisites` (`--report-only`, fixed), `require`, `report-compliance`, `bootstrap --dry-run` — with the session tools. When the last compile found prerequisites undeclared, a card above it carries each finding and "Write them into the estate", which is `WritePrerequisites`: satz's own writer under the write lock, checked and reloaded like an answer |
+| Deploy | `src/views/deploy.rs` | what hands the estate off: the `hcl_dir` path with two chips saying whether `main.tf` is written and whether the directory is initialised, then the `DEPLOY` deck — `transpile`, `hcl-init`, `plan` in the app; `apply`, `migrate`, `bootstrap` as command lines to copy or open in the terminal |
 | Chat | `src/views/chat/` | the agent loop over the open estate: the rail of this estate's transcripts with "New" (empty on the Claude Code engine, which keeps its conversation in its own process), the turns as they stream with one card per tool call and the approval card, the composer with the model, the effort and the capability chips, and the usage footer. `mod.rs` holds the status card for the states the engine is not in — `Starting` a progress line, `NoCredential` and `NotSignedIn` the two empty states below, `Failed` the error with Open Settings |
+| Settings | `src/views/settings.rs` | every `Settings` field as a form: the satz path with the detected version, the MCP ceiling, auto-approve, the provider with base URL and model for the non-Claude ones, the Claude model, effort, fallbacks, transcripts, theme; Save writes the file and locates satz again; the credential card shows where the Claude credential comes from, whether that engine is the one in use, and stores a key in the keychain; the Claude Code card shows the binary, the account and which engine is in use, with "Use this engine", "Sign in" and "Sign out"; beside the satz path, "Update satz" and "Check only" run `satz self-update` (with `--no-open-readme`, so a successful update does not open a browser) and stream it into a log card, and satz is located again once it installs |
+| Commands | `src/views/commands.rs` | not a destination: `PALETTE` is the table of every satz command the app runs, and `CommandDeck` renders any group of them — the list, the chosen entry's argument fields (a reporting command's format as a segmented button), the command line as it will run, Run and Cancel, and `CommandLog`, the streamed log with stdout and stderr distinguished, followed by the file a reporting command wrote where the app named it. `CommandPalette` is every entry in a dialog over the window, on ⌘K / Ctrl+K or the top bar's button, with the session tools `satz_whoami`, `satz_transpile_check`, `satz_questions` as one click each. `CHECKS` and `DEPLOY` are the two groups the destinations gather |
+| Gallery | `src/views/gallery.rs` | every component in its variants, light and dark side by side. A development route: the rail offers it only with `SATZ_STUDIO_DEBUG` set, and nothing else navigates to it |
 
-A view that works on an estate shows a card with a button to Estates while none is
-open.
+A destination that works on an estate shows a card with a button to the Start screen
+while none is open — which the rail cannot reach with no estate, but the banner and the
+chat's empty states can.
 
 ## 2. Material 3 Expressive
 
@@ -194,12 +229,13 @@ works offline.
 | `Checkbox` | `.m-checkbox` | <https://m3.material.io/components/checkbox/specs> | no indeterminate state |
 | `Radio` | `.m-radio` | <https://m3.material.io/components/radio-button/specs> | — |
 | `SegmentedButton` | `.m-segmented` | <https://m3.material.io/components/segmented-buttons/specs> | single-select only |
-| `Dialog` | `.m-dialog` | <https://m3.material.io/components/dialogs/specs> | basic dialog only; no full-screen dialog |
+| `Tabs`, `Tab` | `.m-tabs`, `.m-tab` | <https://m3.material.io/components/tabs/specs> | primary tabs only; fixed tabs, no scrollable row, no swipe |
+| `Dialog` | `.m-dialog` | <https://m3.material.io/components/dialogs/specs> | basic dialog only; no full-screen dialog; a `class` prop widens one whose body needs it (the commands palette) |
 | `List`, `ListItem` | `.m-list`, `.m-list-item` | <https://m3.material.io/components/lists/specs> | one- and two-line items; no three-line item, no dividers |
 | `Tree`, `TreeItem` | `.m-tree` | — (not a Material 3 component) | a nested list with a disclosure per branch, styled with list-item tokens; a `trailing` slot at the row's end |
 | `ChipList` | `.chip-list` (in `views.css`) | — (input chips over a text field) | the values of a list as removable input chips, a field that adds one on Enter or blur, several with commas |
 | `TypedField` | — | — (composes `Switch`, `TextField`, `ChipList`) | one field in the shape satz reads a value in (`FieldKind`: bool, number, list, text) over a `Draft`; a brace in a text and a non-number in a number field are refused under the field with satz's sentence, and `oncommit` fires only for a draft without a problem |
-| door card | `.door` (in `views.css`) | <https://m3.material.io/components/cards/specs> | a `Card` with `onclick` carrying an icon, a title and a supporting line; the chosen door is the filled variant on the primary container. One per `Door`, in the Estates view |
+| door card | `.door` (in `views.css`) | <https://m3.material.io/components/cards/specs> | a `Card` with `onclick` carrying an icon, a title and a supporting line; the chosen door is the filled variant on the primary container. One per `Door`, in the Start screen |
 | `SourceChips` | `.source-chips` (in `views.css`) | — (assist chips over literal text) | a value as satz reads it: a `{param}` chip with what it resolves to, a `${…}` reference chip, the literal text between |
 | `Badge` | `.m-badge` | <https://m3.material.io/components/badges/specs> | — |
 | `LinearProgress`, `CircularProgress` | `.m-linear-progress`, `.m-circular-progress` | <https://m3.material.io/components/progress-indicators/specs> | the linear indicator has the Expressive stop indicator; the wavy Expressive variant is not drawn |
@@ -213,22 +249,42 @@ No Material Web Components and no other library are used: the components are Dio
 components over these classes. The Gallery view is the checklist: every Material
 component above in every variant, in the light and the dark scheme side by side; the
 three composites (`ChipList`, `TypedField`, `SourceChips`) are seen in the estate views
-and the door card in Estates, and their classes live in `views.css`, so
+and the door card on the Start screen, and their classes live in `views.css`, so
 `components.css` stays the Material anatomies alone.
 
 ### Shell
 
-- **Navigation rail:** the "Open estate" FAB in the FAB slot, which puts the Estates
-  view on its Open door and opens the folder picker; one destination per view
-  — Estates `home_storage`, Interview `quiz`, Params `tune`, Map `map`, Resources
-  `account_tree`, Commands `terminal`, Chat `chat`, Settings `settings`, Gallery
-  `palette`. While an estate is open, Interview carries the count of unanswered
-  questions and Resources the count of diagnostics.
-- **Top bar:** the estate's file name and directory; chips for `runs_as` ("runs as the
-  ADC identity" when the estate impersonates nothing), the deployment mode and the
-  schema (provider, version and resource count, or "no schema: run update-schema");
-  reload and close; the satz version chip, red when satz is missing or too old; the
-  drawer toggle with the diagnostics count.
+- **Navigation rail:** six primary destinations in the order the work happens —
+  Overview `dashboard`, Decisions `quiz`, Packs `inventory_2`, Estate `description`,
+  Checks `fact_check`, Deploy `rocket_launch` — and a bottom-aligned group of two, Chat
+  `chat` and Settings `settings`, in the rail's footer slot. Overview carries the count
+  of what the estate owes and Decisions the count of unanswered questions. With no
+  estate open the primary group is empty and the footer carries Settings alone: there is
+  nothing to work on, and the window stands on the Start screen. `SATZ_STUDIO_DEBUG`
+  adds Gallery `palette` to the footer. There is no FAB: opening an estate is what the
+  Start screen does, and switching one is the top bar's action.
+
+  **The pattern's limit, so it is not argued later.** Material 3 puts three to seven
+  destinations in a navigation rail
+  (<https://m3.material.io/components/navigation-rail/guidelines>). Six primary plus a
+  group of two is inside it because Chat and Settings are bottom-aligned SECONDARY
+  items, not peers of the six. A seventh PRIMARY destination breaks the pattern, and
+  the answer then is a navigation drawer — not a smaller font, not a denser rail, not an
+  eighth icon. `crates/satz-studio/src/state/mod.rs` holds `View::PRIMARY` and a test
+  that fails outside three to seven.
+- **Top bar:** the estate's file name and directory; the `runs_as` chip ("runs as the
+  ADC identity" when the estate impersonates nothing); the satz version chip, red when
+  satz is missing or too old; the commands palette, reload and "Switch estate", which
+  closes the estate and returns the window to the Start screen; the drawer toggle with
+  the diagnostics count. The bar carries what is true of the WINDOW — which estate is
+  open, whom it acts as, which satz compiles it. What is true of the ESTATE — its
+  deployment mode, its schema, how far its HCL has been taken — is the Overview's
+  identity card, so each fact has one place.
+- **Commands palette:** every entry of `PALETTE` in a dialog over the window, opened
+  with ⌘K (Ctrl+K on Windows and Linux) or the top bar's button, and closed with
+  Escape, the scrim or the same key. The listener is installed on the window in
+  `src/app.rs`, which mounts once: a keydown inside a text field never reaches a handler
+  above it, and a listener per estate would leave one behind on every switch.
 - **Banner:** while satz is missing or too old, a full-width error banner on every
   view naming the fix (`satz self-update`, or the path in Settings), with "Try again"
   and "Settings".
@@ -299,51 +355,67 @@ a step that writes, as the fixture's `config.toml` says) and over a skeleton wri
 starts commented in. Every write is checked by `satz transpile --check` through the
 estate's `satz mcp` child. No step needs an API key; the first runs `satz init`, which
 reads the Application Default Credentials where there are any; the last needs the Claude
-Code CLI installed and signed in, and nothing else.
+Code CLI installed and signed in, and nothing else. Nothing in the walk changes a live
+organisation: `bootstrap` and `apply` are read as command lines, never run.
 
-1. **Import.** Estates → Import → an empty folder → Terraform HCL → a directory
+1. **Import.** Import → an empty folder → Terraform HCL → a directory
    holding a `.tf` file. The card under the folder says satz init runs first; the
    preview shows both command lines. Import → the log carries both runs, the report
    card names the file satz wrote and every block it promoted or wrapped, and that
    estate is open in the top bar. Choose "State document" and point it at a raw
    `.tfstate`: the field turns red with satz's own sentence and Import stays disabled.
-2. **Open.** Estates → the folder → Open. The top bar shows the file, "runs as the ADC
-   identity", the schema chip with the provider and its type count; the rail shows the
-   count of unanswered questions on Interview.
-3. **Answer a question.** Interview → the first open question → Accept (or type a
+2. **Open.** Open → the folder → Open. The window lands on Overview; the top bar shows
+   the file and "runs as the ADC identity"; the identity card names the deployment mode,
+   the schema with its provider and type count, and what the HCL directory holds. The
+   rail carries the owed count on Overview and the unanswered count on Decisions.
+3. **Read what is owed.** The Overview card lists a row per thing the estate owes and
+   nothing else. Answer a question (step 4) and the questions row loses one; answer the
+   last and the row goes. Point the estate at an empty `schema_dir` (step 9) and the
+   schema row appears with "Run update-schema" on it. An estate that owes nothing shows
+   "Nothing is owed" and no card of rows.
+4. **Answer a question.** Decisions → the first open question → Accept (or type a
    value and Answer). The toast says "1 answer written"; the file has one new line in
    `params { }` (`git diff` shows nothing else: no re-emission, comments and alignment
    intact); the question count on the rail drops by one; a diagnostic the compile had
    raised for that param is gone from the drawer.
-4. **Enable the map, then a pack.** On the skeleton: Map → "Enable the map" → the line
+5. **Enable the map, then a pack.** On the skeleton: Packs → "Enable the map" → the line
    `use "presets/estate-map.satz"` is uncommented and the map's questions are open.
    Toggle `use_budget` on → the answer lands as `use_budget = true` and satz
    uncomments `use "presets/organization-budget.satz" when use_budget`; toggle it off
    → `use_budget = false` and the line stays active — the card says so, and the drawer
    carries the model's note "line active, gate false" on that line, shown inline on the
    card.
-5. **Edit an attribute.** Resources → a resource → a string row → change it → Enter.
+6. **Edit an attribute.** Estate → Resources → a resource → a string row → change it → Enter.
    The toast names the file; the line shows the new value with its `=` column where it
    was; the rest of the file is byte-identical.
-6. **Type a brace.** Params → a text row in value mode → type `{x}` → the field turns
+7. **Type a brace.** Estate → Params → a text row in value mode → type `{x}` → the field turns
    red with "braces interpolate in a Satz string — if `{x}` is what you mean, write
    that param by hand" and nothing is sent; the source-mode toggle is where an
    interpolation is written.
-7. **Break a value.** Params → source mode on a row → replace the value with a bare
-   name nothing binds → Enter. The toast says "not written — line N: …"; the drawer
+8. **Break a value.** Estate → Params → source mode on a row → replace the value with a
+   bare name nothing binds → Enter. The toast says "not written — line N: …"; the drawer
    shows the check's diagnostic at that line, source "check", and it stays after the
-   reload; clicking it in the drawer selects the node at that line in Resources; the
-   file is byte-identical to before.
-8. **Missing schema.** Point a copy's `schema_dir` at an empty directory and open it:
-   the schema chip is red, Resources locks every row with "no schema" and its header
-   carries "Run update-schema", which runs in Commands.
-9. **Switch engines from the chat.** With `provider = "claude"` in `settings.toml`, no
-   `ANTHROPIC_API_KEY` in the environment and the Claude Code CLI signed in: Chat →
-   the card leads "Claude Code is ready" with the account, the four API sources below
-   under "Or use the Messages API" → "Use Claude Code" → the toast says "Settings
-   saved", the card goes, the composer shows "tools run inside Claude Code" and a
-   disabled model field, and `settings.toml` reads `kind = "claude_code"`. Settings →
-   the Claude Code card says "and in use" and offers no "Use this engine"; the
-   credential card says "not the selected engine". Sign the CLI out
-   (`claude auth logout`), set the provider back to Claude, reopen Chat: the card is
-   "No Claude credential" with one line naming `claude auth login`.
+   reload; clicking it in the drawer opens Estate → Resources with the node at that line
+   selected; the file is byte-identical to before.
+9. **Missing schema.** Point a copy's `schema_dir` at an empty directory and open it:
+   the Overview carries the schema row and its "Run update-schema", the identity card
+   says "none in <dir>", and Estate → Resources locks every row with "no schema".
+10. **The palette and the two halves of day 0.** ⌘K opens the commands palette over
+    whatever destination is showing; Escape closes it. Checks → `update-prerequisites`
+    runs `--report-only` and prints the gap; where the compile found one, the card above
+    the deck offers "Write them into the estate" and the toast counts the lines written.
+    Deploy → `apply`, `migrate` and `bootstrap` offer "Copy" and "Open in terminal" and
+    no Run; `bootstrap --dry-run` lives in Checks and runs here. **Do not run a real
+    `bootstrap`** against an organisation you are not prepared to change.
+11. **Switch estates.** The top bar's "Switch estate" closes the estate and returns the
+    window to the Start screen with its three doors; the rail carries Settings alone.
+12. **Switch engines from the chat.** With `provider = "claude"` in `settings.toml`, no
+    `ANTHROPIC_API_KEY` in the environment and the Claude Code CLI signed in: Chat →
+    the card leads "Claude Code is ready" with the account, the four API sources below
+    under "Or use the Messages API" → "Use Claude Code" → the toast says "Settings
+    saved", the card goes, the composer shows "tools run inside Claude Code" and a
+    disabled model field, and `settings.toml` reads `kind = "claude_code"`. Settings →
+    the Claude Code card says "and in use" and offers no "Use this engine"; the
+    credential card says "not the selected engine". Sign the CLI out
+    (`claude auth logout`), set the provider back to Claude, reopen Chat: the card is
+    "No Claude credential" with one line naming `claude auth login`.

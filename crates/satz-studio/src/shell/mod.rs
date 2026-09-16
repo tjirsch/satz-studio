@@ -22,13 +22,15 @@ pub use top_bar::TopBar;
 
 use crate::state::{AppStore, AppStoreStoreExt, EstateAction, OpenEstate, View, estate_coroutine};
 use crate::views::chat::ChatView;
-use crate::views::commands::CommandsView;
+use crate::views::checks::ChecksView;
+use crate::views::commands::CommandPalette;
+use crate::views::deploy::DeployView;
+use crate::views::estate::EstateView;
 use crate::views::estates::EstatesView;
 use crate::views::gallery::GalleryView;
-use crate::views::interview::InterviewView;
-use crate::views::map::MapView;
-use crate::views::params::ParamsView;
-use crate::views::resources::ResourcesView;
+use crate::views::interview::DecisionsView;
+use crate::views::map::PacksView;
+use crate::views::overview::OverviewView;
 use crate::views::settings::SettingsView;
 
 #[component]
@@ -62,6 +64,7 @@ fn EstateHost(open: OpenEstate) -> Element {
 
 #[component]
 fn Frame() -> Element {
+    let app = use_context::<Store<AppStore>>();
     rsx! {
         div { class: "shell",
             NavigationRail {}
@@ -71,12 +74,16 @@ fn Frame() -> Element {
                 main { class: "shell__content", Content {} }
                 DiagnosticsDrawer {}
             }
+            if app.palette_open().cloned() && app.open().is_some() {
+                CommandPalette {}
+            }
             SnackbarHost {}
         }
     }
 }
 
-/// The current view; a destination that needs an estate shows a card without one.
+/// The current view; a destination that needs an estate shows a card without one, and
+/// the Start screen is where the window stands while none is open.
 #[component]
 fn Content() -> Element {
     let app = use_context::<Store<AppStore>>();
@@ -85,14 +92,17 @@ fn Content() -> Element {
         return rsx! { NoEstate { view } };
     }
     match view {
-        View::Estates => rsx! { EstatesView {} },
-        View::Settings => rsx! { SettingsView {} },
-        View::Gallery => rsx! { GalleryView {} },
-        View::Commands => rsx! { CommandsView {} },
-        View::Interview => rsx! { InterviewView {} },
-        View::Params => rsx! { ParamsView {} },
-        View::Map => rsx! { MapView {} },
-        View::Resources => rsx! { ResourcesView {} },
+        View::Start => rsx! { EstatesView {} },
+        View::Overview => rsx! { OverviewView {} },
+        View::Decisions => rsx! { DecisionsView {} },
+        View::Packs => rsx! { PacksView {} },
+        View::Estate => rsx! { EstateView {} },
+        View::Checks => rsx! { ChecksView {} },
+        View::Deploy => rsx! { DeployView {} },
         View::Chat => rsx! { ChatView {} },
+        View::Settings => rsx! { SettingsView {} },
+        // a development route: the rail is its only door, and it offers it only with
+        // SATZ_STUDIO_DEBUG set
+        View::Gallery => rsx! { GalleryView {} },
     }
 }

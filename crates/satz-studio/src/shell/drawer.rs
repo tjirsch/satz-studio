@@ -4,11 +4,12 @@ use dioxus::prelude::*;
 use satz_studio_core::diag::{DiagSource, Diagnostic, Severity};
 
 use crate::components::{Chip, ChipKind, Icon, List, ListItem};
-use crate::state::{AppStore, AppStoreStoreExt, DiagnosticSelection, EstateStoreStoreExt};
+use crate::state::{AppStore, AppStoreStoreExt, DiagnosticSelection, EstateStoreStoreExt, View};
 
 /// The bottom drawer: the open estate's diagnostics grouped by severity, each with its
 /// `file:line`, its source, and — for one of satz's findings — a chip naming the check
-/// that raised it; clicking one sets [`DiagnosticSelection`].
+/// that raised it; clicking one sets [`DiagnosticSelection`], and one that names a line
+/// of the main file also opens the Estate destination, where that line is.
 #[component]
 pub fn DiagnosticsDrawer() -> Element {
     let app = use_context::<Store<AppStore>>();
@@ -16,6 +17,7 @@ pub fn DiagnosticsDrawer() -> Element {
     let open = app.drawer_open().cloned();
     let diagnostics = app.estate().diagnostics().cloned();
     let base = app.open().read().as_ref().map(|o| o.dir.clone());
+    let main = app.open().read().as_ref().map(|o| o.main.clone());
     let count = |s: Severity| diagnostics.iter().filter(|d| d.severity == s).count();
     let (errors, warnings, notes) = (
         count(Severity::Error),
@@ -53,6 +55,8 @@ pub fn DiagnosticsDrawer() -> Element {
                                                 let headline = d.message.lines().next().unwrap_or_default().to_string();
                                                 let kind = d.kind.clone();
                                                 let item = d.clone();
+                                                let in_main = d.line.is_some()
+                                                    && d.file.as_deref() == main.as_deref();
                                                 let mut select = selection.0;
                                                 rsx! {
                                                     ListItem {
@@ -62,7 +66,12 @@ pub fn DiagnosticsDrawer() -> Element {
                                                         selected: is_selected,
                                                         leading: rsx! { Icon { name: icon, size: 20, class: "drawer__icon drawer__icon--{icon}" } },
                                                         trailing: kind.map(|kind| rsx! { Chip { kind: ChipKind::Assist, label: kind } }),
-                                                        onclick: move |_| select.set(Some(item.clone())),
+                                                        onclick: move |_| {
+                                                            select.set(Some(item.clone()));
+                                                            if in_main {
+                                                                app.nav().set(View::Estate);
+                                                            }
+                                                        },
                                                     }
                                                 }
                                             }

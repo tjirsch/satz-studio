@@ -258,6 +258,28 @@ impl EstateDir {
     }
 }
 
+/// How far the generated HCL directory has been taken, read from disk and nothing run.
+/// Two facts, and only what each proves: `main.tf` is there, so the estate has been
+/// transpiled here; `.terraform` is there, so the tool's init has run. A plan needs an
+/// initialised directory, so `initialised == false` proves no plan has run against this
+/// checkout — and `true` proves nothing about a plan, which leaves no trace of its own.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct HclState {
+    /// `hcl_dir/main.tf` exists
+    pub transpiled: bool,
+    /// `hcl_dir/.terraform` exists
+    pub initialised: bool,
+}
+
+impl HclState {
+    pub fn read(hcl_dir: &Path) -> HclState {
+        HclState {
+            transpiled: hcl_dir.join("main.tf").is_file(),
+            initialised: hcl_dir.join(".terraform").is_dir(),
+        }
+    }
+}
+
 /// A value edit in flight: the file `edit` writes beside the real one for satz to check
 /// (`<stem>.studio-tmp.satz`). It is a copy of an estate and never an estate of its own.
 pub fn is_checked_temp(path: &Path) -> bool {
@@ -411,5 +433,30 @@ mod tests {
     fn declares_an_estate_reads_the_statement_not_the_name() {
         assert!(declares_an_estate("// a comment\nestate acme\n"));
         assert!(!declares_an_estate("pack acme version \"1.0\"\n"));
+    }
+
+    #[test]
+    fn the_hcl_state_reads_the_two_files_that_prove_a_transpile_and_an_init() {
+        let tmp = tempfile::tempdir().unwrap();
+        let hcl = tmp.path().join("hcl");
+        assert_eq!(HclState::read(&hcl), HclState::default());
+        std::fs::create_dir_all(&hcl).unwrap();
+        assert_eq!(HclState::read(&hcl), HclState::default());
+        std::fs::write(hcl.join("main.tf"), "# generated\n").unwrap();
+        assert_eq!(
+            HclState::read(&hcl),
+            HclState {
+                transpiled: true,
+                initialised: false
+            }
+        );
+        std::fs::create_dir_all(hcl.join(".terraform")).unwrap();
+        assert_eq!(
+            HclState::read(&hcl),
+            HclState {
+                transpiled: true,
+                initialised: true
+            }
+        );
     }
 }

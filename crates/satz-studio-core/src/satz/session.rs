@@ -1,6 +1,6 @@
 //! One session per open estate: the CLI runner and the MCP child, the write lock every
 //! writer takes, and the identity the estate's live tools run as — read from
-//! `satz_open`, displayed, configured nowhere. The Commands view and the agent's tool
+//! `satz_open`, displayed, configured nowhere. The command decks and the agent's tool
 //! bridge both go through [`EstateSession::tool`], so one identity per estate holds.
 
 use std::path::{Component, Path, PathBuf};

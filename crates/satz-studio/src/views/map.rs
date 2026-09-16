@@ -1,4 +1,4 @@
-//! The Map view: the pack rows — the map line first, then the gated lines under the
+//! The Packs destination: the pack rows — the map line first, then the gated lines under the
 //! phase each can be adopted in, then the choices the file has no line for. A toggle
 //! is an answer written by `satz_interview`; the one line the app writes itself is the
 //! map's, which no question gates.
@@ -100,7 +100,7 @@ fn push_entry(entries: &mut Vec<Entry>, row: PackRow) {
 }
 
 #[component]
-pub fn MapView() -> Element {
+pub fn PacksView() -> Element {
     let app = use_context::<Store<AppStore>>();
     let handle = use_coroutine_handle::<EstateAction>();
     let model = app.estate().model().cloned();
@@ -115,8 +115,8 @@ pub fn MapView() -> Element {
         .collect();
     let Some(model) = model else {
         return rsx! {
-            div { class: "view map",
-                h1 { class: "view__title", "Map" }
+            div { class: "view packs",
+                h1 { class: "view__title", "Packs" }
                 Card { variant: CardVariant::Filled, class: "map__empty",
                     Icon { name: "map", size: 48, class: "placeholder__icon" }
                     p { "The estate model is not available — the drawer says why." }
@@ -132,8 +132,8 @@ pub fn MapView() -> Element {
     let sections = sections(&model.packs);
 
     rsx! {
-        div { class: "view map",
-            h1 { class: "view__title", "Map" }
+        div { class: "view packs",
+            h1 { class: "view__title", "Packs" }
             if let Some(map) = map_row {
                 match map.state {
                     LineState::Off => rsx! {
@@ -160,10 +160,19 @@ pub fn MapView() -> Element {
                         div { class: "map__map-on",
                             Chip { kind: ChipKind::Assist, icon: "check_circle", label: "map on" }
                             span { "{map.path.clone().unwrap_or_default()}" if let Some(l) = map.line { ", line {l}" } }
+                            span { class: "grow" }
+                            Button {
+                                variant: ButtonVariant::Tonal,
+                                icon: "merge",
+                                disabled: loading,
+                                onclick: move |_| handle.send(EstateAction::MergePresets),
+                                "Run merge-presets"
+                            }
                         }
                     },
                 }
             }
+            p { class: "view__lead", "merge-presets reconciles this estate's library with upstream: a pack that is missing is installed and gets its commented line here, an unmodified one is upgraded, an edited one is forked rather than overwritten. Its flags — a report-only run, a pristine directory, adopting one pack in place — are in the commands palette." }
             for section in sections {
                 section { key: "{section.header}", class: "map__section",
                     h2 { class: "map__section-title", "{section.header}" }

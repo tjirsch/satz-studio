@@ -253,7 +253,7 @@ impl McpSession {
             .cloned()
             .collect()
     }
-    /// The child's process id, for the Commands view.
+    /// The child's process id, for the command log.
     pub fn pid(&self) -> Option<u32> {
         self.pid
     }

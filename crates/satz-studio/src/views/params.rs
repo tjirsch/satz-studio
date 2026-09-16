@@ -1,7 +1,7 @@
-//! The Params view: every param the estate binds that is not a pack choice, grouped by
-//! the pack whose question asks for it, each as a typed field in value mode or as its
-//! Satz source in source mode. A commit is one `Edit::ReplaceParam` through the app's
-//! own writer.
+//! The Params pane of the Estate destination: every param the estate binds that is not
+//! a pack choice, grouped by the pack whose question asks for it, each as a typed field
+//! in value mode or as its Satz source in source mode. A commit is one
+//! `Edit::ReplaceParam` through the app's own writer.
 
 use dioxus::prelude::*;
 use satz_studio_core::cst::TypedValue;
@@ -37,15 +37,14 @@ pub fn grouped(rows: &[ParamRow]) -> Vec<(String, Vec<ParamRow>)> {
 }
 
 #[component]
-pub fn ParamsView() -> Element {
+pub fn ParamsPane() -> Element {
     let app = use_context::<Store<AppStore>>();
     let model = app.estate().model().cloned();
     let cst = app.estate().cst().cloned();
     let loading = app.estate().loading().cloned();
     let (Some(model), Some(cst)) = (model, cst) else {
         return rsx! {
-            div { class: "view params",
-                h1 { class: "view__title", "Params" }
+            div { class: "pane params",
                 Card { variant: CardVariant::Filled, class: "params__empty",
                     Icon { name: "tune", size: 48, class: "placeholder__icon" }
                     p { "The estate model is not available — the drawer says why." }
@@ -55,12 +54,11 @@ pub fn ParamsView() -> Element {
     };
     let groups = grouped(&model.params);
     rsx! {
-        div { class: "view params",
-            h1 { class: "view__title", "Params" }
+        div { class: "pane params",
             if groups.is_empty() {
                 Card { variant: CardVariant::Filled, class: "params__empty",
                     Icon { name: "tune", size: 48, class: "placeholder__icon" }
-                    p { "The estate binds no param that is not a pack choice; the Map view has those." }
+                    p { "The estate binds no param that is not a pack choice; the Packs destination has those." }
                 }
             }
             for (group, rows) in groups {

@@ -16,10 +16,15 @@ use futures_util::StreamExt;
 use satz_studio_core::cst::{Cst, Span, UseState, scan_uses};
 use satz_studio_core::diag::{DiagSource, Diagnostic, Severity};
 use satz_studio_core::edit::snapshot::Snapshot;
-use satz_studio_core::edit::{CommitError, Committed, Edit, EditSession, McpChecker, Rollback};
+use satz_studio_core::edit::{
+    CheckFailure, Checker, CommitError, Committed, Edit, EditSession, McpChecker, Rollback,
+};
+use satz_studio_core::estate::HclState;
 use satz_studio_core::model::{EstateModel, MAP_PATH};
-use satz_studio_core::satz::reports::{InterviewArgs, InterviewReport, QuestionsReport};
-use satz_studio_core::satz::{CliLine, EstateSession};
+use satz_studio_core::satz::reports::{
+    InterviewArgs, InterviewReport, PrerequisitesResult, QuestionsReport,
+};
+use satz_studio_core::satz::{CliLine, EstateSession, ToolOutcome};
 use satz_studio_core::schema::{ResourceRegistry, SchemaError};
 use tokio_util::sync::CancellationToken;
 
@@ -51,6 +56,10 @@ pub enum EstateAction {
     },
     /// `satz_interview {accept_defaults: true}`: every default the report offers
     AcceptDefaults,
+    /// `satz_update_prerequisites {report_only: false}`: the roles and APIs the
+    /// estate's own resource types oblige it to declare, written into the file by
+    /// satz's writer under the same discipline as an answer
+    WritePrerequisites,
     /// the app's own writer: the edit applied in memory, checked as a temp file
     /// beside the real one, renamed over it
     CommitEdit(Edit),
@@ -95,6 +104,7 @@ pub async fn estate_coroutine(
                 };
                 interview(&session, app, args).await;
             }
+            EstateAction::WritePrerequisites => write_prerequisites(&session, app).await,
             EstateAction::CommitEdit(edit) => commit_edit(&session, app, edit).await,
             EstateAction::EnableMap => enable_map(&session, app).await,
             EstateAction::MergePresets => {
@@ -115,67 +125,106 @@ pub async fn estate_coroutine(
     }
 }
 
-/// A delegated write: `satz_interview` writes the real file, so the bytes are recorded
-/// first and the check runs on the real path afterwards; a refusal restores them. A
-/// refused tool call wrote nothing and is satz's own sentence in a toast.
-async fn interview(session: &Arc<EstateSession>, app: Store<AppStore>, args: InterviewArgs) {
-    let carried = {
-        let _lock = session.write_lock().await;
-        let snapshot = match Snapshot::take(&session.main) {
-            Ok(s) => s,
-            Err(e) => {
-                toast(app, ToastKind::Error, e.to_string());
-                return;
-            }
-        };
-        let Some(args) = serde_json::to_value(&args)
-            .ok()
-            .and_then(|v| v.as_object().cloned())
-        else {
-            toast(
-                app,
-                ToastKind::Error,
-                "satz_interview: the arguments did not serialise to an object",
-            );
-            return;
-        };
-        let outcome = match session.tool("satz_interview", args).await {
-            Ok(o) => o,
-            Err(e) => {
-                toast(app, ToastKind::Error, format!("satz_interview: {e}"));
-                return;
-            }
-        };
-        if outcome.is_error {
-            toast(app, ToastKind::Error, outcome.text.clone());
-            return;
-        }
-        let report = outcome.typed::<InterviewReport>("satz_interview");
-        let checker = McpChecker {
-            session: Arc::clone(session),
-        };
-        match snapshot.verify(&checker).await {
-            Ok(committed) => {
-                match report {
-                    Ok(report) => {
-                        let written = report.written;
-                        app.estate().interview().set(Some(report));
-                        toast(
-                            app,
-                            ToastKind::Info,
-                            match written {
-                                1 => "1 answer written".to_string(),
-                                n => format!("{n} answers written"),
-                            },
-                        );
-                    }
-                    Err(e) => toast(app, ToastKind::Error, format!("satz_interview: {e}")),
-                }
-                carried_findings(&committed)
-            }
-            Err(e) => rolled_back(app, e),
+/// A delegated write: satz's own writer works on the real file, so the bytes are
+/// recorded first and the check runs on the real path afterwards; a refusal restores
+/// them. A refused tool call wrote nothing and is satz's own sentence in a toast.
+/// `landed` reads the outcome of a call that landed and says what the toast says —
+/// `Err` for an outcome the app could not type, which is a toast in the error colour
+/// over a write that is already on disk.
+///
+/// The returned diagnostics are what the reload carries: the findings of a check that
+/// passed, or the refusal's own.
+async fn delegated_write<F>(
+    session: &Arc<EstateSession>,
+    app: Store<AppStore>,
+    name: &str,
+    args: serde_json::Map<String, serde_json::Value>,
+    landed: F,
+) -> Vec<Diagnostic>
+where
+    F: FnOnce(&ToolOutcome) -> Result<String, String>,
+{
+    let _lock = session.write_lock().await;
+    let snapshot = match Snapshot::take(&session.main) {
+        Ok(s) => s,
+        Err(e) => {
+            toast(app, ToastKind::Error, e.to_string());
+            return Vec::new();
         }
     };
+    let outcome = match session.tool(name, args).await {
+        Ok(o) => o,
+        Err(e) => {
+            toast(app, ToastKind::Error, format!("{name}: {e}"));
+            return Vec::new();
+        }
+    };
+    if outcome.is_error {
+        toast(app, ToastKind::Error, outcome.text.clone());
+        return Vec::new();
+    }
+    let checker = McpChecker {
+        session: Arc::clone(session),
+    };
+    match snapshot.verify(&checker).await {
+        Ok(committed) => {
+            match landed(&outcome) {
+                Ok(text) => toast(app, ToastKind::Info, text),
+                Err(e) => toast(app, ToastKind::Error, e),
+            }
+            carried_findings(&committed)
+        }
+        Err(e) => rolled_back(app, e),
+    }
+}
+
+/// One answer, or every default: `satz_interview` on the real file.
+async fn interview(session: &Arc<EstateSession>, app: Store<AppStore>, args: InterviewArgs) {
+    let Some(args) = serde_json::to_value(&args)
+        .ok()
+        .and_then(|v| v.as_object().cloned())
+    else {
+        toast(
+            app,
+            ToastKind::Error,
+            "satz_interview: the arguments did not serialise to an object",
+        );
+        return;
+    };
+    let carried = delegated_write(session, app, "satz_interview", args, |outcome| {
+        let report = outcome
+            .typed::<InterviewReport>("satz_interview")
+            .map_err(|e| format!("satz_interview: {e}"))?;
+        let written = report.written;
+        app.estate().interview().set(Some(report));
+        Ok(match written {
+            1 => "1 answer written".to_string(),
+            n => format!("{n} answers written"),
+        })
+    })
+    .await;
+    reload_with(session, app, carried).await;
+}
+
+/// The writing half of `update-prerequisites`: satz works out which roles the IaC
+/// service account lacks and which APIs the infra project does not enable, and writes
+/// both into the estate. It is offline and it is satz's own writer, so it goes through
+/// the same discipline as an answer — the write lock, the snapshot, the check on the
+/// real path — rather than a command that rewrites the file under the window.
+async fn write_prerequisites(session: &Arc<EstateSession>, app: Store<AppStore>) {
+    let args =
+        serde_json::Map::from_iter([("report_only".to_string(), serde_json::Value::Bool(false))]);
+    let carried = delegated_write(session, app, "satz_update_prerequisites", args, |outcome| {
+        let result = outcome
+            .typed::<PrerequisitesResult>("satz_update_prerequisites")
+            .map_err(|e| format!("satz_update_prerequisites: {e}"))?;
+        Ok(match result.written.len() {
+            0 => "nothing was missing".to_string(),
+            1 => "1 prerequisite written".to_string(),
+            n => format!("{n} prerequisites written"),
+        })
+    })
+    .await;
     reload_with(session, app, carried).await;
 }
 
@@ -562,13 +611,37 @@ async fn reload(session: &Arc<EstateSession>, app: Store<AppStore>) {
     reload_with(session, app, Vec::new()).await;
 }
 
+/// `satz_transpile_check` on the estate as it stands: the findings of a compile that
+/// passed, the diagnostics of one that refused, or the one error of a checker that
+/// could not run.
+async fn check(session: &Arc<EstateSession>) -> Vec<Diagnostic> {
+    let checker = McpChecker {
+        session: Arc::clone(session),
+    };
+    let base = session.main.parent().unwrap_or(Path::new("."));
+    match checker.check(&session.main).await {
+        Ok(summary) => summary
+            .findings
+            .iter()
+            .map(|f| Diagnostic::from_finding(base, f, DiagSource::Check))
+            .collect(),
+        Err(CheckFailure::Refused(diags)) => diags,
+        Err(CheckFailure::Failed(e)) => vec![Diagnostic::error(
+            format!("satz_transpile_check: {e}"),
+            DiagSource::Check,
+        )],
+    }
+}
+
 /// Questions through the session, then the file, the params and the schema on a
-/// blocking thread, then the model. Every failure is a diagnostic and a toast; the
-/// model stays what it was. `carried` — a refused write's diagnostics — stays in the
-/// drawer after the reload, at its line in the file as it is.
+/// blocking thread, then the model, then the compile's own check. Every failure is a
+/// diagnostic and a toast; the model stays what it was. `carried` — the diagnostics of
+/// the write this reload follows — stays in the drawer, at its line in the file as it
+/// is, and is what the check already said, so the reload does not run it again.
 async fn reload_with(session: &Arc<EstateSession>, app: Store<AppStore>, carried: Vec<Diagnostic>) {
     let estate = app.estate();
     estate.loading().set(true);
+    estate.hcl().set(HclState::read(&session.dir.hcl_dir()));
     let mut diagnostics: Vec<Diagnostic> = Vec::new();
 
     let questions = match session
@@ -645,14 +718,24 @@ async fn reload_with(session: &Arc<EstateSession>, app: Store<AppStore>, carried
         }
     };
 
+    let mut built_ok = false;
     match built {
         Some(Ok((model, cst))) => {
+            built_ok = true;
             diagnostics = model.diagnostics.clone();
             estate.model().set(Some(Arc::new(model)));
             estate.cst().set(Some(Arc::new(cst)));
         }
         Some(Err(d)) => diagnostics.push(*d),
         None => {}
+    }
+    // What the compile finds after the front end — a role the IaC service account
+    // lacks, a required argument the provider wants, raw HCL nobody has reviewed — is
+    // data the estate carries and the app has no other way to learn. It is read here,
+    // once per reload, and only when the front end got as far as a model: a file the
+    // front end refused has already said why, and the check would say it twice.
+    if built_ok && carried.is_empty() {
+        diagnostics.extend(check(session).await);
     }
     diagnostics.extend(carried);
     if let Some(first) = diagnostics

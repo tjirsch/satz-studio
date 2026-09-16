@@ -19,7 +19,7 @@ use std::path::{Path, PathBuf};
 
 use satz_core::pipeline::Env;
 
-use crate::cst::{Cst, NodeId, UseLine, scan_uses};
+use crate::cst::{Cst, NodeId, NodeKind, UseLine, scan_uses};
 use crate::diag::Diagnostic;
 use crate::satz::reports::{QuestionRow, QuestionsReport};
 use crate::schema::{AttrType, ResourceRegistry};
@@ -206,6 +206,16 @@ pub struct PackRow {
     pub line: Option<u32>,
 }
 
+/// One `hcl { … }` block of the file. Raw HCL is emitted verbatim and is opaque to the
+/// compliance plane, so satz warns on every transpile until `hcl trust "<reason>" { … }`
+/// says it was reviewed, and notes it after. `trusted` is which of the two this is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct HclBlock {
+    pub line: u32,
+    /// the block is `hcl trust "<reason>" { … }`
+    pub trusted: bool,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum SchemaStatus {
     /// the providers the schema files came from, and how many resource types
@@ -213,7 +223,7 @@ pub enum SchemaStatus {
         providers: Vec<String>,
         resources: usize,
     },
-    /// `schema_dir` holds no schema: the Resources view is read-only until
+    /// `schema_dir` holds no schema: the Resources pane is read-only until
     /// `satz update-schema`
     Missing(PathBuf),
 }
@@ -226,6 +236,8 @@ pub struct EstateModel {
     pub packs: Vec<PackRow>,
     /// the `use` lines outside every block; the ones inside a block are on its node
     pub uses: Vec<UseLine>,
+    /// every raw-HCL block in this file, trusted or not
+    pub hcl: Vec<HclBlock>,
     pub diagnostics: Vec<Diagnostic>,
     pub schema: SchemaStatus,
 }
@@ -279,8 +291,59 @@ impl EstateModel {
             params,
             packs,
             uses: top_uses,
+            hcl: hcl_blocks(cst),
             diagnostics,
             schema,
         })
+    }
+}
+
+/// Every `hcl` statement of the file, at its line. The document layer keeps both forms
+/// as one opaque statement, so the reason is read from the source: what follows the
+/// keyword is `trust "<reason>"` or the body's brace.
+fn hcl_blocks(cst: &Cst) -> Vec<HclBlock> {
+    cst.nodes()
+        .filter(|(_, n)| matches!(&n.kind, NodeKind::Opaque { statement } if statement == "hcl"))
+        .map(|(_, n)| HclBlock {
+            line: n.line,
+            trusted: cst
+                .slice(n.span)
+                .strip_prefix("hcl")
+                .is_some_and(|rest| rest.trim_start().starts_with("trust")),
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_raw_block_is_untrusted_and_one_with_a_reason_is_trusted() {
+        let cst = Cst::parse(concat!(
+            "estate acme\n\n",
+            "hcl {\n  resource \"google_compute_address\" \"a\" {}\n}\n\n",
+            "hcl trust \"reviewed 2026-09-16: provider gap\" {\n  resource \"x\" \"y\" {}\n}\n",
+        ))
+        .unwrap();
+        assert_eq!(
+            hcl_blocks(&cst),
+            [
+                HclBlock {
+                    line: 3,
+                    trusted: false
+                },
+                HclBlock {
+                    line: 7,
+                    trusted: true
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn a_file_without_raw_hcl_has_no_blocks() {
+        let cst = Cst::parse("estate acme\n\nparams {\n  region = \"europe-west3\"\n}\n").unwrap();
+        assert!(hcl_blocks(&cst).is_empty());
     }
 }

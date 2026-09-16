@@ -141,6 +141,15 @@ pub enum InterviewFilter {
     All,
 }
 
+/// What `satz_update_prerequisites` returns. Only the lines it wrote are read: the
+/// report beside them is what the command's own `--report-only` run prints into the
+/// log, and the app does not render it twice.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct PrerequisitesResult {
+    /// the lines written into the estate; empty when nothing was missing
+    pub written: Vec<String>,
+}
+
 /// What `satz_open` resolved — including the identity the estate's live tools run as.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct OpenReport {

@@ -11,11 +11,20 @@ terminal. `satz apply` is a thin wrapper over the configured tool in the estate'
 `hcl_dir`: stdio is inherited, so `tofu apply`'s approval prompt — the step that shows
 the plan and waits for `yes` — behaves as it does from a shell, and the tool's exit
 code is the command's. `satz bootstrap` creates the day-0 infrastructure as the
-human's own identity after an interactive pre-flight, then runs `init` and the first
-imports through the same wrapper. satz's MCP server serves neither (`MCP_PARITY` in
-`vendor/satz/src/mcp.rs`: `apply` "hands stdio to the tool, approval prompt included";
-`bootstrap` runs "as the human, after an interactive pre-flight"), and under MCP stdin
-and stdout are the protocol.
+human's own identity, then runs `init` and the first imports through the same wrapper.
+satz's MCP server serves neither (`MCP_PARITY` in `vendor/satz/src/mcp.rs`: `apply`
+"hands stdio to the tool, approval prompt included"; `bootstrap` runs "as the human,
+after an interactive pre-flight"), and under MCP stdin and stdout are the protocol.
+
+**Corrected 2026-09-16.** This record used to say `bootstrap` waits on an interactive
+pre-flight, taking satz's own refusal text at its word. It does not: the only
+`read_line` in satz is `interview.rs`, and there is no TTY check anywhere. The decision
+does not change, because its real reason was never the prompt — `bootstrap` runs as the
+OPERATOR'S credentials, the IaC service account it would otherwise bind to not existing
+until it has run, and that is a thing to do knowingly in one's own shell. What changes
+is what the app may say about it: the Overview gives that reason, not a prompt that is
+not there. `apply` is unaffected — tofu's approval prompt is real, and it is the safety
+step this record is mostly about.
 
 The app runs every other command itself: `SatzCli` streams stdout and stderr into the
 Commands pane, and `plan` runs there without a terminal: satz writes every variable's

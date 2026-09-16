@@ -1,7 +1,7 @@
 //! The satz driver: the binary and its version gate ([`binary`]), the CLI runner
 //! ([`cli`]), `satz init` and what it leaves behind ([`init`]), `satz import` and what
 //! it wrote and found ([`import`]), the MCP session over
-//! `satz mcp` ([`mcp`]), and one session per open estate that the Commands view and the
+//! `satz mcp` ([`mcp`]), and one session per open estate that the command decks and the
 //! agent share ([`session`]). [`reports`] are the JSON payloads a reporting command
 //! writes with `--format json` and the server returns as `structuredContent`.
 

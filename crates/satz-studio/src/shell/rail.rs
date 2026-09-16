@@ -1,58 +1,75 @@
 use dioxus::prelude::*;
 
-use crate::components::{Fab, FabSize, NavRail, NavRailItem, Tooltip};
-use crate::state::{AppAction, AppStore, AppStoreStoreExt, EstateStoreStoreExt, View};
-use crate::views::estates::pick_root;
+use crate::components::{NavRail, NavRailItem};
+use crate::state::{AppStore, AppStoreStoreExt, EstateStoreStoreExt, View, debug_routes};
+use crate::views::overview::{Facts, owed};
 
-/// The rail: "Open estate" as the primary action, one destination per [`View`], the
-/// open-question count on Interview and the diagnostics count on Resources while an
-/// estate is open.
+/// The rail: the six primary destinations in the order the work happens, and Chat and
+/// Settings bottom-aligned under them. With no estate open there is nothing to work on,
+/// so the rail carries Settings alone and the window stands on the Start screen — the
+/// doors. Overview carries the count of what the estate owes and Decisions the count of
+/// unanswered questions.
 #[component]
 pub fn NavigationRail() -> Element {
     let app = use_context::<Store<AppStore>>();
-    let handle = use_coroutine_handle::<AppAction>();
     let current = app.nav().cloned();
     let has_estate = app.open().is_some();
-    let questions = if has_estate {
-        app.estate()
-            .questions()
-            .read()
-            .as_ref()
-            .map(|q| q.summary.unanswered)
-            .unwrap_or(0)
+    let questions = app.estate().questions().cloned();
+    let unanswered = questions
+        .as_ref()
+        .map(|q| q.summary.unanswered)
+        .unwrap_or(0);
+    let owes = if has_estate {
+        let open = app.open().cloned();
+        let model = app.estate().model().cloned();
+        let diagnostics = app.estate().diagnostics().cloned();
+        let hcl = app.estate().hcl().cloned();
+        open.map(|open| {
+            owed(&Facts {
+                estate: &open.name,
+                deployment_mode: open.deployment_mode.as_deref(),
+                hcl,
+                questions: questions.as_ref(),
+                model: model.as_deref(),
+                diagnostics: &diagnostics,
+            })
+            .len()
+        })
+        .unwrap_or(0)
     } else {
         0
     };
-    let diagnostics = if has_estate {
-        app.estate().diagnostics().len()
-    } else {
-        0
-    };
+    let primary: &[View] = if has_estate { &View::PRIMARY } else { &[] };
+    let mut secondary: Vec<View> = View::SECONDARY
+        .into_iter()
+        .filter(|v| has_estate || !v.needs_estate())
+        .collect();
+    if debug_routes() {
+        secondary.push(View::Gallery);
+    }
+
     rsx! {
         NavRail {
-            fab: rsx! {
-                Tooltip { text: "Open estate",
-                    // icon-only: a label makes an extended FAB, wider than the rail
-                    Fab {
-                        icon: "folder_open",
-                        size: FabSize::Medium,
-                        class: "rail-fab",
-                        onclick: move |_| {
-                            app.nav().set(View::Estates);
-                            pick_root(app, handle);
-                        },
+            footer: rsx! {
+                for view in secondary {
+                    NavRailItem {
+                        key: "{view.label()}",
+                        icon: view.icon().to_string(),
+                        label: view.label().to_string(),
+                        selected: view == current,
+                        onclick: move |_| app.nav().set(view),
                     }
                 }
             },
-            for view in View::ALL {
+            for view in primary.iter().copied() {
                 NavRailItem {
                     key: "{view.label()}",
                     icon: view.icon().to_string(),
                     label: view.label().to_string(),
                     selected: view == current,
                     badge: match view {
-                        View::Interview => questions,
-                        View::Resources => diagnostics,
+                        View::Overview => owes,
+                        View::Decisions => unanswered,
                         _ => 0,
                     },
                     onclick: move |_| app.nav().set(view),

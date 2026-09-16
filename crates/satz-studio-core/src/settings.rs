@@ -28,7 +28,7 @@ pub struct Settings {
     pub fallbacks: bool,
     pub persist_transcripts: bool,
     pub theme: Theme,
-    /// the folder the Estates view opened last
+    /// the folder the Start screen opened last
     pub last_root: Option<PathBuf>,
 }
 

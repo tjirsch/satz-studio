@@ -1,4 +1,4 @@
-//! The Interview view: the questions the estate's packs declare, one at a time, the
+//! The Decisions destination: the questions the estate's packs declare, one at a time, the
 //! unanswered ones first. Every answer is one `satz_interview` call through the estate
 //! coroutine, and the view re-renders from the reloaded report. The walk remembers the
 //! questions it moved away from, so Back returns to one whether it is answered by then
@@ -197,7 +197,7 @@ pub fn listed(q: &QuestionRow) -> String {
 }
 
 #[component]
-pub fn InterviewView() -> Element {
+pub fn DecisionsView() -> Element {
     let app = use_context::<Store<AppStore>>();
     let handle = use_coroutine_handle::<EstateAction>();
     let report = app.estate().questions().cloned();
@@ -208,8 +208,8 @@ pub fn InterviewView() -> Element {
 
     let Some(report) = report else {
         return rsx! {
-            div { class: "view interview",
-                h1 { class: "view__title", "Interview" }
+            div { class: "view decisions interview",
+                h1 { class: "view__title", "Decisions" }
                 Card { variant: CardVariant::Filled, class: "interview__empty",
                     Icon { name: "quiz", size: 48, class: "placeholder__icon" }
                     p { "The questions report is not available — the drawer says why." }
@@ -257,9 +257,9 @@ pub fn InterviewView() -> Element {
     let listing = show_answered() && !list.is_empty();
 
     rsx! {
-        div { class: "view interview",
+        div { class: "view decisions interview",
             div { class: "interview__head",
-                h1 { class: "view__title", "Interview" }
+                h1 { class: "view__title", "Decisions" }
                 span { class: "grow" }
                 Switch {
                     label: "Show answered",

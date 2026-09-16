@@ -20,7 +20,7 @@ use tokio_util::sync::CancellationToken;
 use super::{
     AppStore, AppStoreStoreExt, CommandOutcome, CreateStoreStoreExt, CredentialStatus, EstateFile,
     EstateStore, EstateSummary, ImportStoreStoreExt, OpenEstate, SatzStatus, ToastKind,
-    UpdateStoreStoreExt, quote, strip_ansi, toast,
+    UpdateStoreStoreExt, View, quote, strip_ansi, toast,
 };
 
 pub enum AppAction {
@@ -216,9 +216,14 @@ fn update_satz(app: Store<AppStore>, check_only: bool) -> Option<CancellationTok
 }
 
 /// Drop the session: the estate host unmounts and its coroutine with it.
+/// Closing an estate is how estates are SWITCHED: the window has nowhere to stand
+/// without one, so it goes back to the Start screen with its doors, and the palette
+/// over it — which acts on the estate that is gone — closes with it.
 pub fn close_estate(app: Store<AppStore>) {
     app.open().set(None);
     app.estate().set(EstateStore::default());
+    app.palette_open().set(false);
+    app.nav().set(View::Start);
 }
 
 async fn locate(app: Store<AppStore>) {
@@ -359,6 +364,9 @@ async fn open_estate(app: Store<AppStore>, config: PathBuf, estate: PathBuf) {
                 runs_as,
                 deployment_mode,
             }));
+            // An estate that opens lands on its Overview: what it still owes is the
+            // first thing to read, whichever door it came through.
+            app.nav().set(View::Overview);
             toast(app, ToastKind::Info, format!("Opened {name} as {identity}"));
         }
         Err(e) => toast(app, ToastKind::Error, format!("{}: {e}", estate.display())),

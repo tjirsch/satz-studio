@@ -10,6 +10,9 @@ pub fn Dialog(
     title: String,
     ondismiss: EventHandler<()>,
     #[props(default)] icon: String,
+    /// an extra class on the dialog itself, for a body that needs its own width
+    #[props(default)]
+    class: String,
     #[props(default)] actions: Option<Element>,
     children: Element,
 ) -> Element {
@@ -26,7 +29,7 @@ pub fn Dialog(
                 }
             },
             div {
-                class: "m-dialog",
+                class: "m-dialog {class}",
                 role: "dialog",
                 "aria-modal": "true",
                 "aria-label": "{title}",
