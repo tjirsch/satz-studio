@@ -112,8 +112,9 @@ the drawer or an outcome under the log.
 
 | view | file | what it does |
 |---|---|---|
-| Estates | `src/views/estates.rs` | the way in: a row of door cards (`state::Door`) over the pane the chosen door opens. **Open** is the folder (typed, or picked with the OS dialog), one card per `config.toml` with its estates, each with its deployment mode and an Open button; the open estate is marked and can be closed. The rail's FAB picks a folder and puts the view on this door |
+| Estates | `src/views/estates.rs` | the way in: a row of three door cards (`state::Door`) over the pane the chosen door opens. **Open** is the folder (typed, or picked with the OS dialog), one card per `config.toml` with its estates, each with its deployment mode and an Open button; the open estate is marked and can be closed. The rail's FAB picks a folder and puts the view on this door |
 | Create | `src/views/create.rs` | the **Create** door: the folder the new estate goes in, picked or typed, refused while it is not there or already holds a `config.toml`; the fields satz cannot derive (customer shortname, default region, the Terraform tool as a segmented button, the Google provider set as a switch, extra providers as a chip list); the customer id and the billing account as overrides, empty by default and each saying which live call answers it when it is left blank; the command line as it will run; Create and Cancel; and the run log with stdout and stderr distinguished, a line saying what satz derives is printed there and kept nowhere else, and the outcome chip — satz's own last line when the run refused |
+| Import | `src/views/import.rs` | the **Import** door: the folder the import runs in, picked or typed, with a line saying which of the two things will happen — `satz import` alone, or `satz init` first because the folder holds no `config.toml`; the source as a segmented button over the four shapes (state document, live scope, Terraform HCL, legacy YAML) with the source field and its picker below, each shape saying in its supporting line what it reads — the state one that it is `tofu show -json` output and not a raw `.tfstate`; then the flags of that shape alone (only/exclude/all, the collision rule, the customer shortname, the output file and `--verbose` for state and live; wrap-all for HCL; kind, gate and fork for YAML); the Terraform tool and the provider-schema switch when the init half runs; the command line, or both of them, as they will run; Import and Cancel; and, beside the log, satz's report split into what it wrote, what it skipped, the params it could not derive and its warnings, with "Check it compiles" running `satz_transpile_check` on the estate that opened |
 | Commands | `src/views/commands.rs` | the palette (`PALETTE`): `transpile --check`, `transpile`, `questions`, `check-presets`, `update-prerequisites`, `update-schema`, `hcl-init`, `plan`, `require`, `report-compliance`, `get-presets`, `merge-presets`, and `apply` and `bootstrap` as command lines to copy or open in the terminal; each with its argument fields — a reporting command's format as a segmented button — the command line as it will run, Run and Cancel, the streamed log with stdout and stderr distinguished, followed by the file a reporting command wrote where the app named it, and the session tools `satz_whoami`, `satz_transpile_check`, `satz_questions` as one click each |
 | Settings | `src/views/settings.rs` | every `Settings` field as a form: the satz path with the detected version, the MCP ceiling, auto-approve, the provider with base URL and model for the non-Claude ones, the Claude model, effort, fallbacks, transcripts, theme; Save writes the file and locates satz again; the credential card shows where the Claude credential comes from, whether that engine is the one in use, and stores a key in the keychain; the Claude Code card shows the binary, the account and which engine is in use, with "Use this engine", "Sign in" and "Sign out"; beside the satz path, "Update satz" and "Check only" run `satz self-update` (with `--no-open-readme`, so a successful update does not open a browser) and stream it into a log card, and satz is located again once it installs |
 | Gallery | `src/views/gallery.rs` | every component in its variants, light and dark side by side |
@@ -296,40 +297,47 @@ estate, read from the pinned submodule — copy the estate to a scratch director
 a step that writes, as the fixture's `config.toml` says) and over a skeleton written by
 `satz interview <dir>/yaml/new.satz --create`, which is the estate every pack line
 starts commented in. Every write is checked by `satz transpile --check` through the
-estate's `satz mcp` child. No step needs an API key; the last needs the Claude Code CLI
-installed and signed in, and nothing else.
+estate's `satz mcp` child. No step needs an API key; the first runs `satz init`, which
+reads the Application Default Credentials where there are any; the last needs the Claude
+Code CLI installed and signed in, and nothing else.
 
-1. **Open.** Estates → the folder → Open. The top bar shows the file, "runs as the ADC
+1. **Import.** Estates → Import → an empty folder → Terraform HCL → a directory
+   holding a `.tf` file. The card under the folder says satz init runs first; the
+   preview shows both command lines. Import → the log carries both runs, the report
+   card names the file satz wrote and every block it promoted or wrapped, and that
+   estate is open in the top bar. Choose "State document" and point it at a raw
+   `.tfstate`: the field turns red with satz's own sentence and Import stays disabled.
+2. **Open.** Estates → the folder → Open. The top bar shows the file, "runs as the ADC
    identity", the schema chip with the provider and its type count; the rail shows the
    count of unanswered questions on Interview.
-2. **Answer a question.** Interview → the first open question → Accept (or type a
+3. **Answer a question.** Interview → the first open question → Accept (or type a
    value and Answer). The toast says "1 answer written"; the file has one new line in
    `params { }` (`git diff` shows nothing else: no re-emission, comments and alignment
    intact); the question count on the rail drops by one; a diagnostic the compile had
    raised for that param is gone from the drawer.
-3. **Enable the map, then a pack.** On the skeleton: Map → "Enable the map" → the line
+4. **Enable the map, then a pack.** On the skeleton: Map → "Enable the map" → the line
    `use "presets/estate-map.satz"` is uncommented and the map's questions are open.
    Toggle `use_budget` on → the answer lands as `use_budget = true` and satz
    uncomments `use "presets/organization-budget.satz" when use_budget`; toggle it off
    → `use_budget = false` and the line stays active — the card says so, and the drawer
    carries the model's note "line active, gate false" on that line, shown inline on the
    card.
-4. **Edit an attribute.** Resources → a resource → a string row → change it → Enter.
+5. **Edit an attribute.** Resources → a resource → a string row → change it → Enter.
    The toast names the file; the line shows the new value with its `=` column where it
    was; the rest of the file is byte-identical.
-5. **Type a brace.** Params → a text row in value mode → type `{x}` → the field turns
+6. **Type a brace.** Params → a text row in value mode → type `{x}` → the field turns
    red with "braces interpolate in a Satz string — if `{x}` is what you mean, write
    that param by hand" and nothing is sent; the source-mode toggle is where an
    interpolation is written.
-6. **Break a value.** Params → source mode on a row → replace the value with a bare
+7. **Break a value.** Params → source mode on a row → replace the value with a bare
    name nothing binds → Enter. The toast says "not written — line N: …"; the drawer
    shows the check's diagnostic at that line, source "check", and it stays after the
    reload; clicking it in the drawer selects the node at that line in Resources; the
    file is byte-identical to before.
-7. **Missing schema.** Point a copy's `schema_dir` at an empty directory and open it:
+8. **Missing schema.** Point a copy's `schema_dir` at an empty directory and open it:
    the schema chip is red, Resources locks every row with "no schema" and its header
    carries "Run update-schema", which runs in Commands.
-8. **Switch engines from the chat.** With `provider = "claude"` in `settings.toml`, no
+9. **Switch engines from the chat.** With `provider = "claude"` in `settings.toml`, no
    `ANTHROPIC_API_KEY` in the environment and the Claude Code CLI signed in: Chat →
    the card leads "Claude Code is ready" with the account, the four API sources below
    under "Or use the Messages API" → "Use Claude Code" → the toast says "Settings

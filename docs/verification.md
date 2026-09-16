@@ -26,6 +26,11 @@ carry a claim the harness relies on.
 | `use_billing_permissions: false` leaves the line active and the param `false`; the model carries one `Note` "line active, gate false" on that line | `tests/e2e_map.rs` | same |
 | A gate bound `true` whose line is gone: `ReplaceParam` appends it and the commit lands at satz's default validation level; the check prints the unadopted-pack warning, which `parse_satz_output` turns into a diagnostic naming the pack and `satz merge-presets`; the model has one `Absent` row, last, and no param row for the gate | `tests/e2e_map.rs` | `a_gate_bound_true_without_its_line_is_absent_and_the_check_names_the_pack` |
 | At `validation_level = "error"` the same sentence is a refusal: `CliChecker` returns it as one error diagnostic of kind `unadopted-pack`, and a commit under that checker is `Rollback::Check` with it, the file's bytes kept, no temp file left | `tests/e2e_map.rs` | same |
+| `satz import --from hcl` over a `.tf` file writes `imported-hcl.satz`, a name no flag stated: the read-back finds exactly that file, it declares an estate, and the report keeps satz's "review it, then transpile and plan" sentence and the promoted block with its `file:line` | `tests/e2e_import.rs` | `the_hcl_shape_writes_an_estate_the_read_back_finds` |
+| A second import over the same source is a file WRITTEN, not a directory unchanged: the read-back is a hash of each `.satz` file and not a listing | `tests/e2e_import.rs` | `a_second_import_over_the_same_file_is_still_a_file_written` |
+| A raw `.tfstate` is refused by the form before anything runs and by satz when it does, in the same words: `values.root_module`, and `tofu show -json > state.json` | `tests/e2e_import.rs` | `a_raw_tfstate_is_refused_by_the_form_and_by_satz_alike` |
+| The legacy YAML shape writes the conversion BESIDE its source rather than into `yaml_dir`; `--kind pack` declares no estate and opens nothing, `--kind estate` declares one | `tests/e2e_import.rs` | `the_yaml_shape_writes_beside_its_source_and_only_an_estate_opens` |
+| The import's argv is the flags of the chosen shape and no other's; a raw `.tfstate`, a source that is not there and a live scope that is not one are refused before a child is spawned; the report splits satz's lines into sections and loses none | `src/satz/import.rs` | `a_shapes_options_never_leak_into_another_shapes_command_line`, `a_raw_tfstate_is_refused_before_anything_runs_whatever_its_name`, `every_line_satz_printed_is_in_exactly_one_section` |
 | A `ReplaceValue` with the node's own value commits with the file's hash unchanged and the output of `satz transpile --check` identical before and after, the banner stripped | `tests/e2e_edit.rs` | `a_no_op_edit_leaves_the_hash_and_the_check_output_unchanged` |
 | An edit on `showcase.satz`'s `audit_retention_days` line replaces the value span alone: the bytes before and after the span, the `=` column, the spaces before the comment and the comment itself are the original's; the reverse edit restores the original bytes and hash | `tests/e2e_edit.rs` | `an_edit_replaces_the_value_span_alone_and_the_reverse_edit_restores_the_bytes` |
 | A good edit lands through the MCP checker; a bad edit rolls back with a diagnostic naming the real file and line, the original bytes intact, no `.studio-tmp.satz` left; a file changed on disk is refused; a delegated write is verified, and a broken one restored | `tests/edit_commit.rs` | `a_good_edit_lands_through_the_mcp_checker`, `a_bad_edit_rolls_back_naming_the_real_file`, `a_file_changed_on_disk_is_refused`, `a_delegated_write_is_verified_and_a_broken_one_is_restored` |
@@ -50,7 +55,8 @@ carry a claim the harness relies on.
 ## 2. The manual smoke walk
 
 The estate views are checked by hand: [`ui.md`](ui.md), section "The smoke walk" —
-seven steps over the fixture estate and a skeleton, no credential needed. It is the
+nine steps over the fixture estate, a skeleton and a Terraform directory, no credential
+needed. It is the
 check of the window over what the harness proves of the core.
 
 ## 3. Checks that need a credential or a machine

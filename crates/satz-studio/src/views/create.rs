@@ -17,9 +17,7 @@ use crate::components::{
     Button, ButtonVariant, Card, CardVariant, Chip, ChipKind, ChipList, Icon, LinearProgress,
     Segment, SegmentedButton, Switch, TextField,
 };
-use crate::state::{
-    AppAction, AppStore, AppStoreStoreExt, CreateStoreStoreExt, create_command_line,
-};
+use crate::state::{AppAction, AppStore, AppStoreStoreExt, CreateStoreStoreExt, run_line};
 
 /// The provider set `satz init --defaults` knows; it expands to `google` and
 /// `google-beta` and fetches the schema of each with the tf tool.
@@ -63,7 +61,7 @@ pub fn CreateEstate() -> Element {
         check_target(Path::new(&dir)).err().map(|e| e.to_string())
     };
     let ready = !dir.is_empty() && problem.is_none() && !running;
-    let preview = create_command_line(Path::new(&dir), &options().argv());
+    let preview = run_line(Path::new(&dir), &options().argv());
     let google = options().defaults.iter().any(|d| d == GOOGLE_SET);
 
     rsx! {
@@ -229,11 +227,11 @@ mod tests {
             customer_shortname: "acme".to_string(),
             ..Default::default()
         };
-        let line = create_command_line(Path::new("/tmp/acme"), &options.argv());
+        let line = run_line(Path::new("/tmp/acme"), &options.argv());
         assert_eq!(line, "cd /tmp/acme && satz init --customer-shortname acme");
         assert!(!line.contains("--config"));
         assert_eq!(
-            create_command_line(Path::new(""), &options.argv()),
+            run_line(Path::new(""), &options.argv()),
             "satz init --customer-shortname acme"
         );
     }
