@@ -1,7 +1,8 @@
-//! `ReplaceParam` writes the bytes satz's own writer writes — on a line that is not
-//! column-aligned, in place and appended, and on an aligned line, whose `=` column both
-//! keep. satz's version comes from `satz_interview {answers}` through the session, on
-//! the same copy, after the edit session has read the bytes.
+//! `ReplaceParam` writes the bytes satz's own writer writes. satz's `bind` replaces a
+//! value in place and leaves its line as the author wrote it; an answer it APPENDS lays
+//! the whole params block out as `satz fmt` does, so the block keeps one `=` column.
+//! Each case runs both on the same copy — satz's through `satz_interview {answers}`
+//! over the session, after the edit session has read the bytes.
 
 #[path = "fixtures/edit/support.rs"]
 mod support;
@@ -9,15 +10,17 @@ mod support;
 use satz_studio_core::cst::TypedValue;
 use satz_studio_core::edit::{Edit, EditSession};
 
-#[tokio::test]
-async fn on_unaligned_params_replace_param_and_satz_write_the_same_bytes() {
-    let copy = support::copy_smoke();
-    let session = copy.open("smoke.satz").await;
-    // The premise is the line's shape, not the fixture's: whatever alignment the
-    // smoke estate carries, this copy binds `logsink_project_id` with one space
-    // on each side of `=`, which is the shape satz's `bind` writes back.
-    let unaligned: String = support::read(&session.main)
-        .lines()
+/// The column of the `=` on the line binding `name`.
+fn column(text: &str, name: &str) -> Option<usize> {
+    text.lines()
+        .find(|l| l.trim_start().starts_with(&format!("{name} ")))
+        .and_then(|l| l.find('='))
+}
+
+/// The text with `logsink_project_id` bound with one space on each side of `=` — out
+/// of the block's column, whatever alignment the fixture carries.
+fn unaligned(text: &str) -> String {
+    text.lines()
         .map(|l| {
             if l.trim_start().starts_with("logsink_project_id") {
                 "  logsink_project_id = \"corp-log-infra-002\""
@@ -27,8 +30,40 @@ async fn on_unaligned_params_replace_param_and_satz_write_the_same_bytes() {
         })
         .collect::<Vec<_>>()
         .join("\n")
-        + "\n";
-    std::fs::write(&session.main, unaligned).unwrap();
+        + "\n"
+}
+
+#[tokio::test]
+async fn a_replacement_alone_keeps_the_line_as_the_author_wrote_it() {
+    let copy = support::copy_smoke();
+    let session = copy.open("smoke.satz").await;
+    std::fs::write(&session.main, unaligned(&support::read(&session.main))).unwrap();
+    let ours = EditSession::open(&session.main)
+        .unwrap()
+        .apply(&[Edit::ReplaceParam {
+            name: "logsink_project_id".to_string(),
+            value: TypedValue::Str("corp-log-infra-003".to_string()),
+        }])
+        .unwrap();
+    let report = support::interview(
+        &session,
+        serde_json::json!({"logsink_project_id": "corp-log-infra-003"}),
+    )
+    .await;
+    assert_eq!(report.written, 1);
+    let satz = support::read(&session.main);
+    assert!(
+        satz.contains("\n  logsink_project_id = \"corp-log-infra-003\"\n"),
+        "{satz}"
+    );
+    assert_eq!(ours.text(), satz);
+}
+
+#[tokio::test]
+async fn an_append_lays_the_block_out_and_the_two_write_the_same_bytes() {
+    let copy = support::copy_smoke();
+    let session = copy.open("smoke.satz").await;
+    std::fs::write(&session.main, unaligned(&support::read(&session.main))).unwrap();
     let ours = EditSession::open(&session.main)
         .unwrap()
         .apply(&[
@@ -49,14 +84,13 @@ async fn on_unaligned_params_replace_param_and_satz_write_the_same_bytes() {
     .await;
     assert_eq!(report.written, 2);
     let satz = support::read(&session.main);
-    assert!(
-        satz.contains("\n  logsink_project_id = \"corp-log-infra-002\"\n"),
-        "{satz}"
-    );
-    assert!(
-        satz.contains("\n  logsink_retention_days = 400\n}\n"),
-        "{satz}"
-    );
+    // the line made unaligned above is back in the block's column, and the appended
+    // answer, now the block's last entry, joins it
+    let block = column(&satz, "customer_shortname");
+    assert!(block.is_some(), "{satz}");
+    assert_eq!(column(&satz, "logsink_project_id"), block, "{satz}");
+    assert_eq!(column(&satz, "logsink_retention_days"), block, "{satz}");
+    assert!(satz.contains(" = 400\n}\n"), "{satz}");
     assert_eq!(ours.text(), satz);
 }
 

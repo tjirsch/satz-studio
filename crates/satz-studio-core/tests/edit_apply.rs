@@ -91,14 +91,24 @@ fn replace_param_rewrites_in_place_and_appends_when_absent() {
             value: num("400"),
         }])
         .unwrap();
-    // the params block's `}` is the first brace alone on its line
+    // an append lays the block out as `satz fmt` does; the fixture is formatted, so the
+    // one change is the new line before the block's `}`, in the block's `=` column
     let close = s.text().find("\n}\n").unwrap() + 1;
+    let eq = at(s.text(), "group_model_split", '=').unwrap();
     let expected = format!(
-        "{}  logsink_retention_days = 400\n{}",
+        "{}{:<eq$}= 400\n{}",
         &s.text()[..close],
+        "  logsink_retention_days",
         &s.text()[close..]
     );
     assert_eq!(p.text(), expected);
+}
+
+/// Where `ch` stands on the line binding `name`.
+fn at(text: &str, name: &str, ch: char) -> Option<usize> {
+    text.lines()
+        .find(|l| l.trim_start().starts_with(&format!("{name} ")))
+        .and_then(|l| l.find(ch))
 }
 
 #[test]
@@ -126,18 +136,23 @@ fn several_edits_land_in_one_apply() {
         ])
         .unwrap();
     let text = p.text();
-    assert!(
-        text.contains("  audit_retention_days     = 30            #"),
+    // the appends lay the block out: every `=` in one column, and the trailing
+    // comments in theirs, the shortened value's included
+    let eq = at(text, "customer_shortname", '=');
+    assert!(text.contains("  audit_retention_days     = 30 "), "{text}");
+    assert_eq!(
+        at(text, "audit_retention_days", '#'),
+        at(text, "want_optional", '#'),
         "{text}"
     );
     assert!(
         text.contains("  customer_shortname       = \"acme\"\n"),
         "{text}"
     );
-    assert!(
-        text.contains("  new_flag = true\n  new_list = [\"a\", \"b\"]\n}\n"),
-        "{text}"
-    );
+    assert_eq!(at(text, "new_flag", '='), eq, "{text}");
+    assert_eq!(at(text, "new_list", '='), eq, "{text}");
+    assert!(text.contains(" = true\n  new_list"), "{text}");
+    assert!(text.contains(" = [\"a\", \"b\"]\n}\n"), "{text}");
     assert!(
         text.contains("  customer_id              = \"C0example\"\n"),
         "{text}"

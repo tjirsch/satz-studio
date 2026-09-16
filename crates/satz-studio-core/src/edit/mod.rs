@@ -189,8 +189,10 @@ impl EditSession {
     /// and nothing else, so the `=` column and a trailing comment on the line stay as
     /// they are. [`Edit::ReplaceParam`] does the same on the entry `params { … }`
     /// binds; a param the block does not bind is appended before its `}` as satz's own
-    /// `bind` appends it — two spaces, `name = value`, a newline — with several appends
-    /// stacked in the order given. Two edits on one node, an edit inside another edited
+    /// `bind` appends it — `name = value` on its own line, several appends stacked in the
+    /// order given — and the params block is then laid out as `satz fmt` lays it out,
+    /// the rest of the file untouched, which is what `bind` does after an append: the
+    /// block keeps one `=` column. Two edits on one node, an edit inside another edited
     /// node, and two appends of one name are refused. Splices land from the highest
     /// span start to the lowest, so every span of the original tree stays valid.
     ///
@@ -203,7 +205,9 @@ impl EditSession {
     /// new tree only a `Value` node with exactly the spliced span counts as that hole)
     /// and each appended param as one `ParamEntry` of that name inside the appended
     /// range. Any other difference is [`EditError::ChangedElsewhere`] naming the line
-    /// of the first node in the new text that does not match.
+    /// of the first node in the new text that does not match. After an append the
+    /// laid-out text is held to the same two parts once more, against the text before
+    /// the layout, which may differ from it in whitespace only.
     pub fn apply(&self, edits: &[Edit]) -> Result<Proposed, EditError> {
         let text = apply::apply(&self.cst, edits)?;
         Ok(Proposed {
