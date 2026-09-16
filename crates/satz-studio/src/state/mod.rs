@@ -18,6 +18,7 @@ use dioxus::prelude::*;
 use satz_studio_core::cst::Cst;
 use satz_studio_core::diag::Diagnostic;
 use satz_studio_core::estate::HclState;
+use satz_studio_core::git::WorkTree;
 use satz_studio_core::llm::CredentialSource;
 use satz_studio_core::model::EstateModel;
 use satz_studio_core::satz::reports::{InterviewReport, QuestionsReport};
@@ -295,6 +296,9 @@ pub struct EstateStore {
     /// what the generated HCL directory holds, read at every reload: the Overview says
     /// what is still owed from it
     pub hcl: HclState,
+    /// whether git holds the estate file's directory in a work tree, asked at every
+    /// reload and after `InitRepository`; `None` until it has been asked
+    pub work_tree: Option<WorkTree>,
 }
 
 /// How a command or a tool call ended, shown under the log.

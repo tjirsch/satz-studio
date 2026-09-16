@@ -5,7 +5,8 @@
 //! the app's, the map line by the app itself — each under the session's write lock,
 //! each verified by `satz transpile --check`, each followed by a reload. A running
 //! command streams from a tokio task into a local task, so the loop stays free to take
-//! `CancelCommand`.
+//! `CancelCommand`; the three git commands that put the estate in a repository run the
+//! same way, when the operator asks for them.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -20,6 +21,7 @@ use satz_studio_core::edit::{
     CheckFailure, Checker, CommitError, Committed, Edit, EditSession, McpChecker, Rollback,
 };
 use satz_studio_core::estate::HclState;
+use satz_studio_core::git::{self, WorkTree};
 use satz_studio_core::model::{EstateModel, MAP_PATH};
 use satz_studio_core::satz::reports::{
     InterviewArgs, InterviewReport, PrerequisitesResult, QuestionsReport,
@@ -68,6 +70,9 @@ pub enum EstateAction {
     EnableMap,
     /// `satz_merge_presets`: the line for a pack the library gained
     MergePresets,
+    /// `git init -b main`, `git add -A` and one commit in the estate directory, streamed
+    /// into the log: the repository `satz merge-presets` needs for its undo
+    InitRepository,
     Close,
 }
 
@@ -119,6 +124,11 @@ pub async fn estate_coroutine(
                     .await;
                 }
                 reload(&session, app).await;
+            }
+            EstateAction::InitRepository => {
+                if let Some(token) = init_repository(&session, app) {
+                    cancel = Some(token);
+                }
             }
             EstateAction::Close => close_estate(app),
         }
@@ -544,6 +554,153 @@ fn run_command(
     Some(token)
 }
 
+/// The directory satz asks git about before `merge-presets` edits the estate: the estate
+/// file's own.
+fn estate_file_dir(session: &EstateSession) -> PathBuf {
+    session
+        .main
+        .parent()
+        .unwrap_or(Path::new("."))
+        .to_path_buf()
+}
+
+/// `git <args…>` as the log header shows it.
+fn git_line(args: &[String]) -> String {
+    std::iter::once("git".to_string())
+        .chain(args.iter().map(|a| quote(a)))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// The repository `satz merge-presets` needs: `git init -b main`, `git add -A` and one
+/// commit naming the estate, run in the estate directory one after the other, streamed
+/// into the log, stopping at the first one git refuses. It runs because the operator
+/// pressed the Overview's button, and never otherwise.
+///
+/// Refused before git runs: a directory without a `.gitignore`, because `git add -A`
+/// would commit whatever is there — the Terraform state and the provider schema with
+/// the estate; an estate file outside the estate directory, which a repository there
+/// would not hold; and, once running, a directory git already holds, where a second
+/// repository would nest inside the first. The commit takes git's configured identity;
+/// the app sets none, and without one git's own refusal is the log and the toast.
+fn init_repository(
+    session: &Arc<EstateSession>,
+    app: Store<AppStore>,
+) -> Option<CancellationToken> {
+    if app.estate().running().cloned() {
+        toast(app, ToastKind::Info, "a command is already running");
+        return None;
+    }
+    let dir = session.dir.dir.clone();
+    if !session.main.starts_with(&dir) {
+        toast(
+            app,
+            ToastKind::Error,
+            format!(
+                "{} is outside the estate directory {}: a repository there would not hold it",
+                session.main.display(),
+                dir.display()
+            ),
+        );
+        return None;
+    }
+    if !dir.join(".gitignore").is_file() {
+        toast(
+            app,
+            ToastKind::Error,
+            format!(
+                "{}: no .gitignore — `git add -A` would commit the Terraform state and the provider schema with the estate. Write one first; satz init writes one.",
+                dir.display()
+            ),
+        );
+        return None;
+    }
+    let name = session
+        .main
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let steps = git::init_steps(&name);
+    let asked = estate_file_dir(session);
+
+    let token = CancellationToken::new();
+    let estate = app.estate();
+    estate.last_command().set(Some(format!(
+        "cd {} && {}",
+        quote(&dir.display().to_string()),
+        steps
+            .iter()
+            .map(|s| git_line(s))
+            .collect::<Vec<_>>()
+            .join(" && ")
+    )));
+    estate.command_log().clear();
+    estate.outcome().set(None);
+    estate.running().set(true);
+    let cancel = token.clone();
+    spawn(async move {
+        let outcome = match WorkTree::read(&asked).await {
+            WorkTree::Inside => CommandOutcome {
+                ok: false,
+                text: "git already holds this estate in a repository: nothing was run".to_string(),
+            },
+            WorkTree::NoGit(e) => CommandOutcome { ok: false, text: e },
+            WorkTree::Outside(_) => run_steps(&dir, &steps, app, cancel).await,
+        };
+        if !outcome.ok {
+            toast(app, ToastKind::Error, outcome.text.clone());
+        }
+        estate.outcome().set(Some(outcome));
+        estate.work_tree().set(Some(WorkTree::read(&asked).await));
+        estate.running().set(false);
+    });
+    Some(token)
+}
+
+/// Each git step in turn, its lines into the log; the first refusal ends the run with
+/// git's last line on stderr, which is its reason.
+async fn run_steps(
+    dir: &Path,
+    steps: &[Vec<String>],
+    app: Store<AppStore>,
+    cancel: CancellationToken,
+) -> CommandOutcome {
+    for step in steps {
+        let line = git_line(step);
+        let (tx, mut lines) = tokio::sync::mpsc::channel::<CliLine>(256);
+        let join = {
+            let (dir, step, cancel) = (dir.to_path_buf(), step.clone(), cancel.clone());
+            tokio::spawn(async move { git::run(&dir, &step, tx, cancel).await })
+        };
+        let mut reason = None;
+        while let Some(l) = lines.recv().await {
+            if let CliLine::Stderr(s) = &l
+                && !s.trim().is_empty()
+            {
+                reason = Some(s.clone());
+            }
+            app.estate().command_log().push(l);
+        }
+        let failed = match join.await {
+            Ok(Ok(status)) if status.success() => continue,
+            Ok(Ok(status)) => match reason {
+                Some(reason) => format!("{line}: {reason}"),
+                None => format!("{line} exited with {status}"),
+            },
+            Ok(Err(e)) => format!("{line}: {e}"),
+            Err(e) => format!("{line}: the task failed: {e}"),
+        };
+        return CommandOutcome {
+            ok: false,
+            text: failed,
+        };
+    }
+    CommandOutcome {
+        ok: true,
+        text: "the estate is in a repository of its own, with one commit".to_string(),
+    }
+}
+
 async fn run_tool(
     session: &Arc<EstateSession>,
     app: Store<AppStore>,
@@ -642,6 +799,9 @@ async fn reload_with(session: &Arc<EstateSession>, app: Store<AppStore>, carried
     let estate = app.estate();
     estate.loading().set(true);
     estate.hcl().set(HclState::read(&session.dir.hcl_dir()));
+    estate
+        .work_tree()
+        .set(Some(WorkTree::read(&estate_file_dir(session)).await));
     let mut diagnostics: Vec<Diagnostic> = Vec::new();
 
     let questions = match session

@@ -24,11 +24,13 @@ pub fn NavigationRail() -> Element {
         let model = app.estate().model().cloned();
         let diagnostics = app.estate().diagnostics().cloned();
         let hcl = app.estate().hcl().cloned();
+        let work_tree = app.estate().work_tree().cloned();
         open.map(|open| {
             owed(&Facts {
                 estate: &open.name,
                 deployment_mode: open.deployment_mode.as_deref(),
                 hcl,
+                work_tree: work_tree.as_ref(),
                 questions: questions.as_ref(),
                 model: model.as_deref(),
                 diagnostics: &diagnostics,

@@ -1,7 +1,8 @@
 //! One typed field for a value satz reads in a known shape — a switch, a number field,
 //! a chip list or a text field — and the draft it edits. The shape is decided where the
-//! value comes from: an interview answer takes the shape of the value it replaces
-//! (satz's `parse_answer`), a param row its `ParamKind`, an attribute its `AttrType`.
+//! value comes from: an interview answer and a param row by their `ParamKind` — for an
+//! answer the value offered, else the shape its param is declared with
+//! (`satz_studio_core::model::answer_kind`) — and an attribute by its `AttrType`.
 //! What comes out is either a JSON value for `satz_interview` or a `TypedValue` for the
 //! app's own writer; in both, a text with a brace is refused with satz's own sentence,
 //! because a value is not a template.
@@ -31,18 +32,8 @@ pub enum FieldKind {
 }
 
 impl FieldKind {
-    /// The shape `parse_answer` reads an answer in, from the value it replaces: a bool
-    /// stays a bool, a number a number, a list a list of strings; anything else — a
-    /// string, an object, or nothing offered — is a string.
-    pub fn of_json(offered: Option<&serde_json::Value>) -> FieldKind {
-        match offered {
-            Some(serde_json::Value::Bool(_)) => FieldKind::Bool,
-            Some(serde_json::Value::Number(_)) => FieldKind::Number,
-            Some(serde_json::Value::Array(_)) => FieldKind::List(ListElem::Text),
-            _ => FieldKind::Text,
-        }
-    }
-
+    /// The field for a param's shape: a list of params is a list of strings, as
+    /// `parse_answer` reads one.
     pub fn of_param(kind: ParamKind) -> FieldKind {
         match kind {
             ParamKind::Bool => FieldKind::Bool,
@@ -129,6 +120,15 @@ impl Draft {
             (FieldKind::Number, other) => Draft::Number(literal(other)?),
             (FieldKind::List(_), other) => Draft::List(vec![literal(other)?]),
         })
+    }
+
+    /// Nothing typed: an empty text or a list without an item.
+    pub fn is_empty(&self) -> bool {
+        match self {
+            Draft::Text(t) => t.trim().is_empty(),
+            Draft::List(items) => items.is_empty(),
+            Draft::Bool(_) | Draft::Number(_) => false,
+        }
     }
 
     /// Why the draft cannot be written yet, if it cannot: a number that is not one, a
@@ -362,16 +362,30 @@ mod tests {
     use serde_json::json;
 
     #[test]
-    fn the_offered_value_decides_the_field_as_parse_answer_does() {
-        assert_eq!(FieldKind::of_json(Some(&json!(true))), FieldKind::Bool);
-        assert_eq!(FieldKind::of_json(Some(&json!(30))), FieldKind::Number);
+    fn a_param_s_shape_decides_its_field() {
+        assert_eq!(FieldKind::of_param(ParamKind::Bool), FieldKind::Bool);
+        assert_eq!(FieldKind::of_param(ParamKind::Number), FieldKind::Number);
         assert_eq!(
-            FieldKind::of_json(Some(&json!(["a"]))),
+            FieldKind::of_param(ParamKind::List),
             FieldKind::List(ListElem::Text)
         );
-        assert_eq!(FieldKind::of_json(Some(&json!("x"))), FieldKind::Text);
-        assert_eq!(FieldKind::of_json(Some(&json!({"a": 1}))), FieldKind::Text);
-        assert_eq!(FieldKind::of_json(None), FieldKind::Text);
+        assert_eq!(FieldKind::of_param(ParamKind::String), FieldKind::Text);
+    }
+
+    /// The answer to a list question that offers nothing: the field starts empty, and one
+    /// value typed into it is sent as a JSON array of one, never as a string.
+    #[test]
+    fn one_value_in_a_list_field_is_sent_as_a_list_of_one() {
+        let kind = FieldKind::of_param(ParamKind::List);
+        assert_eq!(Draft::of_json(None, kind), Draft::List(Vec::new()));
+        assert!(Draft::of_json(None, kind).is_empty());
+        let one = Draft::List(vec!["security@example.com".into()]);
+        assert!(!one.is_empty());
+        assert_eq!(
+            one.problem(kind, "access_approval_notification_emails"),
+            None
+        );
+        assert_eq!(one.to_json(), json!(["security@example.com"]));
     }
 
     #[test]

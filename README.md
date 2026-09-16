@@ -41,8 +41,10 @@ foot of the rail. Switching estates is the top bar's "Switch estate", beside the
 it names, and every satz command the app runs is one keystroke away in the commands
 palette (⌘K, Ctrl+K on Windows and Linux).
 
-The Overview is one card, and it lists what the estate owes — day 0 unconfirmed,
-questions unanswered, a pack the map asks for and the file has no line for, no provider
+The Overview is one card, and it lists what the estate owes — no git repository, which
+`satz merge-presets` needs before it edits the estate, so an estate outside one cannot
+take preset updates (one button runs `git init`, `git add` and a first commit), day 0
+unconfirmed, questions unanswered, a pack the map asks for and the file has no line for, no provider
 schema, prerequisites the compile found undeclared, raw HCL nobody has reviewed, an HCL
 directory nothing has planned against. Every row is derived from the estate as it is on
 the screen, so it cannot go stale, and the card is gone when there is nothing in it.

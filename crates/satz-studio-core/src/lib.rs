@@ -8,6 +8,8 @@
 //!   from `satz-tree-sitter`): byte spans, comments kept, `text()` is the file.
 //! - [`edit`] — the edit primitives and the write discipline: a value is replaced by
 //!   span, the temp file is checked by satz, the real file is replaced atomically.
+//! - [`git`] — whether git holds the estate in a work tree, which `satz merge-presets`
+//!   needs for its undo, and the commands that put it in one.
 //! - [`schema`] and [`model`] — the provider schema and the view model the app binds to.
 //! - [`satz`] — the driver: the binary and its version gate, the CLI runner, the MCP
 //!   session over `satz mcp`, one session per estate.
@@ -22,6 +24,7 @@ pub mod cst;
 pub mod diag;
 pub mod edit;
 pub mod estate;
+pub mod git;
 pub mod llm;
 pub mod model;
 pub mod satz;
