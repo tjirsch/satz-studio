@@ -1,6 +1,8 @@
 //! The Interview view: the questions the estate's packs declare, one at a time, the
 //! unanswered ones first. Every answer is one `satz_interview` call through the estate
-//! coroutine, and the view re-renders from the reloaded report.
+//! coroutine, and the view re-renders from the reloaded report. The walk remembers the
+//! questions it moved away from, so Back returns to one whether it is answered by then
+//! or not; with "Show answered" on, every question is listed beside the card.
 
 use dioxus::prelude::*;
 use satz_studio_core::satz::reports::{
@@ -9,7 +11,7 @@ use satz_studio_core::satz::reports::{
 
 use crate::components::{
     Button, ButtonVariant, Card, CardVariant, Chip, ChipKind, Draft, FieldKind, Icon,
-    LinearProgress, Switch, TypedField,
+    LinearProgress, List, ListItem, Switch, TypedField,
 };
 use crate::state::{AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt};
 
@@ -36,6 +38,108 @@ pub fn ordered(questions: &[QuestionRow], show_answered: bool) -> Vec<QuestionRo
         );
     }
     out
+}
+
+/// Where the walk stands. The card follows its question by `subject`, because a reload
+/// reorders the list: an answer moves a question into the answered block, or out of the
+/// walk while answered questions are hidden. `index` is where the card was, for when its
+/// question has left the list — the question that took its place is shown. `left` holds
+/// the questions the walk moved away from, the latest last, for Back.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Walk {
+    subject: Option<String>,
+    index: usize,
+    left: Vec<String>,
+}
+
+impl Walk {
+    /// The position of the card's question in `list`.
+    pub fn position(&self, list: &[QuestionRow]) -> usize {
+        self.subject
+            .as_ref()
+            .and_then(|s| list.iter().position(|q| &q.subject == s))
+            .unwrap_or(self.index)
+            .min(list.len().saturating_sub(1))
+    }
+
+    fn leave(&mut self, list: &[QuestionRow]) {
+        if let Some(q) = list.get(self.position(list))
+            && self.left.last() != Some(&q.subject)
+        {
+            self.left.push(q.subject.clone());
+        }
+    }
+
+    /// Open the question at `to`, remembering the one on the card.
+    pub fn open(&mut self, list: &[QuestionRow], to: usize) {
+        let Some(q) = list.get(to) else { return };
+        if to != self.position(list) {
+            self.leave(list);
+        }
+        self.subject = Some(q.subject.clone());
+        self.index = to;
+    }
+
+    /// Skip, or Next: the question after the card's, the first one after the last.
+    pub fn next(&mut self, list: &[QuestionRow]) {
+        if !list.is_empty() {
+            self.open(list, (self.position(list) + 1) % list.len());
+        }
+    }
+
+    /// The card's question is being answered: the walk moves on to the question after
+    /// it, which the reload puts where the answered one was.
+    pub fn answered(&mut self, list: &[QuestionRow]) {
+        if list.is_empty() {
+            return;
+        }
+        let i = self.position(list);
+        self.leave(list);
+        self.subject = list.get(i + 1).map(|q| q.subject.clone());
+        self.index = i;
+    }
+
+    pub fn can_go_back(&self) -> bool {
+        !self.left.is_empty()
+    }
+
+    /// Back: the question the walk last moved away from. `None` when there is none;
+    /// otherwise whether answered questions have to be shown to hold it, because an
+    /// answered question is not in the walk while they are hidden.
+    pub fn back(&mut self, questions: &[QuestionRow], show_answered: bool) -> Option<bool> {
+        while let Some(subject) = self.left.pop() {
+            // a question the report no longer carries (its pack is gone) is passed over
+            let Some(q) = questions.iter().find(|q| q.subject == subject) else {
+                continue;
+            };
+            let show = show_answered || q.state != QuestionState::Unanswered;
+            self.index = ordered(questions, show)
+                .iter()
+                .position(|r| r.subject == subject)
+                .unwrap_or(0);
+            self.subject = Some(subject);
+            return Some(show);
+        }
+        None
+    }
+
+    /// "Show answered" switched from `from` to `to`: the card keeps its question when
+    /// the new list holds it, and starts from the first question when it does not.
+    pub fn switched(&mut self, questions: &[QuestionRow], from: bool, to: bool) {
+        let before = ordered(questions, from);
+        let subject = before.get(self.position(&before)).map(|q| &q.subject);
+        let after = ordered(questions, to);
+        match subject.and_then(|s| after.iter().position(|q| &q.subject == s)) {
+            Some(i) => {
+                self.subject = Some(after[i].subject.clone());
+                self.index = i;
+            }
+            None => {
+                self.subject = None;
+                self.index = 0;
+            }
+        }
+    }
 }
 
 /// The option the view starts on: the one the estate binds, else the one the pack
@@ -71,6 +175,27 @@ pub fn recommends_otherwise(q: &QuestionRow) -> Option<&str> {
     }
 }
 
+/// A question's state as the card's chip and the list say it: an icon and the words.
+pub fn state_of(q: &QuestionRow) -> (&'static str, String) {
+    match q.state {
+        QuestionState::Unanswered if q.blocking => ("priority_high", "needs a value".to_string()),
+        QuestionState::Unanswered => ("radio_button_unchecked", "open".to_string()),
+        QuestionState::Answered => (
+            "check_circle",
+            format!(
+                "answered: {}",
+                q.current.as_ref().map(shown).unwrap_or_default()
+            ),
+        ),
+        QuestionState::NotApplicable => ("block", "not asked: its ask_when is false".to_string()),
+    }
+}
+
+/// The list's supporting line for a question: its subject, then its state.
+pub fn listed(q: &QuestionRow) -> String {
+    format!("{} · {}", q.subject, state_of(q).1)
+}
+
 #[component]
 pub fn InterviewView() -> Element {
     let app = use_context::<Store<AppStore>>();
@@ -79,7 +204,7 @@ pub fn InterviewView() -> Element {
     let interview = app.estate().interview().cloned();
     let loading = app.estate().loading().cloned();
     let mut show_answered = use_signal(|| false);
-    let mut index = use_signal(|| 0usize);
+    let mut walk = use_signal(Walk::default);
 
     let Some(report) = report else {
         return rsx! {
@@ -92,6 +217,23 @@ pub fn InterviewView() -> Element {
             }
         };
     };
+    // The handlers read the report when they run: an answer reloads it between renders.
+    let questions_now = move || {
+        app.estate()
+            .questions()
+            .cloned()
+            .map(|r| r.questions)
+            .unwrap_or_default()
+    };
+    let mut go_back = move || {
+        let show = walk.write().back(&questions_now(), show_answered());
+        if let Some(show) = show
+            && show != show_answered()
+        {
+            show_answered.set(show);
+        }
+    };
+
     let s = report.summary.clone();
     let list = ordered(&report.questions, show_answered());
     let offered_defaults = report
@@ -99,7 +241,8 @@ pub fn InterviewView() -> Element {
         .iter()
         .filter(|q| q.state == QuestionState::Unanswered && q.default.is_some())
         .count();
-    let i = index().min(list.len().saturating_sub(1));
+    let i = walk.read().position(&list);
+    let can_back = walk.read().can_go_back();
     let current = list.get(i).cloned();
     let previous_pack = i
         .checked_sub(1)
@@ -111,13 +254,21 @@ pub fn InterviewView() -> Element {
         s.answered as f32 / s.total as f32
     };
     let rename_to = interview.as_ref().and_then(|r| r.rename_to.clone());
+    let listing = show_answered() && !list.is_empty();
 
     rsx! {
         div { class: "view interview",
             div { class: "interview__head",
                 h1 { class: "view__title", "Interview" }
                 span { class: "grow" }
-                Switch { label: "Show answered", checked: show_answered(), onchange: move |v| { show_answered.set(v); index.set(0); } }
+                Switch {
+                    label: "Show answered",
+                    checked: show_answered(),
+                    onchange: move |v| {
+                        walk.write().switched(&questions_now(), show_answered(), v);
+                        show_answered.set(v);
+                    },
+                }
                 Button {
                     variant: ButtonVariant::Tonal,
                     icon: "done_all",
@@ -150,32 +301,57 @@ pub fn InterviewView() -> Element {
                     }
                 }
             }
-            match current {
-                Some(q) => rsx! {
-                    QuestionCard {
-                        key: "{q.subject}",
-                        question: q,
-                        previous_pack,
-                        position: (i + 1, list.len()),
-                        loading,
-                        onskip: move |_| {
-                            let len = list.len();
-                            if len > 0 {
-                                index.set((i + 1) % len);
+            div { class: "interview__walk", class: if listing { "interview__walk--listed" },
+                match current {
+                    Some(q) => rsx! {
+                        QuestionCard {
+                            key: "{q.subject}",
+                            question: q,
+                            previous_pack,
+                            position: (i + 1, list.len()),
+                            loading,
+                            can_back,
+                            onback: move |_| go_back(),
+                            onskip: move |_| {
+                                walk.write().next(&ordered(&questions_now(), show_answered()));
+                            },
+                            onanswer: move |_| {
+                                walk.write().answered(&ordered(&questions_now(), show_answered()));
+                            },
+                        }
+                    },
+                    None => rsx! {
+                        Card { variant: CardVariant::Outlined, class: "interview__empty",
+                            Icon { name: "quiz", size: 48, class: "placeholder__icon" }
+                            if s.total == 0 {
+                                p { "No pack this estate uses asks a question." }
+                            } else {
+                                p { "Nothing is open. Switch on \"Show answered\" to revisit an answer." }
                             }
-                        },
-                    }
-                },
-                None => rsx! {
-                    Card { variant: CardVariant::Outlined, class: "interview__empty",
-                        Icon { name: "quiz", size: 48, class: "placeholder__icon" }
-                        if s.total == 0 {
-                            p { "No pack this estate uses asks a question." }
-                        } else {
-                            p { "Nothing is open. Switch on \"Show answered\" to revisit an answer." }
+                            if can_back {
+                                Button { variant: ButtonVariant::Text, icon: "arrow_back", onclick: move |_| go_back(), "Back" }
+                            }
+                        }
+                    },
+                }
+                if listing {
+                    Card { variant: CardVariant::Outlined, class: "interview__list",
+                        List {
+                            for (n, q) in list.iter().enumerate() {
+                                ListItem {
+                                    key: "{q.subject}",
+                                    headline: q.prompt.clone(),
+                                    supporting: listed(q),
+                                    selected: n == i,
+                                    leading: rsx! { Icon { name: state_of(q).0, size: 20 } },
+                                    onclick: move |_| {
+                                        walk.write().open(&ordered(&questions_now(), show_answered()), n);
+                                    },
+                                }
+                            }
                         }
                     }
-                },
+                }
             }
         }
     }
@@ -197,30 +373,43 @@ fn blast_label(b: Blast) -> &'static str {
     }
 }
 
+/// The walk's controls beside an answer: Back, and Skip — Next on a question that is
+/// already answered or not asked, where there is nothing to skip.
+#[component]
+fn WalkButtons(
+    state: QuestionState,
+    can_back: bool,
+    onback: EventHandler<()>,
+    onskip: EventHandler<()>,
+) -> Element {
+    let forward = if state == QuestionState::Unanswered {
+        "Skip"
+    } else {
+        "Next"
+    };
+    rsx! {
+        Button { variant: ButtonVariant::Text, icon: "arrow_back", disabled: !can_back, onclick: move |_| onback.call(()), "Back" }
+        span { class: "grow" }
+        Button { variant: ButtonVariant::Text, onclick: move |_| onskip.call(()), "{forward}" }
+    }
+}
+
 #[component]
 fn QuestionCard(
     question: QuestionRow,
     previous_pack: Option<String>,
     position: (usize, usize),
     loading: bool,
+    can_back: bool,
+    onback: EventHandler<()>,
     onskip: EventHandler<()>,
+    onanswer: EventHandler<()>,
 ) -> Element {
     let q = question;
     let new_pack = previous_pack.as_deref() != Some(q.pack.as_str());
     let one_way = q.one_way_door();
     let recommend = recommends_otherwise(&q).map(str::to_string);
-    let (state_icon, state_text) = match q.state {
-        QuestionState::Unanswered if q.blocking => ("priority_high", "needs a value".to_string()),
-        QuestionState::Unanswered => ("radio_button_unchecked", "open".to_string()),
-        QuestionState::Answered => (
-            "check_circle",
-            format!(
-                "answered: {}",
-                q.current.as_ref().map(shown).unwrap_or_default()
-            ),
-        ),
-        QuestionState::NotApplicable => ("block", "not asked: its ask_when is false".to_string()),
-    };
+    let (state_icon, state_text) = state_of(&q);
     let subject = q.subject.clone();
 
     rsx! {
@@ -268,10 +457,24 @@ fn QuestionCard(
                 }
                 match q.kind {
                     QuestionKind::Param => rsx! {
-                        ParamAnswer { question: q.clone(), loading, onskip: move |_| onskip.call(()) }
+                        ParamAnswer {
+                            question: q.clone(),
+                            loading,
+                            can_back,
+                            onback: move |_| onback.call(()),
+                            onskip: move |_| onskip.call(()),
+                            onanswer: move |_| onanswer.call(()),
+                        }
                     },
                     QuestionKind::Oneof => rsx! {
-                        OneofAnswer { question: q.clone(), loading, onskip: move |_| onskip.call(()) }
+                        OneofAnswer {
+                            question: q.clone(),
+                            loading,
+                            can_back,
+                            onback: move |_| onback.call(()),
+                            onskip: move |_| onskip.call(()),
+                            onanswer: move |_| onanswer.call(()),
+                        }
                     },
                 }
                 if q.kind == QuestionKind::Param {
@@ -285,7 +488,14 @@ fn QuestionCard(
 }
 
 #[component]
-fn ParamAnswer(question: QuestionRow, loading: bool, onskip: EventHandler<()>) -> Element {
+fn ParamAnswer(
+    question: QuestionRow,
+    loading: bool,
+    can_back: bool,
+    onback: EventHandler<()>,
+    onskip: EventHandler<()>,
+    onanswer: EventHandler<()>,
+) -> Element {
     let handle = use_coroutine_handle::<EstateAction>();
     let q = question;
     let kind = FieldKind::of_json(q.offered());
@@ -300,6 +510,7 @@ fn ParamAnswer(question: QuestionRow, loading: bool, onskip: EventHandler<()>) -
     let send = move || {
         let d = draft();
         if d.problem(kind, &subject).is_none() {
+            onanswer.call(());
             handle.send(EstateAction::Answer {
                 subject: subject.clone(),
                 value: d.to_json(),
@@ -332,7 +543,7 @@ fn ParamAnswer(question: QuestionRow, loading: bool, onskip: EventHandler<()>) -
                 },
             }
             div { class: "interview__actions",
-                Button { variant: ButtonVariant::Text, onclick: move |_| onskip.call(()), "Skip" }
+                WalkButtons { state: q.state, can_back, onback: move |_| onback.call(()), onskip: move |_| onskip.call(()) }
                 Button {
                     variant: ButtonVariant::Filled,
                     icon: if accept { "check" } else { "send" },
@@ -346,7 +557,14 @@ fn ParamAnswer(question: QuestionRow, loading: bool, onskip: EventHandler<()>) -
 }
 
 #[component]
-fn OneofAnswer(question: QuestionRow, loading: bool, onskip: EventHandler<()>) -> Element {
+fn OneofAnswer(
+    question: QuestionRow,
+    loading: bool,
+    can_back: bool,
+    onback: EventHandler<()>,
+    onskip: EventHandler<()>,
+    onanswer: EventHandler<()>,
+) -> Element {
     let handle = use_coroutine_handle::<EstateAction>();
     let q = question;
     let mut chosen = use_signal(|| initial_option(&q));
@@ -386,13 +604,14 @@ fn OneofAnswer(question: QuestionRow, loading: bool, onskip: EventHandler<()>) -
                 }
             }
             div { class: "interview__actions",
-                Button { variant: ButtonVariant::Text, onclick: move |_| onskip.call(()), "Skip" }
+                WalkButtons { state: q.state, can_back, onback: move |_| onback.call(()), onskip: move |_| onskip.call(()) }
                 Button {
                     variant: ButtonVariant::Filled,
                     icon: "send",
                     disabled: loading || picked.is_none(),
                     onclick: move |_| {
                         if let Some(c) = chosen() {
+                            onanswer.call(());
                             handle.send(EstateAction::Answer { subject: subject.clone(), value: serde_json::Value::String(c) });
                         }
                     },
@@ -417,6 +636,10 @@ mod tests {
         .unwrap()
     }
 
+    fn subject_at(walk: &Walk, list: &[QuestionRow]) -> String {
+        list[walk.position(list)].subject.clone()
+    }
+
     #[test]
     fn unanswered_come_first_and_the_rest_only_when_asked_for() {
         let all = vec![
@@ -428,6 +651,115 @@ mod tests {
         let names = |v: Vec<QuestionRow>| v.into_iter().map(|q| q.subject).collect::<Vec<_>>();
         assert_eq!(names(ordered(&all, false)), ["b", "d"]);
         assert_eq!(names(ordered(&all, true)), ["b", "d", "a", "c"]);
+    }
+
+    /// The interview's own flow: an answer moves on, and Back returns to the question
+    /// just answered, which has left the walk while answered questions are hidden.
+    #[test]
+    fn back_returns_to_the_question_just_answered_and_shows_answered_to_hold_it() {
+        let mut questions = vec![
+            q("region", QuestionState::Unanswered),
+            q("billing", QuestionState::Unanswered),
+            q("domain", QuestionState::Unanswered),
+        ];
+        let mut walk = Walk::default();
+        assert!(!walk.can_go_back());
+        walk.answered(&ordered(&questions, false));
+        // the reload: region is answered and leaves the walk
+        questions[0].state = QuestionState::Answered;
+        let open = ordered(&questions, false);
+        assert_eq!(subject_at(&walk, &open), "billing");
+        assert!(walk.can_go_back());
+        assert_eq!(walk.back(&questions, false), Some(true));
+        assert_eq!(subject_at(&walk, &ordered(&questions, true)), "region");
+        assert_eq!(walk.back(&questions, true), None);
+    }
+
+    #[test]
+    fn skip_wraps_and_back_retraces_the_questions_left() {
+        let questions = vec![
+            q("region", QuestionState::Unanswered),
+            q("billing", QuestionState::Unanswered),
+        ];
+        let list = ordered(&questions, false);
+        let mut walk = Walk::default();
+        walk.next(&list);
+        assert_eq!(subject_at(&walk, &list), "billing");
+        walk.next(&list);
+        assert_eq!(subject_at(&walk, &list), "region");
+        assert_eq!(walk.back(&questions, false), Some(false));
+        assert_eq!(subject_at(&walk, &list), "billing");
+        assert_eq!(walk.back(&questions, false), Some(false));
+        assert_eq!(subject_at(&walk, &list), "region");
+        assert_eq!(walk.back(&questions, false), None);
+    }
+
+    /// With answered questions shown, an answer moves the question into the answered
+    /// block; the card goes on to the next question rather than following it there.
+    #[test]
+    fn an_answer_with_answered_shown_moves_on_rather_than_after_the_question() {
+        let mut questions = vec![
+            q("region", QuestionState::Unanswered),
+            q("billing", QuestionState::Unanswered),
+            q("domain", QuestionState::Answered),
+        ];
+        let mut walk = Walk::default();
+        walk.answered(&ordered(&questions, true));
+        questions[0].state = QuestionState::Answered;
+        let list = ordered(&questions, true);
+        assert_eq!(subject_at(&walk, &list), "billing");
+        assert_eq!(walk.position(&list), 0);
+    }
+
+    #[test]
+    fn a_question_opened_from_the_list_is_left_for_back() {
+        let questions = vec![
+            q("region", QuestionState::Unanswered),
+            q("billing", QuestionState::Answered),
+            q("domain", QuestionState::Answered),
+        ];
+        let list = ordered(&questions, true);
+        let mut walk = Walk::default();
+        walk.open(&list, 2);
+        assert_eq!(subject_at(&walk, &list), "domain");
+        // opening the question already on the card leaves nothing behind
+        walk.open(&list, 2);
+        assert_eq!(walk.back(&questions, true), Some(true));
+        assert_eq!(subject_at(&walk, &list), "region");
+        assert!(!walk.can_go_back());
+    }
+
+    #[test]
+    fn switching_show_answered_keeps_the_card_on_its_question_when_it_can() {
+        let questions = vec![
+            q("region", QuestionState::Answered),
+            q("billing", QuestionState::Unanswered),
+            q("domain", QuestionState::Unanswered),
+        ];
+        let mut walk = Walk::default();
+        walk.next(&ordered(&questions, false));
+        walk.switched(&questions, false, true);
+        assert_eq!(subject_at(&walk, &ordered(&questions, true)), "domain");
+        walk.switched(&questions, true, false);
+        assert_eq!(subject_at(&walk, &ordered(&questions, false)), "domain");
+        // on an answered question, hiding answered ones starts from the first open one
+        walk.open(&ordered(&questions, true), 2);
+        walk.switched(&questions, true, false);
+        assert_eq!(subject_at(&walk, &ordered(&questions, false)), "billing");
+    }
+
+    #[test]
+    fn the_list_says_each_question_s_subject_and_its_answer() {
+        let mut region = q("region", QuestionState::Answered);
+        region.current = Some(json!("europe-west3"));
+        assert_eq!(listed(&region), "region · answered: europe-west3");
+        let mut billing = q("billing", QuestionState::Unanswered);
+        billing.blocking = true;
+        assert_eq!(listed(&billing), "billing · needs a value");
+        assert_eq!(
+            listed(&q("domain", QuestionState::NotApplicable)),
+            "domain · not asked: its ask_when is false"
+        );
     }
 
     #[test]
