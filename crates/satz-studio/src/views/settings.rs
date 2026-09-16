@@ -18,8 +18,9 @@ use crate::components::{
 };
 use crate::state::{
     AppAction, AppStore, AppStoreStoreExt, CredentialStatus, SatzStatus, ToastKind,
-    UpdateStoreStoreExt, toast,
+    UpdateStoreStoreExt, ahead_sentence, toast,
 };
+use crate::views::satz_release::SatzReleaseActions;
 use satz_studio_core::satz::CliLine;
 
 #[component]
@@ -29,18 +30,38 @@ pub fn SettingsView() -> Element {
     let saved = app.settings().cloned();
     let mut draft = use_signal(|| saved.clone());
     let dirty = draft() != saved;
+    // The banner's "Dismiss" writes `dismissed_satz` into the saved settings behind this
+    // draft: the draft follows it, so a Save here does not bring the notice back.
+    use_effect(move || {
+        let dismissed = app.settings().read().dismissed_satz.clone();
+        if draft.peek().dismissed_satz != dismissed {
+            draft.write().dismissed_satz = dismissed;
+        }
+    });
     let satz = app.satz().cloned();
     let satz_text = match &satz {
         SatzStatus::Unknown => "locating satz".to_string(),
-        SatzStatus::Located(bin) => format!("satz {} at {}", bin.version, bin.path.display()),
+        SatzStatus::Located(bin) => match bin.ahead_of_build() {
+            None => format!("satz {} at {}", bin.version, bin.path.display()),
+            Some(ahead) => format!(
+                "satz {} at {}; this satz-studio was built and tested against satz {}. {}",
+                bin.version,
+                bin.path.display(),
+                satz_studio_core::satz::SatzBinary::built_against(),
+                ahead_sentence(ahead)
+            ),
+        },
         SatzStatus::TooOld {
             found, required, ..
         } => {
             format!("satz {found} found; {required} or newer is needed")
         }
-        SatzStatus::Missing(why) => why.clone(),
+        SatzStatus::Missing(why) | SatzStatus::Unusable(why) => why.clone(),
     };
-    let satz_error = matches!(satz, SatzStatus::TooOld { .. } | SatzStatus::Missing(_));
+    let satz_error = matches!(
+        satz,
+        SatzStatus::TooOld { .. } | SatzStatus::Missing(_) | SatzStatus::Unusable(_)
+    );
     // There is something to update whenever there is a binary — a too-old one included,
     // which is the case that matters most.
     let satz_updatable = app.satz().read().updatable().is_some();
@@ -136,6 +157,7 @@ pub fn SettingsView() -> Element {
                             }
                         }
                     }
+                    SatzReleaseActions {}
                     p { class: "settings__label", "Capability ceiling of every satz mcp this app starts" }
                     SegmentedButton {
                         options: vec![

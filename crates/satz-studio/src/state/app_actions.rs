@@ -8,8 +8,10 @@ use std::sync::Arc;
 use dioxus::prelude::*;
 use futures_util::StreamExt;
 use satz_studio_core::estate::EstateDir;
+use satz_studio_core::github;
 use satz_studio_core::llm::Credential;
 use satz_studio_core::satz::import::{ImportPlan, satz_files, written_since};
+use satz_studio_core::satz::self_update::{read_check, unprompted_checks_allowed};
 use satz_studio_core::satz::{
     CliLine, EstateSession, ImportOptions, ImportReport, InitOptions, SatzBinary, SatzCli,
     SatzError,
@@ -17,10 +19,12 @@ use satz_studio_core::satz::{
 use satz_studio_core::settings::Settings;
 use tokio_util::sync::CancellationToken;
 
+use super::install;
 use super::{
     AppStore, AppStoreStoreExt, CommandOutcome, CreateStoreStoreExt, CredentialStatus, EstateFile,
-    EstateStore, EstateSummary, ImportStoreStoreExt, OpenEstate, SatzStatus, ToastKind,
-    UpdateStoreStoreExt, View, quote, strip_ansi, toast,
+    EstateStore, EstateSummary, ImportStoreStoreExt, OpenEstate, SatzStatus,
+    StudioLookStoreStoreExt, ToastKind, UpdateStoreStoreExt, View, quote, satz_release_sentence,
+    strip_ansi, toast,
 };
 
 pub enum AppAction {
@@ -59,6 +63,19 @@ pub enum AppAction {
         check_only: bool,
     },
     CancelUpdate,
+    /// hide the notice for a satz newer than the build, for that satz version: the
+    /// version goes into `Settings.dismissed_satz`, and the notice comes back for any other
+    /// newer release. It permits and refuses nothing
+    DismissSatzNotice(String),
+    /// read the latest satz-studio release on GitHub and compare it with this build — a
+    /// look, never an update: nothing is downloaded, run or written. The app looks once at
+    /// launch on its own; this is the look again, when asked
+    LookForStudioUpdate,
+    /// satz's own installer, verified against its SHA-256 sidecar and run without editing
+    /// the shell profile, while no satz is found; then satz is located again. Not offered
+    /// on Windows, where satz publishes no build
+    InstallSatz,
+    CancelInstall,
     /// write the settings file, then locate satz again
     SaveSettings(Settings),
     ResolveCredential,
@@ -68,6 +85,8 @@ pub enum AppAction {
 
 pub async fn app_coroutine(mut rx: UnboundedReceiver<AppAction>, app: Store<AppStore>) {
     locate(app).await;
+    // the two release looks run from tasks of their own, so the walk does not wait on them
+    let mut updating: Option<CancellationToken> = look_at_launch(app);
     if let Some(root) = app.root().cloned() {
         discover(app, root).await;
     }
@@ -75,7 +94,7 @@ pub async fn app_coroutine(mut rx: UnboundedReceiver<AppAction>, app: Store<AppS
     // task so this loop stays free to take `CancelCreate`, as a command does.
     let mut creating: Option<CancellationToken> = None;
     let mut importing: Option<CancellationToken> = None;
-    let mut updating: Option<CancellationToken> = None;
+    let mut installing: Option<CancellationToken> = None;
     while let Some(action) = rx.next().await {
         match action {
             AppAction::LocateSatz => locate(app).await,
@@ -99,10 +118,22 @@ pub async fn app_coroutine(mut rx: UnboundedReceiver<AppAction>, app: Store<AppS
                 }
             }
             AppAction::UpdateSatz { check_only } => {
-                updating = update_satz(app, check_only);
+                if let Some(token) = update_satz(app, check_only, Asked::ByOperator) {
+                    updating = Some(token);
+                }
             }
             AppAction::CancelUpdate => {
                 if let Some(token) = updating.take() {
+                    token.cancel();
+                }
+            }
+            AppAction::DismissSatzNotice(version) => dismiss_satz_notice(app, version).await,
+            AppAction::LookForStudioUpdate => look_for_studio_update(app),
+            AppAction::InstallSatz => {
+                installing = install::install_satz(app);
+            }
+            AppAction::CancelInstall => {
+                if let Some(token) = installing.take() {
                     token.cancel();
                 }
             }
@@ -127,15 +158,35 @@ pub async fn app_coroutine(mut rx: UnboundedReceiver<AppAction>, app: Store<AppS
 /// as well as a current one: a too-old satz updating itself is the entire point of the
 /// offer, and the path is the one the refusal carried.
 ///
+/// A `check_only` run is read: satz's `Latest version:` line against the satz that was
+/// asked becomes `update.found`, which the top bar, the title and Settings offer. An
+/// install clears it. A run the app started on its own ([`Asked::AtLaunch`]) says a failure
+/// in the log card and never in a toast: a look that could not reach GitHub is a fact to
+/// read, not an error to interrupt with.
+///
 /// The operator's `self_update_frequency` is theirs; this writes no satz configuration.
-fn update_satz(app: Store<AppStore>, check_only: bool) -> Option<CancellationToken> {
-    let Some(path) = app.satz().read().updatable().map(Path::to_path_buf) else {
-        toast(
-            app,
-            ToastKind::Error,
-            "there is no satz to update — see the banner",
-        );
+fn update_satz(app: Store<AppStore>, check_only: bool, asked: Asked) -> Option<CancellationToken> {
+    if app.update().running().cloned() {
+        if asked == Asked::ByOperator {
+            toast(app, ToastKind::Info, "satz self-update is already running");
+        }
         return None;
+    }
+    let Some(path) = app.satz().read().updatable().map(Path::to_path_buf) else {
+        if asked == Asked::ByOperator {
+            toast(
+                app,
+                ToastKind::Error,
+                "there is no satz to update — see the banner",
+            );
+        }
+        return None;
+    };
+    // the version of the satz asked, which the check's answer is compared with
+    let current = match &*app.satz().read() {
+        SatzStatus::Located(bin) => Some(bin.version.clone()),
+        SatzStatus::TooOld { found, .. } => semver::Version::parse(found).ok(),
+        _ => None,
     };
     let mut args = vec!["self-update".to_string(), "--no-open-readme".to_string()];
     if check_only {
@@ -160,9 +211,15 @@ fn update_satz(app: Store<AppStore>, check_only: bool) -> Option<CancellationTok
     update.running().set(true);
     spawn(async move {
         let mut last_stderr = None;
+        let mut stdout = String::new();
         while let Some(line) = lines.recv().await {
             let clean = match line {
-                CliLine::Stdout(s) => CliLine::Stdout(strip_ansi(&s)),
+                CliLine::Stdout(s) => {
+                    let s = strip_ansi(&s);
+                    stdout.push_str(&s);
+                    stdout.push('\n');
+                    CliLine::Stdout(s)
+                }
                 CliLine::Stderr(s) => {
                     let s = strip_ansi(&s);
                     if !s.trim().is_empty() {
@@ -180,9 +237,20 @@ fn update_satz(app: Store<AppStore>, check_only: bool) -> Option<CancellationTok
                 ok: false,
                 text: last_stderr.unwrap_or_else(|| format!("exited with {status}")),
             },
-            Ok(Ok(_)) if check_only => CommandOutcome {
-                ok: true,
-                text: "checked — the log has what satz found".to_string(),
+            Ok(Ok(_)) if check_only => match &current {
+                Some(current) => match read_check(&stdout, current) {
+                    Ok(release) => {
+                        let found = Ok(release);
+                        let text = satz_release_sentence(&found, current);
+                        app.update().found().set(Some(found));
+                        CommandOutcome { ok: true, text }
+                    }
+                    Err(e) => CommandOutcome { ok: false, text: e },
+                },
+                None => CommandOutcome {
+                    ok: true,
+                    text: "checked — the log has what satz found".to_string(),
+                },
             },
             Ok(Ok(_)) => CommandOutcome {
                 ok: true,
@@ -201,18 +269,62 @@ fn update_satz(app: Store<AppStore>, check_only: bool) -> Option<CancellationTok
                 text: format!("the update task failed: {e}"),
             },
         };
-        if !outcome.ok && !cancelled {
+        // a check that failed is what the look found this session, with its reason
+        if check_only && !outcome.ok && !cancelled {
+            app.update().found().set(Some(Err(outcome.text.clone())));
+        }
+        if !outcome.ok && !cancelled && asked == Asked::ByOperator {
             toast(app, ToastKind::Error, outcome.text.clone());
         }
         let installed = outcome.ok && !check_only;
         app.update().outcome().set(Some(outcome));
         app.update().running().set(false);
-        // The version on disk changed, so the one the app holds is stale.
+        // The version on disk changed, so the one the app holds is stale, and so is what a
+        // check found against the old one.
         if installed {
+            app.update().found().set(None);
             locate(app).await;
         }
     });
     Some(token)
+}
+
+/// Who started a `satz self-update` run.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Asked {
+    /// the operator, from the banner, the top bar or Settings: a failure is a toast
+    ByOperator,
+    /// the app, once at launch: a failure is read in Settings and interrupts nothing
+    AtLaunch,
+}
+
+/// The two release looks the app makes on its own, once per launch and never on a timer:
+/// the latest satz-studio release against this build, and `satz self-update --check-only`
+/// on the satz that runs. Their results are kept for the session.
+///
+/// satz is asked only when there is a satz, and only when the operator's own satz config
+/// lets satz look for releases unprompted: `self_update_frequency = "never"` is read as
+/// "not on my behalf either", and the look then waits for "Check only". A satz config that
+/// does not parse is said the same way — satz refuses to run with it too.
+fn look_at_launch(app: Store<AppStore>) -> Option<CancellationToken> {
+    look_for_studio_update(app);
+    app.satz().read().updatable()?;
+    let home = std::env::var_os("HOME").map(PathBuf::from);
+    match unprompted_checks_allowed(home.as_deref()) {
+        Ok(true) => update_satz(app, true, Asked::AtLaunch),
+        Ok(false) => {
+            app.update().not_checked().set(Some(
+                "satz was not asked for a newer release at launch: your satz config says self_update_frequency = \"never\". Check only asks it.".to_string(),
+            ));
+            None
+        }
+        Err(e) => {
+            app.update().not_checked().set(Some(format!(
+                "satz was not asked for a newer release at launch: {e}"
+            )));
+            None
+        }
+    }
 }
 
 /// Drop the session: the estate host unmounts and its coroutine with it.
@@ -226,8 +338,10 @@ pub fn close_estate(app: Store<AppStore>) {
     app.nav().set(View::Start);
 }
 
-async fn locate(app: Store<AppStore>) {
-    let override_path = app.settings().read().satz_binary.clone();
+/// Find satz. The driver refuses an older satz and locates a newer one, which runs: the
+/// notice for it is read from the status (`satz_notice`), not decided here.
+pub(super) async fn locate(app: Store<AppStore>) {
+    let override_path = app.settings().cloned().satz_binary;
     let status = match SatzBinary::locate(override_path.as_deref()).await {
         Ok(bin) => SatzStatus::Located(bin),
         Err(SatzError::TooOld {
@@ -239,10 +353,45 @@ async fn locate(app: Store<AppStore>) {
             found: found.to_string(),
             required: required.to_string(),
         },
-        Err(e) => SatzStatus::Missing(e.to_string()),
+        Err(e @ SatzError::NotFound { .. }) => SatzStatus::Missing(e.to_string()),
+        Err(e) => SatzStatus::Unusable(e.to_string()),
     };
     tracing::info!(?status, "satz located");
     app.satz().set(status);
+}
+
+/// Hide the notice for a satz newer than the build, for that version. The version goes
+/// into the settings file; nothing is located again, because nothing about which satz runs
+/// has changed.
+async fn dismiss_satz_notice(app: Store<AppStore>, version: String) {
+    let mut settings = app.settings().cloned();
+    settings.dismissed_satz = Some(version);
+    match settings.save() {
+        Ok(()) => app.settings().set(settings),
+        Err(e) => toast(app, ToastKind::Error, format!("settings not saved: {e}")),
+    }
+}
+
+/// The latest satz-studio release, compared with this build, on a task of its own so the
+/// app coroutine stays free. One look at a time; a look that fails keeps its reason in
+/// `studio_look` and raises no toast.
+fn look_for_studio_update(app: Store<AppStore>) {
+    let look = app.studio_look();
+    if look.looking().cloned() {
+        return;
+    }
+    look.outcome().set(None);
+    look.looking().set(true);
+    spawn(async move {
+        let running = semver::Version::parse(env!("CARGO_PKG_VERSION"))
+            .expect("the package version is a version");
+        let found = github::look_for_studio_update(&github::client(), github::API, &running)
+            .await
+            .map_err(|e| e.to_string());
+        tracing::info!(?found, "looked for a satz-studio update");
+        app.studio_look().outcome().set(Some(found));
+        app.studio_look().looking().set(false);
+    });
 }
 
 async fn discover(app: Store<AppStore>, root: PathBuf) {

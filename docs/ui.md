@@ -14,7 +14,7 @@ App (src/app.rs)            the stores, the app coroutine, the stylesheets, the 
       └─ Frame
          ├─ NavigationRail   six primary destinations, Chat and Settings at the foot
          ├─ TopBar           estate, runs_as, satz version, palette, reload, switch
-         ├─ SatzBanner       satz missing or too old
+         ├─ SatzBanner       satz missing, too old or not running; a notice while newer than the build
          ├─ Content          the view of `AppStore.nav`
          ├─ DiagnosticsDrawer
          ├─ CommandPalette   over the window while `AppStore.palette_open`
@@ -34,7 +34,10 @@ so a log line re-renders the log and not the rail:
 | field | what it is |
 |---|---|
 | `settings` | the `Settings` as saved; the Settings view edits a draft and saves it whole |
-| `satz` | `SatzStatus`: `Unknown` while locating, `Located(SatzBinary)`, `TooOld { found, required }`, `Missing(why)` |
+| `satz` | `SatzStatus`: `Unknown` while locating, `Located(SatzBinary)` — at the build's satz or newer, which runs; `satz_notice` reads a newer one for the banner —, `TooOld { path, found, required }`, `Missing(why)` (nothing found), `Unusable(why)` (found, and it does not run or prints no version). `binary()` answers for `Located` alone, which is what every way of opening an estate asks |
+| `update` | the `UpdateStore`: the `satz self-update` run — `log`, `running`, `command`, `outcome` — and `found`, what the last `--check-only` run found (the launch check or one asked for), kept for the session and cleared when an update installs; `not_checked` says why no check ran at launch |
+| `studio_look` | the `StudioLookStore`: `looking`, and `outcome` — the latest satz-studio release compared with this build, or why the look failed — made once at launch and again when asked, kept for the session |
+| `install` | the `InstallStore`: the run of satz's installer — `log`, `running`, `command`, `outcome`, reset when a run starts; the download and the SHA-256 check lead the log |
 | `root`, `estates`, `discovering` | the folder the Start screen walks and every `config.toml` under it with the estates beside each |
 | `open`, `opening` | the `OpenEstate` (its `Arc<EstateSession>`, main file, `runs_as`, deployment mode) and the estate a session is being opened on |
 | `nav` | the `View` the window stands on |
@@ -61,6 +64,21 @@ nothing blocks in an event handler.
   `Settings.last_root`), `OpenEstate { config, estate }` (`EstateSession::open` with the
   Settings ceiling), `CloseEstate`, `CreateEstate { dir, options }`, `CancelCreate`,
   `SaveSettings` (the file, then satz again), `ResolveCredential` and `StoreKey`.
+  At startup, after locating satz, it looks for releases once ([ADR
+  0014](adr/0014-a-newer-satz-is-a-notice-and-the-app-looks-for-releases.md)): the latest
+  satz-studio release into `studio_look`, and `satz self-update --check-only` on the satz
+  in use into `update.found` — unless the operator's `~/.config/satz/satz.toml` says
+  `self_update_frequency = "never"`, which puts the reason in `update.not_checked`. A look
+  started at launch raises no toast when it fails; a run the operator asks for does.
+  `UpdateSatz` refuses a second run while one is running. `DismissSatzNotice(version)`
+  writes the version into `Settings.dismissed_satz`, which hides the banner's notice for
+  that satz version and changes nothing else. `LookForStudioUpdate` reads the latest
+  satz-studio release again from a task of its own, one look at a time. `InstallSatz` runs satz's installer
+  (`state/install.rs` over `satz::install`) while the status is `Missing` and Settings
+  name no satz path — the installer writes `~/.local/bin/satz`, which the search does not
+  look at while a path is set — streams it into `install.log`, locates satz again, and
+  calls the install done only if satz is then found; `CancelInstall` stops it. On Windows
+  `InstallSatz` is a toast saying satz publishes no Windows build.
   `OpenEstate` puts the window on `View::Overview` when the session opens and
   `CloseEstate` puts it back on `View::Start` — the window has nowhere to stand without
   an estate, so closing one IS switching estates.
@@ -166,7 +184,7 @@ and not a value.
 | Checks | `src/views/checks.rs` | what judges the estate: the `CHECKS` deck — `transpile --check`, `update-prerequisites` (`--report-only`, fixed), `require`, `report-compliance`, `bootstrap --dry-run` — with the session tools. When the last compile found prerequisites undeclared, a card above it carries each finding and "Write them into the estate", which is `WritePrerequisites`: satz's own writer under the write lock, checked and reloaded like an answer |
 | Deploy | `src/views/deploy.rs` | what hands the estate off: the `hcl_dir` path with two chips saying whether `main.tf` is written and whether the directory is initialised, then the `DEPLOY` deck — `transpile`, `hcl-init`, `plan` in the app; `apply`, `migrate`, `bootstrap` as command lines to copy or open in the terminal |
 | Chat | `src/views/chat/` | the agent loop over the open estate: the rail of this estate's transcripts with "New" (empty on the Claude Code engine, which keeps its conversation in its own process), the turns as they stream with one card per tool call and the approval card, the composer with the model, the effort and the capability chips, and the usage footer. `mod.rs` holds the status card for the states the engine is not in — `Starting` a progress line, `NoCredential` and `NotSignedIn` the two empty states below, `Failed` the error with Open Settings |
-| Settings | `src/views/settings.rs` | every `Settings` field as a form: the satz path with the detected version, the MCP ceiling, auto-approve, the provider with base URL and model for the non-Claude ones, the Claude model, effort, fallbacks, transcripts, theme; Save writes the file and locates satz again; the credential card shows where the Claude credential comes from, whether that engine is the one in use, and stores a key in the keychain; the Claude Code card shows the binary, the account and which engine is in use, with "Use this engine", "Sign in" and "Sign out", and the stream log switch with "Reveal logs"; beside the satz path, "Update satz" and "Check only" run `satz self-update` (with `--no-open-readme`, so a successful update does not open a browser) and stream it into a log card, and satz is located again once it installs |
+| Settings | `src/views/settings.rs` | every `Settings` field as a form: the satz path with the detected version, the MCP ceiling, auto-approve, the provider with base URL and model for the non-Claude ones, the Claude model, effort, fallbacks, transcripts, theme; Save writes the file and locates satz again; the credential card shows where the Claude credential comes from, whether that engine is the one in use, and stores a key in the keychain; the Claude Code card shows the binary, the account and which engine is in use, with "Use this engine", "Sign in" and "Sign out", and the stream log switch with "Reveal logs"; beside the satz path, "Update satz" and "Check only" run `satz self-update` (with `--no-open-readme`, so a successful update does not open a browser) and stream it into a log card, and satz is located again once it installs. While satz is newer than the build, the line under the path names both versions and whether satz calls the difference a patch or a minor. Under the buttons `SatzReleaseActions` (`src/views/satz_release.rs`): what the satz check found — a newer satz, the latest, or why the look failed — or why none ran at launch; "Look for a satz-studio update" with its sentence below it (or why it failed) and "Open satz-studio X" when a newer release exists; while no satz is found, "Install satz" with Cancel and the install's log card — on Windows, and while a satz path is set, the sentence saying why the installer is not offered |
 | Commands | `src/views/commands.rs` | not a destination: `PALETTE` is the table of every satz command the app runs, and `CommandDeck` renders any group of them — the list, the chosen entry's argument fields (a reporting command's format as a segmented button), the command line as it will run, Run and Cancel, and `CommandLog`, the streamed log with stdout and stderr distinguished, followed by the file a reporting command wrote where the app named it. `CommandPalette` is every entry in a dialog over the window, on ⌘K / Ctrl+K or the top bar's button, with the session tools `satz_whoami`, `satz_transpile_check`, `satz_questions` as one click each. `CHECKS` and `DEPLOY` are the two groups the destinations gather |
 | Gallery | `src/views/gallery.rs` | every component in its variants, light and dark side by side. A development route: the rail offers it only with `SATZ_STUDIO_DEBUG` set, and nothing else navigates to it |
 
@@ -255,7 +273,7 @@ works offline.
 | `NavRail`, `NavRailItem` | `.m-nav-rail` | <https://m3.material.io/components/navigation-rail/specs> | collapsed rail only (88 px); no expanded rail, no menu button |
 | `TopAppBar` | `.m-top-app-bar` | <https://m3.material.io/components/top-app-bar/specs> | small top app bar only; no scroll behaviour |
 | `Snackbar` | `.m-snackbar` | <https://m3.material.io/components/snackbar/specs> | an error toast uses the error-container colours, which the spec does not define for snackbars |
-| banner (`SatzBanner`) | `.banner` | — (not a Material 3 component) | an error-container surface with the text and its buttons: "Update satz" when a binary was found and refused as too old, then "Try again" and "Settings" |
+| banner (`SatzBanner`) | `.banner` | — (not a Material 3 component) | an error-container surface with the text and its buttons: "Update satz" when a binary was found and refused as too old, "Install satz" (and Cancel while it runs) when none was found, then "Try again" and "Settings". For a satz newer than the build, `.banner--notice` on the tertiary container — a notice, not a fault — with the launch look's sentence under the text, "Open satz-studio X" when it found one, "Look for a satz-studio update" when it has not or failed, and "Dismiss" |
 
 No Material Web Components and no other library are used: the components are Dioxus
 components over these classes. The Gallery view is the checklist: every Material
@@ -285,8 +303,11 @@ and the door card on the Start screen, and their classes live in `views.css`, so
   eighth icon. `crates/satz-studio/src/state/mod.rs` holds `View::PRIMARY` and a test
   that fails outside three to seven.
 - **Top bar:** the estate's file name and directory; the `runs_as` chip ("runs as the
-  ADC identity" when the estate impersonates nothing); the satz version chip, red when
-  satz is missing or too old; the commands palette, reload and "Switch estate", which
+  ADC identity" when the estate impersonates nothing); the satz-studio version chip,
+  "satz-studio X · update available: Y" when the launch look found a newer release, which
+  opens that release's page; the satz version chip, red while satz is missing, too old or
+  does not run, and "satz X · update available: Y" when the satz check found a newer satz,
+  which runs `satz self-update` ("updating to Y…" while it runs); the commands palette, reload and "Switch estate", which
   closes the estate and returns the window to the Start screen; the drawer toggle with
   the diagnostics count. The bar carries what is true of the WINDOW — which estate is
   open, whom it acts as, which satz compiles it. What is true of the ESTATE — its
@@ -297,9 +318,26 @@ and the door card on the Start screen, and their classes live in `views.css`, so
   Escape, the scrim or the same key. The listener is installed on the window in
   `src/app.rs`, which mounts once: a keydown inside a text field never reaches a handler
   above it, and a listener per estate would leave one behind on every switch.
-- **Banner:** while satz is missing or too old, a full-width error banner on every
-  view naming the fix (`satz self-update`, or the path in Settings), with "Try again"
-  and "Settings".
+- **Banner:** while satz is missing, too old or does not run, a full-width error banner
+  on every view naming the fix, with "Try again" and "Settings": for a too-old satz
+  "Update satz" (`satz self-update`); for none at all "Install satz" — satz's own
+  installer, checked against the SHA-256 its release publishes, writing
+  `~/.local/bin/satz` and leaving the shell profile alone — unless Settings name a satz
+  path, where the banner says to correct or clear it; on Windows the banner says satz
+  publishes no Windows build, so it cannot be installed there, and offers no install.
+  While satz is newer than the build, a notice banner instead, and every estate opens:
+  "satz X is installed; this satz-studio was built and tested against satz Y", then satz's
+  own reading of the difference — a patch: "satz says nothing an estate needs changes"; a
+  minor: "satz says an estate may need edits, be refused, or plan differently". Under it,
+  what the launch look found for satz-studio: a newer release (with "Open satz-studio X",
+  its release page in the browser), that this is the latest release, or why the look failed
+  — GitHub not reachable, or the API's hourly limit of the unauthenticated address with when
+  it resets — with "Look for a satz-studio update" to look again. "Dismiss" hides the notice
+  for that satz version; the next newer satz shows it again. The look downloads nothing and
+  installs nothing.
+- **Window title:** `satz-studio <version>`, then "— update available: satz-studio Y" and
+  "— update available: satz Y" for what the launch looks found. The title bar is not
+  clickable; the top bar's chips are where either is acted on.
 - **Diagnostics drawer:** a bottom drawer, collapsed to its header, listing the open
   estate's diagnostics grouped Errors, Warnings, Notes, each with `file:line` relative
   to the estate directory, its source, and — for one of satz's findings — a chip naming
@@ -375,7 +413,7 @@ a step that writes, as the fixture's `config.toml` says) and over a skeleton wri
 `satz interview <dir>/yaml/new.satz --create`, which is the estate every pack line
 starts commented in. Every write is checked by `satz transpile --check` through the
 estate's `satz mcp` child. No step needs an API key; the first runs `satz init`, which
-reads the Application Default Credentials where there are any; the last two need the
+reads the Application Default Credentials where there are any; steps 12 and 13 need the
 Claude Code CLI installed and signed in, and nothing else, and neither sends a message. Nothing in the walk changes a live
 organisation: `bootstrap` and `apply` are read as command lines, never run.
 
@@ -454,3 +492,17 @@ organisation: `bootstrap` and `apply` are read as command lines, never run.
     the estate and the command line, then a `stdin` record with the initialize request
     and a `stdout` record with its answer, each line exactly as it went over the pipe.
     Switch the log off → Save → "New": no new file appears.
+14. **A satz newer than the build, and the release looks.** At launch the window title
+    reads `satz-studio <version>`, and Settings → the satz card says what the satz check
+    and the satz-studio look found (with `self_update_frequency = "never"` in
+    `~/.config/satz/satz.toml`, the card says the satz check did not run and why). Write a
+    script that answers `--version` with a version one patch past the build's satz and
+    hands everything else to the installed satz — `#!/bin/sh`, then `if [ "$1" =
+    --version ]; then echo 'satz 0.59.8'; else exec ~/.local/bin/satz "$@"; fi` for a build
+    against 0.59.7 — make it executable, and set it as the satz binary in Settings → Save.
+    The tertiary banner names 0.59.8 and the build's satz and says it is a patch release,
+    with the satz-studio look's sentence under it; the top bar's satz chip is not red; the
+    Open door opens the fixture estate. "Dismiss" → the banner goes and `settings.toml`
+    reads `dismissed_satz = "0.59.8"`. A second script like it answering `satz 0.60.0`, set
+    as the satz binary → Save: the notice is back and says it is a minor release. Clear the
+    path → Save, and the installed satz is in use again.

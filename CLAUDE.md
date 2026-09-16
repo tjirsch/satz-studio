@@ -31,11 +31,16 @@ the rules that apply to every change, whoever or whatever makes it.
   file from elsewhere adds its line to `NOTICE` in the same pull request. A
   contribution is licensed under the same terms by §5 of the licence itself; no
   separate agreement is asked for (ADR 0011).
-- **satz is pinned once.** The submodule `vendor/satz` and `MIN_SATZ`
-  (`crates/satz-studio-core/src/satz/binary.rs`) name the same version, and a test
-  holds them equal. Moving the pin is one pull request that moves all three: the
-  submodule, `MIN_SATZ`, and the recorded reports under `tests/fixtures`. There is no
-  degraded mode — an older binary is refused at startup, naming the version found.
+- **satz is pinned once; `MIN_SATZ` is the oldest satz the app works with.** The
+  submodule `vendor/satz` is the satz the app is built and tested against. `MIN_SATZ`
+  (`crates/satz-studio-core/src/satz/binary.rs`) may sit below it, and a test holds it at
+  or below. Moving the pin is one pull request that moves the submodule and the recorded
+  reports under `tests/fixtures`, and leaves `MIN_SATZ` alone. `MIN_SATZ` rises only when
+  a satz release breaks the app — answered by a satz-studio patch release the same day —
+  or when the app starts using something a later satz introduced (a flag, a tool, a report
+  field), whose tests are what make that version the requirement (ADR 0014). There is no
+  degraded mode — an older binary is refused at startup, naming the version found; a newer
+  one runs, and the window says so.
 - **Tests key on content, never on a fixture's line numbers or spacing.** satz
   reformats its own fixtures, so a test that pins a line or a column breaks on the next
   pin bump for no reason. Assert the param, the value, the finding —

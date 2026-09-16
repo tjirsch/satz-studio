@@ -16,6 +16,7 @@ pub mod map;
 pub mod overview;
 pub mod params;
 pub mod resources;
+pub mod satz_release;
 pub mod settings;
 
 use satz_studio_core::cst::{Cst, NodeId, NodeKind};

@@ -55,7 +55,13 @@ impl SatzCli {
         out: mpsc::Sender<CliLine>,
         cancel: CancellationToken,
     ) -> Result<ExitStatus, SatzError> {
-        stream(self.command(args), args.join(" "), out, cancel).await
+        stream(
+            self.command(args),
+            format!("satz {}", args.join(" ")),
+            out,
+            cancel,
+        )
+        .await
     }
 
     /// Run `satz <args…>` **in `dir`, with no `--config`**, streaming every line into
@@ -77,7 +83,7 @@ impl SatzCli {
     ) -> Result<ExitStatus, SatzError> {
         let mut cmd = Command::new(satz);
         cmd.args(args).current_dir(dir).kill_on_drop(true);
-        stream(cmd, args.join(" "), out, cancel).await
+        stream(cmd, format!("satz {}", args.join(" ")), out, cancel).await
     }
 
     /// Run a reporting command and type the report it wrote. A reporting command takes
@@ -126,9 +132,11 @@ impl SatzCli {
     }
 }
 
-/// Spawn one satz child and stream both its pipes into `out` until it exits.
-/// `command` is what the call looks like on the command line, for the error messages.
-async fn stream(
+/// Spawn one child and stream both its pipes into `out` until it exits. `command` is what
+/// the call looks like on the command line (`satz transpile`, `sh satz-installer.sh`), for
+/// the error messages. The satz calls above and the satz installer ([`super::install`])
+/// share it.
+pub(super) async fn stream(
     mut cmd: Command,
     command: String,
     out: mpsc::Sender<CliLine>,
@@ -139,7 +147,7 @@ async fn stream(
         .stderr(Stdio::piped())
         .spawn()
         .map_err(|e| SatzError::Io {
-            context: format!("spawning `satz {command}`"),
+            context: format!("spawning `{command}`"),
             source: e,
         })?;
     let stdout = child.stdout.take().expect("stdout is piped");
@@ -152,15 +160,15 @@ async fn stream(
             if let Err(e) = child.kill().await {
                 // `kill` refuses a child that has already exited; that child is
                 // reaped below, and anything else is a real failure.
-                let exited = child.try_wait().map_err(|e| SatzError::Io { context: format!("waiting for `satz {command}`"), source: e })?.is_some();
+                let exited = child.try_wait().map_err(|e| SatzError::Io { context: format!("waiting for `{command}`"), source: e })?.is_some();
                 if !exited {
-                    return Err(SatzError::Io { context: format!("killing `satz {command}`"), source: e });
+                    return Err(SatzError::Io { context: format!("killing `{command}`"), source: e });
                 }
             }
             join_pumps(pump_out, pump_err, &command).await?;
             return Err(SatzError::Cancelled);
         }
-        status = child.wait() => status.map_err(|e| SatzError::Io { context: format!("waiting for `satz {command}`"), source: e })?,
+        status = child.wait() => status.map_err(|e| SatzError::Io { context: format!("waiting for `{command}`"), source: e })?,
     };
     join_pumps(pump_out, pump_err, &command).await?;
     Ok(status)
@@ -189,7 +197,7 @@ async fn join_pumps(
     command: &str,
 ) -> Result<(), SatzError> {
     for (name, handle) in [("stdout", pump_out), ("stderr", pump_err)] {
-        let context = format!("reading the {name} of `satz {command}`");
+        let context = format!("reading the {name} of `{command}`");
         handle
             .await
             .map_err(|e| SatzError::Io {

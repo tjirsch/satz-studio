@@ -90,6 +90,28 @@
   color: inherit;
 }
 
+/* A satz newer than the build: a notice, not a fault, on the tertiary container. */
+.banner--notice {
+  background: var(--md-sys-color-tertiary-container);
+  color: var(--md-sys-color-on-tertiary-container);
+  margin: 0 0 8px;
+  border-radius: var(--md-sys-shape-corner-medium);
+  flex-wrap: wrap;
+}
+
+.banner--notice .m-button--text {
+  color: inherit;
+}
+
+.banner__text p {
+  margin: 0;
+}
+
+.banner__detail {
+  margin-top: 4px;
+  font: var(--md-sys-typescale-body-small);
+}
+
 /* drawer */
 
 .drawer {

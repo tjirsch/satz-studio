@@ -2,8 +2,9 @@
 
 What is proven, where, and how to run it. Every automated check runs offline against
 `tests/fixtures` and the pinned `vendor/satz`; the ones that drive the `satz` binary
-need it installed at `MIN_SATZ` or newer. The manual checks that need a window, a
-credential or a machine are listed at the end.
+need it installed at `MIN_SATZ` or newer. The GitHub reads — the look for a satz-studio
+update, satz's installer — run against a canned server on a local port. The manual checks
+that need a window, a credential or a machine are listed at the end.
 
 ## 1. What is proven where
 
@@ -47,7 +48,12 @@ carry a claim the harness relies on.
 | `Cst::text()` is the file; every `.satz` under `vendor/satz` parses through the grammar and lowers through `satz_core::satz::parse` | `tests/cst_roundtrip.rs`, `src/cst/grammar.rs` | all |
 | `scan_uses` finds every line of a `satz interview --create` skeleton and only the exact shape satz's `pack_line` writes | `tests/cst_uses.rs` | `the_interview_skeleton_is_scanned_line_for_line`, `only_the_exact_shape_is_a_pack_line` |
 | The pack rows: the skeleton is the map row then every gated line `Off`; with the map on every row has its question and a `oneof` is its options; a gate without a line is `Absent`; a line active while its gate is false is a `Note` | `tests/model_packs.rs` | all |
-| `MIN_SATZ` is the submodule's version; an older binary is refused naming `satz self-update` | `src/satz/binary.rs` | `min_satz_is_the_submodule_version`, `an_older_binary_is_refused_by_version` |
+| `MIN_SATZ` is not newer than the submodule's version; an older binary is refused naming `satz self-update` | `src/satz/binary.rs` | `min_satz_is_not_newer_than_the_submodule`, `an_older_binary_is_refused_by_version` |
+| The driver is permissive upward: a fake satz at the build's satz, one patch past it and one minor past it are each located, not refused, and `ahead_of_build` says `None`, `Patch` and `Minor`; a moved major reads as a minor, build metadata on the build's release as that release. The versions derive from the vendored satz, so the tests hold across pin moves; the test on the installed satz asserts `MIN_SATZ` or newer and nothing tighter, because CI installs the newest satz | `tests/satz_binary.rs`, `src/satz/binary.rs` | `a_fake_at_the_pin_or_newer_is_located_and_says_how_far_ahead_it_is`, `the_installed_satz_is_found_at_the_pinned_version_or_newer`, `a_newer_satz_passes_the_gate_and_says_by_which_kind_of_release`, `build_metadata_on_the_pinned_release_is_that_release` |
+| A newer satz is a notice, not a gate, over fake binaries through `locate` as the app coroutine runs it: the build's satz opens estates with no notice; an older satz is the one refusal; a newer patch and a newer minor open estates and give a notice each, worded by satz's release rule; a dismissed notice stays gone for that version and comes back for the next; `dismissed_satz` round-trips through the settings file | `crates/satz-studio/src/state/pace.rs` | `the_pinned_satz_opens_estates_with_no_notice`, `an_older_satz_is_the_one_refusal`, `a_newer_patch_opens_estates_and_is_told_as_a_patch`, `a_newer_minor_opens_estates_and_is_told_as_a_minor`, `a_dismissed_notice_stays_gone_for_that_version_only`, `the_dismissed_version_round_trips_through_the_settings_file` |
+| The satz-studio release look, against a canned local server: it reads `releases/latest` and nothing else; a newer tag is `Available` with its page; the running release, or a build newer than the latest, is `Latest`; a 403 is the rate limit with its reset; a port nothing listens on is `Unreachable`, saying offline; a 404 is no release, and a tag that is not a version is refused. The window's sentence for each of the three outcomes, and what the top bar offers | `tests/releases.rs`, `crates/satz-studio/src/state/pace.rs` | `a_newer_release_is_named_with_its_page_and_the_latest_is_read_never_a_tag`, `the_running_release_or_a_newer_build_is_the_latest`, `a_403_is_the_rate_limit_and_says_so`, `nothing_listening_is_unreachable_and_says_offline`, `no_release_and_a_tag_that_is_not_a_version_are_said_as_such`, `the_studio_look_says_which_of_three_things_it_found` |
+| The satz release check reads `satz self-update --check-only` as satz prints it: `Latest version:` against the satz asked, with the `Release:` page; the latest, or a satz newer than it, is `Latest`; an output without the line is an error quoting it. `self_update_frequency = "never"` in the operator's satz config is the one no, a missing file or key is yes, a file that does not parse is an error naming it. The top bar and the title offer a found release only while it is newer than the satz in use; the title carries the version and each available release | `src/satz/self_update.rs`, `crates/satz-studio/src/state/pace.rs` | `a_newer_release_is_read_with_its_page`, `the_latest_release_or_an_older_one_is_latest`, `an_output_without_the_line_is_an_error_naming_what_satz_printed`, `never_in_the_operators_satz_config_is_the_one_no`, `the_satz_check_offers_a_release_only_while_it_is_newer_than_the_satz_that_runs`, `the_title_carries_the_version_and_what_is_available` |
+| satz's installer, against a canned local server and fake scripts: the installer and its sidecar come from the one `releases/latest` object; a script matching its sidecar runs with `SATZ_NO_MODIFY_PATH=1` and stdin closed; a script that does not match is refused and never runs; a release without a sidecar is refused before anything is downloaded; a sidecar that is not a SHA-256 is refused; on Windows nothing is fetched. An installer that exits cleanly is an install only if satz is then found; Windows is never offered the installer, and says why | `tests/releases.rs`, `src/satz/install.rs`, `crates/satz-studio/src/state/install.rs`, `crates/satz-studio/src/state/pace.rs` | `an_installer_that_matches_its_sidecar_runs_without_a_path_edit_or_a_prompt`, `an_installer_that_does_not_match_its_sidecar_is_refused_and_never_runs`, `a_release_without_a_sidecar_is_refused_before_anything_is_downloaded`, `a_sidecar_that_is_not_a_sha256_is_refused`, `windows_fetches_nothing_and_says_why`, `a_script_that_matches_its_sidecar_is_verified_and_one_that_does_not_is_refused`, `a_clean_exit_is_an_install_only_when_the_search_then_finds_a_satz`, `windows_is_never_offered_the_installer_and_says_why` |
 | `McpSession` lists the twenty-two tools of `docs/mcp.md`, reads `runs_as`, types a tool call; `satz_transpile` under `--allow read` is `is_error` | `tests/satz_mcp.rs`, `tests/satz_session.rs` | all |
 | The recorded `satz questions --format json` of the pinned satz round-trips through the report types | `src/satz/reports.rs` | `the_recorded_questions_report_round_trips` |
 | A reporting call writes one file, reads it back as a typed report and leaves neither the file nor its directory behind, the estate untouched | `tests/satz_cli.rs` | `a_reporting_call_leaves_nothing_behind` |
@@ -68,9 +74,10 @@ carry a claim the harness relies on.
 ## 2. The manual smoke walk
 
 The estate views are checked by hand: [`ui.md`](ui.md), section "The smoke walk" —
-thirteen steps over the fixture estate, a skeleton and a Terraform directory; no API key
-is needed, and the last two need the Claude Code CLI signed in. It is the
-check of the window over what the harness proves of the core.
+fourteen steps over the fixture estate, a skeleton and a Terraform directory; no API key
+is needed, steps 12 and 13 need the Claude Code CLI signed in, and step 14 needs a
+script in front of the installed satz that answers `--version` with a newer one. It is the check of the window over what the harness
+proves of the core.
 
 ## 3. Checks that need a credential or a machine
 

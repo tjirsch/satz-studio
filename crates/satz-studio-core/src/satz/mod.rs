@@ -1,19 +1,22 @@
 //! The satz driver: the binary and its version gate ([`binary`]), the CLI runner
-//! ([`cli`]), `satz init` and what it leaves behind ([`init`]), `satz import` and what
-//! it wrote and found ([`import`]), the MCP session over
-//! `satz mcp` ([`mcp`]), and one session per open estate that the command decks and the
-//! agent share ([`session`]). [`reports`] are the JSON payloads a reporting command
+//! ([`cli`]), satz's own installer verified before it runs ([`install`]), `satz init` and
+//! what it leaves behind ([`init`]), `satz import` and what it wrote and found
+//! ([`import`]), what `satz self-update --check-only` found ([`self_update`]), the MCP
+//! session over `satz mcp` ([`mcp`]), and one session per open estate that the command
+//! decks and the agent share ([`session`]). [`reports`] are the JSON payloads a reporting command
 //! writes with `--format json` and the server returns as `structuredContent`.
 
 pub mod binary;
 pub mod cli;
 pub mod import;
 pub mod init;
+pub mod install;
 pub mod mcp;
 pub mod reports;
+pub mod self_update;
 pub mod session;
 
-pub use binary::{MIN_SATZ, SatzBinary};
+pub use binary::{Ahead, MIN_SATZ, SatzBinary};
 pub use cli::{CliLine, SatzCli};
 pub use import::{ImportOptions, ImportPlan, ImportReport, ImportShape};
 pub use init::InitOptions;

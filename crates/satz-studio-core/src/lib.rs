@@ -11,8 +11,11 @@
 //! - [`git`] — whether git holds the estate in a work tree, which `satz merge-presets`
 //!   needs for its undo, and the commands that put it in one.
 //! - [`schema`] and [`model`] — the provider schema and the view model the app binds to.
-//! - [`satz`] — the driver: the binary and its version gate, the CLI runner, the MCP
-//!   session over `satz mcp`, one session per estate.
+//! - [`satz`] — the driver: the binary and its version gate, the CLI runner, satz's
+//!   installer verified before it runs, the MCP session over `satz mcp`, one session per
+//!   estate.
+//! - [`github`] — the latest release of a repository: the look for a newer satz-studio,
+//!   and the release satz's installer is taken from.
 //! - [`llm`] — the Claude client (Messages API over HTTPS), the agent loop, the
 //!   provider adapters, credentials; [`transcript`] keeps the conversations.
 //! - [`settings`] and [`diag`] — the settings file and the one diagnostic type.
@@ -25,6 +28,7 @@ pub mod diag;
 pub mod edit;
 pub mod estate;
 pub mod git;
+pub mod github;
 pub mod llm;
 pub mod model;
 pub mod satz;

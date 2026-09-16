@@ -54,11 +54,19 @@ estates show the same list, because the same facts are true of them.
 ## What it needs
 
 - **`satz` 0.59.7 or newer.** `MIN_SATZ` in `crates/satz-studio-core/src/satz/binary.rs`
-  names the version, the same release the submodule `vendor/satz` is pinned to. Install
-  satz with its installer or bring it up to date with `satz self-update`. The app looks
-  at the path set in Settings, then on `PATH`, then at `~/.local/bin/satz`. An older
-  binary is refused at startup, naming the version found. Nothing runs without satz;
-  the app has no mode of its own.
+  names the oldest satz this build works with. It rises when a satz release breaks the
+  app or the app starts using something a later satz introduced, not with every satz
+  release. Install satz with its installer or bring it up to date with `satz
+  self-update`. The app looks at the path set in Settings, then on `PATH`, then at
+  `~/.local/bin/satz`. An older binary is refused at startup, naming the version found;
+  the banner runs `satz self-update` on it. With no satz at all, the banner runs satz's
+  own installer, checked against the SHA-256 its release publishes, into `~/.local/bin`
+  and without touching your shell profile — except on Windows, where satz publishes no
+  build. A satz NEWER than the one the build was tested against runs, and a banner says
+  so: both versions, and what satz's release rule makes of the difference — a patch
+  changes nothing an estate needs; a minor may mean edits, refusals or a different plan
+  — until you dismiss it for that version. Nothing runs without satz; the app has no
+  mode of its own.
 - **Application Default Credentials, for the live commands.** `satz init` behind Create,
   `satz import` from a live scope behind Import,
   `whoami`, `report-compliance` and everything else that reads a Google organisation run
@@ -146,6 +154,14 @@ The `.deb` and the `.AppImage` prompt nothing. The same bundle is built locally 
 `dx bundle --package satz-studio --platform desktop --release`, under
 `target/dx/satz-studio/bundle/`; `docs/verification.md` is what is checked before a
 tag.
+
+The app does not replace itself with a newer release. Once per launch it reads the latest
+satz-studio release on GitHub, and asks the satz in use, with `satz self-update
+--check-only`, whether a newer satz is released — unless your satz config says
+`self_update_frequency = "never"`. The window title shows the app's version and "update
+available" for either; in the top bar the satz-studio chip opens the new release's page,
+where the bundle is installed as above, and the satz chip runs `satz self-update`.
+Settings says what each look found, or why it failed, and looks again when asked.
 
 ## Contributing
 
