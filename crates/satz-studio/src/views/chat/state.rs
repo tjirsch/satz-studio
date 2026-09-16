@@ -1085,6 +1085,7 @@ mod tests {
             ],
             params: Vec::new(),
             packs: Vec::new(),
+            pack_edges: Vec::new(),
             uses: Vec::new(),
             hcl: Vec::new(),
             diagnostics: Vec::new(),

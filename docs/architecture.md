@@ -92,7 +92,7 @@ Two crates in one workspace, satz pinned once as the submodule `vendor/satz`
 | `src/cst/` | the lossless document layer over the vendored tree-sitter grammar ([ADR 0003](adr/0003-the-document-layer-is-the-tree-sitter-grammar.md)); `grammar.rs` exposes the compiled parser, `build.rs` walks the tree into nodes with byte spans, `uses.rs` and `render.rs` read the pack lines and write values | `Cst`, `Node`, `NodeKind`, `Span`, `UseLine`, `UseState`, `TypedValue`, `StyleCtx`, `scan_uses`, `render_value`, `style_of`, `grammar::language` |
 | `src/edit/` | the edit primitives and the write discipline (section 4b): `apply.rs` the splice and its proof, `commit.rs` the temp file and the rename, `check.rs` the two checkers, `snapshot.rs` the delegated write | `Edit`, `EditSession`, `Proposed`, `Committed`, `Rollback`, `Checker`, `CheckFailure`, `McpChecker`, `CliChecker`, `Snapshot`, `sha256_hex` |
 | `src/schema.rs` | the provider schema as `satz update-schema` writes it, the types lifted from satz's `src/schema.rs`; `load_all` reads every `*.json` in `schema_dir` and is `SchemaError::Missing` for a directory that is absent or holds no resource type; `AttrType` decodes Terraform's type expression and prints it in Terraform's spelling | `ResourceRegistry`, `AttrType`, `BlockSchema`, `AttributeSchema`, `SchemaError` |
-| `src/model/` | the view model, built pure and rebuilt after every commit and reload: `outline.rs` classifies the blocks as satz's `EstateResolver` and `is_child` do, `params.rs` joins the `params { }` block with the questions and holds `answer_kind`, the shape an interview answer is typed in, `packs.rs` derives the pack rows ([ADR 0007](adr/0007-pack-rows-are-derived-from-the-estate-file.md)), `value.rs` decodes a string as satz's lexer reads it, and `hcl_blocks` reads the file's `hcl` statements with whether each carries a `trust` reason | `EstateModel`, `ResourceNode`, `ResourceKind`, `AttrRow`, `ParamRow`, `ParamKind`, `PackRow`, `PackRowKind`, `LineState`, `Choice`, `SourceValue`, `StrPart`, `EditMode`, `HclBlock`, `SchemaStatus`, `answer_kind` |
+| `src/model/` | the view model, built pure and rebuilt after every commit and reload: `outline.rs` classifies the blocks as satz's `EstateResolver` and `is_child` do, `params.rs` joins the `params { }` block with the questions and holds `answer_kind`, the shape an interview answer is typed in, `packs.rs` derives the pack rows ([ADR 0007](adr/0007-pack-rows-are-derived-from-the-estate-file.md)) and the edges between them, `decls.rs` reads what the pack files declare between the choices with `satz_core::satz::parse` ([ADR 0015](adr/0015-the-packs-view-draws-the-dependency-tree-the-packs-declare.md)), `value.rs` decodes a string as satz's lexer reads it, and `hcl_blocks` reads the file's `hcl` statements with whether each carries a `trust` reason | `EstateModel`, `ResourceNode`, `ResourceKind`, `AttrRow`, `ParamRow`, `ParamKind`, `PackRow`, `PackRowKind`, `LineState`, `Choice`, `PackEdge`, `PackDecls`, `AskWhen`, `Unread`, `SourceValue`, `StrPart`, `EditMode`, `HclBlock`, `SchemaStatus`, `answer_kind` |
 | `src/git.rs` | what `satz merge-presets` needs from git: it edits the estate file in place and asks `git status` in the estate file's directory for the undo, refusing outside a work tree or without git. `WorkTree::read` asks `git rev-parse --is-inside-work-tree` in that directory — a repository above it counts — and answers `Inside`, `Outside` with git's own words, or `NoGit`; `init_steps` are `git init -b main`, `git add -A` and one commit naming the estate; `run` streams one git command's lines and is cancellable | `WorkTree`, `GitError`, `init_steps`, `run` |
 | `src/satz/binary.rs` | where satz is and which version: the Settings override, `PATH`, `~/.local/bin/satz`; the gate that refuses a satz older than `MIN_SATZ`, the oldest satz this build works with; `built_against` is the submodule's satz version, and `ahead_of_build` reads a satz past it as a patch or a minor ahead and refuses nothing | `SatzBinary`, `MIN_SATZ`, `Ahead` |
 | `src/satz/self_update.rs` | what `satz self-update --check-only` printed, read narrowly: the `Latest version:` line against the version of the satz asked, and the `Release:` line when there is one — an output without the line is an error quoting it; `unprompted_checks_allowed` reads `self_update_frequency` from the operator's `~/.config/satz/satz.toml` as satz reads it, a missing file or key being `always` and a file that does not parse an error | `SatzRelease`, `read_check`, `unprompted_checks_allowed` |
@@ -309,9 +309,10 @@ nowhere else.
    fails is `SatzError::Mcp` carrying what satz said before it died.
 5. The estate coroutine's `Reload` builds the model: `HclState::read(hcl_dir)`;
    `WorkTree::read` of the estate file's directory; `satz_questions` over the session for the `QuestionsReport`; then, on a blocking
-   thread, the main file read, `Cst::parse`, `EstateDir::params` and
-   `ResourceRegistry::load_all(schema_dir)`; then `EstateModel::build(main, cst, schema,
-   env, questions, diagnostics)`, where `schema` is `Result<&ResourceRegistry, &Path>`
+   thread, the main file read, `Cst::parse`, `EstateDir::params`,
+   `ResourceRegistry::load_all(schema_dir)` and `PackDecls::read(main, cst, loader)`;
+   then `EstateModel::build(main, cst, schema, env, questions, decls, diagnostics)`,
+   where `schema` is `Result<&ResourceRegistry, &Path>`
    and the `Err` arm becomes `SchemaStatus::Missing`. A reload that built a model then
    runs `satz_transpile_check` and folds the compile's own findings into the
    diagnostics — a prerequisite the estate does not declare, a required argument the
@@ -339,6 +340,26 @@ a list; `tests/e2e_answer_shapes.rs` holds every question of every pack under
 `gate` and `question` are optional; its `state` is `On`, `Off`, or `Absent` when the
 map asks a question the file has no line for, whose remedy is `satz merge-presets`. A
 line active while its gate is false is a `Severity::Note` from `DiagSource::Model`.
+
+The dependencies between the pack rows come from the packs themselves. `PackDecls::read`
+parses, with `satz_core::satz::parse` and the loader satz's pipeline resolves `use "…"`
+with, the estate file, every file its `use` lines name — active or commented, whatever
+the gate — and every file those name in turn, each once; it keeps every question with an
+`ask_when`, and whether the binding that applies to the question's param (the estate's
+own, else the declaring file's default) is that gate by reference. A pack that is off is
+read all the same, so its dependencies are known before it is switched on and the tree
+does not rearrange when a switch flips. `EstateModel::pack_edges` are the `ask_when`s
+whose gate is a row's gate and whose own gates — the param, or the options of a `oneof`
+— include a row's: `PackEdge { parent, child, gates, follows }`. A question waits on at
+most one gate, so the edges form a forest; a gate two declarations make wait on
+different gates, and gates that wait on each other round a cycle, are each a `Note` and
+no edge, and a file that did not load or parse is a `Note` at the line that names it.
+A dependency stated only in a question's `why` is no edge: prose is not read. There is no
+table of edges in the app — the same reason as for the rows ([ADR
+0007](adr/0007-pack-rows-are-derived-from-the-estate-file.md)): a copied table drifts
+the day the library gains a dependency, and satz already declares every one.
+`tests/e2e_pack_edges.rs` parses the files of a skeleton, as written and with every
+pack line on, independently of the model and holds the edges to them.
 
 ### 4b. The write discipline
 
@@ -555,6 +576,7 @@ the tree and over the commits each push or pull request adds.
 | [0012](adr/0012-migrate-hands-off-to-the-terminal.md) | `migrate` hands off to the terminal with `apply` and `bootstrap`; `bootstrap --dry-run` is a check that runs in the app |
 | [0013](adr/0013-the-claude-code-stream-log-is-verbatim-off-by-default-and-bounded.md) | the Claude Code stream log is verbatim, off by default, one file per conversation, and bounded to ten files of 16 MiB |
 | [0014](adr/0014-a-newer-satz-is-a-notice-and-the-app-looks-for-releases.md) | a satz newer than the build runs and is a notice, not a gate; the app looks for releases of itself and of satz once per launch and says so in the title and the top bar |
+| [0015](adr/0015-the-packs-view-draws-the-dependency-tree-the-packs-declare.md) | the Packs view draws the dependency tree the packs declare (`ask_when`, read with satz-core's parser), as tree blocks in the grid with connectors drawn in CSS; no edge table, no lines over the grid |
 
 ## 7. Not built, and why
 
@@ -566,7 +588,9 @@ the tree and over the commits each push or pull request adds.
 - **No copy of satz's `PACK_LINES` table.** A pack row is derived from three sources
   the estate already has: `scan_uses` over the file, the questions report, and the
   resolved params. A gate with no line is `LineState::Absent`, and the row's action is
-  `satz merge-presets`, which is what satz tells an operator.
+  `satz merge-presets`, which is what satz tells an operator. The edges between rows are
+  the packs' own `ask_when`s, read with satz-core's parser; there is no table of them
+  either.
 - **No second parser.** The document layer is the tree-sitter grammar and meaning is
   `satz_core::satz::parse`. A grammar gap is fixed in the grammar repository.
 - **No markdown renderer in the chat.** The model's text is shown as text; the tool

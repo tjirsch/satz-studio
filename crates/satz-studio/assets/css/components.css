@@ -905,6 +905,101 @@
   white-space: nowrap;
 }
 
+/* ---- connector tree ----------------------------------------------------------- */
+/* Boxes joined by right-angle connectors. Every length is relative to the branch (`li`)
+   the connector belongs to: the branches of a box are indented by `--m-connector-indent`,
+   the trunk runs at `--m-connector-x` from the parent box's left edge, and a branch meets
+   its box `--m-connector-box-y` below the box's top — the centre of a card's 32 px head
+   row under its 16 px padding — or below the label row when the branch has one. The elbow
+   is this branch's own connector: from the gap above it down to the box, then across; the
+   dashed variant dashes the part across, so the trunk stays one line. The trunk carries
+   the line past this branch to a later sibling, so the last branch has none. */
+
+.m-connector-tree {
+  --m-connector-indent: 56px;
+  --m-connector-x: 26px;
+  --m-connector-gap: 16px;
+  --m-connector-box-y: 32px;
+  --m-connector-label-height: 20px;
+  --m-connector-label-gap: 4px;
+  --m-connector-width: 2px;
+  --m-connector-color: var(--md-sys-color-outline);
+  min-width: 0;
+}
+
+.m-connector-tree__branches {
+  list-style: none;
+  margin: 0;
+  padding: var(--m-connector-gap) 0 0 var(--m-connector-indent);
+  display: flex;
+  flex-direction: column;
+  gap: var(--m-connector-gap);
+}
+
+.m-connector-tree__branch {
+  --m-connector-branch-y: var(--m-connector-box-y);
+  position: relative;
+  min-width: 0;
+}
+
+.m-connector-tree__branch--labelled {
+  --m-connector-branch-y: calc(
+    var(--m-connector-label-height) + var(--m-connector-label-gap) + var(--m-connector-box-y)
+  );
+}
+
+.m-connector-tree__box {
+  min-width: 0;
+}
+
+.m-connector-tree__elbow,
+.m-connector-tree__trunk {
+  position: absolute;
+  left: calc(var(--m-connector-x) - var(--m-connector-indent));
+  border: 0 solid var(--m-connector-color);
+  pointer-events: none;
+}
+
+.m-connector-tree__elbow {
+  top: calc(-1 * var(--m-connector-gap));
+  width: calc(var(--m-connector-indent) - var(--m-connector-x));
+  height: calc(var(--m-connector-gap) + var(--m-connector-branch-y));
+  border-left-width: var(--m-connector-width);
+  border-bottom-width: var(--m-connector-width);
+}
+
+.m-connector-tree__trunk {
+  top: var(--m-connector-branch-y);
+  bottom: 0;
+  border-left-width: var(--m-connector-width);
+}
+
+.m-connector-tree__branch:last-child > .m-connector-tree__trunk {
+  display: none;
+}
+
+.m-connector-tree__branch--dashed > .m-connector-tree__elbow {
+  border-bottom-style: dashed;
+}
+
+.m-connector-tree__branch--error > .m-connector-tree__elbow,
+.m-connector-tree__trunk--error {
+  border-color: var(--md-sys-color-error);
+}
+
+.m-connector-tree__label {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: var(--m-connector-label-height);
+  margin-bottom: var(--m-connector-label-gap);
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  font: var(--md-sys-typescale-label-medium);
+  color: var(--md-sys-color-on-surface-variant);
+}
+
 /* ---- badge -------------------------------------------------------------------- */
 
 .m-badge-anchor {

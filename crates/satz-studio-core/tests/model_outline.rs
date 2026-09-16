@@ -9,7 +9,8 @@ use satz_core::pipeline::Env;
 use satz_studio_core::cst::{Cst, UseState};
 use satz_studio_core::estate::EstateDir;
 use satz_studio_core::model::{
-    AttrRow, EditMode, EstateModel, ResourceKind, ResourceNode, SchemaStatus, SourceValue, StrPart,
+    AttrRow, EditMode, EstateModel, PackDecls, ResourceKind, ResourceNode, SchemaStatus,
+    SourceValue, StrPart,
 };
 use satz_studio_core::satz::reports::{QuestionsReport, QuestionsSummary};
 use satz_studio_core::schema::{AttrType, ResourceRegistry};
@@ -34,12 +35,14 @@ fn model_of(name: &str) -> EstateModel {
     let cst = Cst::parse(&text).unwrap();
     let env = estate.params(&main).unwrap();
     let registry = ResourceRegistry::load_all(&estate.schema_dir()).unwrap();
+    let decls = PackDecls::read(&main, &cst, &estate.loader(&main));
     EstateModel::build(
         &main,
         &cst,
         Ok(&registry),
         &env,
         &no_questions(&main),
+        &decls,
         Vec::new(),
     )
     .unwrap()
@@ -55,6 +58,7 @@ fn inline(text: &str, env: &Env) -> EstateModel {
         Ok(&registry),
         env,
         &no_questions(main),
+        &PackDecls::default(),
         Vec::new(),
     )
     .unwrap()
@@ -492,6 +496,7 @@ fn without_a_registry_everything_typed_is_unknown() {
         Err(dir),
         &env,
         &no_questions(&main),
+        &PackDecls::read(&main, &cst, &estate.loader(&main)),
         Vec::new(),
     )
     .unwrap();

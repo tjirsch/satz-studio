@@ -20,7 +20,7 @@ use std::path::{Path, PathBuf};
 use satz_core::satz::{File, Value};
 use satz_studio_core::cst::Cst;
 use satz_studio_core::estate::EstateDir;
-use satz_studio_core::model::{EstateModel, ParamKind, SourceValue, answer_kind};
+use satz_studio_core::model::{EstateModel, PackDecls, ParamKind, SourceValue, answer_kind};
 use satz_studio_core::satz::reports::{QuestionKind, QuestionState, QuestionsReport};
 use satz_studio_core::schema::ResourceRegistry;
 
@@ -162,7 +162,17 @@ async fn every_question_of_every_pack_is_answered_in_the_shape_its_param_is_decl
     let env = dir.params(&main).unwrap();
     let registry = ResourceRegistry::load_all(&dir.schema_dir()).unwrap();
     let cst = Cst::parse(&text).unwrap();
-    let model = EstateModel::build(&main, &cst, Ok(&registry), &env, &report, Vec::new()).unwrap();
+    let decls = PackDecls::read(&main, &cst, &dir.loader(&main));
+    let model = EstateModel::build(
+        &main,
+        &cst,
+        Ok(&registry),
+        &env,
+        &report,
+        &decls,
+        Vec::new(),
+    )
+    .unwrap();
 
     // the report carries every question the library declares: the sweep misses none
     let declared: BTreeSet<(String, String)> = library

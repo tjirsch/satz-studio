@@ -11,7 +11,7 @@ use satz_studio_core::cst::Cst;
 use satz_studio_core::diag::Severity;
 use satz_studio_core::estate::EstateDir;
 use satz_studio_core::model::{
-    Choice, EstateModel, LineState, MAP_PATH, PackRow, PackRowKind, ResourceKind,
+    Choice, EstateModel, LineState, MAP_PATH, PackDecls, PackRow, PackRowKind, ResourceKind,
 };
 use satz_studio_core::satz::reports::{QuestionKind, QuestionState, QuestionsReport};
 use satz_studio_core::satz::{SatzBinary, SatzCli};
@@ -103,7 +103,17 @@ async fn model(config_dir: &Path, estate: &Path) -> EstateModel {
     let cst = Cst::parse(&text).unwrap();
     let env = dir.params(estate).unwrap();
     let registry = ResourceRegistry::load_all(&dir.schema_dir()).unwrap();
-    EstateModel::build(estate, &cst, Ok(&registry), &env, &report, Vec::new()).unwrap()
+    let decls = PackDecls::read(estate, &cst, &dir.loader(estate));
+    EstateModel::build(
+        estate,
+        &cst,
+        Ok(&registry),
+        &env,
+        &report,
+        &decls,
+        Vec::new(),
+    )
+    .unwrap()
 }
 
 fn by_gate<'a>(rows: &'a [PackRow], gate: &str) -> Vec<&'a PackRow> {

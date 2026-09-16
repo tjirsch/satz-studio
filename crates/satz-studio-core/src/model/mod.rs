@@ -7,9 +7,11 @@
 //! as satz's `EstateResolver` and `split_body` do, [`params`] reads the `params { }`
 //! block beside the questions report and the shape of every resolved param, which is
 //! what an answer is typed in ([`answer_kind`]), and [`packs`] derives the pack rows from the
-//! `use` lines, the report and the resolved params — no copy of satz's `PACK_LINES`.
-//! [`value`] decodes a value the way satz's lexer reads it.
+//! `use` lines, the report and the resolved params — no copy of satz's `PACK_LINES` — and
+//! the edges between them from what [`decls`] reads out of the pack files with satz-core's
+//! parser. [`value`] decodes a value the way satz's lexer reads it.
 
+mod decls;
 mod outline;
 mod packs;
 mod params;
@@ -25,6 +27,7 @@ use crate::diag::Diagnostic;
 use crate::satz::reports::{QuestionRow, QuestionsReport};
 use crate::schema::{AttrType, ResourceRegistry};
 
+pub use decls::{AskWhen, PackDecls, Unread};
 pub use params::answer_kind;
 pub use value::{decode_string, truthy};
 
@@ -223,6 +226,26 @@ pub struct PackRow {
     pub line: Option<u32>,
 }
 
+/// One dependency between pack rows: the question whose subject is `child` is asked only
+/// while the gate `parent` is on (`ask_when`). The edges of a model form a forest — every
+/// gate in `gates` waits on this one parent and on no other.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PackEdge {
+    /// the gate the question waits on: a pack row's `gate`
+    pub parent: String,
+    /// the question's subject: a gate, or the group name of a `oneof`
+    pub child: String,
+    /// the question's own gates that are pack rows — `child` itself, or the options of
+    /// the `oneof` the estate has rows for; never empty
+    pub gates: Vec<String>,
+    /// the binding that applies to `child` is `parent` by reference, so it is on while
+    /// the parent is until somebody answers it ([`AskWhen::follows`])
+    pub follows: bool,
+    /// the file that declares the question, as its `use` line names it, and the line
+    pub file: String,
+    pub line: usize,
+}
+
 /// One `hcl { … }` block of the file. Raw HCL is emitted verbatim and is opaque to the
 /// compliance plane, so satz warns on every transpile until `hcl trust "<reason>" { … }`
 /// says it was reviewed, and notes it after. `trusted` is which of the two this is.
@@ -251,6 +274,8 @@ pub struct EstateModel {
     pub outline: Vec<ResourceNode>,
     pub params: Vec<ParamRow>,
     pub packs: Vec<PackRow>,
+    /// the dependencies between `packs`, by gate
+    pub pack_edges: Vec<PackEdge>,
     /// the `use` lines outside every block; the ones inside a block are on its node
     pub uses: Vec<UseLine>,
     /// every raw-HCL block in this file, trusted or not
@@ -274,19 +299,23 @@ pub enum ModelError {
 impl EstateModel {
     /// The model of `main`, whose parsed text is `cst`. `schema` is the registry, or
     /// the directory it is missing from; `env` the resolved params
-    /// (`EstateDir::params`); `questions` the report of `satz questions`; `diagnostics`
-    /// what the parse and the compile said, which the model's own notes join.
+    /// (`EstateDir::params`); `questions` the report of `satz questions`; `decls` what
+    /// the files the estate reads declare between its choices ([`PackDecls::read`]);
+    /// `diagnostics` what the parse and the compile said, which the model's own notes
+    /// join.
     pub fn build(
         main: &Path,
         cst: &Cst,
         schema: Result<&ResourceRegistry, &Path>,
         env: &Env,
         questions: &QuestionsReport,
+        decls: &PackDecls,
         mut diagnostics: Vec<Diagnostic>,
     ) -> Result<EstateModel, ModelError> {
         let uses = scan_uses(cst);
         let (outline, top_uses) = outline::build(cst, schema.ok(), env, &uses)?;
         let (packs, notes) = packs::build(main, env, questions, &uses);
+        let (pack_edges, edge_notes) = packs::edges(main, &packs, decls);
         let gates: BTreeSet<&str> = packs
             .iter()
             .filter_map(|r| r.gate.as_deref())
@@ -299,6 +328,7 @@ impl EstateModel {
             .collect();
         let params = params::build(cst, env, questions, &gates)?;
         diagnostics.extend(notes);
+        diagnostics.extend(edge_notes);
         let schema = match schema {
             Ok(registry) => SchemaStatus::Loaded {
                 providers: registry.providers(),
@@ -311,6 +341,7 @@ impl EstateModel {
             outline,
             params,
             packs,
+            pack_edges,
             uses: top_uses,
             hcl: hcl_blocks(cst),
             diagnostics,

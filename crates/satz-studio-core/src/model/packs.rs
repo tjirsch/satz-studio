@@ -5,13 +5,18 @@
 //! first; then one row per gated line in document order; then one `Absent` row per
 //! choice of the map pack that gates no line in the file, whose remedy is
 //! `satz merge-presets`.
+//!
+//! Beside the rows, the edges between them: every `ask_when` the files declare
+//! ([`PackDecls`]) whose question and gate are both rows.
 
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 use satz_core::pipeline::Env;
 
+use super::decls::PackDecls;
 use super::value::truthy;
-use super::{Choice, LineState, MAP_PACK, MAP_PATH, PackRow, PackRowKind};
+use super::{Choice, LineState, MAP_PACK, MAP_PATH, PackEdge, PackRow, PackRowKind};
 use crate::cst::{UseLine, UseState};
 use crate::diag::{DiagSource, Diagnostic, Severity};
 use crate::satz::reports::{OptionRow, QuestionKind, QuestionRow, QuestionsReport};
@@ -156,5 +161,264 @@ fn oneof_choice(q: &QuestionRow, o: &OptionRow) -> Choice {
     Choice::OneofOption {
         group: q.subject.clone(),
         selected: o.selected,
+    }
+}
+
+/// The edges between `rows`, and one `Note` per declaration that could not become one.
+///
+/// An `ask_when` is an edge when its gate is a row's gate and at least one of the
+/// question's own gates is too — the param a question answers, or the options of a
+/// `oneof`; `gates` keeps the ones that are rows. A question between params that gate
+/// no line is a question's dependency, not a pack's, and is no edge.
+///
+/// The edges form a forest: a question waits on at most one gate. What would break
+/// that is noted and drawn nowhere — a gate two declarations make wait on different
+/// gates, and gates that wait on each other round a cycle — so the view never has to
+/// choose a parent, and a note says why the pair is flat.
+///
+/// Every file that did not load or parse is a note as well, at the estate's line that
+/// names it: the dependencies it declares are unknown.
+pub(super) fn edges(
+    main: &Path,
+    rows: &[PackRow],
+    decls: &PackDecls,
+) -> (Vec<PackEdge>, Vec<Diagnostic>) {
+    let gates: BTreeSet<&str> = rows.iter().filter_map(|r| r.gate.as_deref()).collect();
+    let mut notes: Vec<Diagnostic> = decls
+        .unread
+        .iter()
+        .map(|u| {
+            let note = model_note(format!(
+                "`{}` was not read, so the dependencies it declares are not drawn: {}",
+                u.path, u.why
+            ));
+            match u.line {
+                Some(line) => Diagnostic::at(note, main, line),
+                None => note,
+            }
+        })
+        .collect();
+
+    let candidates: Vec<PackEdge> = decls
+        .asks
+        .iter()
+        .filter(|a| gates.contains(a.when.as_str()))
+        .filter_map(|a| {
+            let own: Vec<&String> = if a.oneof {
+                a.options.iter().collect()
+            } else {
+                vec![&a.subject]
+            };
+            let child_gates: Vec<String> = own
+                .into_iter()
+                .filter(|g| gates.contains(g.as_str()))
+                .cloned()
+                .collect();
+            (!child_gates.is_empty()).then(|| PackEdge {
+                parent: a.when.clone(),
+                child: a.subject.clone(),
+                gates: child_gates,
+                follows: a.follows,
+                file: a.file.clone(),
+                line: a.line,
+            })
+        })
+        .collect();
+    let at = |e: &PackEdge| format!("`{}` ({} line {})", e.parent, e.file, e.line);
+
+    let mut dropped: BTreeSet<usize> = BTreeSet::new();
+    let mut waits: BTreeMap<&str, Vec<usize>> = BTreeMap::new();
+    for (i, e) in candidates.iter().enumerate() {
+        for g in &e.gates {
+            waits.entry(g.as_str()).or_default().push(i);
+        }
+    }
+    for (gate, on) in &waits {
+        if on.len() > 1 {
+            let named: Vec<String> = on.iter().map(|&i| at(&candidates[i])).collect();
+            notes.push(model_note(format!(
+                "`{gate}` is asked only when {}: a pack waits on one gate, so none of these is drawn",
+                named.join(" and when ")
+            )));
+            dropped.extend(on);
+        }
+    }
+
+    let parent_of: BTreeMap<&str, usize> = waits
+        .iter()
+        .filter(|(_, on)| on.len() == 1)
+        .map(|(gate, on)| (*gate, on[0]))
+        .collect();
+    let mut cyclic: Vec<usize> = Vec::new();
+    for i in (0..candidates.len()).filter(|i| !dropped.contains(i)) {
+        let mut seen = BTreeSet::from([i]);
+        let mut cur = candidates[i].parent.as_str();
+        while let Some(&j) = parent_of.get(cur) {
+            if j == i {
+                cyclic.push(i);
+                break;
+            }
+            if dropped.contains(&j) || !seen.insert(j) {
+                break;
+            }
+            cur = candidates[j].parent.as_str();
+        }
+    }
+    if !cyclic.is_empty() {
+        let named: Vec<String> = cyclic
+            .iter()
+            .map(|&i| format!("`{}` on {}", candidates[i].child, at(&candidates[i])))
+            .collect();
+        notes.push(model_note(format!(
+            "these questions wait on each other round a cycle, so none of them is drawn: {}",
+            named.join(", ")
+        )));
+        dropped.extend(cyclic);
+    }
+
+    let edges = candidates
+        .into_iter()
+        .enumerate()
+        .filter(|(i, _)| !dropped.contains(i))
+        .map(|(_, e)| e)
+        .collect();
+    (edges, notes)
+}
+
+fn model_note(message: String) -> Diagnostic {
+    Diagnostic {
+        file: None,
+        line: None,
+        severity: Severity::Note,
+        kind: None,
+        message,
+        source: DiagSource::Model,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::decls::{AskWhen, Unread};
+    use super::*;
+
+    fn row(gate: &str) -> PackRow {
+        PackRow {
+            kind: PackRowKind::Choice,
+            gate: Some(gate.to_string()),
+            path: Some(format!("presets/{gate}.satz")),
+            state: LineState::Off,
+            choice: Choice::Bool {
+                current: None,
+                default: None,
+            },
+            question: None,
+            phase: None,
+            line: Some(1),
+        }
+    }
+
+    fn ask(subject: &str, when: &str) -> AskWhen {
+        AskWhen {
+            subject: subject.to_string(),
+            oneof: false,
+            options: Vec::new(),
+            when: when.to_string(),
+            follows: false,
+            file: "presets/estate-map.satz".to_string(),
+            line: 1,
+        }
+    }
+
+    fn decls(asks: Vec<AskWhen>) -> PackDecls {
+        PackDecls {
+            asks,
+            ..PackDecls::default()
+        }
+    }
+
+    fn pairs(edges: &[PackEdge]) -> Vec<(String, String)> {
+        edges
+            .iter()
+            .map(|e| (e.parent.clone(), e.child.clone()))
+            .collect()
+    }
+
+    #[test]
+    fn an_ask_when_between_two_rows_is_an_edge_and_one_between_plain_params_is_not() {
+        let rows = [row("use_a"), row("use_b")];
+        let (e, notes) = edges(
+            Path::new("acme.satz"),
+            &rows,
+            &decls(vec![
+                ask("use_b", "use_a"),
+                ask("emails", "use_a"),
+                ask("use_b_mode", "use_b_on"),
+            ]),
+        );
+        assert_eq!(pairs(&e), [("use_a".to_string(), "use_b".to_string())]);
+        assert_eq!(e[0].gates, ["use_b"]);
+        assert!(notes.is_empty(), "{notes:?}");
+    }
+
+    #[test]
+    fn a_oneof_under_a_gate_keeps_the_options_that_are_rows() {
+        let rows = [row("use_a"), row("pick_x")];
+        let mut pick = ask("pick", "use_a");
+        pick.oneof = true;
+        pick.options = vec!["pick_x".to_string(), "pick_y".to_string()];
+        let (e, _) = edges(Path::new("acme.satz"), &rows, &decls(vec![pick]));
+        assert_eq!(pairs(&e), [("use_a".to_string(), "pick".to_string())]);
+        assert_eq!(e[0].gates, ["pick_x"]);
+    }
+
+    #[test]
+    fn a_gate_that_waits_on_two_gates_is_noted_and_drawn_under_neither() {
+        let rows = [row("use_a"), row("use_b"), row("use_c")];
+        let (e, notes) = edges(
+            Path::new("acme.satz"),
+            &rows,
+            &decls(vec![ask("use_c", "use_a"), ask("use_c", "use_b")]),
+        );
+        assert!(e.is_empty(), "{e:?}");
+        assert_eq!(notes.len(), 1);
+        assert!(
+            notes[0]
+                .message
+                .contains("`use_c` is asked only when `use_a`")
+        );
+    }
+
+    #[test]
+    fn gates_that_wait_on_each_other_are_noted_and_left_flat() {
+        let rows = [row("use_a"), row("use_b"), row("use_c")];
+        let (e, notes) = edges(
+            Path::new("acme.satz"),
+            &rows,
+            &decls(vec![
+                ask("use_a", "use_b"),
+                ask("use_b", "use_a"),
+                ask("use_c", "use_a"),
+            ]),
+        );
+        assert_eq!(pairs(&e), [("use_a".to_string(), "use_c".to_string())]);
+        assert_eq!(notes.len(), 1);
+        assert!(notes[0].message.contains("round a cycle"), "{notes:?}");
+    }
+
+    #[test]
+    fn a_file_that_was_not_read_is_a_note_at_the_line_that_names_it() {
+        let d = PackDecls {
+            unread: vec![Unread {
+                path: "presets/gone.satz".to_string(),
+                line: Some(7),
+                why: "use \"presets/gone.satz\": file not found".to_string(),
+            }],
+            ..PackDecls::default()
+        };
+        let (_, notes) = edges(Path::new("acme.satz"), &[], &d);
+        assert_eq!(notes.len(), 1);
+        assert_eq!(notes[0].line, Some(7));
+        assert_eq!(notes[0].severity, Severity::Note);
+        assert!(notes[0].message.contains("presets/gone.satz"));
     }
 }

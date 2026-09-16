@@ -439,6 +439,7 @@ mod tests {
             outline: Vec::new(),
             params: Vec::new(),
             packs,
+            pack_edges: Vec::new(),
             uses: Vec::new(),
             hcl: Vec::new(),
             diagnostics: Vec::new(),

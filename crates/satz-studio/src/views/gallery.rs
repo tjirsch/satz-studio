@@ -266,6 +266,27 @@ fn Sheet(theme: String) -> Element {
                         }
                     }
                 }
+                ConnectorTree {
+                    root: rsx! { ConnectorBox { name: "scc-service-enablement.satz", state: "on" } },
+                    ConnectorBranch {
+                        node: rsx! { ConnectorBox { name: "scc-notifications.satz", state: "on" } },
+                        branches: rsx! {
+                            ConnectorBranch {
+                                line: ConnectorLine::Dashed,
+                                label: rsx! { span { "dashed, labelled" } },
+                                node: rsx! { ConnectorBox { name: "scc-findings-mail.satz", state: "off" } },
+                            }
+                            ConnectorBranch {
+                                node: rsx! { ConnectorBox { name: "scc-findings-siem.satz", state: "off" } },
+                            }
+                        },
+                    }
+                    ConnectorBranch {
+                        error: true,
+                        label: rsx! { span { "error" } },
+                        node: rsx! { ConnectorBox { name: "scc-export.satz", state: "on" } },
+                    }
+                }
             }
 
             section { class: "sheet__section",
@@ -303,6 +324,20 @@ fn Sheet(theme: String) -> Element {
                         Snackbar { text: "satz 0.51.1 is too old: satz-studio needs 0.56.1 or newer", error: true, action_label: "Settings", onaction: |_| {}, ondismiss: |_| {} }
                     }
                 }
+            }
+        }
+    }
+}
+
+/// An outlined card with a 32 px head row, the box the connector tree's offsets assume.
+#[component]
+fn ConnectorBox(name: String, state: String) -> Element {
+    rsx! {
+        Card { variant: CardVariant::Outlined,
+            div { class: "sheet__row",
+                Icon { name: "extension", size: 20 }
+                code { class: "grow", "{name}" }
+                Chip { kind: ChipKind::Assist, label: "{state}" }
             }
         }
     }
