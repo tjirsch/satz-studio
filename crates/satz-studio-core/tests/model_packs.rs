@@ -156,13 +156,33 @@ async fn the_skeleton_is_the_map_row_then_every_gated_line_off() {
     assert_eq!(map.line, Some(map_line));
 
     let gated = text.lines().filter(|l| l.contains("\" when ")).count();
+    // every use line that is neither gated nor the map: the skeleton's own
+    // `use "presets/estate-core.satz"`, which no question decides
+    let plain = text
+        .lines()
+        .map(str::trim_start)
+        .filter(|l| {
+            (l.starts_with("use \"") || l.starts_with("// use \""))
+                && !l.contains("\" when ")
+                && !l.contains(MAP_PATH)
+        })
+        .count();
+    assert!(plain > 0, "the skeleton runs a pack no question gates");
     assert_eq!(
         m.packs.len(),
-        1 + gated,
-        "one row per gated line, no Absent row"
+        1 + gated + plain,
+        "the map row, then one row per line — gated or not, no Absent row"
     );
-    for row in &m.packs[1..] {
-        assert_eq!(row.kind, PackRowKind::Choice);
+    for row in m.packs[1..].iter().filter(|r| r.kind == PackRowKind::Plain) {
+        assert_eq!(row.gate, None, "{row:?}");
+        assert_eq!(row.question, None, "{row:?}");
+        assert_eq!(row.choice, Choice::Line, "the line is the whole decision");
+        assert!(row.path.is_some() && row.line.is_some(), "{row:?}");
+    }
+    for row in m.packs[1..]
+        .iter()
+        .filter(|r| r.kind == PackRowKind::Choice)
+    {
         assert_eq!(row.state, LineState::Off, "{row:?}");
         assert!(
             row.gate.is_some() && row.path.is_some() && row.line.is_some(),
@@ -183,8 +203,9 @@ async fn the_skeleton_is_the_map_row_then_every_gated_line_off() {
             "{row:?}"
         );
     }
+    // the map row comes first by design; the rest follow the file
     assert!(
-        m.packs.windows(2).all(|w| w[0].line < w[1].line),
+        m.packs[1..].windows(2).all(|w| w[0].line < w[1].line),
         "document order"
     );
 
@@ -439,7 +460,28 @@ async fn showcase_has_one_gated_line_that_is_active_while_false() {
         "showcase does not use the map"
     );
     assert_eq!(m.packs[0].path.as_deref(), Some(MAP_PATH));
-    assert_eq!(m.packs.len(), 2);
+    // Three use lines, and only one of them is gated. The two that are not were in the
+    // estate and in no row until 2026-09-17 — the same silence that hid satz's CIS
+    // baseline while it carried no `when`.
+    assert_eq!(m.packs.len(), 4, "{:?}", m.packs);
+    let plain: Vec<_> = m
+        .packs
+        .iter()
+        .filter(|r| r.kind == PackRowKind::Plain)
+        .collect();
+    assert_eq!(
+        plain
+            .iter()
+            .map(|r| r.path.as_deref().unwrap_or_default())
+            .collect::<Vec<_>>(),
+        ["showcase-pack.satz", "showcase-policies.satz"]
+    );
+    for row in &plain {
+        assert_eq!(row.state, LineState::On, "{row:?}");
+        assert_eq!(row.gate, None, "{row:?}");
+        assert_eq!(row.question, None, "{row:?}");
+        assert_eq!(row.choice, Choice::Line, "{row:?}");
+    }
     let optional = one(&m.packs, "want_optional");
     assert_eq!(optional.state, LineState::On);
     assert_eq!(optional.path.as_deref(), Some("showcase-optional.satz"));
