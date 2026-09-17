@@ -33,8 +33,8 @@ pub use ansi::strip_ansi;
 pub use app_actions::{AppAction, app_coroutine, run_line, save_settings};
 pub use estate_actions::{EstateAction, command_line, estate_coroutine, quote, reports_dir};
 pub use pace::{
-    STUDIO_VERSION, ahead_sentence, install_offer, newer_satz_sentence, satz_available,
-    satz_notice, satz_release_sentence, studio_available, studio_look_sentence, window_title,
+    ahead_sentence, install_offer, newer_satz_sentence, satz_available, satz_notice,
+    satz_release_sentence, studio_available, studio_look_sentence, window_title,
 };
 pub use toast::{Toast, ToastKind, dismiss, enqueue};
 

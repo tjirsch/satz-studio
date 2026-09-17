@@ -1,8 +1,8 @@
 //! The half of the Settings satz card that is about releases: what the launch looks found
 //! for satz and for satz-studio, the look for a satz-studio release again, and satz's
-//! installer while there is no satz. The banner and the top bar offer the same actions;
-//! this is where the reasons stay — a look that failed says why here — with the install's
-//! log.
+//! installer while there is no satz. The banner offers the same actions while satz is
+//! unusable or newer than the build; this is where they always are, and where the reasons
+//! stay — a look that failed says why here — with the install's log.
 
 use dioxus::prelude::*;
 use satz_studio_core::github::StudioUpdate;

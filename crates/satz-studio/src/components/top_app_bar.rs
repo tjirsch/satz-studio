@@ -6,6 +6,10 @@ pub fn TopAppBar(
     title: String,
     #[props(default)] subtitle: String,
     #[props(default)] leading: Option<Element>,
+    /// what acts on the thing the title names, set immediately beside it rather than at
+    /// the bar's far end — the way an account's actions sit next to the account
+    #[props(default)]
+    beside: Option<Element>,
     children: Element,
 ) -> Element {
     rsx! {
@@ -18,6 +22,9 @@ pub fn TopAppBar(
                 if !subtitle.is_empty() {
                     span { class: "m-top-app-bar__subtitle", "{subtitle}" }
                 }
+            }
+            if let Some(beside) = beside {
+                div { class: "m-top-app-bar__beside", {beside} }
             }
             div { class: "m-top-app-bar__actions", {children} }
         }

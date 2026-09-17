@@ -4,8 +4,11 @@ use crate::components::{NavRail, NavRailItem};
 use crate::state::{AppStore, AppStoreStoreExt, EstateStoreStoreExt, View, debug_routes};
 use crate::views::overview::{Facts, owed};
 
-/// The rail: the six primary destinations in the order the work happens, and Chat and
-/// Settings bottom-aligned under them. With no estate open there is nothing to work on,
+/// The rail: the six primary destinations in the order the work happens, and Chat,
+/// Commands and Settings bottom-aligned under them. Commands is not a destination — it
+/// toggles the palette over whatever is showing — and it stands in the footer because
+/// that is where the things that are not places stand. It needs an estate, like Chat: the
+/// palette's entries all act on one. With no estate open there is nothing to work on,
 /// so the rail carries Settings alone and the window stands on the Start screen — the
 /// doors. Overview carries the count of what the estate owes and Decisions the count of
 /// unanswered questions.
@@ -50,6 +53,14 @@ pub fn NavigationRail() -> Element {
         secondary.push(View::Gallery);
     }
 
+    // the shortcut is ⌘K on macOS and Ctrl+K elsewhere, and the button says which of the
+    // two this machine takes
+    let (palette_icon, palette_label) = if cfg!(target_os = "macos") {
+        ("keyboard_command_key", "Commands (⌘K)")
+    } else {
+        ("keyboard", "Commands (Ctrl+K)")
+    };
+
     rsx! {
         NavRail {
             footer: rsx! {
@@ -60,6 +71,15 @@ pub fn NavigationRail() -> Element {
                         label: view.label().to_string(),
                         selected: view == current,
                         onclick: move |_| app.nav().set(view),
+                    }
+                    if view == View::Chat {
+                        NavRailItem {
+                            key: "{palette_label}",
+                            icon: palette_icon.to_string(),
+                            label: palette_label.to_string(),
+                            selected: app.palette_open().cloned(),
+                            onclick: move |_| app.palette_open().toggle(),
+                        }
                     }
                 }
             },

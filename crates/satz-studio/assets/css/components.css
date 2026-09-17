@@ -1314,6 +1314,14 @@
   text-overflow: ellipsis;
 }
 
+/* the actions of the thing the title names: beside it, not at the bar's end */
+.m-top-app-bar__beside {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+}
+
 .m-top-app-bar__actions {
   margin-left: auto;
   display: flex;

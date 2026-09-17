@@ -32,7 +32,7 @@ use tokio_util::sync::CancellationToken;
 
 use super::app_actions::close_estate;
 use super::{
-    AppStore, AppStoreStoreExt, CommandOutcome, EstateStore, EstateStoreStoreExt, ToastKind,
+    AppStore, AppStoreStoreExt, CommandOutcome, Door, EstateStore, EstateStoreStoreExt, ToastKind,
     strip_ansi, toast,
 };
 
@@ -73,7 +73,12 @@ pub enum EstateAction {
     /// `git init -b main`, `git add -A` and one commit in the estate directory, streamed
     /// into the log: the repository `satz merge-presets` needs for its undo
     InitRepository,
+    /// leave the estate: the window has nowhere to stand without one, so it goes back to
+    /// the Start screen as it stands
     Close,
+    /// leave it to open another: the Start screen again, with the Open door showing, so
+    /// the estates it has found are the first thing there
+    Switch,
 }
 
 pub async fn estate_coroutine(
@@ -131,6 +136,10 @@ pub async fn estate_coroutine(
                 }
             }
             EstateAction::Close => close_estate(app),
+            EstateAction::Switch => {
+                close_estate(app);
+                app.door().set(Door::Open);
+            }
         }
     }
 }
