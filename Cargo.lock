@@ -4870,7 +4870,7 @@ dependencies = [
 
 [[package]]
 name = "satz-studio"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "dioxus",
  "dioxus-stores",
@@ -4890,7 +4890,7 @@ dependencies = [
 
 [[package]]
 name = "satz-studio-core"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "apple-native-keyring-store",
  "cc",
