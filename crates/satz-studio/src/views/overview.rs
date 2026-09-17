@@ -538,7 +538,14 @@ fn IdentityCard(facts: Vec<Fact>) -> Element {
                         }
                     }
                 }
-                dt { "File" }
+                dt { "Runs as" }
+                    dd {
+                        match open.runs_as.as_deref() {
+                            Some(identity) => rsx! { code { "{identity}" } },
+                            None => rsx! { "the ADC identity — this estate binds no service account of its own" },
+                        }
+                    }
+                    dt { "File" }
                     dd { code { "{open.main.display()}" } }
                     dt { "Directory" }
                     dd { code { "{open.dir.display()}" } }

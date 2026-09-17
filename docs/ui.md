@@ -13,7 +13,7 @@ App (src/app.rs)            the stores, the app coroutine, the stylesheets, the 
    └─ EstateHost             one per open estate: owns the estate coroutine
       └─ Frame
          ├─ NavigationRail   six primary destinations, Chat and Settings at the foot
-         ├─ TopBar           estate, runs_as, satz version, palette, reload, switch
+         ├─ TopBar           estate name and directory, reload, switch, close
          ├─ SatzBanner       satz missing, too old or not running; a notice while newer than the build
          ├─ Content          the view of `AppStore.nav`
          ├─ DiagnosticsDrawer
@@ -297,8 +297,9 @@ and the door card on the Start screen, and their classes live in `views.css`, so
   of what the estate owes and Decisions the count of unanswered questions. With no
   estate open the primary group is empty and the footer carries Settings alone: there is
   nothing to work on, and the window stands on the Start screen. `SATZ_STUDIO_DEBUG`
-  adds Gallery `palette` to the footer. There is no FAB: opening an estate is what the
-  Start screen does, and switching one is the top bar's action.
+  adds Gallery `palette` to the footer, and Commands stands in it between Chat and
+  Settings. There is no FAB: opening an estate is what the Start screen does, and
+  switching one is the top bar's action.
 
   **The pattern's limit, so it is not argued later.** Material 3 puts three to seven
   destinations in a navigation rail
@@ -308,19 +309,22 @@ and the door card on the Start screen, and their classes live in `views.css`, so
   the answer then is a navigation drawer — not a smaller font, not a denser rail, not an
   eighth icon. `crates/satz-studio/src/state/mod.rs` holds `View::PRIMARY` and a test
   that fails outside three to seven.
-- **Top bar:** the estate's file name and directory; the `runs_as` chip ("runs as the
-  ADC identity" when the estate impersonates nothing); the satz-studio version chip,
-  "satz-studio X · update available: Y" when the launch look found a newer release, which
-  opens that release's page; the satz version chip, red while satz is missing, too old or
-  does not run, and "satz X · update available: Y" when the satz check found a newer satz,
-  which runs `satz self-update` ("updating to Y…" while it runs); the commands palette, reload and "Switch estate", which
-  closes the estate and returns the window to the Start screen; the drawer toggle with
-  the diagnostics count. The bar carries what is true of the WINDOW — which estate is
-  open, whom it acts as, which satz compiles it. What is true of the ESTATE — its
-  deployment mode, its schema, how far its HCL has been taken — is the Overview's
-  identity card, so each fact has one place.
+- **Top bar:** the estate's file name and directory, and beside them — in the
+  `TopAppBar`'s own `beside` slot, not at the bar's far end — what acts on that estate:
+  reload, "Switch estate", "Close estate", and the reload spinner while a reload runs.
+  Then, at the far end, the drawer toggle with the diagnostics count. Close returns the
+  window to the Start screen as it stands; Switch returns it there with the Open door
+  showing, so the estates it has found are in front of you.
+  The bar carries the estate's ADDRESS and nothing else about it: what the estate IS —
+  the customer it stands for, whom its commands run as, its deployment mode, its schema,
+  how far its HCL has been taken — is the Overview's identity card, so each fact has one
+  place. Neither version is here: the window title carries satz-studio's, a newer release
+  of either is the banner's business, and Settings holds the satz binary with its update
+  buttons, the release page and the look-again.
 - **Commands palette:** every entry of `PALETTE` in a dialog over the window, opened
-  with ⌘K (Ctrl+K on Windows and Linux) or the top bar's button, and closed with
+  with ⌘K (Ctrl+K on Windows and Linux) or the rail footer's Commands button — which sits
+  between Chat and Settings, because the footer is where what is not a destination
+  stands — and closed with
   Escape, the scrim or the same key. The listener is installed on the window in
   `src/app.rs`, which mounts once: a keydown inside a text field never reaches a handler
   above it, and a listener per estate would leave one behind on every switch.
@@ -343,7 +347,8 @@ and the door card on the Start screen, and their classes live in `views.css`, so
   installs nothing.
 - **Window title:** `satz-studio <version>`, then "— update available: satz-studio Y" and
   "— update available: satz Y" for what the launch looks found. The title bar is not
-  clickable; the top bar's chips are where either is acted on.
+  clickable; Settings is where either is acted on, and the banner offers the satz-studio
+  release while it is naming a newer satz.
 - **Diagnostics drawer:** a bottom drawer, collapsed to its header, listing the open
   estate's diagnostics grouped Errors, Warnings, Notes, each with `file:line` relative
   to the estate directory, its source, and — for one of satz's findings — a chip naming
@@ -434,7 +439,8 @@ organisation: `bootstrap` and `apply` are read as command lines, never run.
    estate is open in the top bar. Choose "State document" and point it at a raw
    `.tfstate`: the field turns red with satz's own sentence and Import stays disabled.
 2. **Open.** Open → the folder → Open. The window lands on Overview; the top bar shows
-   the file and "runs as the ADC identity". The first card is the identity card: the
+   the file and its directory, with reload, switch and close beside them. The first card
+   on the view is the identity card: the
    customer this estate stands for, by name, short name, customer id, organisation id and
    domain, then the infrastructure it names and the service account it runs as, each one
    the estate's own answer and an unanswered one saying so; below them the deployment
@@ -492,8 +498,9 @@ organisation: `bootstrap` and `apply` are read as command lines, never run.
     Deploy → `apply`, `migrate` and `bootstrap` offer "Copy" and "Open in terminal" and
     no Run; `bootstrap --dry-run` lives in Checks and runs here. **Do not run a real
     `bootstrap`** against an organisation you are not prepared to change.
-11. **Switch estates.** The top bar's "Switch estate" closes the estate and returns the
-    window to the Start screen with its three doors; the rail carries Settings alone.
+11. **Leave the estate, two ways.** The top bar's "Switch estate" returns the window to
+    the Start screen with the Open door showing and the estates it found listed; "Close
+    estate" returns it there as it stands. Either way the rail carries Settings alone.
 12. **Switch engines from the chat.** With `provider = "claude"` in `settings.toml`, no
     `ANTHROPIC_API_KEY` in the environment and the Claude Code CLI signed in: Chat →
     the card leads "Claude Code is ready" with the account, the four API sources below
@@ -521,7 +528,7 @@ organisation: `bootstrap` and `apply` are read as command lines, never run.
     --version ]; then echo 'satz 0.59.8'; else exec ~/.local/bin/satz "$@"; fi` for a build
     against 0.59.7 — make it executable, and set it as the satz binary in Settings → Save.
     The tertiary banner names 0.59.8 and the build's satz and says it is a patch release,
-    with the satz-studio look's sentence under it; the top bar's satz chip is not red; the
+    with the satz-studio look's sentence under it; the
     Open door opens the fixture estate. "Dismiss" → the banner goes and `settings.toml`
     reads `dismissed_satz = "0.59.8"`. A second script like it answering `satz 0.60.0`, set
     as the satz binary → Save: the notice is back and says it is a minor release. Clear the

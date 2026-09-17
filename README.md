@@ -39,9 +39,10 @@ which packs it runs, the packs that wait on another hung below it; **Decisions**
 questions those packs declare and it has not answered; **Estate**, the file
 itself — its params and its resource tree; **Checks**, what judges it, from the compile
 to the compliance catalogs; **Deploy**, what hands it off. Chat and Settings sit at the
-foot of the rail. Switching estates is the top bar's "Switch estate", beside the estate
-it names, and every satz command the app runs is one keystroke away in the commands
-palette (⌘K, Ctrl+K on Windows and Linux).
+foot of the rail, with Commands between them. Beside the estate the top bar names sit
+reload, "Switch estate" — the Start screen with your estates listed — and "Close estate";
+every satz command the app runs is one keystroke away in the commands palette (⌘K,
+Ctrl+K on Windows and Linux, or that footer button).
 
 The Overview is one card, and it lists what the estate owes — no git repository, which
 `satz merge-presets` needs before it edits the estate, so an estate outside one cannot
@@ -161,9 +162,9 @@ The app does not replace itself with a newer release. Once per launch it reads t
 satz-studio release on GitHub, and asks the satz in use, with `satz self-update
 --check-only`, whether a newer satz is released — unless your satz config says
 `self_update_frequency = "never"`. The window title shows the app's version and "update
-available" for either; in the top bar the satz-studio chip opens the new release's page,
-where the bundle is installed as above, and the satz chip runs `satz self-update`.
-Settings says what each look found, or why it failed, and looks again when asked.
+available" for either. Settings is where either is acted on: it opens the new release's
+page, where the bundle is installed as above, and runs `satz self-update`. It also says
+what each look found, or why it failed, and looks again when asked.
 
 ## Contributing
 

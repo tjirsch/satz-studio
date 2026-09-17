@@ -23,7 +23,7 @@ not in it.
   the estate's `config.toml` to learn where it is and leaves it alone.
 - **One identity per estate.** Every open estate has its own `satz mcp` child; the
   identity its live tools run as is what `satz_open` returned (`runs_as`), shown in the
-  top bar and configured nowhere.
+  Overview's identity card and configured nowhere.
 - **Fail fast, no degraded modes.** A satz older than `MIN_SATZ` is refused at startup;
   a settings file that does not parse is a full-screen refusal; a `schema_dir` without
   a schema is `SchemaStatus::Missing`; a file that changed on disk under an edit is
@@ -69,9 +69,9 @@ not in it.
   in use, because satz owns its updater. The satz check is skipped when the operator's satz
   config (`~/.config/satz/satz.toml`) says `self_update_frequency = "never"`: satz may not
   look unprompted, and the app does not look on its behalf. The window title carries the
-  app's version and "update available" for either release; the top bar carries the same
-  as chips that act — the satz-studio chip opens the release page, the satz chip runs
-  `satz self-update`. A look that fails says why in Settings and raises no toast.
+  app's version and "update available" for either release; Settings is where either is
+  acted on — the release page for satz-studio, `satz self-update` for satz — and the
+  banner offers the satz-studio release while it names a newer satz. A look that fails says why in Settings and raises no toast.
 - **Privacy.** The repository is public with its history: example values only, satz's
   gate on every commit. Transcripts live under the app's data directory, credentials in
   the OS keychain, nothing of either inside an estate.
