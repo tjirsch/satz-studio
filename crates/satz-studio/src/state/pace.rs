@@ -132,8 +132,8 @@ pub enum InstallOffer {
     /// Settings name a satz binary: the installer writes `~/.local/bin/satz`, which the
     /// search does not look at while a path is set
     PathSet,
-    /// satz publishes no Windows build
-    NoWindowsBuild,
+    /// satz has a Windows build; this app does not run its installer yet
+    NoWindowsInstall,
 }
 
 impl InstallOffer {
@@ -149,8 +149,8 @@ impl InstallOffer {
             InstallOffer::PathSet => {
                 "Correct the satz path in Settings, or clear it to have satz installed into ~/.local/bin."
             }
-            InstallOffer::NoWindowsBuild => {
-                "satz publishes no Windows build, so satz-studio cannot install it here: build satz from source and set its path in Settings."
+            InstallOffer::NoWindowsInstall => {
+                "satz-studio does not install satz on Windows yet: satz publishes a Windows build, through a PowerShell installer this app does not run. Install satz with that one-liner — `irm https://github.com/tjirsch/satz/releases/latest/download/satz-installer.ps1 | iex` in PowerShell — and this window finds satz.exe on PATH, or set its path in Settings."
             }
         }
     }
@@ -163,7 +163,7 @@ pub fn install_offer(path_set: bool) -> InstallOffer {
 
 fn install_offer_on(windows: bool, path_set: bool) -> InstallOffer {
     if windows {
-        InstallOffer::NoWindowsBuild
+        InstallOffer::NoWindowsInstall
     } else if path_set {
         InstallOffer::PathSet
     } else {
@@ -382,9 +382,16 @@ mod tests {
     fn windows_is_never_offered_the_installer_and_says_why() {
         for path_set in [false, true] {
             let offer = install_offer_on(true, path_set);
-            assert_eq!(offer, InstallOffer::NoWindowsBuild);
+            assert_eq!(offer, InstallOffer::NoWindowsInstall);
             assert!(!offer.offered());
-            assert!(offer.sentence().contains("publishes no Windows build"));
+            // what is true since satz 0.63.0: there IS a Windows build, and the app
+            // does not run its PowerShell installer yet
+            assert!(
+                offer
+                    .sentence()
+                    .contains("does not install satz on Windows yet")
+            );
+            assert!(offer.sentence().contains("satz-installer.ps1"));
         }
         assert!(install_offer_on(false, false).offered());
         assert!(

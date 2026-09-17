@@ -45,9 +45,9 @@ pub const NO_MODIFY_PATH: (&str, &str) = ("SATZ_NO_MODIFY_PATH", "1");
 #[derive(Debug, thiserror::Error)]
 pub enum InstallError {
     #[error(
-        "satz publishes no Windows build, so satz-studio cannot install satz on Windows; build satz from source and set its path in Settings"
+        "satz-studio does not install satz on Windows yet: satz publishes a Windows build since 0.63.0, but through a PowerShell installer this app does not run. Install it with `powershell -ExecutionPolicy Bypass -c \"irm https://github.com/tjirsch/satz/releases/latest/download/satz-installer.ps1 | iex\"`, or set the path to satz.exe in Settings"
     )]
-    NoWindowsBuild,
+    NoWindowsInstall,
     #[error(transparent)]
     Github(#[from] GithubError),
     #[error("the satz release {release} has no {INSTALLER} — its release build has not finished")]
@@ -67,7 +67,7 @@ pub enum InstallError {
 /// The installer is offered on this system.
 pub fn supported() -> Result<(), InstallError> {
     if cfg!(windows) {
-        Err(InstallError::NoWindowsBuild)
+        Err(InstallError::NoWindowsInstall)
     } else {
         Ok(())
     }

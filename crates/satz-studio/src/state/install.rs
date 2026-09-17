@@ -33,7 +33,7 @@ pub fn install_satz(app: Store<AppStore>) -> Option<CancellationToken> {
     toast(
         app,
         ToastKind::Error,
-        InstallError::NoWindowsBuild.to_string(),
+        InstallError::NoWindowsInstall.to_string(),
     );
     None
 }

@@ -371,6 +371,6 @@ async fn windows_fetches_nothing_and_says_why() {
     let e = install::fetch_verified(&github::client(), "http://127.0.0.1:9")
         .await
         .unwrap_err();
-    assert!(matches!(e, InstallError::NoWindowsBuild), "{e:?}");
+    assert!(matches!(e, InstallError::NoWindowsInstall), "{e:?}");
     assert!(e.to_string().contains("no Windows build"));
 }
