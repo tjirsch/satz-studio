@@ -64,8 +64,11 @@ impl Diagnostic {
         }
     }
 
+    /// The file is stored as [`plain`] gives it, whichever side named it: satz prints a
+    /// plain path and the app knows the same file through `canonicalize`, so two
+    /// diagnostics about one file are one file.
     pub fn at(mut self, file: impl Into<PathBuf>, line: u32) -> Self {
-        self.file = Some(file.into());
+        self.file = Some(plain(&file.into()));
         self.line = Some(line);
         self
     }
@@ -73,7 +76,7 @@ impl Diagnostic {
     /// `SatzError` carries a line and no file: the caller names the file it parsed.
     pub fn from_satz_error(file: &Path, e: &SatzError) -> Self {
         Self {
-            file: Some(file.to_path_buf()),
+            file: Some(plain(file)),
             line: Some(e.line as u32),
             severity: Severity::Error,
             kind: None,
@@ -90,11 +93,12 @@ impl Diagnostic {
     pub fn from_finding(base: &Path, f: &Finding, source: DiagSource) -> Self {
         let file = f.file.as_ref().map(|f| {
             let path = Path::new(f);
-            if path.is_absolute() {
+            let path = if path.is_absolute() {
                 path.to_path_buf()
             } else {
                 base.join(path)
-            }
+            };
+            plain(&path)
         });
         let message = match &f.group {
             Some(group) => format!(
@@ -128,7 +132,7 @@ impl Diagnostic {
             base.join(file)
         };
         Self {
-            file: Some(file),
+            file: Some(plain(&file)),
             line: Some(e.line as u32),
             severity: Severity::Error,
             kind: None,
@@ -137,12 +141,32 @@ impl Diagnostic {
         }
     }
 
-    /// Re-point a diagnostic that names a temp file at the real one (same lines).
+    /// Re-point a diagnostic that names a temp file at the real one (same lines). The
+    /// comparison is on [`plain`]: satz names the file it was given, and the app knows
+    /// that file through `canonicalize`, which on Windows is the same path in another
+    /// form.
     pub fn repoint(mut self, from: &Path, to: &Path) -> Self {
-        if self.file.as_deref() == Some(from) {
+        if self.file.as_deref().map(plain) == Some(plain(from)) {
             self.file = Some(to.to_path_buf());
         }
         self
+    }
+}
+
+/// One form for one file, so two paths to it compare equal.
+///
+/// On Windows `std::fs::canonicalize` returns an extended-length path — `\\?\D:\estate`,
+/// or `\\?\UNC\server\share` for a network path — while satz prints the plain one. The two
+/// name the same file and are not equal as strings, which is how a refusal on a temp file
+/// kept the temp file's name: nothing matched, so nothing was re-pointed. Everywhere else
+/// this is the path itself.
+pub fn plain(path: &Path) -> PathBuf {
+    let Some(rest) = path.to_str().and_then(|s| s.strip_prefix(r"\\?\")) else {
+        return path.to_path_buf();
+    };
+    match rest.strip_prefix(r"UNC\") {
+        Some(share) => PathBuf::from(format!(r"\\{share}")),
+        None => PathBuf::from(rest),
     }
 }
 
@@ -313,6 +337,43 @@ mod tests {
         f.file = Some("/other/a.satz".to_string());
         let d = Diagnostic::from_finding(Path::new("/e/yaml"), &f, DiagSource::Check);
         assert_eq!(d.file.as_deref(), Some(Path::new("/other/a.satz")));
+    }
+
+    /// The Windows forms, checked on every platform because the string rule is the same
+    /// everywhere and the bug they caused — a refusal that kept naming the temp file —
+    /// only ever showed on the runner.
+    #[test]
+    fn an_extended_length_path_and_a_plain_one_are_one_file() {
+        assert_eq!(
+            plain(Path::new(r"\\?\D:\estate\yaml\a.satz")),
+            PathBuf::from(r"D:\estate\yaml\a.satz")
+        );
+        assert_eq!(
+            plain(Path::new(r"\\?\UNC\server\share\a.satz")),
+            PathBuf::from(r"\\server\share\a.satz")
+        );
+        // what every other platform carries, and Windows too once satz has printed it
+        assert_eq!(
+            plain(Path::new("/estates/acme/yaml/a.satz")),
+            PathBuf::from("/estates/acme/yaml/a.satz")
+        );
+        assert_eq!(
+            plain(Path::new(r"D:\estate\yaml\a.satz")),
+            PathBuf::from(r"D:\estate\yaml\a.satz")
+        );
+    }
+
+    /// The two halves of the fix: what satz printed and what the app canonicalised name
+    /// the same file, so a diagnostic about the temp file re-points to the real one.
+    #[test]
+    fn a_diagnostic_repoints_across_the_two_forms() {
+        let printed = Path::new(r"D:\estate\yaml\a.studio-tmp.satz");
+        let canonical = Path::new(r"\\?\D:\estate\yaml\a.studio-tmp.satz");
+        let real = Path::new(r"\\?\D:\estate\yaml\a.satz");
+        let d = Diagnostic::error("unknown param", DiagSource::Check)
+            .at(printed, 20)
+            .repoint(canonical, real);
+        assert_eq!(d.file.as_deref(), Some(real));
     }
 
     #[test]
