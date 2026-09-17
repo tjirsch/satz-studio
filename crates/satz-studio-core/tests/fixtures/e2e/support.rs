@@ -15,7 +15,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use satz_studio_core::cst::{Cst, NodeKind, Span, UseState, scan_uses};
-use satz_studio_core::diag::Diagnostic;
+use satz_studio_core::diag::{Diagnostic, plain};
 use satz_studio_core::edit::{Committed, McpChecker, Snapshot};
 use satz_studio_core::estate::EstateDir;
 use satz_studio_core::model::{EstateModel, MAP_PATH, PackDecls};
@@ -51,11 +51,20 @@ pub fn smoke_input() -> Vec<String> {
     lines
 }
 
+/// A real path in the form the app keeps: `canonicalize` and then [`plain`], because on
+/// Windows `canonicalize` returns the extended-length path and the app — like satz —
+/// names the plain one. A test that builds an expectation from a path of its own must
+/// build it the same way, or it compares two spellings of one file.
+fn canon(path: &Path) -> PathBuf {
+    plain(&path.canonicalize().unwrap())
+}
+
 pub fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("..")
         .join("..")
         .canonicalize()
+        .map(|p| plain(&p))
         .unwrap()
 }
 
@@ -89,7 +98,7 @@ pub struct Estate {
 /// default (`warn`) unless given.
 pub fn estate_dir(validation_level: Option<&str>) -> Estate {
     let dir = scratch();
-    let root = dir.path().canonicalize().unwrap();
+    let root = canon(dir.path());
     let yaml = root.join("yaml");
     std::fs::create_dir_all(&yaml).unwrap();
     write_config(&root, &yaml, validation_level);
@@ -104,7 +113,7 @@ pub fn estate_dir(validation_level: Option<&str>) -> Estate {
 /// validation level: `satz --config <this>` reads the same files under another rule.
 pub fn config_over(yaml: &Path, validation_level: &str) -> Estate {
     let dir = scratch();
-    let root = dir.path().canonicalize().unwrap();
+    let root = canon(dir.path());
     write_config(&root, yaml, Some(validation_level));
     Estate {
         _dir: dir,
