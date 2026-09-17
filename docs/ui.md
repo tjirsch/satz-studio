@@ -157,9 +157,13 @@ the drawer or an outcome under the log.
 ### Views
 
 The window is ordered by the job, not by what was built when. With an estate open the
-rail reads **Overview, Decisions, Packs, Estate, Checks, Deploy**, then Chat and
+rail reads **Overview, Packs, Decisions, Estate, Checks, Deploy**, then Chat and
 Settings at its foot; with none open it carries Settings alone and the window stands on
-the Start screen.
+the Start screen. Packs stands before Decisions because a pack is what DECLARES a
+question: `merge-presets`, which brings in the pack lines a library gained, is in Packs,
+so the questions Decisions lists are what Packs has just let in. An estate created here
+lands on Decisions rather than Overview — a skeleton has nothing else yet — and every
+other door lands on Overview; the rail's order is the same for all of them.
 
 **Decisions and Packs/Estate are not duplicates, and this is the rule that says so:**
 Decisions is the WORKLIST — what the estate has not decided yet, one question at a time,
@@ -175,7 +179,7 @@ and not a value.
 | Start | `src/views/estates.rs` | the way in: a row of three door cards (`state::Door`) over the pane the chosen door opens. **Open** is the folder (typed, or picked with the OS dialog), one card per `config.toml` with its estates, each with its deployment mode and an Open button; the open estate is marked and can be closed. It is where the window stands with no estate open, and where closing one returns it |
 | Create | `src/views/create.rs` | the **Create** door: the folder the new estate goes in, picked or typed, refused while it is not there or already holds a `config.toml`; the fields satz cannot derive (customer shortname, default region, the Terraform tool as a segmented button, the Google provider set as a switch, extra providers as a chip list); the customer id and the billing account as overrides, empty by default and each saying which live call answers it when it is left blank; the command line as it will run; Create and Cancel; and the run log with stdout and stderr distinguished, a line saying what satz derives is printed there and kept nowhere else, and the outcome chip — satz's own last line when the run refused |
 | Import | `src/views/import.rs` | the **Import** door: the folder the import runs in, picked or typed, with a line saying which of the two things will happen — `satz import` alone, or `satz init` first because the folder holds no `config.toml`; the source as a segmented button over the four shapes (state document, live scope, Terraform HCL, legacy YAML) with the source field and its picker below, each shape saying in its supporting line what it reads — the state one that it is `tofu show -json` output and not a raw `.tfstate`; then the flags of that shape alone (only/exclude/all, the collision rule, the customer shortname, the output file and `--verbose` for state and live; wrap-all for HCL; kind, gate and fork for YAML); the Terraform tool and the provider-schema switch when the init half runs; the command line, or both of them, as they will run; Import and Cancel; and, beside the log, satz's report split into what it wrote, what it skipped, the params it could not derive and its warnings, with "Check it compiles" running `satz_transpile_check` on the estate that opened |
-| Overview | `src/views/overview.rs` | one card of what the estate still owes, derived on every render by `owed()` over `Facts` — the estate not in a git repository (so `satz merge-presets` refuses and no preset update can land; git's own words, and "Create the repository" running `InitRepository`) or git not installed (said, with nothing to press), day 0 unconfirmed, questions unanswered, the map off or absent, pack choices with no line, no provider schema, prerequisites the compile found undeclared, raw HCL without a `trust` reason, an HCL directory that has not been compiled or not been initialised — each row with what to do about it: a destination, a command run here, a terminal hand-off, or `merge-presets`. The card is absent when the list is empty. Below it the estate's own facts (file, directory, deployment mode, schema, HCL directory) and, once something has run, the shared command log |
+| Overview | `src/views/overview.rs` | the identity card first — which estate this is, by its own answers: `identity()` reads the rows the `estate_core` pack declares out of the questions report, in a written order with the customer at its head (Customer, Short name, Customer ID, Organisation ID, Domain, then the infrastructure, the IaC identity, the engine and the region), a core subject the order does not name under a label made from its own name, an unanswered one saying so rather than showing the pack's default, and `deployment_mode` left to the State row below it; then the file, directory, state, schema and HCL rows, and a chip counting what is unanswered. Below it "Still to do": what the estate owes, derived on every render by `owed()` over `Facts` — the estate not in a git repository (so `satz merge-presets` refuses and no preset update can land; git's own words, and "Create the repository" running `InitRepository`) or git not installed (said, with nothing to press), day 0 unconfirmed, questions unanswered, the map off or absent, pack choices with no line, no provider schema, prerequisites the compile found undeclared, raw HCL without a `trust` reason, an HCL directory that has not been compiled or not been initialised — each row with what to do about it: a destination, a command run here, a terminal hand-off, or `merge-presets`. That card is replaced by "Nothing left to do" when the list is empty, and, once something has run, the shared command log follows |
 | Decisions | `src/views/interview.rs` | the questions report one question at a time, unanswered first with a "Show answered" switch: the pack's description when the pack changes, the prompt, the `why`, chips for reversal and blast, a warning banner on a one-way door, the recommendation when it differs from the offer, the field in the shape `answer_kind` gives the answer — the offered value's, as satz's `parse_answer` reads an answer, and for a question that offers nothing the shape its param has in the fold, which for a param a pack declares `[]` is a list — as a switch, a number field, a chip list or a text field that refuses a brace with satz's sentence; a chip list sends the answer when a chip is added or removed, several values typed at once with commas, and an empty field is never sent for a question that offers nothing; a question that offers nothing while the estate's params did not resolve shows no field and says the shape is not known, a `oneof` as filter chips with the chosen option's `why`; Accept or Answer, then the next question; Back to the question last left — the one just answered included, switching "Show answered" on when it is answered — and Skip, which reads Next on a question that is answered or not asked; "Accept n defaults"; with "Show answered" on, the list-detail layout: every question beside the card, its prompt, subject and answer, the one on the card selected, a click opening it, the list scrolling on its own and moving below the card in a narrow window; the progress from `summary`, the complete state, and the `rename_to` card when the last `satz_interview` returned one. Each answer is one `Answer` action |
 | Packs | `src/views/map.rs` | the `PackRow`s: the map row first — Off is a card with "Enable the map" (`EnableMap`), On a chip, Absent the merge-presets remedy — then sections by phase (the phase comment's first line; a line without one joins the section open at that point; every Absent row last under "Not in this file"), one card per gated line with its path, prompt and `why`, a switch bound to the gate (an answer through `Answer`; off keeps the commented line, satz never re-comments one) or one segmented button per `oneof` group over its options, a badge On/Off/Absent, "Run merge-presets" (`MergePresets`) on an Absent row and once for the whole library beside the map chip, and the model's "line active, gate false" note inline on its row. The `PackEdge`s make a tree of the same cards (`sections(rows, edges)`, a pure function): a card that no other waits on and that waits on none stays a cell of its section's grid; a card others wait on is a block across the whole grid row — a `ConnectorTree` with the card at the top and, below it, the cards asked only when it is on, in the file's order, each hung by a right-angle connector and recursing for a card that others wait on in turn (Security Command Center → notifications → mail and SIEM is three levels). A child hangs under its parent wherever its own line stands, and leaves its phase: a section left with nothing is not shown, and a child whose phase is not its parent's carries that phase's first line as a caption above its card. A connector is solid for "asked only when"; where the child also defaults to its parent by reference its horizontal part is dashed and the caption reads "follows `<gate>`"; where the child's pack is in the estate — line on, gate on — while its parent's is not, the connector and the trunk leading to it are in the error colour and the caption reads "on while `<gate>` is off". A `oneof` is its one group card in the tree as anywhere else, and a card waiting on one of its options hangs from the group |
 | Estate | `src/views/estate.rs` | the main file in two tabs, `ParamsPane` and `ResourcesPane`, with the counts on each. A diagnostic chosen in the drawer opens the Resources tab, where its line is |
@@ -287,7 +291,7 @@ and the door card on the Start screen, and their classes live in `views.css`, so
 ### Shell
 
 - **Navigation rail:** six primary destinations in the order the work happens —
-  Overview `dashboard`, Decisions `quiz`, Packs `inventory_2`, Estate `description`,
+  Overview `dashboard`, Packs `inventory_2`, Decisions `quiz`, Estate `description`,
   Checks `fact_check`, Deploy `rocket_launch` — and a bottom-aligned group of two, Chat
   `chat` and Settings `settings`, in the rail's footer slot. Overview carries the count
   of what the estate owes and Decisions the count of unanswered questions. With no
@@ -419,6 +423,10 @@ reads the Application Default Credentials where there are any; steps 12 and 13 n
 Claude Code CLI installed and signed in, and nothing else, and neither sends a message. Nothing in the walk changes a live
 organisation: `bootstrap` and `apply` are read as command lines, never run.
 
+0. **Create.** Estates → Create → a folder and a customer id → Create. The window lands
+   on **Decisions**, not on Overview: the skeleton has 16 questions of its own and nothing
+   else yet. Overview's identity card carries those 16 as rows, every one of them reading
+   "not answered", and the chip in its header counts them.
 1. **Import.** Import → an empty folder → Terraform HCL → a directory
    holding a `.tf` file. The card under the folder says satz init runs first; the
    preview shows both command lines. Import → the log carries both runs, the report
@@ -426,17 +434,20 @@ organisation: `bootstrap` and `apply` are read as command lines, never run.
    estate is open in the top bar. Choose "State document" and point it at a raw
    `.tfstate`: the field turns red with satz's own sentence and Import stays disabled.
 2. **Open.** Open → the folder → Open. The window lands on Overview; the top bar shows
-   the file and "runs as the ADC identity"; the identity card names the deployment mode,
-   the schema with its provider and type count, and what the HCL directory holds. The
-   rail carries the owed count on Overview and the unanswered count on Decisions.
-3. **Read what is owed.** The Overview card lists a row per thing the estate owes and
+   the file and "runs as the ADC identity". The first card is the identity card: the
+   customer this estate stands for, by name, short name, customer id, organisation id and
+   domain, then the infrastructure it names and the service account it runs as, each one
+   the estate's own answer and an unanswered one saying so; below them the deployment
+   mode, the schema with its provider and type count, and what the HCL directory holds.
+   The rail carries the owed count on Overview and the unanswered count on Decisions.
+3. **Read what is left.** The Overview's "Still to do" card lists a row per thing and
    nothing else. An estate made in a folder outside any repository carries "The estate
    is not in a git repository" first; "Create the repository" streams `git init -b
    main`, `git add -A` and the commit into the log and the row goes (with no git
    identity configured, the log ends in git's own refusal and the row stays). Answer a question (step 4) and the questions row loses one; answer the
    last and the row goes. Point the estate at an empty `schema_dir` (step 9) and the
    schema row appears with "Run update-schema" on it. An estate that owes nothing shows
-   "Nothing is owed" and no card of rows.
+   "Nothing left to do" and no card of rows.
 4. **Answer a question.** Decisions → the first open question → Accept (or type a
    value and Answer). A list question that offers nothing — the access-approval pack's
    `access_approval_notification_emails` on an estate that uses it — is a chip list

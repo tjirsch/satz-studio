@@ -1,4 +1,10 @@
-//! The Overview: what this estate still owes, and what it is.
+//! The Overview: which estate this is, and what it still has to do.
+//!
+//! The first card answers "am I in the right estate": the answers the estate gave to its
+//! OWN questions — the ones the `estate_core` pack declares, the customer and the
+//! organisation it stands for, the infrastructure it names, the identity it runs as —
+//! read from the questions report, never stored. [`identity`] is that derivation, pure
+//! over the report, and a question the report does not carry is simply not a row.
 //!
 //! The card of owed items is DERIVED from the estate's own state on every render — the
 //! questions report, the pack rows, the schema, the compile's findings, the generated
@@ -17,7 +23,7 @@ use satz_studio_core::diag::Diagnostic;
 use satz_studio_core::estate::HclState;
 use satz_studio_core::git::WorkTree;
 use satz_studio_core::model::{EstateModel, LineState, PackRowKind, SchemaStatus};
-use satz_studio_core::satz::reports::QuestionsReport;
+use satz_studio_core::satz::reports::{QuestionRow, QuestionState, QuestionsReport};
 
 use crate::components::{Button, ButtonVariant, Card, CardVariant, Chip, ChipKind, Icon};
 use crate::state::{AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt, View};
@@ -267,6 +273,112 @@ pub fn owed(f: &Facts) -> Vec<Owed> {
     out
 }
 
+/// The pack that declares the estate's own questions: `satz init` writes its `use` line
+/// into every skeleton, and its answers are what one estate IS rather than what it does.
+const CORE_PACK: &str = "estate_core";
+
+/// The estate's own answers, in reading order — the customer first, because the reason to
+/// look at this card is "is this the right one". `deployment_mode` is not here: the card
+/// states it below in its own words, and one fact in two places is one fact to keep in
+/// step. A core subject this list does not name still shows, under a label made from its
+/// own name, after the named ones: a question satz adds is a row, never a silence.
+const CORE_ORDER: [(&str, &str); 15] = [
+    ("customer_longname", "Customer"),
+    ("customer_shortname", "Short name"),
+    ("customer_id", "Customer ID"),
+    ("customer_organization_id", "Organisation ID"),
+    ("customer_domain", "Domain"),
+    ("first_admin", "First admin"),
+    ("billing_account_infra", "Billing account"),
+    ("infra_folder_name", "Infrastructure folder"),
+    ("infra_project_name", "Infrastructure project"),
+    ("infra_bucket_name", "State bucket"),
+    ("svc_iac_account", "IaC service account"),
+    ("svc_iac_users_group", "IaC users group"),
+    ("deployment_engine", "Engine"),
+    ("default_region", "Region"),
+    ("default_zone", "Zone"),
+];
+
+/// One answer the estate gave to a question of its own.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Fact {
+    pub label: String,
+    /// what the estate carries; `None` where the question is unanswered, which the card
+    /// says rather than filling in the pack's default — a default is what an interview
+    /// OFFERS, not what this estate states
+    pub value: Option<String>,
+}
+
+/// The estate's own answers, read from the questions report. Empty until the first report
+/// has arrived, and empty for an estate whose packs do not include the core one.
+pub fn identity(questions: Option<&QuestionsReport>) -> Vec<Fact> {
+    let Some(report) = questions else {
+        return Vec::new();
+    };
+    let core: Vec<&QuestionRow> = report
+        .questions
+        .iter()
+        .filter(|q| q.pack == CORE_PACK && q.subject != "deployment_mode")
+        .collect();
+    let mut out: Vec<Fact> = CORE_ORDER
+        .iter()
+        .filter_map(|(subject, label)| {
+            let q = core.iter().find(|q| q.subject == *subject)?;
+            Some(Fact {
+                label: (*label).to_string(),
+                value: answer(q),
+            })
+        })
+        .collect();
+    out.extend(
+        core.iter()
+            .filter(|q| !CORE_ORDER.iter().any(|(s, _)| *s == q.subject))
+            .map(|q| Fact {
+                label: label_for(&q.subject),
+                value: answer(q),
+            }),
+    );
+    out
+}
+
+/// The answer as one line. A choice is answered by an option's name, which the report
+/// carries as the current value like any other.
+fn answer(q: &QuestionRow) -> Option<String> {
+    match q.state {
+        QuestionState::Answered => Some(q.current.as_ref().map_or_else(
+            || "answered".to_string(),
+            |v| {
+                match v {
+                    serde_json::Value::String(s) => s.clone(),
+                    serde_json::Value::Bool(b) => if *b { "yes" } else { "no" }.to_string(),
+                    serde_json::Value::Array(items) => items
+                        .iter()
+                        .map(|i| match i {
+                            serde_json::Value::String(s) => s.clone(),
+                            other => other.to_string(),
+                        })
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                    other => other.to_string(),
+                }
+            },
+        )),
+        QuestionState::Unanswered | QuestionState::NotApplicable => None,
+    }
+}
+
+/// A label for a core subject the list above does not name: `svc_iac_users_group` reads
+/// "Svc iac users group", which is worse than a written label and better than nothing.
+fn label_for(subject: &str) -> String {
+    let spaced = subject.replace('_', " ");
+    let mut chars = spaced.chars();
+    match chars.next() {
+        Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+        None => spaced,
+    }
+}
+
 #[component]
 pub fn OverviewView() -> Element {
     let app = use_context::<Store<AppStore>>();
@@ -291,14 +403,17 @@ pub fn OverviewView() -> Element {
         diagnostics: &diagnostics,
     });
 
+    let facts = identity(questions.as_ref());
+
     rsx! {
         div { class: "view overview",
             h1 { class: "view__title", "Overview" }
+            IdentityCard { facts }
             if owed.is_empty() {
                 Card { variant: CardVariant::Filled, class: "overview__clear",
                     Icon { name: "task_alt", size: 32, filled: true, class: "overview__clear-icon" }
                     div {
-                        h2 { class: "overview__clear-title", "Nothing is owed" }
+                        h2 { class: "overview__clear-title", "Nothing left to do" }
                         p { "The estate is in a git repository, every question is answered, every pack the map asks for has a line, the schema is there and the HCL directory has been through an init. What is left is the work you came for." }
                     }
                 }
@@ -306,7 +421,7 @@ pub fn OverviewView() -> Element {
                 Card { variant: CardVariant::Outlined, class: "overview__owed",
                     header { class: "overview__owed-head",
                         Icon { name: "assignment_late", size: 22 }
-                        h2 { class: "overview__owed-title", "This estate still owes" }
+                        h2 { class: "overview__owed-title", "Still to do" }
                         span { class: "grow" }
                         Chip { kind: ChipKind::Assist, label: match owed.len() { 1 => "1 item".to_string(), n => format!("{n} items") } }
                     }
@@ -377,13 +492,53 @@ pub fn OverviewView() -> Element {
                 }
             }
 
-            Card { variant: CardVariant::Filled, class: "overview__identity",
-                header { class: "overview__owed-head",
-                    Icon { name: "description", size: 22 }
-                    h2 { class: "overview__owed-title", "{open.name}" }
+            if last_command.is_some() {
+                CommandLog {}
+            }
+        }
+    }
+}
+
+/// The card that says which estate this is: its own answers first, then where it lives
+/// and what it is built against.
+#[component]
+fn IdentityCard(facts: Vec<Fact>) -> Element {
+    let app = use_context::<Store<AppStore>>();
+    let open = app.open().cloned();
+    let model = app.estate().model().cloned();
+    let hcl = app.estate().hcl().cloned();
+    let Some(open) = open else {
+        return rsx! {};
+    };
+    let unanswered = facts.iter().filter(|f| f.value.is_none()).count();
+
+    rsx! {
+        Card { variant: CardVariant::Outlined, class: "overview__identity",
+            header { class: "overview__owed-head",
+                Icon { name: "description", size: 22 }
+                h2 { class: "overview__owed-title", "{open.name}" }
+                span { class: "grow" }
+                if unanswered > 0 {
+                    Chip {
+                        kind: ChipKind::Assist,
+                        label: match unanswered {
+                            1 => "1 unanswered".to_string(),
+                            n => format!("{n} unanswered"),
+                        },
+                    }
                 }
-                dl { class: "overview__facts",
-                    dt { "File" }
+            }
+            dl { class: "overview__facts",
+                for fact in facts {
+                    dt { key: "{fact.label}", "{fact.label}" }
+                    dd {
+                        match fact.value {
+                            Some(value) => rsx! { "{value}" },
+                            None => rsx! { span { class: "overview__unanswered", "not answered" } },
+                        }
+                    }
+                }
+                dt { "File" }
                     dd { code { "{open.main.display()}" } }
                     dt { "Directory" }
                     dd { code { "{open.dir.display()}" } }
@@ -416,11 +571,6 @@ pub fn OverviewView() -> Element {
                         }
                     }
                 }
-            }
-
-            if last_command.is_some() {
-                CommandLog {}
-            }
         }
     }
 }
@@ -431,7 +581,122 @@ mod tests {
     use satz_studio_core::diag::DiagSource;
     use satz_studio_core::model::{Choice, PackRow};
     use satz_studio_core::satz::reports::QuestionsSummary;
+    use serde_json::json;
     use std::path::PathBuf;
+
+    /// One report row, as satz writes it: `current` is the estate's own answer and is
+    /// absent while the question is unanswered.
+    fn row(subject: &str, pack: &str, current: Option<serde_json::Value>) -> QuestionRow {
+        let mut value = json!({
+            "subject": subject, "kind": "param", "prompt": "p", "reversal": "edit",
+            "blast": "low", "state": if current.is_some() { "answered" } else { "unanswered" },
+            "blocking": false, "pack_description": "d", "from": "presets/estate-core.satz",
+            "pack": pack
+        });
+        if let Some(current) = current {
+            value["current"] = current;
+        }
+        serde_json::from_value(value).unwrap()
+    }
+
+    fn report(questions: Vec<QuestionRow>) -> QuestionsReport {
+        QuestionsReport {
+            estate: "C0example.satz".to_string(),
+            questions,
+            summary: QuestionsSummary::default(),
+        }
+    }
+
+    fn labels(facts: &[Fact]) -> Vec<&str> {
+        facts.iter().map(|f| f.label.as_str()).collect()
+    }
+
+    /// The customer comes first, because the reason to read this card is "is this the
+    /// right estate", and every row carries the estate's own answer.
+    #[test]
+    fn the_estate_own_answers_read_customer_first() {
+        let r = report(vec![
+            row("default_region", CORE_PACK, Some(json!("europe-west3"))),
+            row("customer_id", CORE_PACK, Some(json!("C0example"))),
+            row("customer_longname", CORE_PACK, Some(json!("Acme Corp."))),
+            row("customer_shortname", CORE_PACK, Some(json!("acme"))),
+        ]);
+        let facts = identity(Some(&r));
+        assert_eq!(
+            labels(&facts),
+            ["Customer", "Short name", "Customer ID", "Region"]
+        );
+        assert_eq!(facts[0].value.as_deref(), Some("Acme Corp."));
+        assert_eq!(facts[3].value.as_deref(), Some("europe-west3"));
+    }
+
+    /// An unanswered question is SAID to be unanswered. The pack's default is what an
+    /// interview would offer, and printing it here would state something the estate does
+    /// not say.
+    #[test]
+    fn an_unanswered_question_carries_no_value() {
+        let r = report(vec![row("customer_domain", CORE_PACK, None)]);
+        let facts = identity(Some(&r));
+        assert_eq!(labels(&facts), ["Domain"]);
+        assert_eq!(facts[0].value, None);
+    }
+
+    /// The card is the estate's own identity: a pack's question belongs to Decisions, and
+    /// `deployment_mode` is the one core answer the card states below in its own words.
+    #[test]
+    fn pack_questions_and_deployment_mode_are_not_rows() {
+        let r = report(vec![
+            row("use_budget", "organization-budget", Some(json!(true))),
+            row("deployment_mode", CORE_PACK, Some(json!("cloud"))),
+            row("customer_domain", CORE_PACK, Some(json!("example.com"))),
+        ]);
+        assert_eq!(labels(&identity(Some(&r))), ["Domain"]);
+    }
+
+    /// A core question satz adds after this file was written is a row under its own name,
+    /// after the ones with a written label — never a silence.
+    #[test]
+    fn a_core_question_without_a_written_label_still_shows() {
+        let r = report(vec![
+            row("default_zone", CORE_PACK, Some(json!("europe-west3-a"))),
+            row(
+                "customer_second_domain",
+                CORE_PACK,
+                Some(json!("example.net")),
+            ),
+        ]);
+        let facts = identity(Some(&r));
+        assert_eq!(labels(&facts), ["Zone", "Customer second domain"]);
+    }
+
+    /// Before the first report there is no card content, and an estate whose packs do not
+    /// include the core one has none either.
+    #[test]
+    fn no_report_and_no_core_pack_are_both_empty() {
+        assert!(identity(None).is_empty());
+        let r = report(vec![row("use_budget", "organization-budget", None)]);
+        assert!(identity(Some(&r)).is_empty());
+    }
+
+    /// A list answer reads as a list, and a boolean as a word.
+    #[test]
+    fn a_value_reads_as_one_line() {
+        let r = report(vec![
+            row(
+                "first_admin",
+                CORE_PACK,
+                Some(json!(["a@example.com", "b@example.com"])),
+            ),
+            row("customer_domain", CORE_PACK, Some(json!(true))),
+        ]);
+        let facts = identity(Some(&r));
+        assert_eq!(labels(&facts), ["Domain", "First admin"]);
+        assert_eq!(facts[0].value.as_deref(), Some("yes"));
+        assert_eq!(
+            facts[1].value.as_deref(),
+            Some("a@example.com, b@example.com")
+        );
+    }
 
     fn model(packs: Vec<PackRow>, schema: SchemaStatus) -> EstateModel {
         EstateModel {

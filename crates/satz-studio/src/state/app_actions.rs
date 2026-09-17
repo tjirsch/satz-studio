@@ -668,6 +668,13 @@ async fn created(app: Store<AppStore>, dir: &Path) -> CommandOutcome {
                 .map(|n| n.to_string_lossy().into_owned())
                 .unwrap_or_default();
             open_estate(app, estate_dir.config_path.clone(), estate.clone()).await;
+            // A created estate is a skeleton: every question of its own is open and it
+            // owes them all, so it lands on Decisions rather than on an Overview that
+            // would only say so. The rail keeps one order for every estate — where the
+            // window LANDS is what the door decides, not what the rail reads.
+            if app.open().read().is_some() {
+                app.nav().set(View::Decisions);
+            }
             CommandOutcome {
                 ok: true,
                 text: format!("created {name}"),
