@@ -557,7 +557,12 @@ also writes the runner's satz config (`self_update_frequency = "never"`) when no
 exists, so no update check reaches GitHub while the tests drive satz. `platforms` (`macos-15`,
 `windows-2022`) runs the same formatting, clippy, test and build steps on every push
 and pull request; on Windows satz is built from the submodule, since satz has no
-Windows release. `.github/workflows/names-gate.yml` runs `scripts/check-names.sh` over
+Windows release. macOS is Apple silicon alone: `macos-15-intel` is the most expensive
+runner in the catalogue and ran the same code on the same OS beside `macos-15` — the
+difference is the architecture, and nothing here is architecture-dependent, the webview,
+the keyring and the satz binary being the platform's rather than the chip's.
+`release.yml` still builds the Intel bundle, so an Intel Mac still gets a release; what
+went is testing it twice on every push. `.github/workflows/names-gate.yml` runs `scripts/check-names.sh` over
 the tree and over the commits each push or pull request adds.
 
 ## 6. Decisions
