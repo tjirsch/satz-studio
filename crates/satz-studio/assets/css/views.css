@@ -1165,24 +1165,10 @@
   color: var(--md-sys-color-on-surface-variant);
 }
 
-.interview__complete,
 .interview__rename {
   flex-direction: row;
   align-items: center;
   gap: 16px;
-}
-
-.interview__complete {
-  background: var(--md-sys-color-primary-container);
-  color: var(--md-sys-color-on-primary-container);
-}
-
-.interview__complete-icon {
-  color: var(--md-sys-color-on-primary-container);
-}
-
-.interview__complete-title {
-  font: var(--md-sys-typescale-title-medium);
 }
 
 .interview__rename code {
@@ -1198,33 +1184,69 @@
 
 /* The card, and with "Show answered" on the list of every question beside it: the
    list-detail layout, the list scrolling on its own so the card stays in view. */
-.interview__walk {
-  display: grid;
-  grid-template-columns: minmax(0, 880px);
-  gap: 16px;
-  align-items: start;
+/* Decisions fills the content area and does not scroll itself: the walk scrolls, the
+   list scrolls, and neither moves the other. A sticky list still grew the view, so a
+   long list scrolled the question away from under the cursor. */
+.view.decisions {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
 
-.interview__walk--listed {
+.interview__walk {
+  display: grid;
   grid-template-columns: minmax(360px, 880px) minmax(280px, 420px);
+  gap: 16px;
+  align-items: stretch;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* the walk's own column: the question, or the card that stands where none is */
+.interview__walk > .interview__question,
+.interview__walk > .interview__empty {
+  min-height: 0;
+  overflow-y: auto;
+  align-self: start;
+  max-height: 100%;
 }
 
 .interview__list {
-  position: sticky;
-  top: 0;
-  max-height: calc(100vh - 160px);
-  overflow: auto;
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
   padding: 0;
 }
 
+.interview__list-empty {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 20px;
+  color: var(--md-sys-color-on-surface-variant);
+  font: var(--md-sys-typescale-body-medium);
+}
+
+/* Narrow: one column, and the view scrolls as a whole again — two scroll areas beside
+   each other is the point of the layout above, and there is no beside here. */
 @media (max-width: 1100px) {
-  .interview__walk--listed {
+  .view.decisions {
+    height: auto;
+    overflow: visible;
+  }
+
+  .interview__walk > .interview__question,
+  .interview__walk > .interview__empty,
+  .interview__list {
+    max-height: none;
+    height: auto;
+    overflow: visible;
+  }
+
+  .interview__walk {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .interview__list {
-    position: static;
-  }
 }
 
 .interview__question {
@@ -1261,11 +1283,6 @@
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
-}
-
-.interview__position {
-  font: var(--md-sys-typescale-label-medium);
-  color: var(--md-sys-color-on-surface-variant);
 }
 
 .interview__subject {

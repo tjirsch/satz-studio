@@ -264,7 +264,6 @@ pub fn DecisionsView() -> Element {
         s.answered as f32 / s.total as f32
     };
     let rename_to = interview.as_ref().and_then(|r| r.rename_to.clone());
-    let listing = show_answered() && !list.is_empty();
 
     rsx! {
         div { class: "view decisions interview",
@@ -290,15 +289,10 @@ pub fn DecisionsView() -> Element {
             div { class: "interview__progress",
                 LinearProgress { value: progress }
                 span { class: "interview__progress-text",
-                    "{s.answered} of {s.total} answered · {s.unanswered} open · {s.blocking} need a value · {s.one_way_doors} one-way doors"
-                }
-            }
-            if s.complete {
-                Card { variant: CardVariant::Filled, class: "interview__complete",
-                    Icon { name: "task_alt", size: 32, class: "interview__complete-icon" }
-                    div {
-                        h2 { class: "interview__complete-title", "Every applicable question is answered." }
-                        p { "The gate is open: bootstrap and apply will not refuse this estate for an open question." }
+                    if s.complete {
+                        "{s.answered} of {s.total} answered · nothing open — bootstrap and apply will not refuse this estate for an open question"
+                    } else {
+                        "{s.answered} of {s.total} answered · {s.unanswered} open · {s.blocking} need a value · {s.one_way_doors} one-way doors"
                     }
                 }
             }
@@ -311,7 +305,7 @@ pub fn DecisionsView() -> Element {
                     }
                 }
             }
-            div { class: "interview__walk", class: if listing { "interview__walk--listed" },
+            div { class: "interview__walk",
                 match current {
                     Some(q) => rsx! {
                         QuestionCard {
@@ -319,7 +313,6 @@ pub fn DecisionsView() -> Element {
                             question: q,
                             field,
                             previous_pack,
-                            position: (i + 1, list.len()),
                             loading,
                             can_back,
                             onback: move |_| go_back(),
@@ -345,8 +338,24 @@ pub fn DecisionsView() -> Element {
                         }
                     },
                 }
-                if listing {
-                    Card { variant: CardVariant::Outlined, class: "interview__list",
+                // The list stands beside the walk whatever the switch says: the switch
+                // decides what is IN it, not whether it is there. It keeps its own
+                // height and its own scrollbar, so a long list moves nothing else.
+                Card { variant: CardVariant::Outlined, class: "interview__list",
+                    if list.is_empty() {
+                        div { class: "interview__list-empty",
+                            Icon { name: "task_alt", size: 24 }
+                            p {
+                                if s.total == 0 {
+                                    "No pack this estate uses asks a question."
+                                } else if show_answered() {
+                                    "No question to list."
+                                } else {
+                                    "No unanswered question. Switch on \"Show answered\" to list the answered ones."
+                                }
+                            }
+                        }
+                    } else {
                         List {
                             for (n, q) in list.iter().enumerate() {
                                 ListItem {
@@ -410,7 +419,6 @@ fn QuestionCard(
     question: QuestionRow,
     field: Option<FieldKind>,
     previous_pack: Option<String>,
-    position: (usize, usize),
     loading: bool,
     can_back: bool,
     onback: EventHandler<()>,
@@ -437,7 +445,6 @@ fn QuestionCard(
             }
             Card { variant: CardVariant::Outlined, class: "interview__card",
                 div { class: "interview__card-head",
-                    span { class: "interview__position", "{position.0} of {position.1}" }
                     code { class: "interview__subject", "{q.subject}" }
                     span { class: "grow" }
                     Chip { kind: ChipKind::Assist, icon: state_icon, label: state_text, error: q.blocking && q.state == QuestionState::Unanswered }
