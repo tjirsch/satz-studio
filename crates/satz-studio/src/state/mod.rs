@@ -83,9 +83,9 @@ impl SatzStatus {
 }
 
 /// Where the window can stand. The rail's order is the order of the work on an estate:
-/// what it owes, what it has not decided, which packs it runs, what it declares, what
-/// judges it, what hands it off — then the two secondary destinations at the foot of
-/// the rail.
+/// which estate it is and what it still has to do, which packs it runs, what those packs
+/// leave undecided, what it declares, what judges it, what hands it off — then the two
+/// secondary destinations at the foot of the rail.
 ///
 /// [`View::Start`] is not a rail destination: it is the screen with the three doors,
 /// where the window stands while no estate is open. Switching estates is the top bar's
@@ -94,7 +94,8 @@ impl SatzStatus {
 pub enum View {
     #[default]
     Start,
-    /// what this estate still owes, derived from its own state
+    /// which estate this is, in its own answers, and what it still has to do — both
+    /// derived from its own state
     Overview,
     /// the questions its packs declare and it has not answered
     Decisions,
@@ -113,12 +114,16 @@ pub enum View {
 }
 
 impl View {
-    /// The primary destinations, in rail order. Six, and Material 3 allows three to
-    /// seven — `docs/ui.md` says what a seventh would cost.
+    /// The primary destinations, in rail order: the order the work happens, which runs
+    /// from what the estate HAS to what it still has to decide. A pack is what declares a
+    /// question, and `merge-presets` — the command that brings new pack lines in — is in
+    /// Packs, so Packs is where the questions in Decisions come from and it stands before
+    /// them. Six, and Material 3 allows three to seven — `docs/ui.md` says what a seventh
+    /// would cost.
     pub const PRIMARY: [View; 6] = [
         View::Overview,
-        View::Decisions,
         View::Packs,
+        View::Decisions,
         View::Estate,
         View::Checks,
         View::Deploy,

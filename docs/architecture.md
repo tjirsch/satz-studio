@@ -181,10 +181,12 @@ plan and satz's report; **Open** (`src/views/estates.rs`) is the folder walk and
 estate cards. A door is one `Door` variant, one card in the row and one arm of the
 view's `match`, so another way in joins by being added in those three places.
 
-With an estate open the window is ordered by the job: **Overview**, **Decisions**,
-**Packs**, **Estate**, **Checks**, **Deploy**, then Chat and Settings at the foot of the
-rail. Overview (`src/views/overview.rs`) derives what the estate still owes from its own
-state on every render — `owed()` over `Facts`, pure and unit-tested — and shows nothing
+With an estate open the window is ordered by the job: **Overview**, **Packs**,
+**Decisions**, **Estate**, **Checks**, **Deploy**, then Chat and Settings at the foot of
+the rail — Packs before Decisions, because a pack is what declares a question. Overview
+(`src/views/overview.rs`) says which estate this is, from the answers its own
+`estate_core` questions carry (`identity()` over the questions report), and derives what
+it still has to do from its own state on every render — `owed()` over `Facts`, pure and unit-tested — and shows nothing
 when the list is empty; nothing about how the estate reached the app is remembered, so
 created, imported and opened estates show the same list. That includes the repository:
 `satz init` makes none, and `satz merge-presets` refuses outside one, so whether git

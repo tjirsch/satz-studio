@@ -33,8 +33,10 @@ reason for each, and its warnings.
 beside it.
 
 Once an estate is open the window is ordered by the job, and the rail reads in that
-order: **Overview**, what this estate still owes; **Decisions**, the questions its packs
-declare and it has not answered; **Packs**, which packs it runs, the packs that wait on another hung below it; **Estate**, the file
+order: **Overview**, which estate this is — the customer, the organisation and the
+infrastructure it names, in its own answers — and what it still has to do; **Packs**,
+which packs it runs, the packs that wait on another hung below it; **Decisions**, the
+questions those packs declare and it has not answered; **Estate**, the file
 itself — its params and its resource tree; **Checks**, what judges it, from the compile
 to the compliance catalogs; **Deploy**, what hands it off. Chat and Settings sit at the
 foot of the rail. Switching estates is the top bar's "Switch estate", beside the estate

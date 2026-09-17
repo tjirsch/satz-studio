@@ -1747,6 +1747,11 @@
   user-select: text;
 }
 
+/* a question of the estate's own that carries no answer: stated, not filled in */
+.overview__unanswered {
+  color: var(--md-sys-color-outline);
+}
+
 /* ---- estate ------------------------------------------------------------------- */
 
 .estate {
