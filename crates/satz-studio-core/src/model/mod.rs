@@ -207,6 +207,11 @@ pub enum PackRowKind {
     Map,
     /// a `use … when <gate>` line, or a gate the file has no line for
     Choice,
+    /// a `use` line with no gate that is not the map: a pack the FILE decides and no
+    /// question does. It carries no switch, because there is no param to write — the
+    /// line itself is the whole of the decision — and it is a row because a pack the
+    /// estate runs and this view does not name is a pack nobody sees.
+    Plain,
 }
 
 #[derive(Debug, Clone, PartialEq)]

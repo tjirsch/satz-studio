@@ -229,7 +229,10 @@ fn build_node(
 fn flat_sections(rows: &[PackRow]) -> Vec<(String, Vec<Entry>)> {
     let mut out: Vec<(String, Vec<Entry>)> = Vec::new();
     let mut absent: Vec<PackRow> = Vec::new();
-    for row in rows.iter().filter(|r| r.kind == PackRowKind::Choice) {
+    for row in rows
+        .iter()
+        .filter(|r| matches!(r.kind, PackRowKind::Choice | PackRowKind::Plain))
+    {
         if row.state == LineState::Absent {
             absent.push(row.clone());
             continue;
@@ -491,18 +494,28 @@ fn PackCard(entry: Entry, notes: Vec<Diagnostic>, loading: bool) -> Element {
                         span { class: "grow" }
                         {state_chip(row.state)}
                     }
-                    match &row.question {
-                        Some(q) => rsx! {
-                            p { class: "pack-card__prompt", "{q.prompt}" }
-                            if let Some(why) = &q.why {
-                                p { class: "pack-card__why", "{why}" }
-                            }
-                        },
-                        None => rsx! {
-                            p { class: "pack-card__why", "No question: the map does not declare one for " code { "{gate}" } ", or the map is not in." }
-                        },
+                    if row.kind == PackRowKind::Plain {
+                        p { class: "pack-card__why",
+                            "No gate: this line carries no " code { "when" } ", so the file decides the pack and no question does. Write a "
+                            code { "when <param>" } " on it to make it a choice, or comment the line out to take the pack off."
+                        }
+                    } else {
+                        match &row.question {
+                            Some(q) => rsx! {
+                                p { class: "pack-card__prompt", "{q.prompt}" }
+                                if let Some(why) = &q.why {
+                                    p { class: "pack-card__why", "{why}" }
+                                }
+                            },
+                            None => rsx! {
+                                p { class: "pack-card__why", "No question: the map does not declare one for " code { "{gate}" } ", or the map is not in." }
+                            },
+                        }
                     }
-                    if row.state == LineState::Absent {
+                    if row.kind == PackRowKind::Plain {
+                        // no switch: there is no param to write, and the app never
+                        // comments or uncomments a line the operator wrote by hand
+                    } else if row.state == LineState::Absent {
                         div { class: "pack-card__remedy",
                             Icon { name: "info", size: 20 }
                             span { "The estate has no line for this pack: " code { "satz merge-presets" } " writes it under its phase." }

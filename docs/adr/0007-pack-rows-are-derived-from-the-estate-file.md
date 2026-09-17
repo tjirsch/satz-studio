@@ -68,6 +68,16 @@ the file is re-read and the rows rebuilt after every commit, reload and answer.
 
 - **Good:** the phase and the order are known without reading the file; a row exists
   for a pack the estate has no line for.
+- **A line the derivation dropped was a pack nobody saw (2026-09-17).** The rule read
+  the file for `use … when <gate>` lines and skipped every `use` without a gate, the map
+  aside. satz's CIS GCP Foundation baseline was `use`d with no `when` until satz v0.64.0
+  gave it one, so an estate could run thirty organisation policies while this view named
+  none of them — and the same held for any hand-written or imported line. An un-gated
+  line is a row now (`PackRowKind::Plain`): the same card, the same state badge, and no
+  switch, because there is no param to write and the app does not comment or uncomment a
+  line the operator wrote by hand. The rule is "one row per `use` line", not "one row per
+  choice"; what a question decides is what gets a switch.
+
 - **Bad:** it drifts when the library gains a pack, and the app then shows a list the
   binary it drives does not have. Two places for one list is the cost satz ADR 0007
   accepted for the map and the skeleton — inside one repository, paid with a test that

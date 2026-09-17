@@ -2,9 +2,16 @@
 //! `use` lines (`scan_uses`, active or commented, with their phase comment), the
 //! questions report (the question whose subject is a gate, or the `oneof` one of whose
 //! options is), and the resolved params (what a gate is now). The map line comes
-//! first; then one row per gated line in document order; then one `Absent` row per
-//! choice of the map pack that gates no line in the file, whose remedy is
+//! first; then one row per `use` line in document order — a [`PackRowKind::Choice`]
+//! where a gate names it, a [`PackRowKind::Plain`] where none does; then one `Absent`
+//! row per choice of the map pack that gates no line in the file, whose remedy is
 //! `satz merge-presets`.
+//!
+//! An un-gated line was dropped until 2026-09-17, which is how satz's CIS baseline —
+//! `use`d with no `when` before satz v0.64.0 gave it one — could be in an estate and in
+//! no row of this view. A pack the estate runs is a row whether or not a question
+//! decides it; what a `Plain` row does NOT get is a switch, because there is no param
+//! to write.
 //!
 //! Beside the rows, the edges between them: every `ask_when` the files declare
 //! ([`PackDecls`]) whose question and gate are both rows.
@@ -62,6 +69,20 @@ pub(super) fn build(
 
     for u in uses {
         let Some(gate) = u.gate.as_deref() else {
+            // the map is its own row above, and every other un-gated line is the file's
+            // own decision: a row that states it, with nothing to switch
+            if u.path != MAP_PATH {
+                rows.push(PackRow {
+                    kind: PackRowKind::Plain,
+                    gate: None,
+                    path: Some(u.path.clone()),
+                    state: state_of(u.state),
+                    choice: Choice::Line,
+                    question: None,
+                    phase: u.phase_comment.clone(),
+                    line: Some(u.line),
+                });
+            }
             continue;
         };
         let (choice, question) = choice_of(gate, env, questions);
