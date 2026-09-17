@@ -561,8 +561,8 @@ Windows release. macOS is Apple silicon alone: `macos-15-intel` is the most expe
 runner in the catalogue and ran the same code on the same OS beside `macos-15` — the
 difference is the architecture, and nothing here is architecture-dependent, the webview,
 the keyring and the satz binary being the platform's rather than the chip's.
-`release.yml` still builds the Intel bundle, so an Intel Mac still gets a release; what
-went is testing it twice on every push. `.github/workflows/names-gate.yml` runs `scripts/check-names.sh` over
+`release.yml` does not build it either: macOS is Apple silicon in both, and an Intel Mac
+gets no bundle. Linux and Windows are unchanged and x86_64 — this is about the Mac. `.github/workflows/names-gate.yml` runs `scripts/check-names.sh` over
 the tree and over the commits each push or pull request adds.
 
 ## 6. Decisions
@@ -584,6 +584,7 @@ the tree and over the commits each push or pull request adds.
 | [0013](adr/0013-the-claude-code-stream-log-is-verbatim-off-by-default-and-bounded.md) | the Claude Code stream log is verbatim, off by default, one file per conversation, and bounded to ten files of 16 MiB |
 | [0014](adr/0014-a-newer-satz-is-a-notice-and-the-app-looks-for-releases.md) | a satz newer than the build runs and is a notice, not a gate; the app looks for releases of itself and of satz once per launch and says so in the title and the top bar |
 | [0015](adr/0015-the-packs-view-draws-the-dependency-tree-the-packs-declare.md) | the Packs view draws the dependency tree the packs declare (`ask_when`, read with satz-core's parser), as tree blocks in the grid with connectors drawn in CSS; no edge table, no lines over the grid |
+| [0016](adr/0016-macos-is-apple-silicon-alone.md) | macOS is Apple silicon alone, in CI and in the release; Linux and Windows stay x86_64 |
 
 ## 7. Not built, and why
 

@@ -7,7 +7,7 @@ opens one that exists, runs that interview, edits the estate map and the estate 
 through a typed interface that keeps every comment and every line where it was, runs
 satz commands, and drives satz through Claude. An answer, a pack choice or an import id
 is written by satz's own writer; every other edit is checked by `satz transpile --check`
-before it replaces the file. macOS, Linux and Windows.
+before it replaces the file. macOS on Apple silicon, Linux and Windows on x86_64.
 
 The start screen is the way in, and it has three doors. **Create** runs `satz init` in a
 folder that holds no estate yet: satz writes `config.toml`, the directories and the
@@ -79,7 +79,8 @@ estates show the same list, because the same facts are true of them.
   not derive, and writes an estate file only if you stated a customer id.
 - **The platform's webview.** Windows 10 and 11 ship WebView2. Linux needs
   `webkit2gtk-4.1` (Debian and Ubuntu: `libwebkit2gtk-4.1-0`; Ubuntu 22.04 ships only
-  the 4.0 API and does not run it). macOS needs nothing.
+  the 4.0 API and does not run it). macOS needs nothing, and is Apple silicon: there is
+  no Intel build (ADR 0016).
 - **A Claude credential *or* a Claude Code login, for the Chat view only.** Either
   serves it; Settings chooses which engine runs.
   - *A credential:* `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, an `ant auth login`
@@ -131,7 +132,7 @@ a fake CLI and need Python 3.
 | `tests/fixtures/` | an estate directory over satz's smoke estates, its `config.toml` pointing into the submodule; a test that writes copies it first |
 | `docs/` | [`architecture.md`](docs/architecture.md), [`ui.md`](docs/ui.md), [`verification.md`](docs/verification.md) and the decision records under [`adr/`](docs/adr/README.md) |
 | `scripts/` | the privacy gate (`check-names.sh`), the satz installer CI runs (`install-satz.sh`, the newest satz release verified against its SHA-256 sidecar and held to `MIN_SATZ` or newer), the verification harness (`e2e.sh`), the grammar refresh (`sync-grammar.sh`) |
-| `.github/workflows/` | `ci.yml` (formatting, clippy, tests, the verification harness, a build of the app; Linux, macOS on Apple silicon, and Windows on every push — the release still builds for Intel Macs), `release.yml` (the bundles of the three operating systems on a tag) and `names-gate.yml` (the privacy gate over the tree and the commits) |
+| `.github/workflows/` | `ci.yml` (formatting, clippy, tests, the verification harness, a build of the app; Linux, macOS on Apple silicon, and Windows on every push), `release.yml` (the bundles of the three operating systems on a tag) and `names-gate.yml` (the privacy gate over the tree and the commits) |
 | `.githooks/` | the pre-commit and commit-msg hooks that run the gate locally |
 
 ## Release
@@ -144,7 +145,6 @@ file names is the workspace version in `Cargo.toml`; the tag is that version wit
 | file | built on |
 |---|---|
 | `SatzStudio_<tag>_arm64.app.zip`, `SatzStudio_<version>_aarch64.dmg` | `macos-15` |
-| `SatzStudio_<tag>_x86_64.app.zip`, `SatzStudio_<version>_x86_64.dmg` | `macos-15-intel` |
 | `satz-studio_<version>_amd64.deb`, `satz-studio_<version>_x86_64.AppImage` | `ubuntu-24.04` |
 | `SatzStudio_<version>_x64.msi` | `windows-2022` |
 
