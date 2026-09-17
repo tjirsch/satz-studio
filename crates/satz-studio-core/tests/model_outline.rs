@@ -105,14 +105,21 @@ fn smoke_is_configuration_then_maps_of_resources() {
             "terraform",
             "providers",
             "google_essential_contacts_contact",
-            "google_org_policy_policy",
             "google_cloud_identity_group",
             "google_organization_iam_member",
             "google_folder",
             "google_billing_account_iam_member",
         ]
     );
-    assert!(m.uses.is_empty(), "every use line of smoke sits in a block");
+    // The one use line of smoke that sits outside every block: since satz v0.64.0
+    // (ADR 0028) the CIS baseline declares its own `google_org_policy_policy` and is
+    // `use`d bare, so the estate has no `google_org_policy_policy` block of its own —
+    // the keys above say so — and the baseline is an estate-level use. Every other use
+    // line still sits in the block it fills.
+    assert_eq!(m.uses.len(), 1, "{:?}", m.uses);
+    assert_eq!(m.uses[0].path, "presets/cis/CIS-GCP-Foundation-4.0.satz");
+    assert_eq!(m.uses[0].state, UseState::Active);
+    assert!(m.uses[0].as_key.is_none(), "{:?}", m.uses[0]);
 
     let terraform = child(&m.outline, "terraform");
     assert_eq!(terraform.kind, ResourceKind::Config);
@@ -142,17 +149,6 @@ fn smoke_is_configuration_then_maps_of_resources() {
     );
     assert_eq!(project.mode, EditMode::Source);
     assert!(project.editable);
-
-    let policies = child(&m.outline, "google_org_policy_policy");
-    assert_eq!(policies.kind, ResourceKind::ResourceMap);
-    assert_eq!(
-        policies.tf_type.as_deref(),
-        Some("google_org_policy_policy")
-    );
-    assert_eq!(policies.uses.len(), 1);
-    assert_eq!(policies.uses[0].path, "presets/CIS-GCP-Foundation-4.0.satz");
-    assert_eq!(policies.uses[0].state, UseState::Active);
-    assert!(policies.children.is_empty());
 }
 
 #[test]

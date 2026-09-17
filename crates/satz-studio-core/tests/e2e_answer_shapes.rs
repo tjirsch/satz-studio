@@ -47,7 +47,7 @@ fn library() -> BTreeMap<String, File> {
     out
 }
 
-/// `presets/cis-extensions/access-approval.satz`, with forward slashes on every platform.
+/// `presets/cis/access-approval.satz`, with forward slashes on every platform.
 fn used_as(vendor: &Path, path: &Path) -> String {
     path.strip_prefix(vendor)
         .unwrap()
@@ -266,18 +266,14 @@ async fn one_address_for_a_list_param_is_written_as_a_list_of_one() {
     let estate = support::estate_dir(None);
     let main: PathBuf = estate.create_skeleton("C0example.satz").await;
     let skeleton = support::read(&main);
-    let commented =
-        "// use \"presets/cis-extensions/access-approval.satz\" when cis_access_approval";
+    let commented = "// use \"presets/cis/access-approval.satz\" when cis_access_approval";
     assert!(
         skeleton.contains(commented),
         "the skeleton carries the pack's line"
     );
     std::fs::write(
         &main,
-        skeleton.replace(
-            commented,
-            "use \"presets/cis-extensions/access-approval.satz\"",
-        ),
+        skeleton.replace(commented, "use \"presets/cis/access-approval.satz\""),
     )
     .unwrap();
     let session = estate.open("C0example.satz").await;
