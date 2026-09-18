@@ -115,6 +115,11 @@ pub enum SatzError {
     Mcp(String),
     #[error("{tool} refused: {text}")]
     Refused { tool: String, text: String },
+    /// The server answered a tool call with a JSON-RPC `invalid_params` error instead of
+    /// a result — a tool it does not serve, or arguments it could not read. The tool did
+    /// not run; whoever chose the name and the arguments can correct them.
+    #[error("{tool}: the call's parameters were refused: {message}")]
+    InvalidParams { tool: String, message: String },
     #[error("the session is closed (satz mcp exited: {0})")]
     Closed(String),
     #[error("cancelled")]

@@ -9,7 +9,9 @@ use std::process::Stdio;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use rmcp::model::{CallToolRequestParams, ReadResourceRequestParams, ResourceContents, Tool};
+use rmcp::model::{
+    CallToolRequestParams, ErrorCode, ReadResourceRequestParams, ResourceContents, Tool,
+};
 use rmcp::service::{RoleClient, RunningService, ServiceError, ServiceExt};
 use rmcp::transport::TokioChildProcess;
 use tokio::io::{AsyncBufReadExt, BufReader};
@@ -258,8 +260,9 @@ impl McpSession {
         self.pid
     }
 
-    /// Call a tool. A refusal is a [`ToolOutcome`] with `is_error`; a child that has
-    /// exited is [`SatzError::Closed`].
+    /// Call a tool. A refusal is a [`ToolOutcome`] with `is_error`; a JSON-RPC
+    /// `invalid_params` error in place of a result is [`SatzError::InvalidParams`]; a
+    /// child that has exited is [`SatzError::Closed`].
     pub async fn call(
         &self,
         tool: &str,
@@ -322,7 +325,18 @@ async fn call_on(
     args: serde_json::Map<String, serde_json::Value>,
 ) -> Result<ToolOutcome, SatzError> {
     let params = CallToolRequestParams::new(tool.to_string()).with_arguments(args);
-    let result = service.call_tool(params).await.map_err(service_error)?;
+    let result = service.call_tool(params).await.map_err(|e| match e {
+        ServiceError::McpError(e) if e.code == ErrorCode::INVALID_PARAMS => {
+            SatzError::InvalidParams {
+                tool: tool.to_string(),
+                message: match e.data {
+                    Some(data) => format!("{} ({data})", e.message),
+                    None => e.message.into_owned(),
+                },
+            }
+        }
+        other => service_error(other),
+    })?;
     let text = result
         .content
         .iter()

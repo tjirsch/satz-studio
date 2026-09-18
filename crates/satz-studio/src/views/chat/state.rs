@@ -9,7 +9,7 @@ use dioxus::prelude::*;
 use satz_studio_core::diag::{Diagnostic, Severity};
 use satz_studio_core::llm::{
     AgentEvent, Approval, Capabilities, ContentBlock, Effort, EstateContext, Message, Role,
-    StopReason, Usage,
+    StopReason, Usage, result_text,
 };
 use satz_studio_core::model::{EstateModel, ResourceKind, ResourceNode};
 use satz_studio_core::satz::ToolOutcome;
@@ -101,7 +101,8 @@ pub struct ToolCard {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ToolResultView {
-    /// the structured payload pretty-printed when there is one, else the text
+    /// what the model read: the text `result_text` makes of the outcome, which a
+    /// replayed transcript carries as it was sent
     pub body: String,
     pub is_error: bool,
     /// `None` for a replayed result, whose duration was not kept
@@ -120,11 +121,12 @@ impl ToolCard {
     }
 
     /// The input as the card shows it: the whole value pretty-printed when known,
-    /// else the JSON exactly as it streamed so far.
+    /// else the JSON exactly as it streamed so far; [`NO_ARGUMENTS`] for a call that has
+    /// none.
     pub fn input_text(&self) -> String {
         match &self.input {
-            Some(value) => pretty(value),
-            None if self.input_json.trim().is_empty() => "{}".to_string(),
+            Some(value) => arguments_text(value),
+            None if self.input_json.trim().is_empty() => NO_ARGUMENTS.to_string(),
             None => self.input_json.clone(),
         }
     }
@@ -139,12 +141,8 @@ impl ToolCard {
                 serde_json::from_str(&self.input_json).ok()
             };
         }
-        let body = match outcome.structured {
-            Some(value) => pretty(&value),
-            None => outcome.text,
-        };
         self.result = Some(ToolResultView {
-            body,
+            body: result_text(&outcome),
             is_error: outcome.is_error,
             millis: Some(millis),
         });
@@ -499,8 +497,20 @@ fn event_name(event: &AgentEvent) -> &'static str {
     }
 }
 
-pub fn pretty(value: &serde_json::Value) -> String {
+fn pretty(value: &serde_json::Value) -> String {
     serde_json::to_string_pretty(value).expect("a JSON value serialises")
+}
+
+/// What a card says for a tool call without arguments, in place of an empty object.
+pub const NO_ARGUMENTS: &str = "no arguments";
+
+/// A call's arguments as a card shows them: the object pretty-printed, or
+/// [`NO_ARGUMENTS`] when it is empty.
+pub fn arguments_text(value: &serde_json::Value) -> String {
+    match value.as_object() {
+        Some(args) if args.is_empty() => NO_ARGUMENTS.to_string(),
+        _ => pretty(value),
+    }
 }
 
 /// What the estate context is rendered from.
@@ -812,13 +822,17 @@ mod tests {
     }
 
     #[test]
-    fn a_tool_with_no_input_shows_an_empty_object() {
+    fn a_tool_with_no_input_says_it_has_no_arguments() {
         let mut s = store();
         started(&mut s, "who");
         s.apply(AgentEvent::ToolUseStarted {
             id: "t1".into(),
             name: "satz_whoami".into(),
         });
+        let Block::Tool(open) = &s.streaming.as_ref().unwrap().blocks[0] else {
+            panic!("not a tool card");
+        };
+        assert_eq!(open.input_text(), NO_ARGUMENTS);
         s.apply(AgentEvent::ToolResult {
             id: "t1".into(),
             name: "satz_whoami".into(),
@@ -832,9 +846,48 @@ mod tests {
         let Block::Tool(card) = &s.streaming.as_ref().unwrap().blocks[0] else {
             panic!("not a tool card");
         };
-        assert_eq!(card.input_text(), "{}");
+        assert_eq!(card.input, Some(serde_json::json!({})));
+        assert_eq!(card.input_text(), NO_ARGUMENTS);
         assert!(card.result.as_ref().unwrap().is_error);
         assert_eq!(card.result.as_ref().unwrap().body, "refused");
+    }
+
+    #[test]
+    fn the_approval_card_says_no_arguments_for_an_empty_object() {
+        assert_eq!(arguments_text(&serde_json::json!({})), NO_ARGUMENTS);
+        assert_eq!(
+            arguments_text(&serde_json::json!({"answers": {"x": true}})),
+            "{\n  \"answers\": {\n    \"x\": true\n  }\n}"
+        );
+    }
+
+    #[test]
+    fn a_refused_call_shows_its_sentence_before_what_it_carries() {
+        let mut s = store();
+        started(&mut s, "check");
+        s.apply(AgentEvent::ToolUseStarted {
+            id: "t1".into(),
+            name: "satz_transpile_check".into(),
+        });
+        s.apply(AgentEvent::ToolResult {
+            id: "t1".into(),
+            name: "satz_transpile_check".into(),
+            outcome: ToolOutcome {
+                structured: Some(serde_json::json!({"findings": [{"kind": "parse"}]})),
+                text: "the estate does not compile".into(),
+                is_error: true,
+            },
+            millis: 3,
+        });
+        let Block::Tool(card) = &s.streaming.as_ref().unwrap().blocks[0] else {
+            panic!("not a tool card");
+        };
+        let body = &card.result.as_ref().unwrap().body;
+        assert!(
+            body.starts_with("the estate does not compile\n\n{"),
+            "{body}"
+        );
+        assert!(body.contains("\"kind\": \"parse\""), "{body}");
     }
 
     #[test]
@@ -1220,7 +1273,7 @@ mod tests {
         let Block::Tool(card) = &first.blocks[2] else {
             panic!("a tool card");
         };
-        assert_eq!(card.input_text(), "{}");
+        assert_eq!(card.input_text(), NO_ARGUMENTS);
         assert_eq!(
             card.result,
             Some(ToolResultView {

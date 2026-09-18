@@ -1,11 +1,11 @@
 //! The approval card for the write tool the agent is waiting on: the name, the
-//! input, and the three answers of ADR 0005.
+//! arguments ("no arguments" for a call without any), and the three answers of ADR 0005.
 
 use dioxus::prelude::*;
 use satz_studio_core::llm::Approval;
 
 use super::actions::ChatAction;
-use super::state::{ChatStore, ChatStoreStoreExt, pretty};
+use super::state::{ChatStore, ChatStoreStoreExt, arguments_text};
 use crate::components::{Button, ButtonVariant, Card, CardVariant, Chip, ChipKind, Icon};
 use crate::state::{AppStore, AppStoreStoreExt};
 
@@ -29,7 +29,7 @@ pub fn ApprovalCard() -> Element {
         })
         .flatten()
         .unwrap_or(false);
-    let input = pretty(&pending.input);
+    let input = arguments_text(&pending.input);
     rsx! {
         Card { variant: CardVariant::Filled, class: "chat__approval",
             div { class: "chat__approval-header",

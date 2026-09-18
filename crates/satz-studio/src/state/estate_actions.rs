@@ -88,16 +88,12 @@ pub async fn estate_coroutine(
 ) {
     app.estate().set(EstateStore::default());
     reload(&session, app).await;
-    let mut cancel: Option<CancellationToken> = None;
+    let mut running = RunningCommand::default();
     while let Some(action) = rx.next().await {
         match action {
             EstateAction::Reload => reload(&session, app).await,
-            EstateAction::RunCommand(args) => cancel = run_command(&session, app, args),
-            EstateAction::CancelCommand => {
-                if let Some(token) = cancel.take() {
-                    token.cancel();
-                }
-            }
+            EstateAction::RunCommand(args) => running.started(run_command(&session, app, args)),
+            EstateAction::CancelCommand => running.cancel(),
             EstateAction::RunTool { name, args } => run_tool(&session, app, name, args).await,
             EstateAction::OpenInTerminal(args) => open_in_terminal(&session, app, &args),
             EstateAction::Answer { subject, value } => {
@@ -130,16 +126,33 @@ pub async fn estate_coroutine(
                 }
                 reload(&session, app).await;
             }
-            EstateAction::InitRepository => {
-                if let Some(token) = init_repository(&session, app) {
-                    cancel = Some(token);
-                }
-            }
+            EstateAction::InitRepository => running.started(init_repository(&session, app)),
             EstateAction::Close => close_estate(app),
             EstateAction::Switch => {
                 close_estate(app);
                 app.door().set(Door::Open);
             }
+        }
+    }
+}
+
+/// The cancel token of the command the estate's log is running, which Cancel reaches.
+/// A start that was refused — a command already running, a directory that could not be
+/// made — hands back no token and leaves the running command's in place, so the command
+/// that is running stays cancellable.
+#[derive(Debug, Default)]
+struct RunningCommand(Option<CancellationToken>);
+
+impl RunningCommand {
+    fn started(&mut self, token: Option<CancellationToken>) {
+        if let Some(token) = token {
+            self.0 = Some(token);
+        }
+    }
+
+    fn cancel(&mut self) {
+        if let Some(token) = self.0.take() {
+            token.cancel();
         }
     }
 }
@@ -928,6 +941,32 @@ async fn reload_with(session: &Arc<EstateSession>, app: Store<AppStore>, carried
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_refused_second_command_leaves_the_first_one_cancellable() {
+        let mut running = RunningCommand::default();
+        let first = CancellationToken::new();
+        running.started(Some(first.clone()));
+        // `run_command` refuses while a command runs and hands back no token
+        running.started(None);
+        running.cancel();
+        assert!(
+            first.is_cancelled(),
+            "Cancel still reaches the command that is running"
+        );
+    }
+
+    #[test]
+    fn the_next_command_is_the_one_cancel_reaches() {
+        let mut running = RunningCommand::default();
+        let first = CancellationToken::new();
+        let second = CancellationToken::new();
+        running.started(Some(first.clone()));
+        running.started(Some(second.clone()));
+        running.cancel();
+        assert!(second.is_cancelled());
+        assert!(!first.is_cancelled());
+    }
 
     #[test]
     fn the_map_line_loses_its_marker_and_keeps_its_indentation_and_neighbours() {

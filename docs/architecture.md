@@ -99,7 +99,7 @@ Two crates in one workspace, satz pinned once as the submodule `vendor/satz`
 | `src/satz/install.rs` | satz's own cargo-dist installer for an operator with no satz: the installer and its `satz-installer.sh.sha256` sidecar are the assets of ONE `releases/latest` object, so a release published between two downloads cannot pair them; `VerifiedInstaller::verify` is the only way to hold the script, and only on a matching SHA-256; `run` writes it into a private temporary directory and runs it with `sh`, `SATZ_NO_MODIFY_PATH=1` (the installer otherwise adds `~/.local/bin` to `PATH` in the shell profiles, and `locate` searches there without it) and stdin closed, streamed and cancellable. No `run` exists on Windows, where satz publishes no build | `VerifiedInstaller`, `InstallError`, `fetch_verified`, `supported` |
 | `src/satz/cli.rs` | `satz --config <dir> <args…>` in the estate's directory, stdout and stderr streamed line by line and cancellable, by the one streaming helper the installer's run shares; `json_report` runs a reporting command with `--format json` and an `--out` of its own and types the file it wrote; `run_in` is the same streaming without a `--config`, in a working directory of its own, for the one command that runs before a `config.toml` exists | `SatzCli`, `CliLine` |
 | `src/satz/init.rs` | `satz init` as a typed thing: `InitOptions` renders the flags it was given to argv and passes nothing for a field left blank, so a blank field is the instruction to derive; `check_target` refuses a directory that is not there or already holds a `config.toml`; `created` reads what a finished run left, because `init` names the estate file after a customer id it may have derived and the name is not knowable in advance | `InitOptions`, `check_target`, `created` |
-| `src/satz/mcp.rs` | one `satz mcp` child per estate, spoken to with rmcp over stdio; every rmcp type stays inside this file | `McpSession`, `ToolInfo`, `ToolAnnotations`, `ToolOutcome` |
+| `src/satz/mcp.rs` | one `satz mcp` child per estate, spoken to with rmcp over stdio; every rmcp type stays inside this file. A tool's refusal is a `ToolOutcome` with `is_error`; a JSON-RPC `invalid_params` error in place of a result — a tool name satz does not serve — is `SatzError::InvalidParams` naming the tool | `McpSession`, `ToolInfo`, `ToolAnnotations`, `ToolOutcome` |
 | `src/satz/session.rs` | one session per open estate: the CLI runner, the MCP child, the write lock every writer takes, the identity from `satz_open`; `apply` and `bootstrap` as a one-shot script in the OS terminal | `EstateSession`, `session_root` |
 | `src/satz/reports.rs` | serde mirrors of what a reporting command writes with `--format json` and satz returns as `structuredContent`: unknown fields ignored, missing required fields fail; the questions report round-trips a recorded output of the pinned satz. `Finding` is satz's own list of what the compile found after the front end — a `CompileSummary` carries the warnings and notes it did not refuse on, a `Refusal` the ones it did; `kind` is the kebab-case word satz writes, kept as a `String` so a kind satz adds is carried instead of failing the result | `QuestionsReport`, `QuestionRow`, `InterviewArgs`, `InterviewReport`, `PrerequisitesResult`, `OpenReport`, `EstatesReport`, `CompileSummary`, `Finding`, `FindingSeverity`, `Refusal` |
 | `src/satz/mod.rs` | the capability ceiling and the one error type of the driver | `Allow`, `SatzError` |
@@ -434,8 +434,10 @@ this section is the API engine.
   `system[1]` from `EstateContext::render()`, the volatile estate context (path,
   `runs_as`, `deployment_mode`, the questions summary, up to `MAX_DIAGNOSTICS`
   diagnostics, the outline) with no breakpoint; `tool_defs` turns every `ToolInfo` into
-  a `ToolDef`, `input_schema` verbatim, the output schema's keys appended as
-  `Returns: {…}`. `body()` in `types.rs` owns the four breakpoints (the last tool, tools
+  a `ToolDef`, `input_schema` verbatim; a tool whose output schema names properties gets
+  `Returns JSON with the keys {…}. A refusal is prose instead, marked as an error.`
+  appended to its description, because a satz refusal is a sentence with `isError`
+  whatever the schema says. `body()` in `types.rs` owns the four breakpoints (the last tool, tools
   sorted by name; `system[0]`; the last block of the last user message; a marker set
   anywhere else is dropped) and sends adaptive thinking with a summarised display,
   `output_config.effort`, and `fallbacks: "default"` when asked
@@ -461,9 +463,15 @@ this section is the API engine.
   a read-only tool runs; a non-destructive tool runs when `auto_approve_writes` is set
   or the operator allowed it for the session; a destructive tool asks every time.
   Anything else raises `AgentEvent::ToolCallPending` and waits for `Approval::Once`,
-  `ForSession` or `Deny`. `Deny`, a tool the host does not list, and an input that is
-  not a JSON object are each a `tool_result` with `is_error`, never a protocol error;
-  all results of one assistant message go back in one user message.
+  `ForSession` or `Deny`. `Deny`, a tool the host does not list, an input that is not a
+  JSON object, and a call whose parameters satz refuses as a JSON-RPC `invalid_params`
+  error (`SatzError::InvalidParams`, satz's message as the text) are each a
+  `tool_result` with `is_error`, and the turn goes on; any other failure below the tool
+  is `ClaudeError::Tool` and fails the turn. `result_text` (`bridge.rs`) makes the
+  block's content: a result's structured payload pretty-printed, else its text; a
+  refusal leads with satz's sentence, then the structured part it carries, if any — a
+  refused `satz_transpile_check` hands over its `CompileSummary` — after a blank line.
+  All results of one assistant message go back in one user message.
 - **Ends.** `EndTurn`, `MaxTokens` and `StopSequence` are `AgentEvent::TurnDone`;
   `PauseTurn` loops again, ten times at most; `Refusal` is `ClaudeError::Refused` with
   the category, the explanation and the recommended model from `stop_details`. A turn
@@ -537,8 +545,10 @@ Code's and asks it nothing but `claude auth status --json`.
 
 ## 5. Deployment and CI
 
-`Dioxus.toml` names the bundle identity; `dx bundle --release --platform desktop`
-produces the bundle per OS, and U10 builds the release workflow that runs it. The
+`Dioxus.toml` names the bundle identity and the two files every bundle carries,
+`LICENSE` and `NOTICE` (`bundle.resources`, which dx resolves against the directory it
+runs in — the repository root); `dx bundle --release --platform desktop` produces the
+bundle per OS, and U10 builds the release workflow that runs it. The
 webview is a runtime dependency: WebView2 on Windows, `webkit2gtk-4.1` on Linux.
 
 `.github/workflows/ci.yml` runs `core` on `ubuntu-24.04` once per commit — on a pull

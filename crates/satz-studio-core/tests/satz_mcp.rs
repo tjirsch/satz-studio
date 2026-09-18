@@ -159,6 +159,41 @@ async fn the_session_lists_the_tools_reads_the_guide_and_opens_the_estate() {
         .unwrap();
 }
 
+/// What the agent bridge relies on: an argument satz cannot read is a refusal the tool
+/// returns, and a name it does not serve is a JSON-RPC `invalid_params` error, which the
+/// session names as such — neither is a transport failure.
+#[tokio::test]
+async fn a_bad_argument_is_a_refusal_and_an_unknown_tool_is_invalid_params() {
+    let session = open(Allow::Read).await;
+
+    let mut mistyped = serde_json::Map::new();
+    mistyped.insert("estate".to_string(), serde_json::json!(5));
+    let refused = tokio::time::timeout(TIME_BOX, session.call("satz_transpile_check", mistyped))
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(refused.is_error, "{refused:?}");
+    assert!(refused.structured.is_none(), "{refused:?}");
+    assert!(!refused.text.trim().is_empty(), "a refusal says why");
+
+    let err = tokio::time::timeout(
+        TIME_BOX,
+        session.call("satz_imagined", serde_json::Map::new()),
+    )
+    .await
+    .unwrap()
+    .unwrap_err();
+    assert!(
+        matches!(err, SatzError::InvalidParams { ref tool, ref message } if tool == "satz_imagined" && !message.is_empty()),
+        "{err:?}"
+    );
+
+    tokio::time::timeout(TIME_BOX, session.close())
+        .await
+        .unwrap()
+        .unwrap();
+}
+
 #[tokio::test]
 async fn a_refused_open_is_an_error_not_a_session() {
     let bin = SatzBinary::locate(None).await.unwrap();

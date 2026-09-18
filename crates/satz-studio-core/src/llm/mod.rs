@@ -24,7 +24,7 @@ pub mod claude;
 pub mod claude_code;
 pub mod provider;
 
-pub use agent::bridge::{tool_defs, tool_result};
+pub use agent::bridge::{result_text, tool_defs, tool_result};
 pub use agent::{Agent, AgentEvent, Approval, EstateContext, MAX_TOKENS, ToolHost};
 pub use auth::{Credential, CredentialSource};
 pub use claude::client::ClaudeClient;
