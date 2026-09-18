@@ -9,6 +9,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use satz_studio_core::cst::{Cst, NodeId, NodeKind};
+use satz_studio_core::diag::plain;
 use satz_studio_core::edit::{CliChecker, McpChecker};
 use satz_studio_core::estate::EstateDir;
 use satz_studio_core::satz::reports::InterviewReport;
@@ -16,11 +17,20 @@ use satz_studio_core::satz::{Allow, EstateSession, SatzBinary};
 
 pub const TIME_BOX: Duration = Duration::from_secs(60);
 
+/// A real path in the form the app keeps: `canonicalize` and then [`plain`], because on
+/// Windows `canonicalize` returns the extended-length path and the app — like satz —
+/// names the plain one. A test that builds an expectation from a path of its own must
+/// build it the same way, or it compares two spellings of one file.
+fn canon(path: &Path) -> PathBuf {
+    plain(&path.canonicalize().unwrap())
+}
+
 pub fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("..")
         .join("..")
         .canonicalize()
+        .map(|p| plain(&p))
         .unwrap()
 }
 
@@ -64,7 +74,7 @@ pub fn copy_smoke() -> SmokeCopy {
 /// `"error"` a finding that would be a warning refuses the compile instead.
 pub fn copy_smoke_at(validation_level: Option<&str>) -> SmokeCopy {
     let dir = scratch();
-    let root = dir.path().canonicalize().unwrap();
+    let root = canon(dir.path());
     let yaml = root.join("yaml");
     std::fs::create_dir_all(&yaml).unwrap();
     for entry in std::fs::read_dir(smoke_yaml()).unwrap() {

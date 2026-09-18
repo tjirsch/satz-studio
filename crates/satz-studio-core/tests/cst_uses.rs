@@ -109,10 +109,10 @@ fn the_interview_skeleton_is_scanned_line_for_line() {
         "every commented pack line is scanned"
     );
     for u in &commented {
-        let ungated = [
-            "presets/estate-map.satz",
-            "presets/CIS-GCP-Foundation-4.0.satz",
-        ];
+        // The map is the one line no question gates. The CIS baseline was the other
+        // until satz v0.64.0 (ADR 0028) gave it `use_cis_baseline` and moved it under
+        // `presets/cis/`.
+        let ungated = ["presets/estate-map.satz"];
         assert_eq!(
             u.gate.is_none(),
             ungated.contains(&u.path.as_str()),
