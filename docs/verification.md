@@ -92,8 +92,8 @@ proves of the core.
   "which questions are open?" makes the agent call `satz_questions`, and a write tool
   call shows the approval card first.
 - **The bundles.** `.github/workflows/release.yml` builds the `.app` and `.dmg` on
-  `macos-15` (arm64) and `macos-15-intel` (x86_64), the `.deb` and `.AppImage` on
-  `ubuntu-24.04` and the `.msi` on `windows-2022`. That each bundle launches and opens
+  `macos-15` (arm64 — macOS is Apple silicon alone), the `.deb` and `.AppImage` on
+  `ubuntu-24.04` and the `.msi` on `windows-2022`, both x86_64. That each bundle launches and opens
   the fixture estate is checked by hand on a machine of that OS: unzip or mount, start
   the app past the unsigned-build prompt the README names, the Open door → the
   repository's `tests/fixtures` → Open → the top bar shows `smoke.satz` and "runs as the

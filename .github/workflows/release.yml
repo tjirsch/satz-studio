@@ -17,9 +17,14 @@ name: release
 # notarization, and Windows Authenticode, are what changes this, and each needs a
 # certificate this repository does not hold.
 #
-# Runners, from GitHub's hosted-runner list: macos-15 is arm64 and macos-15-intel is
-# x86_64 (both current); ubuntu-24.04 builds the .deb and the .AppImage against
-# webkit2gtk-4.1; windows-2022 builds the MSI with the WiX 3.14 toolset dx downloads.
+# Runners, from GitHub's hosted-runner list: macos-15 is arm64; ubuntu-24.04 builds the
+# .deb and the .AppImage against webkit2gtk-4.1; windows-2022 builds the MSI with the WiX
+# 3.14 toolset dx downloads.
+#
+# macOS is Apple silicon alone (Thomas, 2026-09-18). An Intel Mac gets no bundle from
+# here: `macos-15-intel` is the most expensive runner in the catalogue, and it built a
+# second macOS artifact for machines Apple stopped selling. Linux and Windows are
+# x86_64 and stay exactly as they were — this is about the Mac, not about x86_64.
 # dioxus-cli is the release binary through cargo-binstall, built from source with
 # `cargo install` only when no binary exists for the runner.
 #
@@ -47,9 +52,6 @@ jobs:
         include:
           - os: macos-15
             arch: arm64
-            package_types: --package-types macos --package-types dmg
-          - os: macos-15-intel
-            arch: x86_64
             package_types: --package-types macos --package-types dmg
           - os: ubuntu-24.04
             arch: x86_64
