@@ -541,8 +541,9 @@ Code's and asks it nothing but `claude auth status --json`.
 produces the bundle per OS, and U10 builds the release workflow that runs it. The
 webview is a runtime dependency: WebView2 on Windows, `webkit2gtk-4.1` on Linux.
 
-`.github/workflows/ci.yml` runs `core` on `ubuntu-24.04` for every push and pull
-request: the desktop crate's system libraries, then `scripts/install-satz.sh`, then
+`.github/workflows/ci.yml` runs `core` on `ubuntu-24.04` once per commit — on a pull
+request for a branch, on the push for `main`, since a branch's pull request already runs
+the jobs on the branch merged into `main`: the desktop crate's system libraries, then `scripts/install-satz.sh`, then
 `cargo fmt -p satz-studio-core -p satz-studio -- --check` (the two packages;
 `vendor/satz` is satz's own), `cargo clippy --workspace --all-targets --locked -- -D
 warnings`, `cargo test --workspace --locked` and `cargo build -p satz-studio --locked`.
@@ -555,15 +556,15 @@ the app has fallen behind. That is why nothing refuses a newer satz and no test 
 locates the real binary asserts it is at the build's satz exactly. It
 also writes the runner's satz config (`self_update_frequency = "never"`) when none
 exists, so no update check reaches GitHub while the tests drive satz. `platforms` (`macos-15`,
-`windows-2022`) runs the same formatting, clippy, test and build steps on every push
-and pull request; on Windows satz is built from the submodule, since satz has no
-Windows release. macOS is Apple silicon alone: `macos-15-intel` is the most expensive
+`windows-2022`) runs the same formatting, clippy, test and build steps on the same
+events; on Windows satz is built from the submodule, because satz's Windows release
+installs through PowerShell and `scripts/install-satz.sh` does not run it. macOS is Apple silicon alone: `macos-15-intel` is the most expensive
 runner in the catalogue and ran the same code on the same OS beside `macos-15` — the
 difference is the architecture, and nothing here is architecture-dependent, the webview,
 the keyring and the satz binary being the platform's rather than the chip's.
 `release.yml` does not build it either: macOS is Apple silicon in both, and an Intel Mac
 gets no bundle. Linux and Windows are unchanged and x86_64 — this is about the Mac. `.github/workflows/names-gate.yml` runs `scripts/check-names.sh` over
-the tree and over the commits each push or pull request adds.
+the tree and over the commits a pull request adds, or the push to `main` that merges it.
 
 ## 6. Decisions
 

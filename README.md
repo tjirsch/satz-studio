@@ -185,7 +185,7 @@ account, tenant id, e-mail address or repository path that is not one of satz's
 documented example values (`acme`, `example.com`, `C0example`, `123456789012`; the
 table is `docs/examples.md` in the satz repository). `scripts/check-names.sh` is satz's
 gate: it rejects those shapes in files and in commit messages, and CI runs it on every
-push and pull request. Enable the hooks once per clone:
+pull request and on the push to `main` that merges it. Enable the hooks once per clone:
 
 ```sh
 git config core.hooksPath .githooks

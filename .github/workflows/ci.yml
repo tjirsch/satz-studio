@@ -7,25 +7,27 @@ name: ci
 # five newest releases, so a release pinned by tag is gone within days; the
 # script also writes the runner's satz config with the
 # update check off, because satz prints its update notice on stdout and a
-# newer release would break every `--format json` test. Windows has no satz
-# release: there it is built from the submodule vendor/satz instead, so the
-# same pinned source serves.
+# newer release would break every `--format json` test. On Windows satz is
+# built from the submodule vendor/satz instead — satz's Windows release installs
+# through PowerShell, which install-satz.sh does not run — so the pinned source
+# serves there.
 #
-# Both jobs run on every push and pull request: `core` on ubuntu and `platforms` on
-# macOS and Windows, which have their own webview, their own keyring store and, on
-# Windows, a satz built from the submodule. A release tag and a manual dispatch run
-# both as well, so release.yml bundles a tree they have passed on.
+# Both jobs run once per commit: on a pull request for a branch, on the push for
+# `main`. A branch push alone runs nothing, because its pull request runs the same
+# jobs on the branch merged into `main` — running on both is every commit tested
+# twice. `core` is on ubuntu and `platforms` on macOS and Windows, which have their own
+# webview, their own keyring store and, on Windows, a satz built from the submodule. A
+# release tag and a manual dispatch run both as well, so release.yml bundles a tree
+# they have passed on.
 #
-# macOS is Apple silicon alone here (Thomas, 2026-09-18). `macos-15-intel` is the most
-# expensive runner in the catalogue and it ran on every push beside `macos-15`, testing
-# the same code on the same OS — the difference is the architecture, and nothing in this
-# app is architecture-dependent: the webview, the keyring and the satz binary are the
-# platform's, not the chip's. release.yml still BUILDS the Intel bundle, so an Intel Mac
-# still gets a release; what is gone is testing it twice on every push.
+# macOS is Apple silicon alone, here and in release.yml (Thomas, 2026-09-18, ADR 0016):
+# nothing in this app is architecture-dependent — the webview, the keyring and the satz
+# binary are the platform's, not the chip's — and `macos-15-intel` is the most expensive
+# runner in the catalogue. An Intel Mac gets no bundle.
 
 on:
   push:
-    branches: ['**']
+    branches: [main]
     tags: ['v*']
   pull_request:
   workflow_dispatch:
@@ -99,7 +101,7 @@ jobs:
         run: |
           bash scripts/install-satz.sh
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-      - name: satz (built from the submodule — no Windows release)
+      - name: satz (built from the submodule — install-satz.sh does not run the PowerShell installer)
         if: runner.os == 'Windows'
         shell: bash
         run: |
