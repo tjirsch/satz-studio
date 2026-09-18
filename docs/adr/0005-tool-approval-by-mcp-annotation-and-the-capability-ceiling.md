@@ -57,8 +57,13 @@ and a call the ceiling refuses is shown as satz's own refusal.
   `satz_whoami` reach the live organisation (`openWorldHint`) and still run without a
   card, since they write nothing. What bounds them is the identity satz binds per
   estate, which the app displays and cannot change.
-- `exec` is a Settings decision, taken once, not a per-call one: `satz_scan_checkov` is
-  annotated read-only and runs without a card once the ceiling allows it.
+- `exec` is a Settings decision, taken once: without it satz refuses `satz_scan_checkov`
+  whatever the operator approves. With it the call is approved like any tool that is
+  not read-only — a card, unless it was approved for the session or
+  `auto_approve_writes` is on — because satz annotates it so: it runs an external
+  program, Checkov, which `uvx` downloads first when it is not on the `PATH`. The
+  remediation tools read the report a scan wrote and run nothing:
+  `satz_remediation_items` is read-only and needs no `exec`.
 - The operator sees every write before it happens, and the transcript carries a
   denial as the model saw it.
 

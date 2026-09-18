@@ -463,7 +463,7 @@ pub const PALETTE: &[CommandSpec] = &[
         id: "migrate",
         label: "migrate",
         icon: "swap_horiz",
-        description: "Move the estate between local and cloud state: it rewrites deployment_mode in the file, transpiles again and copies the state to the other backend — in your terminal.",
+        description: "Move the estate between local and cloud state: it binds deployment_mode in the estate's params, transpiles again and copies the state to the other backend — in your terminal.",
         head: &["migrate"],
         estate: EstateArg::Positional,
         tail: &[],
