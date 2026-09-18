@@ -15,8 +15,9 @@
 //!   needs no `PATH` change and makes none.
 //! - **Nothing to answer.** The installer asks nothing; its stdin is closed all the same,
 //!   so a prompt in some later version would read end-of-file rather than wait.
-//! - **No Windows.** satz publishes no Windows build (its `dist-workspace.toml` targets
-//!   macOS and Linux), so there is nothing to install there and nothing is attempted.
+//! - **Not on Windows.** satz's Windows installer is `satz-installer.ps1`, PowerShell,
+//!   which this module does not run; there nothing is attempted and the refusal names the
+//!   one-liner that installs it.
 
 #[cfg(not(windows))]
 use std::process::{ExitStatus, Stdio};
@@ -227,7 +228,8 @@ mod tests {
     fn windows_is_refused_by_name_and_everything_else_is_offered() {
         if cfg!(windows) {
             let said = supported().unwrap_err().to_string();
-            assert!(said.contains("no Windows build"), "{said}");
+            assert!(said.contains("does not install satz on Windows"), "{said}");
+            assert!(said.contains("satz-installer.ps1"), "{said}");
         } else {
             assert!(supported().is_ok());
         }

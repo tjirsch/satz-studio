@@ -219,7 +219,8 @@ async fn no_release_and_a_tag_that_is_not_a_version_are_said_as_such() {
 
 // ---- satz's installer ------------------------------------------------------------
 
-/// The installer runs with `sh`, and satz publishes no Windows build: these are unix tests.
+/// The installer runs with `sh`; satz's Windows installer is PowerShell, which the app does
+/// not run: these are unix tests.
 #[cfg(not(windows))]
 mod installer {
     use satz_studio_core::satz::install::{INSTALLER, SIDECAR};
@@ -364,7 +365,7 @@ mod installer {
     }
 }
 
-/// On Windows nothing is fetched: satz publishes no Windows build.
+/// On Windows nothing is fetched: the app does not run satz's PowerShell installer.
 #[cfg(windows)]
 #[tokio::test]
 async fn windows_fetches_nothing_and_says_why() {
@@ -372,5 +373,5 @@ async fn windows_fetches_nothing_and_says_why() {
         .await
         .unwrap_err();
     assert!(matches!(e, InstallError::NoWindowsInstall), "{e:?}");
-    assert!(e.to_string().contains("no Windows build"));
+    assert!(e.to_string().contains("does not install satz on Windows"));
 }
