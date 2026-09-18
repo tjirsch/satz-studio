@@ -64,8 +64,11 @@ estates show the same list, because the same facts are true of them.
   `~/.local/bin/satz`. An older binary is refused at startup, naming the version found;
   the banner runs `satz self-update` on it. With no satz at all, the banner runs satz's
   own installer, checked against the SHA-256 its release publishes, into `~/.local/bin`
-  and without touching your shell profile — except on Windows, where satz publishes no
-  build. A satz NEWER than the one the build was tested against runs, and a banner says
+  and without touching your shell profile — except on Windows. satz has published a
+  Windows build since 0.63.0, but it installs through PowerShell and this app does not
+  run that installer yet: install satz with
+  `irm https://github.com/tjirsch/satz/releases/latest/download/satz-installer.ps1 | iex`,
+  and the app finds `satz.exe` on `PATH`. A satz NEWER than the one the build was tested against runs, and a banner says
   so: both versions, and what satz's release rule makes of the difference — a patch
   changes nothing an estate needs; a minor may mean edits, refusals or a different plan
   — until you dismiss it for that version. Nothing runs without satz; the app has no

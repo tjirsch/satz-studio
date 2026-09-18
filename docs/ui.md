@@ -78,7 +78,8 @@ nothing blocks in an event handler.
   name no satz path — the installer writes `~/.local/bin/satz`, which the search does not
   look at while a path is set — streams it into `install.log`, locates satz again, and
   calls the install done only if satz is then found; `CancelInstall` stops it. On Windows
-  `InstallSatz` is a toast saying satz publishes no Windows build.
+  `InstallSatz` is a toast saying the app does not run satz's PowerShell installer, with
+  the one-liner that does.
   `OpenEstate` puts the window on `View::Overview` when the session opens and
   `CloseEstate` puts it back on `View::Start` — the window has nowhere to stand without
   an estate, so closing one IS switching estates.
@@ -333,8 +334,9 @@ and the door card on the Start screen, and their classes live in `views.css`, so
   "Update satz" (`satz self-update`); for none at all "Install satz" — satz's own
   installer, checked against the SHA-256 its release publishes, writing
   `~/.local/bin/satz` and leaving the shell profile alone — unless Settings name a satz
-  path, where the banner says to correct or clear it; on Windows the banner says satz
-  publishes no Windows build, so it cannot be installed there, and offers no install.
+  path, where the banner says to correct or clear it; on Windows the banner says the
+  app does not run satz's PowerShell installer, names the one-liner that does, and offers
+  no install.
   While satz is newer than the build, a notice banner instead, and every estate opens:
   "satz X is installed; this satz-studio was built and tested against satz Y", then satz's
   own reading of the difference — a patch: "satz says nothing an estate needs changes"; a

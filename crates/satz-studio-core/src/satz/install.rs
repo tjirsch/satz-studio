@@ -15,8 +15,9 @@
 //!   needs no `PATH` change and makes none.
 //! - **Nothing to answer.** The installer asks nothing; its stdin is closed all the same,
 //!   so a prompt in some later version would read end-of-file rather than wait.
-//! - **No Windows.** satz publishes no Windows build (its `dist-workspace.toml` targets
-//!   macOS and Linux), so there is nothing to install there and nothing is attempted.
+//! - **Not on Windows.** satz's Windows installer is `satz-installer.ps1`, PowerShell,
+//!   which this module does not run; there nothing is attempted and the refusal names the
+//!   one-liner that installs it.
 
 #[cfg(not(windows))]
 use std::process::{ExitStatus, Stdio};
@@ -45,9 +46,9 @@ pub const NO_MODIFY_PATH: (&str, &str) = ("SATZ_NO_MODIFY_PATH", "1");
 #[derive(Debug, thiserror::Error)]
 pub enum InstallError {
     #[error(
-        "satz publishes no Windows build, so satz-studio cannot install satz on Windows; build satz from source and set its path in Settings"
+        "satz-studio does not install satz on Windows yet: satz publishes a Windows build since 0.63.0, but through a PowerShell installer this app does not run. Install it with `powershell -ExecutionPolicy Bypass -c \"irm https://github.com/tjirsch/satz/releases/latest/download/satz-installer.ps1 | iex\"`, or set the path to satz.exe in Settings"
     )]
-    NoWindowsBuild,
+    NoWindowsInstall,
     #[error(transparent)]
     Github(#[from] GithubError),
     #[error("the satz release {release} has no {INSTALLER} — its release build has not finished")]
@@ -67,7 +68,7 @@ pub enum InstallError {
 /// The installer is offered on this system.
 pub fn supported() -> Result<(), InstallError> {
     if cfg!(windows) {
-        Err(InstallError::NoWindowsBuild)
+        Err(InstallError::NoWindowsInstall)
     } else {
         Ok(())
     }
@@ -227,7 +228,8 @@ mod tests {
     fn windows_is_refused_by_name_and_everything_else_is_offered() {
         if cfg!(windows) {
             let said = supported().unwrap_err().to_string();
-            assert!(said.contains("no Windows build"), "{said}");
+            assert!(said.contains("does not install satz on Windows"), "{said}");
+            assert!(said.contains("satz-installer.ps1"), "{said}");
         } else {
             assert!(supported().is_ok());
         }

@@ -5,8 +5,8 @@
 //! closed stdin (`satz_studio_core::satz::install`). This is the run as the window sees
 //! it: the guard, the log, the cancel, and satz located again afterwards.
 //!
-//! On Windows there is nothing to run: satz publishes no Windows build, and the action is
-//! the sentence that says so.
+//! On Windows there is nothing to run: satz's installer there is PowerShell, which the
+//! app does not run, and the action is the sentence that names it.
 
 use dioxus::prelude::*;
 use tokio_util::sync::CancellationToken;
@@ -33,7 +33,7 @@ pub fn install_satz(app: Store<AppStore>) -> Option<CancellationToken> {
     toast(
         app,
         ToastKind::Error,
-        InstallError::NoWindowsBuild.to_string(),
+        InstallError::NoWindowsInstall.to_string(),
     );
     None
 }
