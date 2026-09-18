@@ -61,8 +61,8 @@ change and its documentation together — a change to what the app does updates
 4. **dioxus-cli 0.7.10**, for running and bundling the app:
    `cargo install dioxus-cli@0.7.10` or `cargo binstall dioxus-cli@0.7.10`. Then
    `dx serve --package satz-studio` runs the app with hot reload and
-   `dx bundle --package satz-studio --platform desktop --release` builds this
-   machine's bundle. `cargo run -p satz-studio` runs the app without it.
+   `dx bundle --package satz-studio --platform desktop --release`, run from the
+   repository root, builds this machine's bundle with `LICENSE` and `NOTICE` in it. `cargo run -p satz-studio` runs the app without it.
 5. **The platform's webview.** Windows 10 and 11 ship WebView2. Linux needs
    `webkit2gtk-4.1`, and the build needs
    `libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev`

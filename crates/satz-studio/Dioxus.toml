@@ -24,6 +24,14 @@ icon = [
   "assets/icons/icon-512.png",
   "assets/icons/icon-1024.png",
 ]
+# The licence and the notice every bundle carries, as Apache 2.0 §4(a) and §4(d) ask of
+# a redistribution. dx copies them into SatzStudio.app/Contents/Resources/ (the .dmg holds
+# that .app), into the MSI's install directory beside the executable, and into
+# /usr/lib/SatzStudio/ in the .deb and the AppImage. dx resolves `resources` against the
+# directory it runs in, not against this crate as it does `icon`, and skips a path that
+# is not there with a warning: `dx bundle --package satz-studio` runs from the repository
+# root, as release.yml and CONTRIBUTING.md run it.
+resources = ["LICENSE", "NOTICE"]
 
 # the runtime halves of the -dev packages ci.yml installs (Ubuntu 24.04 names its
 # time64 builds `…t64` and declares the plain name as provided)

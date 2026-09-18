@@ -1,7 +1,7 @@
 //! The agent loop over a scripted provider and a mock tool host: tool calls, the
 //! approval gate, the ends of a turn, and what the transcript looks like after each.
 
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, VecDeque};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
@@ -10,7 +10,7 @@ use satz_studio_core::llm::agent::PREAMBLE;
 use satz_studio_core::llm::{
     Agent, AgentEvent, Approval, Capabilities, ChatProvider, ClaudeError, ContentBlock, Effort,
     EstateContext, Message, Request, Role, StopDetails, StopReason, StreamEvent, StreamFuture,
-    ToolHost, Usage, tool_defs, tool_result,
+    ToolHost, Usage, result_text, tool_defs, tool_result,
 };
 use satz_studio_core::satz::{SatzError, ToolAnnotations, ToolInfo, ToolOutcome};
 use tokio::sync::mpsc;
@@ -85,17 +85,33 @@ impl ChatProvider for MockProvider {
     }
 }
 
+/// How the mock answers a tool that does not answer `{"ok": true, "tool": <name>}`.
+#[derive(Clone)]
+enum Answer {
+    /// the child is gone: a failure below the tool
+    Closed,
+    /// the server refused the call's parameters as a JSON-RPC `invalid_params` error
+    InvalidParams(String),
+    /// the tool ran and returned this: a refusal, with `is_error`
+    Outcome(ToolOutcome),
+}
+
 struct MockHost {
     calls: Mutex<Vec<(String, serde_json::Map<String, serde_json::Value>)>>,
-    /// a tool whose call fails below the tool
-    broken: Option<String>,
+    answers: BTreeMap<String, Answer>,
 }
 
 impl MockHost {
     fn new() -> Arc<Self> {
+        Self::answering([])
+    }
+    fn answering(answers: impl IntoIterator<Item = (&'static str, Answer)>) -> Arc<Self> {
         Arc::new(Self {
             calls: Mutex::new(Vec::new()),
-            broken: None,
+            answers: answers
+                .into_iter()
+                .map(|(name, answer)| (name.to_string(), answer))
+                .collect(),
         })
     }
     fn calls(&self) -> Vec<String> {
@@ -149,6 +165,15 @@ impl ToolHost for MockHost {
                 ),
             ),
             info("satz_interview", "Answer questions", false, false, None),
+            info(
+                "satz_transpile_check",
+                "Compile the estate and write nothing.",
+                true,
+                false,
+                Some(
+                    serde_json::json!({"type": "object", "properties": {"estate": {}, "addresses": {}, "written": {}, "findings": {}}}),
+                ),
+            ),
         ]
     }
     fn instructions(&self) -> String {
@@ -163,15 +188,20 @@ impl ToolHost for MockHost {
         args: serde_json::Map<String, serde_json::Value>,
     ) -> Pin<Box<dyn Future<Output = Result<ToolOutcome, SatzError>> + Send + 'a>> {
         Box::pin(async move {
-            if self.broken.as_deref() == Some(name) {
-                return Err(SatzError::Closed("exit status: 1".to_string()));
-            }
             self.calls.lock().unwrap().push((name.to_string(), args));
-            Ok(ToolOutcome {
-                structured: Some(serde_json::json!({"ok": true, "tool": name})),
-                text: String::new(),
-                is_error: false,
-            })
+            match self.answers.get(name).cloned() {
+                Some(Answer::Closed) => Err(SatzError::Closed("exit status: 1".to_string())),
+                Some(Answer::InvalidParams(message)) => Err(SatzError::InvalidParams {
+                    tool: name.to_string(),
+                    message,
+                }),
+                Some(Answer::Outcome(outcome)) => Ok(outcome),
+                None => Ok(ToolOutcome {
+                    structured: Some(serde_json::json!({"ok": true, "tool": name})),
+                    text: String::new(),
+                    is_error: false,
+                }),
+            }
         })
     }
 }
@@ -419,7 +449,12 @@ async fn a_tool_turn_returns_every_result_in_one_user_message_then_ends() {
             .iter()
             .map(|t| t.name.as_str())
             .collect::<Vec<_>>(),
-        vec!["satz_interview", "satz_questions", "satz_wipe"]
+        vec![
+            "satz_interview",
+            "satz_questions",
+            "satz_transpile_check",
+            "satz_wipe"
+        ]
     );
     assert_eq!(requests[0].model, "claude-opus-5");
     assert!(requests[0].fallbacks);
@@ -630,10 +665,7 @@ async fn a_failure_below_a_tool_fails_and_discards_the_turn() {
         "satz_questions",
         serde_json::json!({}),
     )])]);
-    let host = Arc::new(MockHost {
-        calls: Mutex::new(Vec::new()),
-        broken: Some("satz_questions".to_string()),
-    });
+    let host = MockHost::answering([("satz_questions", Answer::Closed)]);
     let mut agent = agent(provider, host);
     let (result, seen) = drive(&mut agent, "what is open?", Approval::Deny, false).await;
     assert!(
@@ -700,29 +732,31 @@ async fn the_estate_context_is_the_second_system_block_without_a_breakpoint() {
 }
 
 #[test]
-fn tool_defs_describe_the_output_keys_sort_by_name_and_mark_the_last() {
-    let defs = tool_defs(
-        &MockHost {
-            calls: Mutex::new(Vec::new()),
-            broken: None,
-        }
-        .tools(),
-    );
+fn tool_defs_describe_the_output_keys_and_the_refusal_sort_by_name_and_mark_the_last() {
+    let defs = tool_defs(&MockHost::new().tools());
     assert_eq!(
         defs.iter().map(|d| d.name.as_str()).collect::<Vec<_>>(),
-        vec!["satz_interview", "satz_questions", "satz_wipe"]
+        vec![
+            "satz_interview",
+            "satz_questions",
+            "satz_transpile_check",
+            "satz_wipe"
+        ]
     );
-    assert_eq!(defs[0].description, "Answer questions");
+    assert_eq!(
+        defs[0].description, "Answer questions",
+        "no output schema, no promise of JSON"
+    );
     assert_eq!(
         defs[1].description,
-        "The questions of the estate. Returns: {answered, open}"
+        "The questions of the estate. Returns JSON with the keys {answered, open}. A refusal is prose instead, marked as an error."
     );
     assert_eq!(
         defs[1].input_schema,
         serde_json::json!({"type": "object", "properties": {"estate": {"type": "string"}}})
     );
-    assert!(defs[0].cache_control.is_none() && defs[1].cache_control.is_none());
-    assert!(defs[2].cache_control.is_some());
+    assert!(defs[..3].iter().all(|d| d.cache_control.is_none()));
+    assert!(defs[3].cache_control.is_some());
     assert!(tool_defs(&[]).is_empty());
 }
 
@@ -755,5 +789,152 @@ fn tool_result_prefers_the_structured_payload_and_carries_is_error() {
             is_error: true,
             cache_control: None
         }
+    );
+    let refused_with_findings = ToolOutcome {
+        structured: Some(serde_json::json!({"findings": []})),
+        text: "does not compile\n".to_string(),
+        is_error: true,
+    };
+    assert_eq!(
+        tool_result("toolu_3", &refused_with_findings),
+        ContentBlock::ToolResult {
+            tool_use_id: "toolu_3".to_string(),
+            content: "does not compile\n\n{\n  \"findings\": []\n}".to_string(),
+            is_error: true,
+            cache_control: None
+        },
+        "the sentence first, then what the refusal carries"
+    );
+    let silent = ToolOutcome {
+        structured: Some(serde_json::json!({"findings": []})),
+        text: String::new(),
+        is_error: true,
+    };
+    assert_eq!(result_text(&silent), "{\n  \"findings\": []\n}");
+}
+
+/// The one tool result of the turn's second message, which the agent sent back.
+fn only_result(agent: &Agent) -> (String, bool) {
+    let results = &agent.messages[2];
+    assert_eq!(results.role, Role::User);
+    assert_eq!(results.content.len(), 1);
+    match &results.content[0] {
+        ContentBlock::ToolResult {
+            tool_use_id,
+            content,
+            is_error,
+            ..
+        } => {
+            assert_eq!(tool_use_id, "toolu_1");
+            (content.clone(), *is_error)
+        }
+        other => panic!("not a tool result: {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn a_refused_call_gives_claude_the_refusal_text_with_is_error() {
+    let sentence = "no estate is open. Call `satz_open` with the estate's config.toml and its main .satz file first";
+    let provider = MockProvider::new(vec![
+        tool_turn(vec![("toolu_1", "satz_questions", serde_json::json!({}))]),
+        text_turn("I will open it first.", StopReason::EndTurn),
+    ]);
+    let host = MockHost::answering([(
+        "satz_questions",
+        Answer::Outcome(ToolOutcome {
+            structured: None,
+            text: sentence.to_string(),
+            is_error: true,
+        }),
+    )]);
+    let mut agent = agent(provider.clone(), host);
+    let (result, seen) = drive(&mut agent, "what is open?", Approval::Deny, false).await;
+    result.expect("a refusal is a result the model reads, and the turn goes on");
+    assert_eq!(only_result(&agent), (sentence.to_string(), true));
+    assert!(seen.contains(&Seen::Result {
+        name: "satz_questions".to_string(),
+        is_error: true,
+        content: sentence.to_string(),
+    }));
+    assert_eq!(seen.last(), Some(&Seen::TurnDone(StopReason::EndTurn)));
+    assert_eq!(
+        provider.requests()[1].messages[2],
+        agent.messages[2],
+        "the second request carries the refusal"
+    );
+}
+
+#[tokio::test]
+async fn a_call_with_a_bad_argument_continues_the_turn() {
+    let message = "failed to deserialize parameters: invalid type: integer `5`, expected a string";
+    let provider = MockProvider::new(vec![
+        tool_turn(vec![(
+            "toolu_1",
+            "satz_transpile_check",
+            serde_json::json!({"estate": 5}),
+        )]),
+        text_turn("The estate is a path; retrying.", StopReason::EndTurn),
+    ]);
+    let host = MockHost::answering([(
+        "satz_transpile_check",
+        Answer::InvalidParams(message.to_string()),
+    )]);
+    let mut agent = agent(provider, host.clone());
+    let (result, seen) = drive(&mut agent, "check it", Approval::Deny, false).await;
+    result.expect("the turn goes on after a refused argument");
+    assert_eq!(host.calls(), vec!["satz_transpile_check"]);
+    assert_eq!(only_result(&agent), (message.to_string(), true));
+    assert!(
+        !seen.iter().any(|s| matches!(s, Seen::Failed(_))),
+        "{seen:?}"
+    );
+    assert_eq!(seen.last(), Some(&Seen::TurnDone(StopReason::EndTurn)));
+    assert_eq!(agent.messages.len(), 4);
+}
+
+#[tokio::test]
+async fn a_refused_transpile_check_gives_claude_the_sentence_and_the_summary() {
+    let sentence = "the estate does not compile: 1 error";
+    let summary = serde_json::json!({
+        "estate": "C0example.satz",
+        "addresses": [],
+        "written": [],
+        "findings": [{
+            "kind": "parse",
+            "severity": "error",
+            "message": "unknown key `foo`",
+            "file": "C0example.satz",
+            "line": 12
+        }]
+    });
+    let provider = MockProvider::new(vec![
+        tool_turn(vec![(
+            "toolu_1",
+            "satz_transpile_check",
+            serde_json::json!({}),
+        )]),
+        text_turn("Line 12 has an unknown key.", StopReason::EndTurn),
+    ]);
+    let host = MockHost::answering([(
+        "satz_transpile_check",
+        Answer::Outcome(ToolOutcome {
+            structured: Some(summary.clone()),
+            text: sentence.to_string(),
+            is_error: true,
+        }),
+    )]);
+    let mut agent = agent(provider, host);
+    let (result, _) = drive(&mut agent, "check it", Approval::Deny, false).await;
+    result.expect("ends");
+    let (content, is_error) = only_result(&agent);
+    assert!(is_error);
+    let (first, rest) = content
+        .split_once("\n\n")
+        .expect("the sentence, a blank line, the summary");
+    assert_eq!(first, sentence, "the sentence that says why comes first");
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(rest).expect("the summary is JSON"),
+        summary,
+        "then the summary, whole"
     );
 }

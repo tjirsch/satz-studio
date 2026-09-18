@@ -514,7 +514,10 @@ impl Agent {
     }
 
     /// The call runs to completion on its own task: cancellation stops the wait and
-    /// drops the result, never a write half-done.
+    /// drops the result, never a write half-done. Parameters the server refuses as a
+    /// JSON-RPC `invalid_params` error are an error result carrying satz's message: the
+    /// model chose the name and the arguments, so it is told and the turn goes on. Any
+    /// other failure below the tool fails the turn.
     async fn run_tool(
         &self,
         name: &str,
@@ -525,9 +528,23 @@ impl Agent {
         let tool = name.to_string();
         let started = Instant::now();
         let task = tokio::spawn(async move { host.call(&tool, args).await });
-        let outcome = tokio::select! {
-            joined = task => joined.map_err(|e| ClaudeError::Tool { name: name.to_string(), message: format!("the tool task ended abnormally: {e}") })?.map_err(|e| ClaudeError::Tool { name: name.to_string(), message: e.to_string() })?,
+        let called = tokio::select! {
+            joined = task => joined.map_err(|e| ClaudeError::Tool { name: name.to_string(), message: format!("the tool task ended abnormally: {e}") })?,
             _ = cancel.cancelled() => return Err(ClaudeError::Cancelled),
+        };
+        let outcome = match called {
+            Ok(outcome) => outcome,
+            Err(SatzError::InvalidParams { message, .. }) => ToolOutcome {
+                structured: None,
+                text: message,
+                is_error: true,
+            },
+            Err(e) => {
+                return Err(ClaudeError::Tool {
+                    name: name.to_string(),
+                    message: e.to_string(),
+                });
+            }
         };
         Ok(Outcome {
             outcome,

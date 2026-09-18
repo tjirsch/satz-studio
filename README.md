@@ -151,14 +151,18 @@ file names is the workspace version in `Cargo.toml`; the tag is that version wit
 | `satz-studio_<version>_amd64.deb`, `satz-studio_<version>_x86_64.AppImage` | `ubuntu-24.04` |
 | `SatzStudio_<version>_x64.msi` | `windows-2022` |
 
+Every bundle carries `LICENSE` and `NOTICE`: in `SatzStudio.app/Contents/Resources/`,
+beside the executable in the MSI's install directory, and in `/usr/lib/SatzStudio/` from
+the `.deb` and the AppImage.
+
 The builds are not signed and not notarized. On macOS, Gatekeeper refuses the first
 launch with "Apple could not verify “SatzStudio” is free of malware"; System Settings
 → Privacy & Security → "Open Anyway" lets it start, and so does
 `xattr -d com.apple.quarantine SatzStudio.app` on the unzipped app. On Windows,
 SmartScreen shows "Windows protected your PC"; "More info" → "Run anyway" installs.
 The `.deb` and the `.AppImage` prompt nothing. The same bundle is built locally with
-`dx bundle --package satz-studio --platform desktop --release`, under
-`target/dx/satz-studio/bundle/`; `docs/verification.md` is what is checked before a
+`dx bundle --package satz-studio --platform desktop --release` from the repository
+root, under `target/dx/satz-studio/bundle/`; `docs/verification.md` is what is checked before a
 tag.
 
 The app does not replace itself with a newer release. Once per launch it reads the latest
@@ -203,4 +207,5 @@ app does; what is still to do is planned outside the repository.
 
 Apache License 2.0, see [`LICENSE`](LICENSE). [`NOTICE`](NOTICE) names the material
 this repository bundles under other terms — the Material Symbols font and the vendored
-tree-sitter grammar — and travels with a redistribution.
+tree-sitter grammar — and travels with a redistribution; every release bundle carries
+both files.

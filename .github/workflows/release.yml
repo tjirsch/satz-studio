@@ -35,6 +35,12 @@ name: release
 # linux/appimage/satz-studio_<version>_<arch>.AppImage,
 # windows/msi/SatzStudio_<version>_<arch>.msi; `--out-dir dist` copies each into
 # dist/ flat, which is what the steps below read.
+#
+# Every bundle carries LICENSE and NOTICE, from `resources` in
+# crates/satz-studio/Dioxus.toml, which dx resolves against the directory it runs in —
+# the checkout root here. dx skips a resource it cannot find with a warning and exits 0,
+# so the macOS job compares the two files in the .app with the checkout's before
+# anything is attached; the .deb, the AppImage and the MSI take them from the same list.
 
 on:
   push:
@@ -90,6 +96,14 @@ jobs:
         run: |
           dx bundle --package satz-studio --platform desktop --release ${{ matrix.package_types }} --out-dir dist
           ls -la dist
+      - name: the .app carries LICENSE and NOTICE (dx skips a resource it cannot find and still exits 0)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          for f in LICENSE NOTICE; do
+            cmp "dist/SatzStudio.app/Contents/Resources/$f" "$f"
+          done
       - name: the artifacts (the .app zipped) and their SHA-256 sidecars
         shell: bash
         run: |
