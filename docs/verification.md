@@ -107,8 +107,9 @@ proves of the core.
   `dx bundle` runs from the repository root, where dx finds the two paths. That each bundle launches and opens
   the fixture estate is checked by hand on a machine of that OS: unzip or mount, start
   the app past the unsigned-build prompt the README names, the Open door → the
-  repository's `tests/fixtures` → Open → the top bar shows `smoke.satz` and "runs as the
-  ADC identity", and the window lands on the Overview with the estate's own facts in it. On Linux the `.deb` declares the runtime libraries; the AppImage
+  repository's `tests/fixtures` → Open → the top bar shows `smoke.satz`, and the window
+  lands on the Overview with the estate's own facts in it and "the ADC identity — local
+  mode" in its Runs as row. On Linux the `.deb` declares the runtime libraries; the AppImage
   needs `webkit2gtk-4.1` on the host. On Windows the app needs the `satz` binary, which
   satz does not release for Windows.
 

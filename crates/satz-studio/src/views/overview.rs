@@ -379,6 +379,36 @@ fn label_for(subject: &str) -> String {
     }
 }
 
+/// Whom the estate's live calls run as, as `satz whoami` tells the cases apart — from
+/// what `satz_open` reported, which is enough to tell the ones an open estate can be in.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RunsAs<'a> {
+    /// cloud mode: the IaC service account the estate declares, impersonated by the ADC
+    /// identity
+    Impersonated(&'a str),
+    /// the ADC identity itself, and why nothing is impersonated
+    Credentials(String),
+}
+
+/// `runs_as` is `satz_open`'s answer, null whenever the calls impersonate nothing; the
+/// mode is the estate's `deployment_mode`, `local` when it binds none — as the emitter,
+/// `satz whoami` and `satz migrate` read it. In cloud mode a null `runs_as` means the
+/// estate declares no account to impersonate.
+pub fn runs_as_row<'a>(runs_as: Option<&'a str>, deployment_mode: Option<&str>) -> RunsAs<'a> {
+    match (runs_as, deployment_mode.unwrap_or("local")) {
+        (Some(account), _) => RunsAs::Impersonated(account),
+        (None, "cloud") => RunsAs::Credentials(
+            "the estate declares no IaC service account (svc_iac_account, infra_project_name), \
+             so nothing is impersonated"
+                .to_string(),
+        ),
+        (None, mode) => RunsAs::Credentials(format!(
+            "{mode} mode; `satz migrate --mode cloud` makes every run impersonate the IaC \
+             service account the estate declares"
+        )),
+    }
+}
+
 #[component]
 pub fn OverviewView() -> Element {
     let app = use_context::<Store<AppStore>>();
@@ -540,9 +570,9 @@ fn IdentityCard(facts: Vec<Fact>) -> Element {
                 }
                 dt { "Runs as" }
                     dd {
-                        match open.runs_as.as_deref() {
-                            Some(identity) => rsx! { code { "{identity}" } },
-                            None => rsx! { "the ADC identity — this estate binds no service account of its own" },
+                        match runs_as_row(open.runs_as.as_deref(), open.deployment_mode.as_deref()) {
+                            RunsAs::Impersonated(account) => rsx! { code { "{account}" } " — impersonated by the ADC identity" },
+                            RunsAs::Credentials(why) => rsx! { "the ADC identity — {why}" },
                         }
                     }
                     dt { "File" }
@@ -1022,5 +1052,41 @@ mod tests {
         assert!(owed(&f).is_empty());
         f.work_tree = None;
         assert!(owed(&f).is_empty());
+    }
+
+    const ACCOUNT: &str = "svc-iac-001@acme-infra-001.iam.gserviceaccount.com";
+
+    /// Cloud mode with a declared account: that account, and who becomes it.
+    #[test]
+    fn an_account_satz_open_names_is_impersonated() {
+        assert_eq!(
+            runs_as_row(Some(ACCOUNT), Some("cloud")),
+            RunsAs::Impersonated(ACCOUNT)
+        );
+    }
+
+    /// Local mode runs as the credentials whatever the estate declares, and the row
+    /// names the switch rather than claiming the estate declares no account — the card
+    /// above it lists the account it does declare.
+    #[test]
+    fn local_mode_runs_as_the_credentials_and_names_the_switch() {
+        for mode in [Some("local"), None] {
+            let RunsAs::Credentials(why) = runs_as_row(None, mode) else {
+                panic!("local mode impersonates nothing");
+            };
+            assert!(why.starts_with("local mode;"), "{why}");
+            assert!(why.contains("`satz migrate --mode cloud`"), "{why}");
+            assert!(!why.contains("declares no"), "{why}");
+        }
+    }
+
+    /// Cloud mode with nothing to impersonate is the estate declaring no account.
+    #[test]
+    fn cloud_mode_without_an_account_says_the_estate_declares_none() {
+        let RunsAs::Credentials(why) = runs_as_row(None, Some("cloud")) else {
+            panic!("nothing is impersonated");
+        };
+        assert!(why.contains("declares no IaC service account"), "{why}");
+        assert!(!why.contains("migrate"), "{why}");
     }
 }
