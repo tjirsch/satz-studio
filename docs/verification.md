@@ -116,6 +116,6 @@ dx bundle --package satz-studio --platform desktop --release   # this machine's 
 (`crates/satz-studio-core/src/satz/binary.rs`), runs
 `cargo test -p satz-studio-core --locked --test 'e2e_*'`, and without `--ci` also
 `cargo build -p satz-studio --locked`; one verdict line per step, and the first failure
-ends the run. `ci.yml` runs it with `--ci` after the tests on every push and pull
-request. The e2e tests each write a temporary estate whose `config.toml` points into
+ends the run. `ci.yml` runs it with `--ci` after the tests on every pull request and on
+every push to `main`. The e2e tests each write a temporary estate whose `config.toml` points into
 `vendor/satz` by absolute path, so nothing under the repository is written.
