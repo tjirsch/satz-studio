@@ -26,7 +26,9 @@ mod text_field;
 mod tooltip;
 mod top_app_bar;
 mod tree;
-mod typed_field;
+/// The one module named rather than only re-exported: [`typed_field::commits`] is the
+/// rule a view chooses its commit behaviour by, and the Decisions view's test reads it.
+pub(crate) mod typed_field;
 
 pub use badge::Badge;
 pub use button::{Button, ButtonGroup, ButtonVariant};

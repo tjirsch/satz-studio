@@ -572,6 +572,15 @@ fn QuestionCard(
     }
 }
 
+/// An answer is written when the operator presses Enter or the forward button, and not
+/// when the field merely loses focus. The asymmetry with Params and Resources, where
+/// blur-to-save IS the contract, is deliberate: there a blur saves a value into the file
+/// the operator is editing, here it would send the SAME answer a second time — the
+/// button's own click blurs the field first — and each send is a write to the estate
+/// through satz. An unchanged answer still writes when it is pressed: that press is what
+/// re-activates a pack line whose gate is already true while its line stands commented.
+const ON_BLUR: bool = false;
+
 #[component]
 fn ParamAnswer(
     question: QuestionRow,
@@ -625,6 +634,7 @@ fn ParamAnswer(
                 disabled: loading,
                 supporting: field_hint,
                 commit_unchanged: offers,
+                commit_on_blur: ON_BLUR,
                 onchange: move |d: Draft| draft.set(d),
                 oncommit: {
                     let send = send.clone();
@@ -714,6 +724,7 @@ fn OneofAnswer(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::components::typed_field::{Commit, commits};
     use serde_json::json;
 
     fn q(subject: &str, state: QuestionState) -> QuestionRow {
@@ -723,6 +734,37 @@ mod tests {
             "blocking": false, "pack_description": "d", "from": "f", "pack": "p"
         }))
         .unwrap()
+    }
+
+    /// An answered question whose field carries the estate's own value: the field is
+    /// unchanged and it offers something, which is `commit_unchanged` in `ParamAnswer`.
+    fn answered_field() -> (bool, bool) {
+        let mut row = q("customer_shortname", QuestionState::Answered);
+        row.current = Some(json!("acme"));
+        let offers = row.offered().is_some();
+        (false, offers)
+    }
+
+    /// Enter on an answer the operator has not changed still writes: that press is what
+    /// re-activates a pack line whose gate is true while its line is commented.
+    #[test]
+    fn enter_on_an_unchanged_answered_field_writes() {
+        let (changed, offers) = answered_field();
+        assert!(offers);
+        assert!(commits(Commit::Pressed, changed, offers, ON_BLUR));
+    }
+
+    /// And the same field losing focus writes nothing: the press already sent the
+    /// answer, and the blur would send the identical one a second time.
+    #[test]
+    fn blurring_an_unchanged_answered_field_writes_nothing() {
+        let (changed, offers) = answered_field();
+        assert!(!commits(Commit::Blur, changed, offers, ON_BLUR));
+        // a value the operator typed is not written by the blur either — the button or
+        // Enter sends it
+        assert!(!commits(Commit::Blur, true, offers, ON_BLUR));
+        // and a param field, where blur-to-save is the contract, still saves on blur
+        assert!(commits(Commit::Blur, true, false, true));
     }
 
     fn subject_at(walk: &Walk, list: &[QuestionRow]) -> String {

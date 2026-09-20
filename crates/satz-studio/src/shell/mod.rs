@@ -5,6 +5,7 @@
 
 mod banner;
 mod drawer;
+mod notices;
 mod placeholder;
 mod rail;
 mod snackbar;
@@ -15,6 +16,7 @@ use dioxus::prelude::*;
 
 pub use banner::SatzBanner;
 pub use drawer::DiagnosticsDrawer;
+pub use notices::NoticeDialog;
 pub use placeholder::NoEstate;
 pub use rail::NavigationRail;
 pub use snackbar::SnackbarHost;
@@ -76,6 +78,9 @@ fn Frame() -> Element {
             }
             if app.palette_open().cloned() && app.open().is_some() {
                 CommandPalette {}
+            }
+            if app.open().is_some() {
+                NoticeDialog {}
             }
             SnackbarHost {}
         }

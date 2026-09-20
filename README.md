@@ -48,15 +48,24 @@ The Overview is one card, and it lists what the estate owes — no git repositor
 `satz merge-presets` needs before it edits the estate, so an estate outside one cannot
 take preset updates (one button runs `git init`, `git add` and a first commit), day 0
 unconfirmed, questions unanswered, a pack the map asks for and the file has no line for, no provider
-schema, prerequisites the compile found undeclared, raw HCL nobody has reviewed, an HCL
-directory nothing has planned against. Every row is derived from the estate as it is on
+schema, a pack whose notice is open, prerequisites the compile found undeclared, raw HCL
+nobody has reviewed, an HCL directory nothing has planned against. Every row is derived from the estate as it is on
 the screen, so it cannot go stale, and the card is gone when there is nothing in it.
 Nothing about how an estate reached the app is remembered: created, imported and opened
 estates show the same list, because the same facts are true of them.
 
+A pack can name one command to run once it is switched on — `satz adopt` for the CIS
+org-policy packs, so every policy that is already live is in the state before the first
+apply. Switching such a pack on raises that notice as a dialog: it carries the pack's
+own sentence and the command, and offers to run it, to say it has been run, or to leave
+it for later. The estate says a notice has been dealt with by binding its param, which
+is what "I ran it" writes and what `satz adopt --execute --import` writes itself; until
+then the notice stands on the Overview, in the diagnostics drawer, and — for a notice
+that holds them up — in front of apply and bootstrap, which satz refuses.
+
 ## What it needs
 
-- **`satz` 0.62.0 or newer.** `MIN_SATZ` in `crates/satz-studio-core/src/satz/binary.rs`
+- **`satz` 0.67.0 or newer.** `MIN_SATZ` in `crates/satz-studio-core/src/satz/binary.rs`
   names the oldest satz this build works with. It rises when a satz release breaks the
   app or the app starts using something a later satz introduced, not with every satz
   release. Install satz with its installer or bring it up to date with `satz

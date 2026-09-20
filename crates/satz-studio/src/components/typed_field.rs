@@ -257,12 +257,30 @@ fn json_truthy(v: &serde_json::Value) -> bool {
     }
 }
 
+/// What asked a field to commit: a press — Enter, a switch flip, a chip change — or the
+/// focus leaving it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Commit {
+    Pressed,
+    Blur,
+}
+
+/// Whether a commit reaches `oncommit`. A draft with a problem never does; an unchanged
+/// draft does only where `commit_unchanged` says an unchanged one counts (an interview
+/// accepting the value it offers); and a blur does only where `commit_on_blur` does.
+///
+/// The two switches are separate because the two fields are: a param and an attribute
+/// save what is typed the moment the field loses focus, and an interview answer is a
+/// write to the estate the operator asks for by pressing something.
+pub fn commits(cause: Commit, changed: bool, commit_unchanged: bool, commit_on_blur: bool) -> bool {
+    (changed || commit_unchanged) && (cause == Commit::Pressed || commit_on_blur)
+}
+
 /// The field: a switch, a number field, a chip list or a text field by `kind`, over
 /// `draft`. `onchange` gets every keystroke's draft; `oncommit` gets the draft on
-/// Enter, on blur, on a switch flip and on a chip change — only when it has no
-/// `problem`, and only when it differs from what the field was given unless
-/// `commit_unchanged` says an unchanged draft counts (an interview accepting its
-/// offer). A problem is shown under the field with satz's sentence.
+/// Enter, on a switch flip, on a chip change and — unless `commit_on_blur` is off — on
+/// blur, under the rule [`commits`] states. A problem is shown under the field with
+/// satz's sentence.
 #[component]
 pub fn TypedField(
     kind: FieldKind,
@@ -272,6 +290,10 @@ pub fn TypedField(
     #[props(default)] disabled: bool,
     #[props(default)] supporting: String,
     #[props(default)] commit_unchanged: bool,
+    /// blur-to-save, which is the contract of a param and an attribute field; an
+    /// interview answer switches it off
+    #[props(default = true)]
+    commit_on_blur: bool,
     #[props(default)] onchange: Option<EventHandler<Draft>>,
     #[props(default)] oncommit: Option<EventHandler<Draft>>,
 ) -> Element {
@@ -279,10 +301,10 @@ pub fn TypedField(
     let mut current = use_signal(|| draft.clone());
     let problem = current().problem(kind, &subject);
     let commit_subject = subject.clone();
-    let commit = use_callback(move |()| {
+    let commit = use_callback(move |cause: Commit| {
         let d = current();
         if d.problem(kind, &commit_subject).is_none()
-            && (commit_unchanged || d != given)
+            && commits(cause, d != given, commit_unchanged, commit_on_blur)
             && let Some(h) = &oncommit
         {
             h.call(d);
@@ -318,8 +340,8 @@ pub fn TypedField(
                 supporting: hint,
                 error: problem.is_some(),
                 oninput: move |v: String| update.call(Draft::Number(v)),
-                onenter: move |_| commit.call(()),
-                onblur: move |_| commit.call(()),
+                onenter: move |_| commit.call(Commit::Pressed),
+                onblur: move |_| commit.call(Commit::Blur),
             }
         },
         (FieldKind::List(_), Draft::List(items)) => rsx! {
@@ -331,7 +353,7 @@ pub fn TypedField(
                 error: problem.is_some(),
                 onchange: move |next: Vec<String>| {
                     update.call(Draft::List(next));
-                    commit.call(());
+                    commit.call(Commit::Pressed);
                 },
             }
         },
@@ -344,8 +366,8 @@ pub fn TypedField(
                 supporting: hint,
                 error: problem.is_some(),
                 oninput: move |v: String| update.call(Draft::Text(v)),
-                onenter: move |_| commit.call(()),
-                onblur: move |_| commit.call(()),
+                onenter: move |_| commit.call(Commit::Pressed),
+                onblur: move |_| commit.call(Commit::Blur),
             }
         },
         (kind, draft) => rsx! {

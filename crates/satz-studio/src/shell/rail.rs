@@ -37,6 +37,7 @@ pub fn NavigationRail() -> Element {
                 questions: questions.as_ref(),
                 model: model.as_deref(),
                 diagnostics: &diagnostics,
+                held_notices: app.estate().notices().read().len(),
             })
             .len()
         })

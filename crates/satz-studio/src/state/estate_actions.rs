@@ -20,11 +20,11 @@ use satz_studio_core::edit::snapshot::Snapshot;
 use satz_studio_core::edit::{
     CheckFailure, Checker, CommitError, Committed, Edit, EditSession, McpChecker, Rollback,
 };
-use satz_studio_core::estate::HclState;
+use satz_studio_core::estate::{EstateDir, HclState};
 use satz_studio_core::git::{self, WorkTree};
 use satz_studio_core::model::{EstateModel, MAP_PATH, PackDecls};
 use satz_studio_core::satz::reports::{
-    InterviewArgs, InterviewReport, PrerequisitesResult, QuestionsReport,
+    InterviewArgs, InterviewReport, NoticeRow, PrerequisitesResult, QuestionsReport,
 };
 use satz_studio_core::satz::{CliLine, EstateSession, ToolOutcome};
 use satz_studio_core::schema::{ResourceRegistry, SchemaError};
@@ -42,6 +42,10 @@ pub enum EstateAction {
     /// `satz --config <dir> <args…>`, streamed into the log; a reporting command's
     /// file goes into the log after it, whole
     RunCommand(Vec<String>),
+    /// the command a pack's notice names, run the same way — and the estate read again
+    /// when it ends, because that command writes the file: `satz adopt --execute
+    /// --import` puts the live ids in it and binds the notice's param itself
+    RunNoticeCommand(Vec<String>),
     CancelCommand,
     /// one MCP tool on this estate's session, its result into the log
     RunTool {
@@ -92,9 +96,16 @@ pub async fn estate_coroutine(
     while let Some(action) = rx.next().await {
         match action {
             EstateAction::Reload => reload(&session, app).await,
-            EstateAction::RunCommand(args) => running.started(run_command(&session, app, args)),
+            EstateAction::RunCommand(args) => {
+                running.started(run_command(&session, app, args, After::Nothing))
+            }
+            EstateAction::RunNoticeCommand(args) => {
+                running.started(run_command(&session, app, args, After::Reload))
+            }
             EstateAction::CancelCommand => running.cancel(),
-            EstateAction::RunTool { name, args } => run_tool(&session, app, name, args).await,
+            EstateAction::RunTool { name, args } => {
+                run_tool(&session, app, name, args).await;
+            }
             EstateAction::OpenInTerminal(args) => open_in_terminal(&session, app, &args),
             EstateAction::Answer { subject, value } => {
                 let args = InterviewArgs {
@@ -116,13 +127,23 @@ pub async fn estate_coroutine(
             EstateAction::MergePresets => {
                 {
                     let _lock = session.write_lock().await;
-                    run_tool(
+                    let outcome = run_tool(
                         &session,
                         app,
                         "satz_merge_presets".to_string(),
                         serde_json::Map::new(),
                     )
                     .await;
+                    // a merge that brings a pack in, or a pack that gained one, opens
+                    // notices of its own: the same window raises them
+                    if let Some(outcome) = outcome.filter(|o| !o.is_error) {
+                        match outcome.typed::<MergeNotices>("satz_merge_presets") {
+                            Ok(merged) => queue_notices(app, &merged.notices),
+                            Err(e) => {
+                                toast(app, ToastKind::Error, format!("satz_merge_presets: {e}"))
+                            }
+                        }
+                    }
                 }
                 reload(&session, app).await;
             }
@@ -211,6 +232,11 @@ where
 }
 
 /// One answer, or every default: `satz_interview` on the real file.
+///
+/// An answer that switches a pack on opens that pack's notices — the command that pack
+/// asks to be run — and satz returns each one once, in the report of the call that opened
+/// it. They are held in the store from here; the reload is what takes them away again,
+/// when the estate binds their param.
 async fn interview(session: &Arc<EstateSession>, app: Store<AppStore>, args: InterviewArgs) {
     let Some(args) = serde_json::to_value(&args)
         .ok()
@@ -228,14 +254,52 @@ async fn interview(session: &Arc<EstateSession>, app: Store<AppStore>, args: Int
             .typed::<InterviewReport>("satz_interview")
             .map_err(|e| format!("satz_interview: {e}"))?;
         let written = report.written;
+        let opened = report.notices.len();
+        queue_notices(app, &report.notices);
         app.estate().interview().set(Some(report));
-        Ok(match written {
-            1 => "1 answer written".to_string(),
-            n => format!("{n} answers written"),
+        Ok(match (written, opened) {
+            (1, 0) => "1 answer written".to_string(),
+            (n, 0) => format!("{n} answers written"),
+            (1, 1) => "1 answer written · 1 notice opened".to_string(),
+            (n, o) => format!("{n} answers written · {o} notices opened"),
         })
     })
     .await;
     reload_with(session, app, carried).await;
+}
+
+/// The half of `satz_merge_presets`'s report the app reads: what a merge opened. The
+/// rest of it is the log the tool call already printed.
+#[derive(Debug, Clone, PartialEq, serde::Deserialize)]
+struct MergeNotices {
+    #[serde(default)]
+    notices: Vec<NoticeRow>,
+}
+
+/// The notices the window holds after a write: the ones it held, plus the ones this
+/// call opened that it does not hold yet. satz reports a notice once — in the report of
+/// the call that opened it — so the window keeps it; what takes it away is the estate
+/// binding its param, which every reload asks satz about. A notice satz reports as
+/// acknowledged is never held: it is the record of a command that has run.
+pub fn queued(current: &[NoticeRow], opened: &[NoticeRow]) -> Vec<NoticeRow> {
+    let mut out = current.to_vec();
+    for n in opened {
+        if !n.acknowledged && !out.iter().any(|held| held.param == n.param) {
+            out.push(n.clone());
+        }
+    }
+    out
+}
+
+/// [`queued`] into the store, with the dialog raised when a notice the window was not
+/// holding has opened.
+fn queue_notices(app: Store<AppStore>, opened: &[NoticeRow]) {
+    let held = app.estate().notices().cloned();
+    let next = queued(&held, opened);
+    if next.len() > held.len() {
+        app.estate().notices_open().set(true);
+    }
+    app.estate().notices().set(next);
 }
 
 /// The writing half of `update-prerequisites`: satz works out which roles the IaC
@@ -503,10 +567,18 @@ pub fn quote(word: &str) -> String {
     }
 }
 
+/// What follows a run: nothing, or the estate read again because the command wrote it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum After {
+    Nothing,
+    Reload,
+}
+
 fn run_command(
     session: &Arc<EstateSession>,
     app: Store<AppStore>,
     args: Vec<String>,
+    after: After,
 ) -> Option<CancellationToken> {
     if app.estate().running().cloned() {
         toast(app, ToastKind::Info, "a command is already running");
@@ -521,6 +593,7 @@ fn run_command(
     }
     let token = CancellationToken::new();
     let (tx, mut lines) = tokio::sync::mpsc::channel::<CliLine>(256);
+    let reread = Arc::clone(session);
     let cli = session.cli.clone();
     let argv = args.clone();
     let child = token.clone();
@@ -572,6 +645,9 @@ fn run_command(
         }
         estate.outcome().set(Some(outcome));
         estate.running().set(false);
+        if after == After::Reload {
+            reload(&reread, app).await;
+        }
     });
     Some(token)
 }
@@ -728,7 +804,7 @@ async fn run_tool(
     app: Store<AppStore>,
     name: String,
     args: serde_json::Map<String, serde_json::Value>,
-) {
+) -> Option<ToolOutcome> {
     let estate = app.estate();
     let shown = serde_json::to_string(&args).unwrap_or_default();
     estate.last_command().set(Some(format!("{name} {shown}")));
@@ -757,6 +833,7 @@ async fn run_tool(
                 ok: !outcome.is_error,
                 text,
             }));
+            Some(outcome)
         }
         Err(e) => {
             toast(app, ToastKind::Error, format!("{name}: {e}"));
@@ -764,6 +841,7 @@ async fn run_tool(
                 ok: false,
                 text: e.to_string(),
             }));
+            None
         }
     }
 }
@@ -868,6 +946,17 @@ async fn reload_with(session: &Arc<EstateSession>, app: Store<AppStore>, carried
 
     let built = match parsed {
         Ok(Ok((cst, env, registry, decls))) => {
+            // What takes a notice off the window: the estate binds its param, whether
+            // the operator pressed "I ran it" or the command the notice names bound it
+            // itself. satz's own rule judges it, over the params of this reload.
+            let held = estate.notices().cloned();
+            if !held.is_empty() {
+                estate.notices().set(
+                    held.into_iter()
+                        .filter(|n| !EstateDir::acknowledged(&env, &n.param))
+                        .collect(),
+                );
+            }
             let schema_dir = session.dir.schema_dir();
             let registry = match registry {
                 Ok(r) => Some(r),
@@ -941,6 +1030,36 @@ async fn reload_with(session: &Arc<EstateSession>, app: Store<AppStore>, carried
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn notice(param: &str) -> NoticeRow {
+        NoticeRow {
+            param: param.to_string(),
+            pack: "presets/cis/block-project-ssh-keys.satz".to_string(),
+            text: "Import what is live first.".to_string(),
+            run: "satz adopt <estate> --execute --import".to_string(),
+            before: Some(satz_studio_core::satz::reports::NoticeBefore::Apply),
+            acknowledged: false,
+        }
+    }
+
+    #[test]
+    fn a_notice_is_held_once_and_a_later_call_neither_drops_nor_doubles_it() {
+        let opened = vec![notice("cis_baseline_adopted")];
+        let held = queued(&[], &opened);
+        assert_eq!(held.len(), 1);
+        // satz returns a notice once, in the call that opened it: a later call that
+        // returns none leaves the window holding it
+        assert_eq!(queued(&held, &[]), held);
+        // and a call that returns it again adds nothing
+        assert_eq!(queued(&held, &opened), held);
+    }
+
+    #[test]
+    fn a_notice_the_estate_has_already_acknowledged_is_never_held() {
+        let mut done = notice("cis_baseline_adopted");
+        done.acknowledged = true;
+        assert!(queued(&[], &[done]).is_empty());
+    }
 
     #[test]
     fn a_refused_second_command_leaves_the_first_one_cancellable() {

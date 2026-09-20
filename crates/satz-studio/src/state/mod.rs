@@ -24,7 +24,7 @@ use satz_studio_core::git::WorkTree;
 use satz_studio_core::github::StudioUpdate;
 use satz_studio_core::llm::CredentialSource;
 use satz_studio_core::model::EstateModel;
-use satz_studio_core::satz::reports::{InterviewReport, QuestionsReport};
+use satz_studio_core::satz::reports::{InterviewReport, NoticeRow, QuestionsReport};
 use satz_studio_core::satz::self_update::SatzRelease;
 use satz_studio_core::satz::{CliLine, EstateSession, ImportReport, SatzBinary};
 use satz_studio_core::settings::Settings;
@@ -303,6 +303,13 @@ pub struct EstateStore {
     pub questions: Option<QuestionsReport>,
     /// what the last `satz_interview` call returned — `rename_to` is read from it
     pub interview: Option<InterviewReport>,
+    /// the notices a write of this session opened — a pack switched on names a command
+    /// to run — and that the estate has not acknowledged since. satz returns each one
+    /// once, when it opens, so they are kept here until their param is bound
+    pub notices: Vec<NoticeRow>,
+    /// the notice dialog stands over the window: raised when notices arrive, lowered by
+    /// Later, raised again from the Overview's row
+    pub notices_open: bool,
     pub diagnostics: Vec<Diagnostic>,
     /// the streamed output of the last command, ANSI stripped
     pub command_log: Vec<CliLine>,
