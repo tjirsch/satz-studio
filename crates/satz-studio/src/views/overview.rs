@@ -42,6 +42,9 @@ pub struct Facts<'a> {
     pub questions: Option<&'a QuestionsReport>,
     pub model: Option<&'a EstateModel>,
     pub diagnostics: &'a [Diagnostic],
+    /// how many of the open notices the window is holding — the ones a write of this
+    /// session opened, which its dialog can raise again
+    pub held_notices: usize,
 }
 
 /// What a row offers to do about itself.
@@ -66,6 +69,8 @@ pub enum Remedy {
     /// `git init -b main`, `git add -A` and one commit in the estate directory, run when
     /// the operator presses it and never on the app's own account
     InitRepository,
+    /// raise the notice dialog again, for the notices this session is holding
+    ShowNotices,
 }
 
 /// One thing the estate still owes.
@@ -234,6 +239,32 @@ pub fn owed(f: &Facts) -> Vec<Owed> {
                 remedies: vec![Remedy::Go(View::Estate)],
             });
         }
+    }
+
+    // What a pack asks to be run once it is switched on. The compile raises one finding
+    // per open notice, so the count is satz's, not the app's; the window holds the ones
+    // a write of this session opened and can raise their dialog again.
+    let notices = f
+        .diagnostics
+        .iter()
+        .filter(|d| d.kind.as_deref() == Some("notice"))
+        .count();
+    if notices > 0 {
+        out.push(Owed {
+            id: "notices",
+            icon: "assignment_late",
+            title: match notices {
+                1 => "1 pack asks for a command to be run".to_string(),
+                n => format!("{n} packs ask for a command to be run"),
+            },
+            detail: "A pack that goes into an estate can name the command to run once it is on — `satz adopt` for the CIS org-policy packs, so every policy that is already live is in the state before the apply. The estate acknowledges each by binding the notice's param, and apply and bootstrap refuse while one that holds them up is open. The drawer carries each notice with its command and its param."
+                .to_string(),
+            remedies: if f.held_notices > 0 {
+                vec![Remedy::ShowNotices]
+            } else {
+                Vec::new()
+            },
+        });
     }
 
     if f.diagnostics
@@ -431,6 +462,7 @@ pub fn OverviewView() -> Element {
         questions: questions.as_ref(),
         model: model.as_deref(),
         diagnostics: &diagnostics,
+        held_notices: app.estate().notices().read().len(),
     });
 
     let facts = identity(questions.as_ref());
@@ -502,6 +534,15 @@ pub fn OverviewView() -> Element {
                                                     icon: "commit",
                                                     onclick: move |_| handle.send(EstateAction::InitRepository),
                                                     "Create the repository"
+                                                }
+                                            },
+                                            Remedy::ShowNotices => rsx! {
+                                                Button {
+                                                    key: "{i}",
+                                                    variant: ButtonVariant::Filled,
+                                                    icon: "assignment_late",
+                                                    onclick: move |_| app.estate().notices_open().set(true),
+                                                    "Show the notices"
                                                 }
                                             },
                                             Remedy::Merge => rsx! {
@@ -800,6 +841,7 @@ mod tests {
             questions: q,
             model: m,
             diagnostics: d,
+            held_notices: 0,
         }
     }
 
@@ -963,6 +1005,37 @@ mod tests {
             trusted: true,
         }];
         assert!(owed(&facts(None, hcl, Some(&q), Some(&m), &[])).is_empty());
+    }
+
+    /// The count is the compile's, so a notice acknowledged outside the window stops
+    /// being a row at the next reload; the button appears only where this session is
+    /// holding the notice and can raise its dialog again.
+    #[test]
+    fn the_notices_row_counts_the_compiles_own_findings_and_offers_the_dialog_it_holds() {
+        let q = questions(0, 0);
+        let m = model(vec![pack(PackRowKind::Map, LineState::On)], loaded());
+        let hcl = HclState {
+            transpiled: true,
+            initialised: true,
+        };
+        let notice = |message: &str| {
+            let mut d = Diagnostic::error(message, DiagSource::Check);
+            d.kind = Some("notice".to_string());
+            d
+        };
+        let two = [
+            notice("the baseline asks for adopt"),
+            notice("so does the SSH pack"),
+        ];
+        let rows = owed(&facts(None, hcl, Some(&q), Some(&m), &two));
+        assert_eq!(ids(&rows), ["notices"]);
+        assert_eq!(rows[0].title, "2 packs ask for a command to be run");
+        assert_eq!(rows[0].remedies, [], "this session opened neither of them");
+        let mut held = facts(None, hcl, Some(&q), Some(&m), &two);
+        held.held_notices = 1;
+        assert_eq!(owed(&held)[0].remedies, [Remedy::ShowNotices]);
+        let none: [Diagnostic; 0] = [];
+        assert!(owed(&facts(None, hcl, Some(&q), Some(&m), &none)).is_empty());
     }
 
     #[test]

@@ -88,7 +88,7 @@ Two crates in one workspace, satz pinned once as the submodule `vendor/satz`
 
 | module | responsibility | main public types |
 |---|---|---|
-| `src/estate.rs` | an estate directory as satz sees it: `config.toml` read into `ToolConfig` with satz's defaults and resolved against its own directory; `discover` walks a folder for every `config.toml` (depth 6, at most 200, skipping `hcl/`, `target/`, `evidence/`, `node_modules/` and dot-directories); `estates` lists the `.satz` files in `yaml_dir` that declare an `estate`, skipping a checked temp file (`is_checked_temp`); `loader` resolves `use "…"` as satz does (the file's directory, then `include_dirs`); `params` and `deployment_mode` read the resolved params without a schema; `HclState::read` answers two facts about `hcl_dir` and no more — `main.tf` is there, so the estate has been transpiled here, and `.terraform` is there, so the tool's init has run | `EstateDir`, `ToolConfig`, `EstateError`, `HclState`, `declares_an_estate` |
+| `src/estate.rs` | an estate directory as satz sees it: `config.toml` read into `ToolConfig` with satz's defaults and resolved against its own directory; `discover` walks a folder for every `config.toml` (depth 6, at most 200, skipping `hcl/`, `target/`, `evidence/`, `node_modules/` and dot-directories); `estates` lists the `.satz` files in `yaml_dir` that declare an `estate`, skipping a checked temp file (`is_checked_temp`); `loader` resolves `use "…"` as satz does (the file's directory, then `include_dirs`); `params` and `deployment_mode` read the resolved params without a schema, and `acknowledged` asks satz's own rule whether those params acknowledge a pack's notice; `HclState::read` answers two facts about `hcl_dir` and no more — `main.tf` is there, so the estate has been transpiled here, and `.terraform` is there, so the tool's init has run | `EstateDir`, `ToolConfig`, `EstateError`, `HclState`, `declares_an_estate` |
 | `src/cst/` | the lossless document layer over the vendored tree-sitter grammar ([ADR 0003](adr/0003-the-document-layer-is-the-tree-sitter-grammar.md)); `grammar.rs` exposes the compiled parser, `build.rs` walks the tree into nodes with byte spans, `uses.rs` and `render.rs` read the pack lines and write values | `Cst`, `Node`, `NodeKind`, `Span`, `UseLine`, `UseState`, `TypedValue`, `StyleCtx`, `scan_uses`, `render_value`, `style_of`, `grammar::language` |
 | `src/edit/` | the edit primitives and the write discipline (section 4b): `apply.rs` the splice and its proof, `commit.rs` the temp file and the rename, `check.rs` the two checkers, `snapshot.rs` the delegated write | `Edit`, `EditSession`, `Proposed`, `Committed`, `Rollback`, `Checker`, `CheckFailure`, `McpChecker`, `CliChecker`, `Snapshot`, `sha256_hex` |
 | `src/schema.rs` | the provider schema as `satz update-schema` writes it, the types lifted from satz's `src/schema.rs`; `load_all` reads every `*.json` in `schema_dir` and is `SchemaError::Missing` for a directory that is absent or holds no resource type; `AttrType` decodes Terraform's type expression and prints it in Terraform's spelling | `ResourceRegistry`, `AttrType`, `BlockSchema`, `AttributeSchema`, `SchemaError` |
@@ -101,7 +101,7 @@ Two crates in one workspace, satz pinned once as the submodule `vendor/satz`
 | `src/satz/init.rs` | `satz init` as a typed thing: `InitOptions` renders the flags it was given to argv and passes nothing for a field left blank, so a blank field is the instruction to derive; `check_target` refuses a directory that is not there or already holds a `config.toml`; `created` reads what a finished run left, because `init` names the estate file after a customer id it may have derived and the name is not knowable in advance | `InitOptions`, `check_target`, `created` |
 | `src/satz/mcp.rs` | one `satz mcp` child per estate, spoken to with rmcp over stdio; every rmcp type stays inside this file. A tool's refusal is a `ToolOutcome` with `is_error`; a JSON-RPC `invalid_params` error in place of a result — a tool name satz does not serve — is `SatzError::InvalidParams` naming the tool | `McpSession`, `ToolInfo`, `ToolAnnotations`, `ToolOutcome` |
 | `src/satz/session.rs` | one session per open estate: the CLI runner, the MCP child, the write lock every writer takes, the identity from `satz_open`; `apply` and `bootstrap` as a one-shot script in the OS terminal | `EstateSession`, `session_root` |
-| `src/satz/reports.rs` | serde mirrors of what a reporting command writes with `--format json` and satz returns as `structuredContent`: unknown fields ignored, missing required fields fail; the questions report round-trips a recorded output of the pinned satz. `Finding` is satz's own list of what the compile found after the front end — a `CompileSummary` carries the warnings and notes it did not refuse on, a `Refusal` the ones it did; `kind` is the kebab-case word satz writes, kept as a `String` so a kind satz adds is carried instead of failing the result | `QuestionsReport`, `QuestionRow`, `InterviewArgs`, `InterviewReport`, `PrerequisitesResult`, `OpenReport`, `EstatesReport`, `CompileSummary`, `Finding`, `FindingSeverity`, `Refusal` |
+| `src/satz/reports.rs` | serde mirrors of what a reporting command writes with `--format json` and satz returns as `structuredContent`: unknown fields ignored, missing required fields fail; the questions report round-trips a recorded output of the pinned satz. `Finding` is satz's own list of what the compile found after the front end — a `CompileSummary` carries the warnings and notes it did not refuse on, a `Refusal` the ones it did; `kind` is the kebab-case word satz writes, kept as a `String` so a kind satz adds is carried instead of failing the result. `NoticeRow` is what a pack asks to be run once it is on, with the param that acknowledges it; `before` is an enum, so a word satz adds fails the report rather than reading as "nothing is held up", and an interview report without `notices` fails too — satz has reported them since 0.67.0, which is `MIN_SATZ` | `QuestionsReport`, `QuestionRow`, `InterviewArgs`, `InterviewReport`, `NoticeRow`, `NoticeBefore`, `PrerequisitesResult`, `OpenReport`, `EstatesReport`, `CompileSummary`, `Finding`, `FindingSeverity`, `Refusal` |
 | `src/satz/mod.rs` | the capability ceiling and the one error type of the driver | `Allow`, `SatzError` |
 | `src/llm/claude/` | Claude natively ([ADR 0004](adr/0004-claude-natively-other-providers-adapt-into-its-message-model.md)): `types.rs` the Messages API wire types as the app's only message model and `body()`, `sse.rs` the event-stream decoder and the assembler, `client.rs` the HTTPS client, `error.rs` the one error type | `Request`, `Response`, `Message`, `ContentBlock`, `SystemBlock`, `ToolDef`, `StopReason`, `StopDetails`, `Usage`, `Effort`, `ClaudeClient`, `ClaudeError` |
 | `src/llm/agent/` | the agent loop over a `ToolHost`, the approval gate, and `bridge.rs`: MCP tools as Claude tool definitions and outcomes back as `tool_result` blocks | `Agent`, `AgentEvent`, `Approval`, `ToolHost`, `EstateContext`, `tool_defs`, `tool_result` |
@@ -147,9 +147,10 @@ the stores are written from there only:
   and walks `last_root`;
 - **one coroutine per open estate** (`src/state/estate_actions.rs`, `EstateAction`),
   started by `EstateHost` in `src/shell/mod.rs` with the `Arc<EstateSession>` and
-  living as long as the estate is open: `Reload`, `RunCommand`, `CancelCommand`,
-  `RunTool`, `OpenInTerminal`, `Answer`, `AcceptDefaults`, `WritePrerequisites`,
-  `CommitEdit`, `EnableMap`, `MergePresets`, `InitRepository`, `Close`.
+  living as long as the estate is open: `Reload`, `RunCommand`, `RunNoticeCommand`,
+  `CancelCommand`, `RunTool`, `OpenInTerminal`, `Answer`, `AcceptDefaults`,
+  `WritePrerequisites`, `CommitEdit`, `EnableMap`, `MergePresets`, `InitRepository`,
+  `Close`.
 
 A reporting command takes one `--format` and one `--out`, both required, and writes one
 file instead of printing (satz's ADR 0021). The app names the destination: the file the
@@ -162,6 +163,17 @@ the palette would hold no write lock and reload no model. The writing run is off
 Checks instead, as `EstateAction::WritePrerequisites` — `satz_update_prerequisites
 {report_only: false}` through the delegated-write discipline of section 4b.
 
+A pack can name one command to be run once it is switched on — its `notice`, which the
+estate acknowledges by binding the notice's param `true` (satz's ADR 0033). satz returns
+the notices a write opened in that write's own report, once, and the app holds them:
+`queued()` puts what `satz_interview` and `satz_merge_presets` returned into
+`EstateStore::notices` and raises the dialog of `src/shell/notices.rs`. What takes one
+away is the estate binding its param, and satz decides that — every reload asks
+`EstateDir::acknowledged` over the params it has just folded — so "I ran it" (an `Answer`
+binding the param) and `satz adopt --execute --import` (which binds it itself) both end
+the same way. `RunNoticeCommand` is the notice's own command run in the app: the same
+run as `RunCommand`, followed by a reload, because that command writes the estate file.
+
 `apply`, `bootstrap` and `migrate` run in the user's own terminal
 ([ADR 0006](adr/0006-apply-and-bootstrap-run-in-the-users-terminal.md),
 [ADR 0012](adr/0012-migrate-hands-off-to-the-terminal.md)); `bootstrap --dry-run` is a
@@ -171,8 +183,8 @@ Overview's day-0 row offers.
 The shell (`src/shell/`) is the navigation rail with its badges, the top bar with the
 `runs_as`, satz-studio-version and satz-version chips and the actions beside them, the
 `SatzBanner` while satz is missing, too old or does not run, and as a notice while it is
-newer than the build, the diagnostics drawer, the commands palette and the
-snackbar host.
+newer than the build, the diagnostics drawer, the commands palette, the notice
+dialog and the snackbar host.
 
 The Start screen is the way in, and the only one: a row of doors (`state::Door`) over
 the pane the chosen door opens. **Create** (`src/views/create.rs`) is the `satz init`

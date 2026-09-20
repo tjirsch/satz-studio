@@ -231,6 +231,14 @@ impl EstateDir {
         satz_core::pipeline::estate_params(&main.to_string_lossy(), &src, &self.loader(main))
     }
 
+    /// Whether the estate has acknowledged the notice on `param`, by satz's own rule
+    /// over the resolved params of [`EstateDir::params`]: the param is bound `true`,
+    /// and nothing else counts. The app asks this rather than reading the param
+    /// itself, so a window and satz never disagree about what is still open.
+    pub fn acknowledged(env: &satz_core::pipeline::Env, param: &str) -> bool {
+        satz_core::pipeline::acknowledged(env, param)
+    }
+
     /// `deployment_mode` as the estate binds it — `local` or `cloud` — or `None` when
     /// it binds nothing (a skeleton before its first answers).
     pub fn deployment_mode(

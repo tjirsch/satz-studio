@@ -526,6 +526,24 @@ pub fn spec_of(id: &str) -> Option<&'static CommandSpec> {
     PALETTE.iter().find(|s| s.id == id)
 }
 
+/// Whether a command line — the arguments after `satz` — is one the app hands to the OS
+/// terminal rather than running itself: `apply`, `bootstrap` and `migrate` are, by the
+/// same table that decides it for the decks (ADR 0006, ADR 0012). Read by the notice
+/// dialog, so the command a pack asks for goes where the app runs that command.
+pub fn runs_in_terminal(args: &[String]) -> bool {
+    let Some(head) = args.first() else {
+        return false;
+    };
+    PALETTE
+        .iter()
+        .filter(|s| s.head.first() == Some(&head.as_str()))
+        .filter(|s| s.tail.iter().all(|word| args.iter().any(|a| a == word)))
+        // the most specific entry decides: `bootstrap` is the terminal's and
+        // `bootstrap --dry-run` is the app's, and they share a head
+        .max_by_key(|s| s.tail.len())
+        .is_some_and(|s| s.external)
+}
+
 /// The initial field values of a spec: positionals and choices at their default,
 /// everything else empty.
 pub fn defaults(spec: &CommandSpec) -> BTreeMap<String, String> {
@@ -868,6 +886,25 @@ mod tests {
 
     fn built(id: &str, estate: &str, values: &BTreeMap<String, String>) -> Vec<String> {
         build_args(spec(id), estate, values, Path::new(OUT)).unwrap()
+    }
+
+    #[test]
+    fn the_terminal_takes_the_three_external_commands_and_a_dry_run_stays_in_the_app() {
+        let args =
+            |line: &str| -> Vec<String> { line.split_whitespace().map(str::to_string).collect() };
+        assert!(runs_in_terminal(&args("bootstrap C0example.satz")));
+        assert!(runs_in_terminal(&args("apply")));
+        assert!(runs_in_terminal(&args("migrate C0example.satz")));
+        assert!(!runs_in_terminal(&args(
+            "bootstrap C0example.satz --dry-run"
+        )));
+        assert!(!runs_in_terminal(&args("transpile C0example.satz")));
+        // a command the palette does not carry — `adopt`, which a pack's notice names —
+        // runs in the app's log like every other satz command
+        assert!(!runs_in_terminal(&args(
+            "adopt C0example.satz --execute --import"
+        )));
+        assert!(!runs_in_terminal(&[]));
     }
 
     #[test]

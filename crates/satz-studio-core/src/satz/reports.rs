@@ -125,13 +125,53 @@ pub struct QuestionsSummary {
     pub complete: bool,
 }
 
-/// What `satz_interview` returns: the report, plus what the call did to the file.
+/// What a notice holds up. satz's only value is `apply`: `transpile --apply` and
+/// `bootstrap` refuse while such a notice is open. A word satz adds fails the report
+/// rather than reading as "nothing is held up".
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum NoticeBefore {
+    Apply,
+}
+
+/// One notice of a pack the estate uses: what a pack asks to be run once it is
+/// switched on, and the param the estate binds `true` to say it has been. satz's own
+/// `NoticeRow` (`vendor/satz/src/notices.rs`).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct NoticeRow {
+    /// the param the estate binds `true` to acknowledge it
+    pub param: String,
+    /// the file that declares it, as the `use` that reached it names it
+    pub pack: String,
+    /// what to do and why
+    pub text: String,
+    /// the command to run, with `<estate>` where the estate file goes
+    pub run: String,
+    /// what stays refused while the notice is open
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub before: Option<NoticeBefore>,
+    /// the estate binds the param `true`
+    pub acknowledged: bool,
+}
+
+impl NoticeRow {
+    /// Apply and bootstrap refuse while this one is open.
+    pub fn holds_up_apply(&self) -> bool {
+        self.before == Some(NoticeBefore::Apply)
+    }
+}
+
+/// What `satz_interview` returns: the report, plus what the call did to the file and
+/// the notices its answers opened.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct InterviewReport {
     pub created: bool,
     pub written: usize,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rename_to: Option<String>,
+    /// the notices this call opened by switching a pack on — shown once, when they
+    /// open; a later call returns only what it opens
+    pub notices: Vec<NoticeRow>,
     #[serde(flatten)]
     pub report: QuestionsReport,
 }
@@ -283,12 +323,63 @@ mod tests {
     #[test]
     fn an_interview_report_flattens_the_questions_report() {
         let r: InterviewReport = serde_json::from_value(serde_json::json!({
-            "created": true, "written": 2, "rename_to": "C0example.satz",
+            "created": true, "written": 2, "rename_to": "C0example.satz", "notices": [],
             "estate": "x.satz", "questions": [], "summary": {"total": 0, "answered": 0, "unanswered": 0, "not_applicable": 0, "blocking": 0, "one_way_doors": 0, "complete": true}
         }))
         .unwrap();
         assert_eq!(r.rename_to.as_deref(), Some("C0example.satz"));
         assert!(r.report.summary.complete);
+        assert!(r.notices.is_empty());
+    }
+
+    /// The notice a `satz_interview` call returned when the CIS pack went on, recorded
+    /// from the pinned release.
+    const OPENED: &str = r#"{
+        "acknowledged": false,
+        "before": "apply",
+        "pack": "presets/cis/block-project-ssh-keys.satz",
+        "param": "cis_block_project_ssh_keys_adopted",
+        "run": "satz adopt <estate> --execute --import",
+        "text": "Run satz adopt once the pack is on, so every live policy is in the state before the apply."
+    }"#;
+
+    #[test]
+    fn a_notice_carries_the_command_to_run_and_the_param_that_acknowledges_it() {
+        let n: NoticeRow = serde_json::from_str(OPENED).unwrap();
+        assert_eq!(n.param, "cis_block_project_ssh_keys_adopted");
+        assert_eq!(n.run, "satz adopt <estate> --execute --import");
+        assert!(!n.acknowledged);
+        assert!(n.holds_up_apply());
+        assert_eq!(
+            serde_json::to_value(&n).unwrap(),
+            serde_json::from_str::<serde_json::Value>(OPENED).unwrap()
+        );
+    }
+
+    /// A notice the app cannot read is a failed report, never a notice quietly dropped:
+    /// the operator would never learn of the command the pack asks for.
+    #[test]
+    fn a_notice_field_the_app_cannot_read_fails_the_report() {
+        let missing = serde_json::json!({
+            "param": "p", "pack": "presets/p.satz", "text": "t", "acknowledged": false
+        });
+        assert!(
+            serde_json::from_value::<NoticeRow>(missing).is_err(),
+            "no `run`"
+        );
+        let unknown_before = serde_json::json!({
+            "param": "p", "pack": "presets/p.satz", "text": "t", "run": "satz x",
+            "before": "bootstrap", "acknowledged": false
+        });
+        assert!(serde_json::from_value::<NoticeRow>(unknown_before).is_err());
+        let no_notices = serde_json::json!({
+            "created": false, "written": 1,
+            "estate": "x.satz", "questions": [], "summary": {"total": 0, "answered": 0, "unanswered": 0, "not_applicable": 0, "blocking": 0, "one_way_doors": 0, "complete": true}
+        });
+        assert!(
+            serde_json::from_value::<InterviewReport>(no_notices).is_err(),
+            "a satz that does not report notices is not one this app runs"
+        );
     }
 
     /// The `structuredContent` of a refused `satz_transpile_check`, recorded from the
