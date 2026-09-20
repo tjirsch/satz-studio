@@ -1,11 +1,13 @@
 //! The Decisions destination: the questions the estate's packs declare, one at a time, the
 //! unanswered ones first. Every answer is one `satz_interview` call through the estate
-//! coroutine, and the view re-renders from the reloaded report. The walk remembers the
-//! questions it moved away from, so Back returns to one whether it is answered by then
-//! or not; with "Show answered" on, every question is listed beside the card. A typed
-//! answer's field has the shape `answer_kind` reads off the report — the shape the pack
-//! declares the param with, else the offered value's — so a list that offers nothing is
-//! still a list.
+//! coroutine, and the view re-renders from the reloaded report. The card moves when the
+//! operator moves it and at no other time: an answer is written and the card stays on the
+//! question it answered — now reading answered, its forward button reading Next — until
+//! Next, Back or a click in the list moves it. The walk remembers the questions it moved
+//! away from, so Back returns to one whether it is answered by then or not; with "Show
+//! answered" on, every question is listed beside the card. A typed answer's field has the
+//! shape `answer_kind` reads off the report — the shape the pack declares the param with,
+//! else the offered value's — so a list that offers nothing is still a list.
 
 use dioxus::prelude::*;
 use satz_studio_core::model::answer_kind;
@@ -20,24 +22,32 @@ use crate::components::{
 use crate::state::{AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt};
 
 /// The questions in the order the view walks them: the unanswered ones as the report
-/// lists them, then — when asked for — the answered ones and the ones not asked.
-pub fn ordered(questions: &[QuestionRow], show_answered: bool) -> Vec<QuestionRow> {
+/// lists them, then — when asked for — the answered ones and the ones not asked. `held`
+/// is the subject of the question the card holds open, the one it has just answered: it
+/// keeps the place it had among the unanswered ones whatever its state now says, so
+/// answering moves neither the card nor a row under the operator.
+pub fn ordered(
+    questions: &[QuestionRow],
+    show_answered: bool,
+    held: Option<&str>,
+) -> Vec<QuestionRow> {
+    let is_held = |q: &QuestionRow| held.is_some_and(|h| h == q.subject);
     let mut out: Vec<QuestionRow> = questions
         .iter()
-        .filter(|q| q.state == QuestionState::Unanswered)
+        .filter(|q| q.state == QuestionState::Unanswered || is_held(q))
         .cloned()
         .collect();
     if show_answered {
         out.extend(
             questions
                 .iter()
-                .filter(|q| q.state == QuestionState::Answered)
+                .filter(|q| q.state == QuestionState::Answered && !is_held(q))
                 .cloned(),
         );
         out.extend(
             questions
                 .iter()
-                .filter(|q| q.state == QuestionState::NotApplicable)
+                .filter(|q| q.state == QuestionState::NotApplicable && !is_held(q))
                 .cloned(),
         );
     }
@@ -48,15 +58,24 @@ pub fn ordered(questions: &[QuestionRow], show_answered: bool) -> Vec<QuestionRo
 /// reorders the list: an answer moves a question into the answered block, or out of the
 /// walk while answered questions are hidden. `index` is where the card was, for when its
 /// question has left the list — the question that took its place is shown. `left` holds
-/// the questions the walk moved away from, the latest last, for Back.
+/// the questions the walk moved away from, the latest last, for Back. `held` is the
+/// question answered on the card: the walk keeps it where it was until the operator
+/// moves off it, so an answer alone never carries the card to the next question.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Walk {
     subject: Option<String>,
     index: usize,
     left: Vec<String>,
+    held: Option<String>,
 }
 
 impl Walk {
+    /// The questions the walk carries: `ordered`, with the question the card holds open
+    /// kept in its place.
+    pub fn list(&self, questions: &[QuestionRow], show_answered: bool) -> Vec<QuestionRow> {
+        ordered(questions, show_answered, self.held.as_deref())
+    }
+
     /// The position of the card's question in `list`.
     pub fn position(&self, list: &[QuestionRow]) -> usize {
         self.subject
@@ -74,33 +93,58 @@ impl Walk {
         }
     }
 
-    /// Open the question at `to`, remembering the one on the card.
-    pub fn open(&mut self, list: &[QuestionRow], to: usize) {
+    /// Open the question at `to` in the walk's list, remembering the one on the card.
+    pub fn open(&mut self, questions: &[QuestionRow], show_answered: bool, to: usize) {
+        let list = self.list(questions, show_answered);
         let Some(q) = list.get(to) else { return };
-        if to != self.position(list) {
-            self.leave(list);
+        if to == self.position(&list) {
+            return;
         }
+        self.leave(&list);
         self.subject = Some(q.subject.clone());
         self.index = to;
+        // the card has left the question it held open; the list stops carrying it
+        self.held = None;
     }
 
-    /// Skip, or Next: the question after the card's, the first one after the last.
-    pub fn next(&mut self, list: &[QuestionRow]) {
-        if !list.is_empty() {
-            self.open(list, (self.position(list) + 1) % list.len());
-        }
-    }
-
-    /// The card's question is being answered: the walk moves on to the question after
-    /// it, which the reload puts where the answered one was.
-    pub fn answered(&mut self, list: &[QuestionRow]) {
+    /// Skip, or Next: the question after the card's, the first one after the last. This
+    /// and Back are what move the card — writing an answer does not.
+    pub fn next(&mut self, questions: &[QuestionRow], show_answered: bool) {
+        let list = self.list(questions, show_answered);
         if list.is_empty() {
             return;
         }
-        let i = self.position(list);
-        self.leave(list);
-        self.subject = list.get(i + 1).map(|q| q.subject.clone());
-        self.index = i;
+        let from = self.position(&list);
+        let to = (from + 1) % list.len();
+        if to != from {
+            self.open(questions, show_answered, to);
+            return;
+        }
+        // One question in the walk, and it is there only because the card holds it open:
+        // moving on lets it go, and leaves the walk with no question at all.
+        let plain = ordered(questions, show_answered, None);
+        let releases = self.held.is_some()
+            && list
+                .get(from)
+                .is_some_and(|q| !plain.iter().any(|p| p.subject == q.subject));
+        if releases {
+            self.leave(&list);
+            self.subject = None;
+            self.index = 0;
+            self.held = None;
+        }
+    }
+
+    /// The card's question has just been answered: the walk holds on to it, so the
+    /// reload leaves the card on the question it answered and only Next moves it off.
+    pub fn hold(&mut self, questions: &[QuestionRow], show_answered: bool) {
+        let list = self.list(questions, show_answered);
+        let i = self.position(&list);
+        if let Some(q) = list.get(i) {
+            self.subject = Some(q.subject.clone());
+            self.index = i;
+            self.held = Some(q.subject.clone());
+        }
     }
 
     pub fn can_go_back(&self) -> bool {
@@ -117,7 +161,9 @@ impl Walk {
                 continue;
             };
             let show = show_answered || q.state != QuestionState::Unanswered;
-            self.index = ordered(questions, show)
+            // the card leaves the question it held open, as it does going forward
+            self.held = None;
+            self.index = ordered(questions, show, None)
                 .iter()
                 .position(|r| r.subject == subject)
                 .unwrap_or(0);
@@ -128,19 +174,24 @@ impl Walk {
     }
 
     /// "Show answered" switched from `from` to `to`: the card keeps its question when
-    /// the new list holds it, and starts from the first question when it does not.
+    /// the new list holds it, and starts from the first question when it does not. The
+    /// switch is not a move, so a question the card holds open stays on the card.
     pub fn switched(&mut self, questions: &[QuestionRow], from: bool, to: bool) {
-        let before = ordered(questions, from);
-        let subject = before.get(self.position(&before)).map(|q| &q.subject);
-        let after = ordered(questions, to);
-        match subject.and_then(|s| after.iter().position(|q| &q.subject == s)) {
-            Some(i) => {
-                self.subject = Some(after[i].subject.clone());
-                self.index = i;
-            }
+        let before = self.list(questions, from);
+        self.subject = before
+            .get(self.position(&before))
+            .map(|q| q.subject.clone());
+        let after = self.list(questions, to);
+        match self
+            .subject
+            .as_ref()
+            .and_then(|s| after.iter().position(|q| &q.subject == s))
+        {
+            Some(i) => self.index = i,
             None => {
                 self.subject = None;
                 self.index = 0;
+                self.held = None;
             }
         }
     }
@@ -239,7 +290,7 @@ pub fn DecisionsView() -> Element {
     };
 
     let s = report.summary.clone();
-    let list = ordered(&report.questions, show_answered());
+    let list = walk.read().list(&report.questions, show_answered());
     let offered_defaults = report
         .questions
         .iter()
@@ -317,10 +368,12 @@ pub fn DecisionsView() -> Element {
                             can_back,
                             onback: move |_| go_back(),
                             onskip: move |_| {
-                                walk.write().next(&ordered(&questions_now(), show_answered()));
+                                walk.write().next(&questions_now(), show_answered());
                             },
+                            // an answer does not move the card: it holds the question it
+                            // answered until the operator presses Next
                             onanswer: move |_| {
-                                walk.write().answered(&ordered(&questions_now(), show_answered()));
+                                walk.write().hold(&questions_now(), show_answered());
                             },
                         }
                     },
@@ -365,7 +418,7 @@ pub fn DecisionsView() -> Element {
                                     selected: n == i,
                                     leading: rsx! { Icon { name: state_of(q).0, size: 20 } },
                                     onclick: move |_| {
-                                        walk.write().open(&ordered(&questions_now(), show_answered()), n);
+                                        walk.write().open(&questions_now(), show_answered(), n);
                                     },
                                 }
                             }
@@ -685,30 +738,81 @@ mod tests {
             q("d", QuestionState::Unanswered),
         ];
         let names = |v: Vec<QuestionRow>| v.into_iter().map(|q| q.subject).collect::<Vec<_>>();
-        assert_eq!(names(ordered(&all, false)), ["b", "d"]);
-        assert_eq!(names(ordered(&all, true)), ["b", "d", "a", "c"]);
+        assert_eq!(names(ordered(&all, false, None)), ["b", "d"]);
+        assert_eq!(names(ordered(&all, true, None)), ["b", "d", "a", "c"]);
+        // the question the card holds open keeps its place among the unanswered ones,
+        // and is not listed a second time in the answered block
+        assert_eq!(names(ordered(&all, false, Some("a"))), ["a", "b", "d"]);
+        assert_eq!(names(ordered(&all, true, Some("a"))), ["a", "b", "d", "c"]);
     }
 
-    /// The interview's own flow: an answer moves on, and Back returns to the question
-    /// just answered, which has left the walk while answered questions are hidden.
+    /// The rule Thomas asked for: an answer writes a value and nothing else. The card
+    /// stays on the question it answered — which now reads answered, so its forward
+    /// button reads Next — and the list under it does not move either.
     #[test]
-    fn back_returns_to_the_question_just_answered_and_shows_answered_to_hold_it() {
+    fn an_answer_leaves_the_card_on_the_question_it_answered() {
         let mut questions = vec![
             q("region", QuestionState::Unanswered),
             q("billing", QuestionState::Unanswered),
             q("domain", QuestionState::Unanswered),
         ];
         let mut walk = Walk::default();
-        assert!(!walk.can_go_back());
-        walk.answered(&ordered(&questions, false));
-        // the reload: region is answered and leaves the walk
+        walk.hold(&questions, false);
+        // the reload: region is answered and would leave the walk, but the card holds it
         questions[0].state = QuestionState::Answered;
-        let open = ordered(&questions, false);
-        assert_eq!(subject_at(&walk, &open), "billing");
+        let list = walk.list(&questions, false);
+        assert_eq!(
+            list.iter().map(|q| &q.subject).collect::<Vec<_>>(),
+            ["region", "billing", "domain"]
+        );
+        assert_eq!(walk.position(&list), 0);
+        assert_eq!(list[0].state, QuestionState::Answered);
+        // nothing was left behind, so there is nothing to go back to yet
+        assert!(!walk.can_go_back());
+    }
+
+    /// Next is what moves the card, and only then does the answered question leave the
+    /// walk; Back returns to it, switching "Show answered" on to hold it.
+    #[test]
+    fn next_moves_the_card_off_the_answered_question_and_back_returns_to_it() {
+        let mut questions = vec![
+            q("region", QuestionState::Unanswered),
+            q("billing", QuestionState::Unanswered),
+            q("domain", QuestionState::Unanswered),
+        ];
+        let mut walk = Walk::default();
+        walk.hold(&questions, false);
+        questions[0].state = QuestionState::Answered;
+        walk.next(&questions, false);
+        let list = walk.list(&questions, false);
+        assert_eq!(
+            list.iter().map(|q| &q.subject).collect::<Vec<_>>(),
+            ["billing", "domain"]
+        );
+        assert_eq!(subject_at(&walk, &list), "billing");
         assert!(walk.can_go_back());
         assert_eq!(walk.back(&questions, false), Some(true));
-        assert_eq!(subject_at(&walk, &ordered(&questions, true)), "region");
+        assert_eq!(
+            subject_at(&walk, &walk.list(&questions, true)),
+            "region",
+            "Back returns to the answered question, with answered questions shown"
+        );
         assert_eq!(walk.back(&questions, true), None);
+    }
+
+    /// The last open question: answering it leaves the card on it, and Next then empties
+    /// the walk rather than showing that question again.
+    #[test]
+    fn next_off_the_last_answered_question_empties_the_walk() {
+        let mut questions = vec![q("region", QuestionState::Unanswered)];
+        let mut walk = Walk::default();
+        walk.hold(&questions, false);
+        questions[0].state = QuestionState::Answered;
+        assert_eq!(subject_at(&walk, &walk.list(&questions, false)), "region");
+        walk.next(&questions, false);
+        assert!(walk.list(&questions, false).is_empty());
+        assert_eq!(walk.back(&questions, false), Some(true));
+        assert_eq!(subject_at(&walk, &walk.list(&questions, true)), "region");
     }
 
     #[test]
@@ -717,11 +821,11 @@ mod tests {
             q("region", QuestionState::Unanswered),
             q("billing", QuestionState::Unanswered),
         ];
-        let list = ordered(&questions, false);
+        let list = ordered(&questions, false, None);
         let mut walk = Walk::default();
-        walk.next(&list);
+        walk.next(&questions, false);
         assert_eq!(subject_at(&walk, &list), "billing");
-        walk.next(&list);
+        walk.next(&questions, false);
         assert_eq!(subject_at(&walk, &list), "region");
         assert_eq!(walk.back(&questions, false), Some(false));
         assert_eq!(subject_at(&walk, &list), "billing");
@@ -730,20 +834,35 @@ mod tests {
         assert_eq!(walk.back(&questions, false), None);
     }
 
-    /// With answered questions shown, an answer moves the question into the answered
-    /// block; the card goes on to the next question rather than following it there.
+    /// Skipping the only open question keeps it on the card and remembers nothing: there
+    /// is nowhere to go, and the card was not holding it in the walk.
     #[test]
-    fn an_answer_with_answered_shown_moves_on_rather_than_after_the_question() {
+    fn skipping_the_only_open_question_stays_on_it() {
+        let questions = vec![q("region", QuestionState::Unanswered)];
+        let mut walk = Walk::default();
+        walk.next(&questions, false);
+        assert_eq!(subject_at(&walk, &walk.list(&questions, false)), "region");
+        assert!(!walk.can_go_back());
+    }
+
+    /// With answered questions shown, an answer leaves the card and its row where they
+    /// were rather than carrying the question into the answered block under the operator.
+    #[test]
+    fn an_answer_with_answered_shown_moves_neither_the_card_nor_its_row() {
         let mut questions = vec![
             q("region", QuestionState::Unanswered),
             q("billing", QuestionState::Unanswered),
             q("domain", QuestionState::Answered),
         ];
         let mut walk = Walk::default();
-        walk.answered(&ordered(&questions, true));
+        walk.hold(&questions, true);
         questions[0].state = QuestionState::Answered;
-        let list = ordered(&questions, true);
-        assert_eq!(subject_at(&walk, &list), "billing");
+        let list = walk.list(&questions, true);
+        assert_eq!(
+            list.iter().map(|q| &q.subject).collect::<Vec<_>>(),
+            ["region", "billing", "domain"]
+        );
+        assert_eq!(subject_at(&walk, &list), "region");
         assert_eq!(walk.position(&list), 0);
     }
 
@@ -754,13 +873,34 @@ mod tests {
             q("billing", QuestionState::Answered),
             q("domain", QuestionState::Answered),
         ];
-        let list = ordered(&questions, true);
+        let list = ordered(&questions, true, None);
         let mut walk = Walk::default();
-        walk.open(&list, 2);
+        walk.open(&questions, true, 2);
         assert_eq!(subject_at(&walk, &list), "domain");
         // opening the question already on the card leaves nothing behind
-        walk.open(&list, 2);
+        walk.open(&questions, true, 2);
         assert_eq!(walk.back(&questions, true), Some(true));
+        assert_eq!(subject_at(&walk, &list), "region");
+        assert!(!walk.can_go_back());
+    }
+
+    /// The row the card holds open is the row a click on it opens: clicking it is not a
+    /// move, so the question stays in the list.
+    #[test]
+    fn clicking_the_held_question_s_own_row_keeps_it_in_the_list() {
+        let mut questions = vec![
+            q("region", QuestionState::Unanswered),
+            q("billing", QuestionState::Unanswered),
+        ];
+        let mut walk = Walk::default();
+        walk.hold(&questions, false);
+        questions[0].state = QuestionState::Answered;
+        walk.open(&questions, false, 0);
+        let list = walk.list(&questions, false);
+        assert_eq!(
+            list.iter().map(|q| &q.subject).collect::<Vec<_>>(),
+            ["region", "billing"]
+        );
         assert_eq!(subject_at(&walk, &list), "region");
         assert!(!walk.can_go_back());
     }
@@ -773,15 +913,41 @@ mod tests {
             q("domain", QuestionState::Unanswered),
         ];
         let mut walk = Walk::default();
-        walk.next(&ordered(&questions, false));
+        walk.next(&questions, false);
         walk.switched(&questions, false, true);
-        assert_eq!(subject_at(&walk, &ordered(&questions, true)), "domain");
+        assert_eq!(
+            subject_at(&walk, &ordered(&questions, true, None)),
+            "domain"
+        );
         walk.switched(&questions, true, false);
-        assert_eq!(subject_at(&walk, &ordered(&questions, false)), "domain");
+        assert_eq!(
+            subject_at(&walk, &ordered(&questions, false, None)),
+            "domain"
+        );
         // on an answered question, hiding answered ones starts from the first open one
-        walk.open(&ordered(&questions, true), 2);
+        walk.open(&questions, true, 2);
         walk.switched(&questions, true, false);
-        assert_eq!(subject_at(&walk, &ordered(&questions, false)), "billing");
+        assert_eq!(
+            subject_at(&walk, &ordered(&questions, false, None)),
+            "billing"
+        );
+    }
+
+    /// The switch is not a press of the forward button: a question answered on the card
+    /// stays on it through "Show answered" going on and off again.
+    #[test]
+    fn the_show_answered_switch_does_not_take_the_just_answered_card_away() {
+        let mut questions = vec![
+            q("region", QuestionState::Unanswered),
+            q("billing", QuestionState::Unanswered),
+        ];
+        let mut walk = Walk::default();
+        walk.hold(&questions, false);
+        questions[0].state = QuestionState::Answered;
+        walk.switched(&questions, false, true);
+        assert_eq!(subject_at(&walk, &walk.list(&questions, true)), "region");
+        walk.switched(&questions, true, false);
+        assert_eq!(subject_at(&walk, &walk.list(&questions, false)), "region");
     }
 
     #[test]
