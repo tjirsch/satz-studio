@@ -29,6 +29,19 @@ pub enum Blast {
     High,
 }
 
+/// The shape the pack declares a param with, and so the shape an answer must have.
+/// satz refuses an answer that contradicts it, so the app types its field in this
+/// shape and never derives one of its own.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Shape {
+    String,
+    Number,
+    Bool,
+    List,
+    Map,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum QuestionState {
@@ -57,6 +70,11 @@ pub struct QuestionRow {
     pub default: Option<serde_json::Value>,
     /// unanswered and no usable default: a value has to be typed
     pub blocking: bool,
+    /// the shape the pack declares the param with. Absent for a choice, which is
+    /// answered by an option's name, and for a param whose declaration names no
+    /// shape satz can read off
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shape: Option<Shape>,
     /// the pack's own description — its header's first paragraph
     pub pack_description: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]

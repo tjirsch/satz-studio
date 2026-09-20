@@ -159,11 +159,16 @@ async fn a_gate_bound_true_without_its_line_is_absent_and_the_check_names_the_pa
     support::answer_like_the_smoke_matrix(&session).await;
     support::enable_map(&session).await;
 
-    // the budget line goes, as in an estate written before the library gained the pack
+    // the budget pack goes back to how it looks in an estate written before the
+    // library gained it: no line for it, active or commented, and no binding of its gate
     let text = support::read(&main);
-    let budget_line = format!("// use \"{BUDGET}\" when use_budget\n");
-    assert!(text.contains(&budget_line), "{text}");
-    std::fs::write(&main, text.replacen(&budget_line, "", 1)).unwrap();
+    assert!(text.contains(BUDGET), "{text}");
+    let without: String = text
+        .lines()
+        .filter(|l| !l.contains(BUDGET) && !l.trim_start().starts_with("use_budget "))
+        .map(|l| format!("{l}\n"))
+        .collect();
+    std::fs::write(&main, &without).unwrap();
 
     // `use_budget = true` the app's way: appended by `ReplaceParam`, and the commit
     // lands — at satz's default validation level the check passes
@@ -218,7 +223,7 @@ async fn a_gate_bound_true_without_its_line_is_absent_and_the_check_names_the_pa
     assert!(
         warning
             .message
-            .contains("run `satz merge-presets` to write it"),
+            .contains("`satz add-pack` writes it where the pack graph places it"),
         "{}",
         warning.message
     );
@@ -261,27 +266,34 @@ async fn a_gate_bound_true_without_its_line_is_absent_and_the_check_names_the_pa
     let CheckFailure::Refused(refused) = err else {
         panic!("{err:?}")
     };
-    assert_eq!(refused.len(), 1, "{refused:?}");
-    assert_eq!(refused[0].severity, Severity::Error);
-    assert_eq!(refused[0].source, DiagSource::Check);
-    assert_eq!(refused[0].kind.as_deref(), Some("unadopted-pack"));
+    // the pack whose line is gone, among the packs this estate asks for and does not
+    // use; how many others share that group is the library's business, not this test's
+    let budget = refused
+        .iter()
+        .find(|d| d.message.contains("`use_budget` is true"))
+        .unwrap_or_else(|| panic!("no refusal names use_budget: {refused:?}"));
+    assert_eq!(budget.severity, Severity::Error);
+    assert_eq!(budget.source, DiagSource::Check);
+    assert_eq!(budget.kind.as_deref(), Some("unadopted-pack"));
     assert!(
-        refused[0]
+        budget
             .message
-            .starts_with("1 pack(s) this estate asks for but does not use"),
+            .contains("pack(s) this estate asks for but does not use"),
         "{}",
-        refused[0].message
+        budget.message
     );
     assert!(
-        refused[0].message.contains(&format!(
-            "`use_budget` is true and this estate has no line for `{BUDGET}` — run `satz merge-presets` to write it"
+        budget.message.contains(&format!(
+            "`use_budget` is true and this estate has no line for `{BUDGET}` — `satz add-pack` writes it where the pack graph places it"
         )),
         "{}",
-        refused[0].message
+        budget.message
     );
 
-    // … and the write discipline under it rolls the binding back: false lands, true
-    // is refused with that diagnostic, the file keeps its bytes, no temp file stays
+    // … and the write discipline rolls a binding back: switching the pack off lands
+    // through the estate's own checker, where a pack nothing emits is a warning;
+    // switching it on again is refused by the strict one with that diagnostic, the
+    // file keeps its bytes, no temp file stays
     let es = EditSession::open(&main).unwrap();
     let proposed = es
         .apply(&[Edit::ReplaceParam {
@@ -289,7 +301,7 @@ async fn a_gate_bound_true_without_its_line_is_absent_and_the_check_names_the_pa
             value: TypedValue::Bool(false),
         }])
         .unwrap();
-    support::within(proposed.commit(&strict)).await.unwrap();
+    support::within(proposed.commit(&mcp)).await.unwrap();
     let off = support::read(&main);
     assert_eq!(
         off.lines()

@@ -56,7 +56,7 @@ estates show the same list, because the same facts are true of them.
 
 ## What it needs
 
-- **`satz` 0.59.7 or newer.** `MIN_SATZ` in `crates/satz-studio-core/src/satz/binary.rs`
+- **`satz` 0.62.0 or newer.** `MIN_SATZ` in `crates/satz-studio-core/src/satz/binary.rs`
   names the oldest satz this build works with. It rises when a satz release breaks the
   app or the app starts using something a later satz introduced, not with every satz
   release. Install satz with its installer or bring it up to date with `satz
@@ -128,6 +128,7 @@ a fake CLI and need Python 3.
 | path | what it is |
 |---|---|
 | `Cargo.toml` | the workspace: two crates, `vendor` excluded, every dependency pinned once under `[workspace.dependencies]` |
+| `release.toml` | cargo-release: the version bump, the commit, the tag `vX.Y.Z` and the push, in one step on `main` |
 | `crates/satz-studio-core/` | the headless half: the estate directory, the document layer, the edit primitives and the write discipline, the provider schema and the view model, the satz driver (binary, CLI, `satz mcp` session), the Claude client and agent loop, transcripts, settings, diagnostics. No GUI dependency; tested on every runner |
 | `crates/satz-studio/` | the Dioxus 0.7 desktop binary `satz-studio`: the window, the views, the Material 3 Expressive stylesheet |
 | `vendor/satz/` | git submodule, pinned to a satz release tag. **The one pin:** satz-core as a path dependency, the presets, the smoke estates and the provider-schema fixture all come from this checkout |
@@ -140,10 +141,15 @@ a fake CLI and need Python 3.
 
 ## Release
 
-A tag `vX.Y.Z` runs `.github/workflows/release.yml`: `dx bundle` on each runner and a
-GitHub release with the bundles and a `.sha256` sidecar per file. The version in the
-file names is the workspace version in `Cargo.toml`; the tag is that version with a
-`v`. A manual run of the workflow builds the same bundles as workflow artifacts.
+`cargo release patch|minor --execute --no-confirm`, run on `main`, bumps the workspace
+version in `Cargo.toml`, commits it, tags it `vX.Y.Z` and pushes both; `release.toml`
+is that configuration.
+
+The tag runs `.github/workflows/release.yml`: it refuses a tag that is not the
+workspace version, then `dx bundle` on each runner and a GitHub release with the
+bundles and a `.sha256` sidecar per file. The version in the file names is that same
+workspace version. A manual run of the workflow builds the same bundles as workflow
+artifacts.
 
 | file | built on |
 |---|---|

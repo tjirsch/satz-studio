@@ -1,0 +1,21 @@
+# cargo-release: one step bumps the workspace version, commits it, tags it and pushes.
+# `cargo release patch|minor --execute --no-confirm` on `main`, after the checks are
+# green there. The tag `vX.Y.Z` is what .github/workflows/release.yml builds.
+#
+#   cargo install cargo-release      # once per machine
+#
+# Nothing is published to crates.io: the app is a bundle, not a crate.
+# A release is cut on `main` and nowhere else: the tag names a tree that CI has
+# passed there, and a tag off a branch would name one it has not.
+allow-branch = ["main"]
+sign-commit = false
+sign-tag = false
+push = true
+publish = false
+pre-release-commit-message = "version bump"
+tag-message = ""
+tag-name = "v{{version}}"
+# The two crates carry the workspace version and move together, so one tag names the
+# release rather than one per crate.
+shared-version = true
+consolidate-commits = true

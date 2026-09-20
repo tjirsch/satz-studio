@@ -156,7 +156,7 @@ async fn a_refusal_is_the_same_findings_through_both_checkers() {
     assert_eq!(pack.severity, Severity::Error);
     assert!(
         pack.message.contains(&format!(
-            "`use_budget` is true and this estate has no line for `{BUDGET}` — run `satz merge-presets` to write it"
+            "`use_budget` is true and this estate has no line for `{BUDGET}` — `satz add-pack` writes it where the pack graph places it"
         )),
         "{}",
         pack.message

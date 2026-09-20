@@ -72,6 +72,7 @@ async fn showcase_params_carry_their_questions_and_leave_the_gates_out() {
             "default_region",
             "audit_retention_days",
             "pack_bucket_location",
+            "pack_bucket_adopted",
         ],
         "want_optional gates a line and the group_model options are a oneof: pack rows"
     );
@@ -111,11 +112,18 @@ async fn showcase_params_carry_their_questions_and_leave_the_gates_out() {
     assert!(!retention.one_way_door);
 
     assert!(row(&m.params, "customer_id").question.is_none());
-    assert!(
-        m.params.iter().all(|r| r.line >= 12 && r.line <= 23),
-        "{:?}",
-        m.params.iter().map(|r| r.line).collect::<Vec<_>>()
-    );
+    // every row sits on the line that binds it, wherever the params block stands
+    let lines: Vec<&str> = text.lines().collect();
+    for r in &m.params {
+        let at = lines[r.line as usize - 1];
+        assert_eq!(
+            at.split_once('=').map(|(name, _)| name.trim()),
+            Some(r.name.as_str()),
+            "{}: line {} is `{at}`",
+            r.name,
+            r.line
+        );
+    }
 
     let gates: Vec<&str> = m.packs.iter().filter_map(|p| p.gate.as_deref()).collect();
     assert_eq!(

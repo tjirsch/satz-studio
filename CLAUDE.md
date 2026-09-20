@@ -85,12 +85,18 @@ the rules that apply to every change, whoever or whatever makes it.
 - **Planning lives outside this repository.** There is no roadmap file and no todo file
   here, and nothing in `docs/` is a plan. A pull request carries its own reasoning.
 - **One task, one branch, one squash-merged pull request** against `main`; `main` is
-  the merged history and nothing is committed to it directly.
-- **Release:** the workspace version in `Cargo.toml` is bumped in its own pull request,
-  and the tag `vX.Y.Z` comes after it, on `main`. The tag is what builds:
-  `.github/workflows/release.yml` runs `dx bundle` on macOS arm64, macOS Intel, Linux
-  and Windows and attaches each bundle with a SHA-256 sidecar. The bundles are not
-  signed and not notarized; `docs/verification.md` is what is checked before a tag.
+  the merged history, and the one commit that lands on it directly is the version bump
+  of a release.
+- **Release:** `cargo release patch|minor --execute --no-confirm` on `main`, once its
+  checks are green. One step bumps the workspace version in `Cargo.toml`, commits it as
+  `version bump`, tags it `vX.Y.Z` and pushes both; `release.toml` is that
+  configuration. That commit is the sanctioned exception to the rule above
+  ([ADR 0017](docs/adr/0017-a-release-is-cargo-release-on-main.md)): a pull request for
+  one version line re-runs the whole CI matrix over a tree `main` has just passed. The
+  tag is what builds: `.github/workflows/release.yml` refuses a tag that is not the
+  workspace version, then runs `dx bundle` on macOS arm64, Linux and Windows and
+  attaches each bundle with a SHA-256 sidecar. The bundles are not signed and not
+  notarized; `docs/verification.md` is what is checked before a release.
 - **`Satz` is the language; `satz` is the tool and its repository; `satz-studio` is
   this app.** "an estate written in Satz", "the satz binary", "satz-studio opens it".
 - **The window follows Material 3 Expressive.** The tokens and anatomies are

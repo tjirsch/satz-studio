@@ -3,8 +3,9 @@
 //! coroutine, and the view re-renders from the reloaded report. The walk remembers the
 //! questions it moved away from, so Back returns to one whether it is answered by then
 //! or not; with "Show answered" on, every question is listed beside the card. A typed
-//! answer's field has the shape `answer_kind` gives it: the offered value's, else the
-//! shape its param is declared with, so a list that offers nothing is still a list.
+//! answer's field has the shape `answer_kind` reads off the report — the shape the pack
+//! declares the param with, else the offered value's — so a list that offers nothing is
+//! still a list.
 
 use dioxus::prelude::*;
 use satz_studio_core::model::answer_kind;
@@ -206,7 +207,6 @@ pub fn DecisionsView() -> Element {
     let report = app.estate().questions().cloned();
     let interview = app.estate().interview().cloned();
     let loading = app.estate().loading().cloned();
-    let model = app.estate().model().cloned();
     let mut show_answered = use_signal(|| false);
     let mut walk = use_signal(Walk::default);
 
@@ -248,11 +248,11 @@ pub fn DecisionsView() -> Element {
     let i = walk.read().position(&list);
     let can_back = walk.read().can_go_back();
     let current = list.get(i).cloned();
-    // the field's shape; `None` when nothing is offered and the estate's params did not
-    // resolve, so the declared shape is not known
+    // the field's shape, as the report declares it; `None` when there is no field to
+    // type the answer in — a map, or a param declared without a shape that offers nothing
     let field = current
         .as_ref()
-        .and_then(|q| answer_kind(q, model.as_deref().map(|m| &m.shapes)))
+        .and_then(answer_kind)
         .map(FieldKind::of_param);
     let previous_pack = i
         .checked_sub(1)
@@ -477,7 +477,7 @@ fn QuestionCard(
                 match (q.kind, field) {
                     (QuestionKind::Param, Some(kind)) => rsx! {
                         ParamAnswer {
-                            // a shape that arrives with the model starts the field afresh
+                            // a question of another shape starts the field afresh
                             key: "{kind:?}",
                             question: q.clone(),
                             kind,
@@ -491,11 +491,7 @@ fn QuestionCard(
                     (QuestionKind::Param, None) => rsx! {
                         div { class: "interview__answer",
                             p { class: "interview__hint",
-                                if loading {
-                                    "The estate is being read; the field follows, in the shape this answer is written in."
-                                } else {
-                                    "This question offers no value, and the estate's params did not resolve, so the shape its answer is written in is not known. The drawer says why."
-                                }
+                                "There is no field for this answer: its param is declared as a map, or with no shape satz names. Write the value into the estate's params block."
                             }
                             div { class: "interview__actions",
                                 WalkButtons { state: q.state, can_back, onback: move |_| onback.call(()), onskip: move |_| onskip.call(()) }

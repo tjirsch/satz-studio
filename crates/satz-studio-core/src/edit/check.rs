@@ -183,7 +183,21 @@ fn refusal(stderr: &[String], base: &Path) -> Vec<Diagnostic> {
     let message = debug_string(payload)
         .filter(|(_, rest)| rest.is_empty())
         .map_or_else(|| payload.to_string(), |(s, _)| s);
-    vec![Diagnostic::error(message, DiagSource::Check)]
+    // A front-end refusal satz renders itself — one that carries a hint beside the
+    // parser's sentence — is a plain `<file>:<line>: message`. Read that location, or
+    // the drawer cannot point at the line the estate is wrong on.
+    let mut diags = parse_satz_output(&message, DiagSource::Check);
+    if diags.is_empty() {
+        return vec![Diagnostic::error(message, DiagSource::Check)];
+    }
+    for d in &mut diags {
+        if let Some(file) = &d.file
+            && file.is_relative()
+        {
+            d.file = Some(base.join(file));
+        }
+    }
+    diags
 }
 
 /// `CompileRefusal { message: "…", findings: [Finding { … }, …] }` as `Debug` renders
@@ -382,6 +396,39 @@ mod tests {
         assert_eq!(d[0].severity, Severity::Error);
         assert_eq!(d[0].kind, None);
         assert_eq!(d[0].source, DiagSource::Check);
+    }
+
+    /// satz renders a front-end refusal itself where it has something to add to the
+    /// parser's sentence, and then the error is a plain string: the location in front
+    /// of it is what the drawer points at.
+    #[test]
+    fn a_front_end_refusal_satz_rendered_itself_keeps_its_file_and_line() {
+        let stderr = [
+            "satz v0.67.0 (built 2026-09-20 05:23:53)".to_string(),
+            concat!(
+                r#"Error: "/e/yaml/acme.satz:24: unknown param 'nobody' — the pack graph: "#,
+                r#"`presets/cis/CIS-GCP-Foundation-4.0.satz` needs `presets/estate-map.satz`, which is off""#,
+            )
+            .to_string(),
+        ];
+        let d = refusal(&stderr, Path::new(BASE));
+        assert_eq!(d.len(), 1, "{d:?}");
+        assert_eq!(d[0].file.as_deref(), Some(Path::new("/e/yaml/acme.satz")));
+        assert_eq!(d[0].line, Some(24));
+        assert!(d[0].message.starts_with("unknown param 'nobody'"), "{d:?}");
+        assert_eq!(d[0].severity, Severity::Error);
+        assert_eq!(d[0].source, DiagSource::Check);
+    }
+
+    /// The same refusal with a relative file, as satz names one it loaded by a `use`
+    /// path: resolved against the estate's own directory.
+    #[test]
+    fn a_relative_file_in_a_rendered_refusal_resolves_against_the_estate() {
+        let stderr = [r#"Error: "acme.satz:7: unknown param 'nobody'""#.to_string()];
+        let d = refusal(&stderr, Path::new(BASE));
+        assert_eq!(d.len(), 1, "{d:?}");
+        assert_eq!(d[0].file.as_deref(), Some(Path::new("/e/yaml/acme.satz")));
+        assert_eq!(d[0].line, Some(7));
     }
 
     #[test]

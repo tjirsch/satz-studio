@@ -209,21 +209,25 @@ async fn the_skeleton_is_the_map_row_then_every_gated_line_off() {
         "document order"
     );
 
-    let runner = by_gate(&m.packs, "use_verification_runner");
-    assert_eq!(runner.len(), 2, "two lines with one gate are two rows");
+    // every line of the skeleton is its own row: the runner and the grant that goes
+    // with it are two, each with its own gate
+    let runner = one(&m.packs, "use_verification_runner");
     assert!(
-        runner[0]
+        runner
             .path
             .as_deref()
             .unwrap()
-            .ends_with("verification-runner.satz")
+            .ends_with("verification-runner.satz"),
+        "{runner:?}"
     );
+    let grant = one(&m.packs, "use_verification_runner_grant");
     assert!(
-        runner[1]
+        grant
             .path
             .as_deref()
             .unwrap()
-            .ends_with("verification-runner-grant.satz")
+            .ends_with("verification-runner-grant.satz"),
+        "{grant:?}"
     );
 
     let logsink = one(&m.packs, "use_audit_logsink");
