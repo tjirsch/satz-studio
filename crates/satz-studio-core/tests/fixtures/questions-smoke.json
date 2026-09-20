@@ -11,6 +11,7 @@
       "state": "unanswered",
       "default": "essential-contacts-all@example.com",
       "blocking": false,
+      "shape": "string",
       "pack_description": "One organization-level Essential Contact, subscribed to every notification category Google routes.",
       "from": "presets/essential-contacts-organization.satz",
       "pack": "essential_contacts_organization"
@@ -25,8 +26,9 @@
       "state": "unanswered",
       "default": false,
       "blocking": false,
+      "shape": "bool",
       "pack_description": "The CIS GCP Foundation 4.0 organization-policy set, managed constraints included.",
-      "from": "presets/CIS-GCP-Foundation-4.0.satz",
+      "from": "presets/cis/CIS-GCP-Foundation-4.0.satz",
       "pack": "CIS_GCP_Foundation_4_0"
     },
     {
@@ -39,8 +41,9 @@
       "state": "unanswered",
       "default": false,
       "blocking": false,
+      "shape": "bool",
       "pack_description": "The CIS GCP Foundation 4.0 organization-policy set, managed constraints included.",
-      "from": "presets/CIS-GCP-Foundation-4.0.satz",
+      "from": "presets/cis/CIS-GCP-Foundation-4.0.satz",
       "pack": "CIS_GCP_Foundation_4_0"
     },
     {
@@ -53,8 +56,9 @@
       "state": "unanswered",
       "default": false,
       "blocking": false,
+      "shape": "bool",
       "pack_description": "The CIS GCP Foundation 4.0 organization-policy set, managed constraints included.",
-      "from": "presets/CIS-GCP-Foundation-4.0.satz",
+      "from": "presets/cis/CIS-GCP-Foundation-4.0.satz",
       "pack": "CIS_GCP_Foundation_4_0"
     },
     {
@@ -67,8 +71,9 @@
       "state": "unanswered",
       "default": false,
       "blocking": false,
+      "shape": "bool",
       "pack_description": "The CIS GCP Foundation 4.0 organization-policy set, managed constraints included.",
-      "from": "presets/CIS-GCP-Foundation-4.0.satz",
+      "from": "presets/cis/CIS-GCP-Foundation-4.0.satz",
       "pack": "CIS_GCP_Foundation_4_0"
     },
     {
@@ -81,8 +86,9 @@
       "state": "unanswered",
       "default": false,
       "blocking": false,
+      "shape": "bool",
       "pack_description": "The CIS GCP Foundation 4.0 organization-policy set, managed constraints included.",
-      "from": "presets/CIS-GCP-Foundation-4.0.satz",
+      "from": "presets/cis/CIS-GCP-Foundation-4.0.satz",
       "pack": "CIS_GCP_Foundation_4_0"
     },
     {
@@ -95,8 +101,9 @@
       "state": "unanswered",
       "default": false,
       "blocking": false,
+      "shape": "bool",
       "pack_description": "The CIS GCP Foundation 4.0 organization-policy set, managed constraints included.",
-      "from": "presets/CIS-GCP-Foundation-4.0.satz",
+      "from": "presets/cis/CIS-GCP-Foundation-4.0.satz",
       "pack": "CIS_GCP_Foundation_4_0"
     },
     {
@@ -109,8 +116,9 @@
       "state": "unanswered",
       "default": false,
       "blocking": false,
+      "shape": "bool",
       "pack_description": "The CIS GCP Foundation 4.0 organization-policy set, managed constraints included.",
-      "from": "presets/CIS-GCP-Foundation-4.0.satz",
+      "from": "presets/cis/CIS-GCP-Foundation-4.0.satz",
       "pack": "CIS_GCP_Foundation_4_0"
     },
     {
@@ -123,8 +131,9 @@
       "state": "unanswered",
       "default": false,
       "blocking": false,
+      "shape": "bool",
       "pack_description": "The CIS GCP Foundation 4.0 organization-policy set, managed constraints included.",
-      "from": "presets/CIS-GCP-Foundation-4.0.satz",
+      "from": "presets/cis/CIS-GCP-Foundation-4.0.satz",
       "pack": "CIS_GCP_Foundation_4_0"
     },
     {
@@ -137,8 +146,9 @@
       "state": "unanswered",
       "default": false,
       "blocking": false,
+      "shape": "bool",
       "pack_description": "The CIS GCP Foundation 4.0 organization-policy set, managed constraints included.",
-      "from": "presets/CIS-GCP-Foundation-4.0.satz",
+      "from": "presets/cis/CIS-GCP-Foundation-4.0.satz",
       "pack": "CIS_GCP_Foundation_4_0"
     },
     {
@@ -151,8 +161,9 @@
       "state": "unanswered",
       "default": false,
       "blocking": false,
+      "shape": "bool",
       "pack_description": "The CIS GCP Foundation 4.0 organization-policy set, managed constraints included.",
-      "from": "presets/CIS-GCP-Foundation-4.0.satz",
+      "from": "presets/cis/CIS-GCP-Foundation-4.0.satz",
       "pack": "CIS_GCP_Foundation_4_0"
     },
     {
@@ -165,8 +176,9 @@
       "state": "unanswered",
       "default": false,
       "blocking": false,
+      "shape": "bool",
       "pack_description": "The CIS GCP Foundation 4.0 organization-policy set, managed constraints included.",
-      "from": "presets/CIS-GCP-Foundation-4.0.satz",
+      "from": "presets/cis/CIS-GCP-Foundation-4.0.satz",
       "pack": "CIS_GCP_Foundation_4_0"
     },
     {
@@ -179,8 +191,9 @@
       "state": "unanswered",
       "default": false,
       "blocking": false,
+      "shape": "bool",
       "pack_description": "The CIS GCP Foundation 4.0 organization-policy set, managed constraints included.",
-      "from": "presets/CIS-GCP-Foundation-4.0.satz",
+      "from": "presets/cis/CIS-GCP-Foundation-4.0.satz",
       "pack": "CIS_GCP_Foundation_4_0"
     },
     {
@@ -193,8 +206,9 @@
       "state": "unanswered",
       "default": false,
       "blocking": false,
+      "shape": "bool",
       "pack_description": "The CIS GCP Foundation 4.0 organization-policy set, managed constraints included.",
-      "from": "presets/CIS-GCP-Foundation-4.0.satz",
+      "from": "presets/cis/CIS-GCP-Foundation-4.0.satz",
       "pack": "CIS_GCP_Foundation_4_0"
     },
     {
@@ -207,8 +221,9 @@
       "state": "unanswered",
       "default": false,
       "blocking": false,
+      "shape": "bool",
       "pack_description": "The CIS GCP Foundation 4.0 organization-policy set, managed constraints included.",
-      "from": "presets/CIS-GCP-Foundation-4.0.satz",
+      "from": "presets/cis/CIS-GCP-Foundation-4.0.satz",
       "pack": "CIS_GCP_Foundation_4_0"
     },
     {
@@ -221,8 +236,9 @@
       "state": "unanswered",
       "default": true,
       "blocking": false,
+      "shape": "bool",
       "pack_description": "The CIS GCP Foundation 4.0 organization-policy set, managed constraints included.",
-      "from": "presets/CIS-GCP-Foundation-4.0.satz",
+      "from": "presets/cis/CIS-GCP-Foundation-4.0.satz",
       "pack": "CIS_GCP_Foundation_4_0"
     },
     {
@@ -235,8 +251,9 @@
       "state": "unanswered",
       "default": false,
       "blocking": false,
+      "shape": "bool",
       "pack_description": "The CIS GCP Foundation 4.0 organization-policy set, managed constraints included.",
-      "from": "presets/CIS-GCP-Foundation-4.0.satz",
+      "from": "presets/cis/CIS-GCP-Foundation-4.0.satz",
       "pack": "CIS_GCP_Foundation_4_0"
     },
     {
@@ -249,8 +266,9 @@
       "state": "unanswered",
       "default": true,
       "blocking": false,
+      "shape": "bool",
       "pack_description": "The CIS GCP Foundation 4.0 organization-policy set, managed constraints included.",
-      "from": "presets/CIS-GCP-Foundation-4.0.satz",
+      "from": "presets/cis/CIS-GCP-Foundation-4.0.satz",
       "pack": "CIS_GCP_Foundation_4_0"
     },
     {
@@ -266,8 +284,9 @@
         "in:us-locations"
       ],
       "blocking": false,
+      "shape": "list",
       "pack_description": "The CIS GCP Foundation 4.0 organization-policy set, managed constraints included.",
-      "from": "presets/CIS-GCP-Foundation-4.0.satz",
+      "from": "presets/cis/CIS-GCP-Foundation-4.0.satz",
       "pack": "CIS_GCP_Foundation_4_0"
     },
     {
@@ -282,8 +301,9 @@
         "//cloudresourcemanager.googleapis.com/organizations/123456789012"
       ],
       "blocking": false,
+      "shape": "list",
       "pack_description": "The CIS GCP Foundation 4.0 organization-policy set, managed constraints included.",
-      "from": "presets/CIS-GCP-Foundation-4.0.satz",
+      "from": "presets/cis/CIS-GCP-Foundation-4.0.satz",
       "pack": "CIS_GCP_Foundation_4_0"
     },
     {
@@ -302,8 +322,9 @@
         "serviceAccount:service-org-123456789012@gcp-sa-ktd-hpsa.iam.gserviceaccount.com"
       ],
       "blocking": false,
+      "shape": "list",
       "pack_description": "The CIS GCP Foundation 4.0 organization-policy set, managed constraints included.",
-      "from": "presets/CIS-GCP-Foundation-4.0.satz",
+      "from": "presets/cis/CIS-GCP-Foundation-4.0.satz",
       "pack": "CIS_GCP_Foundation_4_0"
     },
     {
@@ -316,6 +337,7 @@
       "state": "answered",
       "current": "corp-log-infra-001",
       "blocking": false,
+      "shape": "string",
       "pack_description": "Organization-wide audit log sink into a GCS bucket — the compliance archive.",
       "from": "presets/monitoring/organization-audit-logsink.satz",
       "pack": "monitoring.organization_audit_logsink"
@@ -330,6 +352,7 @@
       "state": "unanswered",
       "default": "corp-organization-audit-logs",
       "blocking": false,
+      "shape": "string",
       "pack_description": "Organization-wide audit log sink into a GCS bucket — the compliance archive.",
       "from": "presets/monitoring/organization-audit-logsink.satz",
       "pack": "monitoring.organization_audit_logsink"
@@ -344,6 +367,7 @@
       "state": "unanswered",
       "default": "europe-west3",
       "blocking": false,
+      "shape": "string",
       "pack_description": "Organization-wide audit log sink into a GCS bucket — the compliance archive.",
       "from": "presets/monitoring/organization-audit-logsink.satz",
       "pack": "monitoring.organization_audit_logsink"
@@ -358,6 +382,7 @@
       "state": "unanswered",
       "default": 400,
       "blocking": false,
+      "shape": "number",
       "pack_description": "Organization-wide audit log sink into a GCS bucket — the compliance archive.",
       "from": "presets/monitoring/organization-audit-logsink.satz",
       "pack": "monitoring.organization_audit_logsink"
@@ -372,6 +397,7 @@
       "state": "unanswered",
       "default": "gcp-security@example.com",
       "blocking": false,
+      "shape": "string",
       "pack_description": "Centralized log-based alerting for CIS 2.5-2.12 in 5.0 numbering, 2.4-2.11 in 4.0.",
       "from": "presets/monitoring/organization-cis-log-alerts-central.satz",
       "pack": "monitoring.organization_cis_log_alerts_central"
@@ -386,6 +412,7 @@
       "state": "unanswered",
       "default": "corp-log-infra-001",
       "blocking": false,
+      "shape": "string",
       "pack_description": "Centralized log-based alerting for CIS 2.5-2.12 in 5.0 numbering, 2.4-2.11 in 4.0.",
       "from": "presets/monitoring/organization-cis-log-alerts-central.satz",
       "pack": "monitoring.organization_cis_log_alerts_central"

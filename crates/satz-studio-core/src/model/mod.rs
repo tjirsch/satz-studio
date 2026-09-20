@@ -17,7 +17,7 @@ mod packs;
 mod params;
 mod value;
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use satz_core::pipeline::Env;
@@ -287,10 +287,6 @@ pub struct EstateModel {
     pub hcl: Vec<HclBlock>,
     pub diagnostics: Vec<Diagnostic>,
     pub schema: SchemaStatus,
-    /// the shape of every param the fold binds — the estate's own and every pack's it
-    /// uses, the first definition winning as satz folds them — by name: what a question
-    /// that offers no value is answered in ([`answer_kind`])
-    pub shapes: BTreeMap<String, ParamKind>,
 }
 
 /// A value the grammar accepted and satz's lexer rules cannot read — a disagreement
@@ -351,7 +347,6 @@ impl EstateModel {
             hcl: hcl_blocks(cst),
             diagnostics,
             schema,
-            shapes: params::shapes(env),
         })
     }
 }

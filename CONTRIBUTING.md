@@ -41,6 +41,11 @@ A pull request is a coherent unit of work: a feature, a fix, a refactor. Keep th
 change and its documentation together — a change to what the app does updates
 `README.md` and the page under `docs/` that describes it, in the same pull request.
 
+Every commit on `main` comes from such a pull request, with one exception: the version
+bump of a release, which the maintainer runs on `main` with `cargo release`
+([ADR 0017](docs/adr/0017-a-release-is-cargo-release-on-main.md), and "Releasing"
+below).
+
 ## Development setup
 
 1. **Rust stable.** `rust-toolchain.toml` selects it; the workspace needs 1.88 or
@@ -55,9 +60,14 @@ change and its documentation together — a change to what the app does updates
    at or below the version the submodule is pinned to). `bash scripts/install-satz.sh`
    installs the newest satz release, verified against its SHA-256 sidecar and held to
    that floor, into `~/.local/bin`. An older binary is refused at startup and by the
-   tests that drive it. satz has no Windows release: there, build it from the
-   submodule with `cargo build --release --manifest-path vendor/satz/Cargo.toml` and
-   put `vendor/satz/target/release` on `PATH`.
+   tests that drive it. On Windows that script does not run: satz's Windows release
+   installs through PowerShell, with
+   `irm https://github.com/tjirsch/satz/releases/latest/download/satz-installer.ps1 | iex`,
+   which puts `satz.exe` in `%USERPROFILE%\.local\bin` and on `PATH`. There is no
+   ARM64 Windows build; on that machine, and on any host the release does not cover,
+   build satz from the submodule with
+   `cargo build --release --manifest-path vendor/satz/Cargo.toml` and put
+   `vendor/satz/target/release` on `PATH`, as the Windows CI job does.
 4. **dioxus-cli 0.7.10**, for running and bundling the app:
    `cargo install dioxus-cli@0.7.10` or `cargo binstall dioxus-cli@0.7.10`. Then
    `dx serve --package satz-studio` runs the app with hot reload and
@@ -99,6 +109,21 @@ builds.
 `ci.yml` runs the Linux job and the macOS and Windows jobs on every push and pull
 request; `names-gate.yml` runs the privacy gate over the tree and over the commits
 the push adds.
+
+## Releasing
+
+The maintainer releases; a contributor never has to. `cargo release patch|minor
+--execute --no-confirm`, run on `main` once its checks are green, bumps the workspace
+version in `Cargo.toml`, commits it as `version bump`, tags it `vX.Y.Z` and pushes
+both — `release.toml` is that configuration, and `cargo install cargo-release` is the
+one tool it needs. The tag is what builds:
+[`.github/workflows/release.yml`](.github/workflows/release.yml) refuses a tag that is
+not the workspace version, then bundles the app on macOS arm64, Linux and Windows and
+attaches each bundle with a SHA-256 sidecar.
+
+A release is a PATCH unless it changes what an operator has to do — a setting that
+moves, an estate the app reads differently, a satz version the app now requires — which
+makes it a MINOR. `docs/verification.md` is what is checked before one.
 
 ## The privacy gate
 

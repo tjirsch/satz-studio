@@ -138,7 +138,9 @@ impl<'t> Builder<'t> {
             "use_statement" => Ok(self.use_statement(n)),
             "block" => self.block(n),
             "string" | "number" | "boolean" | "reference" | "list" | "object" => self.value(n),
-            "claim" | "question" | "action" | "suppress" | "hcl_block" => Ok(self.opaque(n)),
+            "claim" | "question" | "action" | "notice" | "offers" | "suppress" | "hcl_block" => {
+                Ok(self.opaque(n))
+            }
             other => Err(CstError::Parse {
                 line: line(n),
                 message: format!(

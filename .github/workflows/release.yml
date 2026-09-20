@@ -4,7 +4,9 @@ name: release
 # (`v*`) and attached to the GitHub release with a SHA-256 sidecar each; a manual
 # dispatch builds the same bundles and keeps them as workflow artifacts, so the
 # workflow runs without a tag. The version in every file name is the workspace
-# version in Cargo.toml; the tag is expected to be that version with a `v`.
+# version in Cargo.toml, and a tag that is not that version with a `v` is refused
+# before anything is built. `cargo release` writes both, so they agree by
+# construction (docs/adr/0017-a-release-is-cargo-release-on-main.md).
 #
 # Signing and notarization are NOT done. The macOS bundles are unsigned and not
 # notarized: Gatekeeper refuses the first launch of the app with "Apple could not
@@ -70,6 +72,16 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+      - name: the tag is the workspace version
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(grep -m1 '^version = ' Cargo.toml | sed -E 's/.*"(.*)".*/\1/')
+          [ "$GITHUB_REF_NAME" = "v$version" ] || {
+            echo "tag $GITHUB_REF_NAME is not v$version, the workspace version — every bundle is named after the version, so the two have to agree" >&2
+            exit 1
+          }
       - name: system libraries the desktop crate links (the set of ci.yml), and what the AppImage build needs
         if: runner.os == 'Linux'
         run: |

@@ -338,6 +338,47 @@ mod tests {
         }
     }
 
+    fn use_line(path: &str, gate: &str, line: u32) -> UseLine {
+        UseLine {
+            path: path.to_string(),
+            gate: Some(gate.to_string()),
+            as_key: None,
+            state: UseState::Commented,
+            span: crate::cst::Span { start: 0, end: 0 },
+            line,
+            phase_comment: None,
+        }
+    }
+
+    /// One row per line, not per gate: two packs may hang off one answer, and an
+    /// estate that shows one of them is an estate whose other pack nobody can see.
+    #[test]
+    fn two_lines_on_one_gate_are_two_rows() {
+        let uses = [
+            use_line("presets/ci/runner.satz", "use_runner", 10),
+            use_line("presets/ci/runner-grant.satz", "use_runner", 11),
+        ];
+        let questions = QuestionsReport {
+            estate: "acme.satz".to_string(),
+            questions: Vec::new(),
+            summary: Default::default(),
+        };
+        let (rows, notes) = build(Path::new("acme.satz"), &Env::new(), &questions, &uses);
+        assert!(notes.is_empty(), "{notes:?}");
+        let gated: Vec<&PackRow> = rows
+            .iter()
+            .filter(|r| r.gate.as_deref() == Some("use_runner"))
+            .collect();
+        assert_eq!(gated.len(), 2, "{rows:?}");
+        assert_eq!(
+            gated
+                .iter()
+                .map(|r| r.path.as_deref().unwrap())
+                .collect::<Vec<_>>(),
+            ["presets/ci/runner.satz", "presets/ci/runner-grant.satz"]
+        );
+    }
+
     fn ask(subject: &str, when: &str) -> AskWhen {
         AskWhen {
             subject: subject.to_string(),

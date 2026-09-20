@@ -746,7 +746,6 @@ mod tests {
             hcl: Vec::new(),
             diagnostics: Vec::new(),
             schema,
-            shapes: Default::default(),
         }
     }
 

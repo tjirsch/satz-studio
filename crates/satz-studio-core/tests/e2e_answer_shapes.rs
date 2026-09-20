@@ -1,15 +1,16 @@
 //! The shape an answer is typed in, held to the packs. Decisions picks an answer's field
-//! from `answer_kind` over the questions report and the model's `shapes`; a question
-//! that offers no value — a param its pack declares `[]` offers none — takes the shape
-//! its param is declared with, so one address typed for a list of addresses is written
-//! as a list of one and never as a string that `tofu apply` refuses.
+//! from `answer_kind` over the questions report, which carries the shape the pack
+//! declares each param with; a question that offers no value — a param its pack declares
+//! `[]` offers none — is typed in that declared shape, so one address typed for a list of
+//! addresses is written as a list of one and never as a string that `tofu apply` refuses.
 //!
 //! The sweep reads every question of every pack under `vendor/satz/presets`, finds the
 //! value its param is declared with in the pack's own text, and asserts that the field
 //! agrees with it: a list is a list of strings, a bool a bool, a number a number. It runs over one
 //! estate that uses every pack, through the installed satz and the model the app builds,
 //! so a pin bump that brings a pack with a new list param fails here, not in someone's
-//! apply.
+//! apply. The declaration it reads is its own: satz's `shape` and this file's walk of the
+//! pack text are two readings of one fact, and the test is that they agree.
 
 #[path = "fixtures/e2e/support.rs"]
 mod support;
@@ -163,7 +164,8 @@ async fn every_question_of_every_pack_is_answered_in_the_shape_its_param_is_decl
     let registry = ResourceRegistry::load_all(&dir.schema_dir()).unwrap();
     let cst = Cst::parse(&text).unwrap();
     let decls = PackDecls::read(&main, &cst, &dir.loader(&main));
-    let model = EstateModel::build(
+    // the model builds over an estate that uses every pack there is
+    EstateModel::build(
         &main,
         &cst,
         Ok(&registry),
@@ -232,7 +234,7 @@ async fn every_question_of_every_pack_is_answered_in_the_shape_its_param_is_decl
         offers_nothing.current = None;
         offers_nothing.default = None;
         for (how, row) in [("as reported", q), ("offering nothing", &offers_nothing)] {
-            let got = answer_kind(row, Some(&model.shapes));
+            let got = answer_kind(row);
             if got != Some(want) {
                 wrong.push(format!(
                     "{} `{}` ({how}): declared {want:?}, answered as {got:?}",
@@ -284,7 +286,6 @@ async fn one_address_for_a_list_param_is_written_as_a_list_of_one() {
         Some(&serde_yaml::Value::Sequence(Vec::new())),
         "the fold carries the pack's declaration"
     );
-    let model = support::model(&session, Vec::new()).await;
     let report = support::questions(&session).await;
     let row = report
         .questions
@@ -294,7 +295,7 @@ async fn one_address_for_a_list_param_is_written_as_a_list_of_one() {
     assert_eq!(row.state, QuestionState::Unanswered);
     assert!(row.blocking, "{row:?}");
     assert_eq!(row.offered(), None, "satz offers no empty list");
-    assert_eq!(answer_kind(row, Some(&model.shapes)), Some(ParamKind::List));
+    assert_eq!(answer_kind(row), Some(ParamKind::List));
 
     // what a list field sends for one chip
     let value = serde_json::json!(["security@example.com"]);
