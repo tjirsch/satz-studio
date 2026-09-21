@@ -39,7 +39,7 @@ recognises the other.
 | | decision | status |
 |---|---|---|
 | [0001](0001-dioxus-desktop-on-the-webview-renderer.md) | Dioxus 0.7 desktop on the webview renderer | accepted |
-| [0002](0002-a-separate-repository-with-satz-pinned-once.md) | a separate repository, with satz pinned once as a submodule and the binary required at a minimum version | accepted; the minimum's rule superseded by 0014 |
+| [0002](0002-a-separate-repository-with-satz-pinned-once.md) | a separate repository, with satz pinned once as a submodule and the binary required at a minimum version | accepted; the minimum's rule superseded by 0014, its Windows half by satz's Windows build |
 | [0003](0003-the-document-layer-is-the-tree-sitter-grammar.md) | the document layer is the tree-sitter grammar of Satz, vendored and compiled in; satz-core stays the authority on meaning | accepted |
 | [0004](0004-claude-natively-other-providers-adapt-into-its-message-model.md) | Claude natively: the Messages API wire types are the app's message model, and other providers adapt into it | accepted |
 | [0005](0005-tool-approval-by-mcp-annotation-and-the-capability-ceiling.md) | tool approval by the MCP annotations satz declares; the capability ceiling stays satz's | accepted |

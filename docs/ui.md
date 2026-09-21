@@ -70,16 +70,20 @@ nothing blocks in an event handler.
   in use into `update.found` — unless the operator's `~/.config/satz/satz.toml` says
   `self_update_frequency = "never"`, which puts the reason in `update.not_checked`. A look
   started at launch raises no toast when it fails; a run the operator asks for does.
-  `UpdateSatz` refuses a second run while one is running. `DismissSatzNotice(version)`
+  `UpdateSatz` refuses a second run while one is running. On Windows, where
+  `satz self-update` checks but does not install, `UpdateSatz` without `check_only` runs
+  satz's PowerShell installer instead (`install::update_by_installer`), verified as for
+  an install and run with `SATZ_INSTALL_DIR` set to the folder of the satz in use, and
+  calls the update done only if the satz then located is the release it installed. `DismissSatzNotice(version)`
   writes the version into `Settings.dismissed_satz`, which hides the banner's notice for
   that satz version and changes nothing else. `LookForStudioUpdate` reads the latest
   satz-studio release again from a task of its own, one look at a time. `InstallSatz` runs satz's installer
-  (`state/install.rs` over `satz::install`) while the status is `Missing` and Settings
-  name no satz path — the installer writes `~/.local/bin/satz`, which the search does not
-  look at while a path is set — streams it into `install.log`, locates satz again, and
-  calls the install done only if satz is then found; `CancelInstall` stops it. On Windows
-  `InstallSatz` is a toast saying the app does not run satz's PowerShell installer, with
-  the one-liner that does.
+  (`state/install.rs` over `satz::install`) — `satz-installer.sh` under `sh`, or
+  `satz-installer.ps1` under `powershell -File` on Windows — while the status is `Missing`
+  and Settings name no satz path — the installer writes `~/.local/bin/satz`
+  (`satz.exe` on Windows), which the search does not look at while a path is set —
+  streams it into `install.log`, locates satz again, and calls the install done only if
+  satz is then found; `CancelInstall` stops it.
   `OpenEstate` puts the window on `View::Overview` when the session opens and
   `CloseEstate` puts it back on `View::Start` — the window has nowhere to stand without
   an estate, so closing one IS switching estates.
@@ -354,12 +358,10 @@ and the door card on the Start screen, and their classes live in `views.css`, so
   --import`, which binds it itself, takes the dialog away too.
 - **Banner:** while satz is missing, too old or does not run, a full-width error banner
   on every view naming the fix, with "Try again" and "Settings": for a too-old satz
-  "Update satz" (`satz self-update`); for none at all "Install satz" — satz's own
-  installer, checked against the SHA-256 its release publishes, writing
-  `~/.local/bin/satz` and leaving the shell profile alone — unless Settings name a satz
-  path, where the banner says to correct or clear it; on Windows the banner says the
-  app does not run satz's PowerShell installer, names the one-liner that does, and offers
-  no install.
+  "Update satz" (`satz self-update`, satz's PowerShell installer on Windows); for none at
+  all "Install satz" — satz's own installer, checked against the SHA-256 its release
+  publishes, writing satz into `~/.local/bin` and leaving the `PATH` and the shell profile
+  alone — unless Settings name a satz path, where the banner says to correct or clear it.
   While satz is newer than the build, a notice banner instead, and every estate opens:
   "satz X is installed; this satz-studio was built and tested against satz Y", then satz's
   own reading of the difference — a patch: "satz says nothing an estate needs changes"; a

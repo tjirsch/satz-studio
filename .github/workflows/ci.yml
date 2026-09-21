@@ -7,17 +7,15 @@ name: ci
 # five newest releases, so a release pinned by tag is gone within days; the
 # script also writes the runner's satz config with the
 # update check off, because satz prints its update notice on stdout and a
-# newer release would break every `--format json` test. On Windows satz is
-# built from the submodule vendor/satz instead — satz's Windows release installs
-# through PowerShell, which install-satz.sh does not run — so the pinned source
-# serves there.
+# newer release would break every `--format json` test. On Windows the same is
+# done by a PowerShell step through satz's own satz-installer.ps1, verified against
+# its sidecar and run as the app runs it.
 #
 # Both jobs run once per commit: on a pull request for a branch, on the push for
 # `main`. A branch push alone runs nothing, because its pull request runs the same
 # jobs on the branch merged into `main` — running on both is every commit tested
 # twice. `core` is on ubuntu and `platforms` on macOS and Windows, which have their own
-# webview, their own keyring store and, on Windows, a satz built from the submodule. A
-# release tag and a manual dispatch run both as well, so release.yml bundles a tree
+# webview, their own keyring store and their own satz installer. A release tag and a manual dispatch run both as well, so release.yml bundles a tree
 # they have passed on.
 #
 # macOS is Apple silicon alone, here and in release.yml (Thomas, 2026-09-18, ADR 0016):
@@ -88,25 +86,55 @@ jobs:
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
-        if: runner.os != 'Windows'
-      - uses: Swatinem/rust-cache@v2
-        if: runner.os == 'Windows'
-        with:
-          # the satz build from the submodule is cached beside the app's
-          workspaces: |
-            . -> target
-            vendor/satz -> vendor/satz/target
       - name: satz (the pinned MIN_SATZ release)
         if: runner.os != 'Windows'
         run: |
           bash scripts/install-satz.sh
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-      - name: satz (built from the submodule — install-satz.sh does not run the PowerShell installer)
+      # scripts/install-satz.sh for Windows: the newest release's satz-installer.ps1,
+      # verified against its SHA-256 sidecar — a missing sidecar fails the download —
+      # run as the app runs it (powershell -File, SATZ_INSTALL_DIR, SATZ_NO_MODIFY_PATH=1)
+      # and held to MIN_SATZ or newer, after the runner's satz config is written with the
+      # update check off.
+      - name: satz (the newest release, through satz-installer.ps1)
         if: runner.os == 'Windows'
-        shell: bash
+        shell: pwsh
         run: |
-          cargo build --release --manifest-path vendor/satz/Cargo.toml --locked
-          echo "$GITHUB_WORKSPACE/vendor/satz/target/release" >> "$GITHUB_PATH"
+          $ErrorActionPreference = 'Stop'
+          $cfg = Join-Path $env:USERPROFILE '.config\satz\satz.toml'
+          if (-not (Test-Path $cfg)) {
+            New-Item -ItemType Directory -Force -Path (Split-Path $cfg) | Out-Null
+            [IO.File]::WriteAllText($cfg, "self_update_frequency = `"never`"`n")
+            Write-Output "install-satz: wrote $cfg (self_update_frequency = never)"
+          }
+          $lines = @(Select-String -Path crates/satz-studio-core/src/satz/binary.rs -Pattern '^pub const MIN_SATZ: &str = "([0-9]+\.[0-9]+\.[0-9]+)";')
+          if ($lines.Count -ne 1) { throw "expected exactly one MIN_SATZ line in binary.rs, found $($lines.Count)" }
+          $floor = $lines[0].Matches[0].Groups[1].Value
+          $base = 'https://github.com/tjirsch/satz/releases/latest/download'
+          $tmp = New-Item -ItemType Directory -Path (Join-Path $env:RUNNER_TEMP 'satz-install')
+          $ps1 = Join-Path $tmp 'satz-installer.ps1'
+          Invoke-WebRequest -Uri "$base/satz-installer.ps1" -OutFile $ps1
+          Invoke-WebRequest -Uri "$base/satz-installer.ps1.sha256" -OutFile "$ps1.sha256"
+          $expected = ((Get-Content -Raw "$ps1.sha256").Trim() -split '\s+')[0].ToLowerInvariant()
+          if ($expected -notmatch '^[0-9a-f]{64}$') { throw "the sidecar is not a SHA-256: $expected" }
+          $actual = (Get-FileHash -Algorithm SHA256 -Path $ps1).Hash.ToLowerInvariant()
+          if ($actual -ne $expected) { throw "SHA-256 mismatch for satz-installer.ps1: sidecar $expected, downloaded $actual" }
+          Write-Output "install-satz: satz-installer.ps1 verified ($actual)"
+          $bin = Join-Path $env:USERPROFILE '.local\bin'
+          $env:SATZ_INSTALL_DIR = $bin
+          $env:SATZ_NO_MODIFY_PATH = '1'
+          powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $ps1
+          if ($LASTEXITCODE -ne 0) { throw "satz-installer.ps1 exited with $LASTEXITCODE" }
+          $satz = Join-Path $bin 'satz.exe'
+          if (-not (Test-Path $satz)) { throw "the installer ran but $satz is not there" }
+          $said = @(& $satz --version)
+          $said | Write-Output
+          $found = @($said | Select-String -Pattern '^satz ([0-9]+\.[0-9]+\.[0-9]+)$')
+          if ($found.Count -eq 0) { throw "$satz printed no 'satz X.Y.Z' line" }
+          $got = $found[-1].Matches[0].Groups[1].Value
+          if ([version]$got -lt [version]$floor) { throw "the newest satz release is $got, below MIN_SATZ $floor" }
+          Write-Output "install-satz: satz $got (MIN_SATZ $floor)"
+          Add-Content -Path $env:GITHUB_PATH -Value $bin
       - name: formatting (rustfmt, the two packages — vendor/satz is satz's own)
         run: cargo fmt -p satz-studio-core -p satz-studio -- --check
       - name: clippy (warnings are errors)

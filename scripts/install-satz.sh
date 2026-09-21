@@ -20,7 +20,7 @@
 # the binary it installed, which must be the tag's.
 #
 # Windows: satz's release installs there through PowerShell, which this script does
-# not run; exit 2. CI builds satz from the submodule vendor/satz there
+# not run; exit 2. CI installs satz through satz-installer.ps1 there
 # (.github/workflows/ci.yml).
 #
 # bash 3.2 compatible (macOS default).
@@ -31,7 +31,7 @@ die() { echo "install-satz: $*" >&2; exit 1; }
 
 case "$(uname -s 2>/dev/null || true):${OS:-}" in
   MINGW*|MSYS*|CYGWIN*|*:Windows_NT)
-    echo "install-satz: satz installs on Windows through PowerShell, which this script does not run; CI builds it from vendor/satz instead" >&2
+    echo "install-satz: satz installs on Windows through PowerShell, which this script does not run; CI installs it through satz-installer.ps1 (.github/workflows/ci.yml)" >&2
     exit 2 ;;
 esac
 

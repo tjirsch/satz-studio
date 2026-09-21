@@ -79,21 +79,35 @@ impl SatzBinary {
         Self::check(path, version)
     }
 
-    /// `satz` on `PATH`, else `~/.local/bin/satz`; [`SatzError::NotFound`] lists both.
+    /// `satz` on `PATH`, else `~/.local/bin/satz` (`satz.exe` on Windows);
+    /// [`SatzError::NotFound`] lists both. The home lookup is what finds a satz installed
+    /// while the app runs: the app keeps the `PATH` it was started with.
     fn first_on_path_or_home() -> Result<PathBuf, SatzError> {
         let mut tried = Vec::new();
         match which::which("satz") {
             Ok(p) => return Ok(p),
             Err(_) => tried.push(PathBuf::from("satz (on PATH)")),
         }
-        if let Some(home) = dirs::home_dir() {
-            let local = home.join(".local").join("bin").join("satz");
+        if let Some(dir) = Self::home_bin_dir() {
+            let local = Self::in_dir(&dir, std::env::consts::EXE_SUFFIX);
             if local.is_file() {
                 return Ok(local);
             }
             tried.push(local);
         }
         Err(SatzError::NotFound { tried })
+    }
+
+    /// `~/.local/bin`, where satz's installer puts satz and where the search looks after
+    /// `PATH`; `None` without a home directory.
+    pub fn home_bin_dir() -> Option<PathBuf> {
+        dirs::home_dir().map(|home| home.join(".local").join("bin"))
+    }
+
+    /// The satz binary in `dir`, with the platform's executable suffix: `""`, or `".exe"`
+    /// on Windows (`std::env::consts::EXE_SUFFIX`).
+    pub fn in_dir(dir: &Path, exe_suffix: &str) -> PathBuf {
+        dir.join(format!("satz{exe_suffix}"))
     }
 
     /// The version in `satz --version` output (`satz 0.56.1`, possibly after the banner line).
@@ -169,6 +183,18 @@ impl SatzBinary {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_home_binary_carries_the_platform_s_executable_suffix() {
+        let dir = PathBuf::from("home").join(".local").join("bin");
+        assert_eq!(SatzBinary::in_dir(&dir, ""), dir.join("satz"));
+        assert_eq!(SatzBinary::in_dir(&dir, ".exe"), dir.join("satz.exe"));
+        let here = SatzBinary::in_dir(&dir, std::env::consts::EXE_SUFFIX);
+        assert_eq!(
+            here.file_name().unwrap(),
+            if cfg!(windows) { "satz.exe" } else { "satz" }
+        );
+    }
 
     #[test]
     fn the_version_line_is_read_past_the_banner() {
