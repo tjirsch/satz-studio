@@ -24,7 +24,8 @@ use satz_studio_core::llm::{
 use satz_studio_core::satz::EstateSession;
 use satz_studio_core::settings::{ProviderChoice, Settings};
 use satz_studio_core::transcript::{Transcript, TranscriptStore};
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::broadcast::error::RecvError;
+use tokio::sync::{broadcast, mpsc, oneshot};
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
@@ -49,6 +50,8 @@ pub enum ChatAction {
     /// the empty state's "Use Claude Code": select that engine in the settings, save
     /// them, and build the engine again
     UseClaudeCode,
+    /// the footer's switch: show or hide the debug panel, kept in the settings
+    SetDebugLog(bool),
 }
 
 /// How many events the engine may run ahead of the view.
@@ -160,6 +163,8 @@ pub async fn chat_coroutine(
     chat: Store<ChatStore>,
     session: Arc<EstateSession>,
 ) {
+    // the estate's `satz mcp` stderr, for the debug log; `None` once it closed
+    let mut stderr = Some(session.mcp_stderr());
     let mut state = Chat::start(app, chat, session).await;
     loop {
         tokio::select! {
@@ -170,6 +175,10 @@ pub async fn chat_coroutine(
             event = state.next_event() => match event {
                 Some(event) => state.reduce(event),
                 None => state.turn_ended().await,
+            },
+            line = next_stderr(&mut stderr) => match line {
+                Err(RecvError::Closed) => stderr = None,
+                line => state.stderr_line(line),
             },
         }
     }
@@ -232,6 +241,20 @@ impl Chat {
         }
     }
 
+    /// A stderr line goes to the debug log's open call, when one is open. A log that
+    /// fell behind says how many lines it lost.
+    fn stderr_line(&mut self, line: Result<String, RecvError>) {
+        let line = match line {
+            Ok(line) => line,
+            Err(RecvError::Lagged(n)) => format!("[{n} stderr lines lost: the log fell behind]"),
+            // the caller stops listening; the estate session reports its own end
+            Err(RecvError::Closed) => return,
+        };
+        if self.chat.read().has_open_call() {
+            self.chat.write().debug_stderr(line);
+        }
+    }
+
     async fn handle(&mut self, action: ChatAction) {
         match action {
             ChatAction::Send(text) => self.send(text),
@@ -243,6 +266,7 @@ impl Chat {
             ChatAction::SetEffort(effort) => self.set_effort(effort),
             ChatAction::Restart => self.restart().await,
             ChatAction::UseClaudeCode => self.use_claude_code().await,
+            ChatAction::SetDebugLog(on) => self.set_debug_log(on),
         }
     }
 
@@ -461,6 +485,18 @@ impl Chat {
         }
     }
 
+    /// The debug panel on or off. Only this field changes, so the settings file is
+    /// written directly and nothing is located again; a write that failed leaves the
+    /// panel as it was and says so.
+    fn set_debug_log(&mut self, on: bool) {
+        let mut settings = self.app_store.settings().cloned();
+        settings.chat_debug_log = on;
+        match settings.save() {
+            Ok(()) => self.app_store.settings().set(settings),
+            Err(e) => self.fail(format!("settings not saved: {e}")),
+        }
+    }
+
     async fn new_transcript(&mut self) {
         if self.running.is_some() {
             return self.fail("wait for the turn to end");
@@ -491,8 +527,8 @@ impl Chat {
             Ok(t) => t,
             Err(e) => return self.fail(e.to_string()),
         };
-        let turns = match replay(&transcript.messages) {
-            Ok(t) => t,
+        let replayed = match replay(&transcript.messages) {
+            Ok(r) => r,
             Err(e) => return self.fail(format!("{}: {e}", path.display())),
         };
         let Some(Engine::Api(agent)) = &mut self.engine else {
@@ -506,7 +542,7 @@ impl Chat {
             apply_model(agent, &choice, &model);
         }
         agent.messages = transcript.messages.clone();
-        self.chat.write().load_conversation(turns, path, model);
+        self.chat.write().load_conversation(replayed, path, model);
         // with persistence off the conversation continues in memory alone, and the
         // footer says so
         let persist = self.app_store.settings().read().persist_transcripts;
@@ -558,6 +594,14 @@ impl Chat {
             }
             None => self.fail("no engine"),
         }
+    }
+}
+
+/// The next stderr line of the estate's `satz mcp`; forever pending once it closed.
+async fn next_stderr(rx: &mut Option<broadcast::Receiver<String>>) -> Result<String, RecvError> {
+    match rx {
+        Some(rx) => rx.recv().await,
+        None => std::future::pending().await,
     }
 }
 

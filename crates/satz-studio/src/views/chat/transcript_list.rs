@@ -70,6 +70,15 @@ fn StreamingTurn() -> Element {
 
 #[component]
 fn AssistantTurnView(turn: AssistantTurn, live: bool) -> Element {
+    let chat = use_context::<Store<ChatStore>>();
+    let asked = chat.model().cloned();
+    // the server named another model than the one asked for: a fallback, or an
+    // endpoint that names its model more precisely
+    let answered_by = turn.model.clone().filter(|m| !live && *m != asked);
+    let request_line = match &turn.model {
+        Some(model) => format!("request {} on {model}", turn.requests),
+        None => format!("request {}", turn.requests),
+    };
     let last = turn.blocks.len().saturating_sub(1);
     let limit = matches!(
         turn.stop_reason,
@@ -83,10 +92,13 @@ fn AssistantTurnView(turn: AssistantTurn, live: bool) -> Element {
             if live {
                 div { class: "chat__live",
                     CircularProgress { size: 20 }
-                    span { "request {turn.requests}" }
+                    span { "{request_line}" }
                 }
             } else if limit {
                 Chip { kind: ChipKind::Assist, icon: "block", label: "stopped at the output limit; the answer is cut", error: true }
+            }
+            if let Some(model) = answered_by {
+                Chip { kind: ChipKind::Assist, icon: "alt_route", label: "answered by {model}" }
             }
         }
     }

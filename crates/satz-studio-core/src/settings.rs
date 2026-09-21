@@ -34,6 +34,9 @@ pub struct Settings {
     /// server-side refusal fallbacks (`fallbacks: "default"`)
     pub fallbacks: bool,
     pub persist_transcripts: bool,
+    /// show the chat's debug log beside the conversation: every tool call's input, result,
+    /// duration and the satz stderr lines that arrived during it
+    pub chat_debug_log: bool,
     pub theme: Theme,
     /// the folder the Start screen opened last
     pub last_root: Option<PathBuf>,
@@ -53,6 +56,7 @@ impl Default for Settings {
             effort: Effort::High,
             fallbacks: true,
             persist_transcripts: true,
+            chat_debug_log: false,
             theme: Theme::System,
             last_root: None,
         }
@@ -185,6 +189,18 @@ mod tests {
         let path = dir.path().join("settings.toml");
         std::fs::write(&path, "claude_code_log = true\n").unwrap();
         assert!(Settings::load_from(&path).unwrap().claude_code_log);
+    }
+
+    #[test]
+    fn a_settings_file_without_the_debug_log_field_loads_with_the_log_off() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("settings.toml");
+        std::fs::write(&path, "persist_transcripts = false\n").unwrap();
+        let loaded = Settings::load_from(&path).unwrap();
+        assert!(!loaded.chat_debug_log);
+        assert!(!loaded.persist_transcripts);
+        std::fs::write(&path, "chat_debug_log = true\n").unwrap();
+        assert!(Settings::load_from(&path).unwrap().chat_debug_log);
     }
 
     #[test]

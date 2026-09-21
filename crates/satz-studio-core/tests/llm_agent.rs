@@ -209,7 +209,8 @@ impl ToolHost for MockHost {
 /// What the collector saw, without the channel half of a pending card.
 #[derive(Debug, PartialEq)]
 enum Seen {
-    Started,
+    Started(String),
+    RequestDone(Usage),
     Text(String),
     Thinking(String),
     ToolUseStarted(String),
@@ -311,7 +312,8 @@ async fn drive(
         let mut seen = Vec::new();
         while let Some(event) = rx.recv().await {
             seen.push(match event {
-                AgentEvent::Started => Seen::Started,
+                AgentEvent::Started { model } => Seen::Started(model),
+                AgentEvent::RequestDone { usage } => Seen::RequestDone(usage),
                 AgentEvent::TextDelta(t) => {
                     if cancel_on_text {
                         token.cancel();
@@ -425,7 +427,19 @@ async fn a_tool_turn_returns_every_result_in_one_user_message_then_ends() {
         2
     );
     assert_eq!(seen.last(), Some(&Seen::TurnDone(StopReason::EndTurn)));
-    assert_eq!(seen.iter().filter(|s| **s == Seen::Started).count(), 2);
+    assert_eq!(
+        seen.iter()
+            .filter(|s| **s == Seen::Started("claude-opus-5".to_string()))
+            .count(),
+        2
+    );
+    assert_eq!(
+        seen.iter()
+            .filter(|s| matches!(s, Seen::RequestDone(_)))
+            .count(),
+        2,
+        "one usage per request"
+    );
 
     let requests = provider.requests();
     assert_eq!(requests.len(), 2);
@@ -458,6 +472,76 @@ async fn a_tool_turn_returns_every_result_in_one_user_message_then_ends() {
     );
     assert_eq!(requests[0].model, "claude-opus-5");
     assert!(requests[0].fallbacks);
+}
+
+#[tokio::test]
+async fn every_request_names_its_model_and_its_usage_and_the_turn_sums_them() {
+    // the second request is served by another model than the one asked for: a
+    // server-side fallback shows at its start, not only in the replayed transcript
+    let provider = MockProvider::new(vec![
+        tool_turn(vec![("toolu_1", "satz_questions", serde_json::json!({}))]),
+        Script::Events(vec![
+            StreamEvent::Started {
+                id: "msg_02".to_string(),
+                model: "claude-sonnet-5".to_string(),
+            },
+            StreamEvent::TextDelta("Done.".to_string()),
+            StreamEvent::BlockStop {
+                index: 0,
+                block: ContentBlock::text("Done."),
+            },
+            done(StopReason::EndTurn),
+        ]),
+    ]);
+    let mut agent = agent(provider, MockHost::new());
+    let (tx, mut rx) = mpsc::channel(64);
+    let collect = async {
+        let mut events = Vec::new();
+        while let Some(event) = rx.recv().await {
+            events.push(event);
+        }
+        events
+    };
+    let (result, events) = tokio::join!(
+        agent.run_turn("go".to_string(), tx, CancellationToken::new()),
+        collect
+    );
+    result.expect("the turn ends");
+    let models: Vec<&str> = events
+        .iter()
+        .filter_map(|e| match e {
+            AgentEvent::Started { model } => Some(model.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(models, ["claude-opus-5", "claude-sonnet-5"]);
+    let per_request: Vec<Usage> = events
+        .iter()
+        .filter_map(|e| match e {
+            AgentEvent::RequestDone { usage } => Some(*usage),
+            _ => None,
+        })
+        .collect();
+    let one = Usage {
+        input_tokens: 10,
+        output_tokens: 5,
+        cache_creation_input_tokens: None,
+        cache_read_input_tokens: Some(4),
+    };
+    assert_eq!(per_request, [one, one]);
+    let Some(AgentEvent::TurnDone { usage, .. }) = events.last() else {
+        panic!("the turn ends in TurnDone: {events:?}");
+    };
+    assert_eq!(
+        *usage,
+        Usage {
+            input_tokens: 20,
+            output_tokens: 10,
+            cache_creation_input_tokens: None,
+            cache_read_input_tokens: Some(8),
+        },
+        "the turn's usage is both requests summed, not the last one"
+    );
 }
 
 #[tokio::test]
@@ -651,7 +735,7 @@ async fn cancellation_mid_stream_leaves_messages_as_before_the_turn() {
     assert_eq!(
         seen,
         vec![
-            Seen::Started,
+            Seen::Started("claude-opus-5".to_string()),
             Seen::Text("Hel".to_string()),
             Seen::Cancelled
         ]

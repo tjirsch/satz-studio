@@ -113,6 +113,12 @@ that holds them up — in front of apply and bootstrap, which satz refuses.
     directory, the ten newest kept at up to 16 MiB each. It holds the estate's contents
     and what you type, and stays on your machine.
 
+  On either engine the chat shows each tool call as one line — its name, its status,
+  its duration and what the result amounts to — and asks for a write in words. The
+  JSON goes to a debug log beside the conversation, switched on from the chat's footer
+  or in Settings: every call's input, its result, how long it took, and what satz wrote
+  to stderr meanwhile.
+
   Every other view works without either.
 
 ## Build and run from source

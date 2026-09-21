@@ -231,6 +231,7 @@ pub fn SettingsView() -> Element {
                     }
                     Switch { label: "Server-side refusal fallbacks", checked: draft().fallbacks, onchange: move |v| draft.write().fallbacks = v }
                     Switch { label: "Keep transcripts under the app's data directory", checked: draft().persist_transcripts, onchange: move |v| draft.write().persist_transcripts = v }
+                    Switch { label: "Show the debug log beside the chat: every tool call's input and result JSON", checked: draft().chat_debug_log, onchange: move |v| draft.write().chat_debug_log = v }
                 }
                 Card { variant: CardVariant::Outlined, class: "settings__card",
                     h2 { class: "settings__heading", Icon { name: "contrast", size: 20 } "Appearance" }

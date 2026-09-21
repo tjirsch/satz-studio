@@ -1,15 +1,18 @@
 //! The Chat view: the merged agent loop over the open estate. A rail of the estate's
 //! transcripts, the conversation streamed turn by turn — text, the summarised
 //! thinking, one card per tool call, the approval card for a write — the composer
-//! with the model and the effort, and the usage footer. The store lives with the
+//! with the model and the effort, the usage footer, and, while it is switched on, the
+//! debug panel with every call's JSON. The store lives with the
 //! view (`state.rs`); the coroutine that owns the agent is `actions.rs`.
 
 mod actions;
 mod approval_card;
 mod composer;
+mod debug_panel;
 mod footer;
 mod rail;
 mod state;
+mod summary;
 mod tool_card;
 mod transcript_list;
 
@@ -23,6 +26,7 @@ use self::state::ChatStore;
 use self::actions::ChatAction;
 use self::approval_card::ApprovalCard;
 use self::composer::Composer;
+use self::debug_panel::DebugPanel;
 use self::footer::UsageFooter;
 use self::rail::TranscriptRail;
 use self::state::{AgentStatus, ChatStoreStoreExt, EngineKind};
@@ -61,10 +65,11 @@ fn ChatHost(open: OpenEstate) -> Element {
     use_context_provider(|| chat);
     let session = open.session.clone();
     use_coroutine(move |rx| chat_coroutine(rx, app, chat, session.clone()));
+    let debug_on = app.settings().read().chat_debug_log;
 
     rsx! {
         document::Stylesheet { href: CHAT_CSS }
-        div { class: "chat",
+        div { class: "chat", class: if debug_on { "chat--debug" },
             TranscriptRail {}
             section { class: "chat__main",
                 AgentStatusCard {}
@@ -74,6 +79,9 @@ fn ChatHost(open: OpenEstate) -> Element {
                 ApprovalCard {}
                 Composer {}
                 UsageFooter {}
+            }
+            if debug_on {
+                DebugPanel {}
             }
         }
     }

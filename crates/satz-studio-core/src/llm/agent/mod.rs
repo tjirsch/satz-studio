@@ -138,8 +138,16 @@ pub enum Approval {
 
 #[derive(Debug)]
 pub enum AgentEvent {
-    /// a request's stream has started (once per request of the turn)
-    Started,
+    /// a request's stream has started (once per request of the turn); `model` is the
+    /// model the server says serves it, which differs from the one asked for when the
+    /// server fell back to another
+    Started {
+        model: String,
+    },
+    /// a request's stream has ended; `usage` is that request's alone
+    RequestDone {
+        usage: Usage,
+    },
     TextDelta(String),
     ThinkingDelta(String),
     ToolUseStarted {
@@ -167,7 +175,7 @@ pub enum AgentEvent {
     /// subscription's usage against the plan, a retry, a tool the engine denied
     /// itself. The Chat view shows the last one in its footer.
     Notice(String),
-    /// the turn ended; `usage` is the last request's
+    /// the turn ended; `usage` is the whole turn's, every request of it summed
     TurnDone {
         stop_reason: StopReason,
         usage: Usage,
@@ -306,12 +314,21 @@ impl Agent {
     ) -> Result<(), ClaudeError> {
         let mut next_user = Some(Message::user(vec![ContentBlock::text(user_text)]));
         let mut pauses = 0;
+        let mut turn_usage = Usage::default();
         loop {
             if let Some(message) = next_user.take() {
                 self.messages.push(message);
             }
             let request = self.request();
             let response = self.stream_once(&request, events, cancel).await?;
+            turn_usage = turn_usage.plus(response.usage);
+            send(
+                events,
+                AgentEvent::RequestDone {
+                    usage: response.usage,
+                },
+            )
+            .await?;
             self.messages
                 .push(Message::assistant(response.content.clone()));
             match response.stop_reason {
@@ -329,7 +346,7 @@ impl Agent {
                         events,
                         AgentEvent::TurnDone {
                             stop_reason: response.stop_reason,
-                            usage: response.usage,
+                            usage: turn_usage,
                         },
                     )
                     .await?;
@@ -376,8 +393,8 @@ impl Agent {
                 let forwarded = match event {
                     StreamEvent::Started { id, model } => {
                         fold.id = Some(id);
-                        fold.model = model;
-                        Some(AgentEvent::Started)
+                        fold.model = model.clone();
+                        Some(AgentEvent::Started { model })
                     }
                     StreamEvent::TextDelta(text) => Some(AgentEvent::TextDelta(text)),
                     StreamEvent::ThinkingDelta(text) => Some(AgentEvent::ThinkingDelta(text)),
