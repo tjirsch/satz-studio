@@ -197,8 +197,10 @@ view's `match`, so another way in joins by being added in those three places.
 With an estate open the window is ordered by the job: **Overview**, **Packs**,
 **Decisions**, **Estate**, **Checks**, **Deploy**, then Chat and Settings at the foot of
 the rail — Packs before Decisions, because a pack is what declares a question. Overview
-(`src/views/overview.rs`) says which estate this is, from the answers its own
-`estate_core` questions carry (`identity()` over the questions report), and derives what
+(`src/views/overview.rs`) says which estate this is — the short name, the customer, the
+customer id and the organisation id from the file's own `params { }` block (the model's
+`params`), then the answers its other `estate_core` questions carry (`identity()` over
+both), and derives what
 it still has to do from its own state on every render — `owed()` over `Facts`, pure and unit-tested — and shows nothing
 when the list is empty; nothing about how the estate reached the app is remembered, so
 created, imported and opened estates show the same list. That includes the repository:

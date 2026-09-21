@@ -1,10 +1,13 @@
 //! The Overview: which estate this is, and what it still has to do.
 //!
-//! The first card answers "am I in the right estate": the answers the estate gave to its
-//! OWN questions — the ones the `estate_core` pack declares, the customer and the
-//! organisation it stands for, the infrastructure it names, the identity it runs as —
-//! read from the questions report, never stored. [`identity`] is that derivation, pure
-//! over the report, and a question the report does not carry is simply not a row.
+//! The first card answers "am I in the right estate": first whose estate it is — the
+//! short name, the customer, the customer id and the organisation id, read from the
+//! file's own `params { }` block whether or not it uses the `estate_core` pack — then the
+//! answers the estate gave to the rest of its OWN questions, the ones that pack declares
+//! (the infrastructure it names, the identity it runs as), read from the questions
+//! report. Nothing is stored. [`identity`] is that derivation, pure over the params and
+//! the report; a param the file does not set says so, and a question the report does
+//! not carry is simply not a row.
 //!
 //! The card of owed items is DERIVED from the estate's own state on every render — the
 //! questions report, the pack rows, the schema, the compile's findings, the generated
@@ -22,7 +25,7 @@ use dioxus::prelude::*;
 use satz_studio_core::diag::Diagnostic;
 use satz_studio_core::estate::HclState;
 use satz_studio_core::git::WorkTree;
-use satz_studio_core::model::{EstateModel, SchemaStatus};
+use satz_studio_core::model::{EstateModel, ParamRow, SchemaStatus, SourceValue, StrPart};
 use satz_studio_core::satz::reports::{PackLine, QuestionRow, QuestionState, QuestionsReport};
 
 use crate::components::{Button, ButtonVariant, Card, CardVariant, Chip, ChipKind, Icon};
@@ -297,16 +300,24 @@ pub fn owed(f: &Facts) -> Vec<Owed> {
 /// into every skeleton, and its answers are what one estate IS rather than what it does.
 const CORE_PACK: &str = "estate_core";
 
-/// The estate's own answers, in reading order — the customer first, because the reason to
-/// look at this card is "is this the right one". `deployment_mode` is not here: the card
-/// states it below in its own words, and one fact in two places is one fact to keep in
-/// step. A core subject this list does not name still shows, under a label made from its
-/// own name, after the named ones: a question satz adds is a row, never a silence.
-const CORE_ORDER: [(&str, &str); 15] = [
-    ("customer_longname", "Customer"),
+/// Whose estate this is, read from the file's own `params { }` block rather than from a
+/// pack's questions, so an estate that sets these without `use`-ing the core pack still
+/// says who it stands for. The card opens with them, in this order, because the reason to
+/// look at it is "is this the right one".
+const FILE_ORDER: [(&str, &str); 4] = [
     ("customer_shortname", "Short name"),
+    ("customer_longname", "Customer"),
     ("customer_id", "Customer ID"),
     ("customer_organization_id", "Organisation ID"),
+];
+
+/// The rest of the estate's own answers, in reading order. The subjects of [`FILE_ORDER`]
+/// are never a question row, so each shows once. `deployment_mode` is not here either:
+/// the card states it below in its own words, and one fact in two places is one fact to
+/// keep in step. A core subject this list does not name still shows, under a label made
+/// from its own name, after the named ones: a question satz adds is a row, never a
+/// silence.
+const CORE_ORDER: [(&str, &str); 11] = [
     ("customer_domain", "Domain"),
     ("first_admin", "First admin"),
     ("billing_account_infra", "Billing account"),
@@ -320,71 +331,144 @@ const CORE_ORDER: [(&str, &str); 15] = [
     ("default_zone", "Zone"),
 ];
 
-/// One answer the estate gave to a question of its own.
+/// What one row of the card says.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Reading {
+    /// what the estate carries, as one line
+    Value(String),
+    /// a core question the report has unanswered. The pack's default is what an
+    /// interview OFFERS, not what this estate states, so it is never shown here
+    NotAnswered,
+    /// a param of [`FILE_ORDER`] the file's `params { }` block does not set; a pack's
+    /// default is not shown for it either
+    NotSet,
+    /// a param of [`FILE_ORDER`] the file sets to `""`, as `satz init` writes the ones it
+    /// could not derive
+    Empty,
+    /// a param of [`FILE_ORDER`] before the model is built: whether the file sets it is
+    /// not known yet, so the row states neither a value nor "not set"
+    NotRead,
+}
+
+/// One row of the card: a label, and what the estate says under it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Fact {
     pub label: String,
-    /// what the estate carries; `None` where the question is unanswered, which the card
-    /// says rather than filling in the pack's default — a default is what an interview
-    /// OFFERS, not what this estate states
-    pub value: Option<String>,
+    pub reading: Reading,
 }
 
-/// The estate's own answers, read from the questions report. Empty until the first report
-/// has arrived, and empty for an estate whose packs do not include the core one.
-pub fn identity(questions: Option<&QuestionsReport>) -> Vec<Fact> {
+/// The card's rows: the four of [`FILE_ORDER`] from the file's params (`params` is the
+/// model's, `None` until the model is built), then the other core answers from the
+/// questions report — none until the first report has arrived, and none for an estate
+/// whose packs do not include the core one.
+pub fn identity(params: Option<&[ParamRow]>, questions: Option<&QuestionsReport>) -> Vec<Fact> {
+    let mut out: Vec<Fact> = FILE_ORDER
+        .iter()
+        .map(|(name, label)| Fact {
+            label: (*label).to_string(),
+            reading: match params {
+                None => Reading::NotRead,
+                Some(params) => match params.iter().find(|p| p.name == *name) {
+                    None => Reading::NotSet,
+                    Some(p) => match source_line(&p.value) {
+                        line if line.is_empty() => Reading::Empty,
+                        line => Reading::Value(line),
+                    },
+                },
+            },
+        })
+        .collect();
     let Some(report) = questions else {
-        return Vec::new();
+        return out;
     };
     let core: Vec<&QuestionRow> = report
         .questions
         .iter()
-        .filter(|q| q.pack == CORE_PACK && q.subject != "deployment_mode")
-        .collect();
-    let mut out: Vec<Fact> = CORE_ORDER
-        .iter()
-        .filter_map(|(subject, label)| {
-            let q = core.iter().find(|q| q.subject == *subject)?;
-            Some(Fact {
-                label: (*label).to_string(),
-                value: answer(q),
-            })
+        .filter(|q| {
+            q.pack == CORE_PACK
+                && q.subject != "deployment_mode"
+                && !FILE_ORDER.iter().any(|(s, _)| *s == q.subject)
         })
         .collect();
+    out.extend(CORE_ORDER.iter().filter_map(|(subject, label)| {
+        let q = core.iter().find(|q| q.subject == *subject)?;
+        Some(Fact {
+            label: (*label).to_string(),
+            reading: answer(q),
+        })
+    }));
     out.extend(
         core.iter()
             .filter(|q| !CORE_ORDER.iter().any(|(s, _)| *s == q.subject))
             .map(|q| Fact {
                 label: label_for(&q.subject),
-                value: answer(q),
+                reading: answer(q),
             }),
     );
     out
 }
 
+/// A value as the file has it, as one line: a string as satz reads it, each `{param}` in
+/// it replaced by what the param resolves to; a reference by its resolved value; a list
+/// joined with commas.
+fn source_line(value: &SourceValue) -> String {
+    match value {
+        SourceValue::Str { parts, .. } => parts
+            .iter()
+            .map(|part| match part {
+                StrPart::Lit(text) => text.clone(),
+                StrPart::TfRef(target) => format!("${{{target}}}"),
+                StrPart::Param {
+                    resolved: Some(v), ..
+                } => json_line(v),
+                StrPart::Param {
+                    name,
+                    resolved: None,
+                } => format!("{{{name}}}"),
+            })
+            .collect(),
+        SourceValue::Num(n) => n.clone(),
+        SourceValue::Bool(b) => if *b { "yes" } else { "no" }.to_string(),
+        SourceValue::Ref {
+            resolved: Some(v), ..
+        } => json_line(v),
+        SourceValue::Ref {
+            param,
+            resolved: None,
+        } => param.clone(),
+        SourceValue::List(items) => items.iter().map(source_line).collect::<Vec<_>>().join(", "),
+        SourceValue::Obj => "an object".to_string(),
+    }
+}
+
 /// The answer as one line. A choice is answered by an option's name, which the report
 /// carries as the current value like any other.
-fn answer(q: &QuestionRow) -> Option<String> {
+fn answer(q: &QuestionRow) -> Reading {
     match q.state {
-        QuestionState::Answered => Some(q.current.as_ref().map_or_else(
-            || "answered".to_string(),
-            |v| {
-                match v {
-                    serde_json::Value::String(s) => s.clone(),
-                    serde_json::Value::Bool(b) => if *b { "yes" } else { "no" }.to_string(),
-                    serde_json::Value::Array(items) => items
-                        .iter()
-                        .map(|i| match i {
-                            serde_json::Value::String(s) => s.clone(),
-                            other => other.to_string(),
-                        })
-                        .collect::<Vec<_>>()
-                        .join(", "),
-                    other => other.to_string(),
-                }
-            },
-        )),
-        QuestionState::Unanswered | QuestionState::NotApplicable => None,
+        QuestionState::Answered => Reading::Value(
+            q.current
+                .as_ref()
+                .map_or_else(|| "answered".to_string(), json_line),
+        ),
+        QuestionState::Unanswered | QuestionState::NotApplicable => Reading::NotAnswered,
+    }
+}
+
+/// A JSON value as one line: a string as itself, a boolean as a word, a list joined with
+/// commas.
+fn json_line(v: &serde_json::Value) -> String {
+    match v {
+        serde_json::Value::String(s) => s.clone(),
+        serde_json::Value::Bool(b) => if *b { "yes" } else { "no" }.to_string(),
+        serde_json::Value::Array(items) => items
+            .iter()
+            .map(|i| match i {
+                serde_json::Value::String(s) => s.clone(),
+                other => other.to_string(),
+            })
+            .collect::<Vec<_>>()
+            .join(", "),
+        other => other.to_string(),
     }
 }
 
@@ -454,7 +538,10 @@ pub fn OverviewView() -> Element {
         held_notices: app.estate().notices().read().len(),
     });
 
-    let facts = identity(questions.as_ref());
+    let facts = identity(
+        model.as_deref().map(|m| m.params.as_slice()),
+        questions.as_ref(),
+    );
 
     rsx! {
         div { class: "view overview",
@@ -561,7 +648,15 @@ fn IdentityCard(facts: Vec<Fact>) -> Element {
     let Some(open) = open else {
         return rsx! {};
     };
-    let unanswered = facts.iter().filter(|f| f.value.is_none()).count();
+    let missing = facts
+        .iter()
+        .filter(|f| {
+            matches!(
+                f.reading,
+                Reading::NotAnswered | Reading::NotSet | Reading::Empty
+            )
+        })
+        .count();
 
     rsx! {
         Card { variant: CardVariant::Outlined, class: "overview__identity",
@@ -569,12 +664,12 @@ fn IdentityCard(facts: Vec<Fact>) -> Element {
                 Icon { name: "description", size: 22 }
                 h2 { class: "overview__owed-title", "{open.name}" }
                 span { class: "grow" }
-                if unanswered > 0 {
+                if missing > 0 {
                     Chip {
                         kind: ChipKind::Assist,
-                        label: match unanswered {
-                            1 => "1 unanswered".to_string(),
-                            n => format!("{n} unanswered"),
+                        label: match missing {
+                            1 => "1 without a value".to_string(),
+                            n => format!("{n} without a value"),
                         },
                     }
                 }
@@ -583,9 +678,12 @@ fn IdentityCard(facts: Vec<Fact>) -> Element {
                 for fact in facts {
                     dt { key: "{fact.label}", "{fact.label}" }
                     dd {
-                        match fact.value {
-                            Some(value) => rsx! { "{value}" },
-                            None => rsx! { span { class: "overview__unanswered", "not answered" } },
+                        match fact.reading {
+                            Reading::Value(value) => rsx! { "{value}" },
+                            Reading::NotAnswered => rsx! { span { class: "overview__unanswered", "not answered" } },
+                            Reading::NotSet => rsx! { span { class: "overview__unanswered", "not set" } },
+                            Reading::Empty => rsx! { span { class: "overview__unanswered", "empty" } },
+                            Reading::NotRead => rsx! { span { class: "overview__unanswered", "not read yet" } },
                         }
                     }
                 }
@@ -671,23 +769,164 @@ mod tests {
         facts.iter().map(|f| f.label.as_str()).collect()
     }
 
-    /// The customer comes first, because the reason to read this card is "is this the
-    /// right estate", and every row carries the estate's own answer.
+    /// The rows that follow the four the file answers: the questions report's.
+    fn answered_rows(facts: &[Fact]) -> &[Fact] {
+        &facts[FILE_ORDER.len()..]
+    }
+
+    fn value(text: &str) -> Reading {
+        Reading::Value(text.to_string())
+    }
+
+    /// One row of the file's `params { }` block holding a plain string.
+    fn param(name: &str, text: &str) -> ParamRow {
+        ParamRow {
+            id: 0,
+            name: name.to_string(),
+            value: SourceValue::Str {
+                raw: text.to_string(),
+                parts: vec![StrPart::Lit(text.to_string())],
+            },
+            kind: satz_studio_core::model::ParamKind::String,
+            question: None,
+            one_way_door: false,
+            mode: satz_studio_core::model::EditMode::Value,
+            line: 1,
+        }
+    }
+
+    /// The four params that say whose estate this is, as an estate that does not use the
+    /// core pack sets them; the organisation id is a number.
+    fn whose() -> Vec<ParamRow> {
+        let mut org = param("customer_organization_id", "");
+        org.value = SourceValue::Num("123456789012".to_string());
+        vec![
+            param("customer_id", "C0example"),
+            param("customer_longname", "Acme Corp."),
+            param("default_region", "europe-west3"),
+            org,
+            param("customer_shortname", "acme"),
+        ]
+    }
+
+    /// The card opens with whose estate this is, read from the file itself: with no
+    /// questions report at all, the four params the file sets are exactly the four rows,
+    /// short name first, and another param of the file is not one of them.
     #[test]
-    fn the_estate_own_answers_read_customer_first() {
+    fn the_file_s_own_params_say_whose_estate_it_is_without_a_questions_report() {
+        let facts = identity(Some(&whose()), None);
+        assert_eq!(
+            facts,
+            [
+                Fact {
+                    label: "Short name".to_string(),
+                    reading: value("acme")
+                },
+                Fact {
+                    label: "Customer".to_string(),
+                    reading: value("Acme Corp.")
+                },
+                Fact {
+                    label: "Customer ID".to_string(),
+                    reading: value("C0example")
+                },
+                Fact {
+                    label: "Organisation ID".to_string(),
+                    reading: value("123456789012")
+                },
+            ]
+        );
+    }
+
+    /// An estate that uses the core pack carries the same four subjects as questions too;
+    /// each is still one row, read from the file, and the other core answers follow.
+    #[test]
+    fn with_the_core_report_each_subject_still_shows_once() {
         let r = report(vec![
             row("default_region", CORE_PACK, Some(json!("europe-west3"))),
             row("customer_id", CORE_PACK, Some(json!("C0example"))),
             row("customer_longname", CORE_PACK, Some(json!("Acme Corp."))),
             row("customer_shortname", CORE_PACK, Some(json!("acme"))),
+            row(
+                "customer_organization_id",
+                CORE_PACK,
+                Some(json!("123456789012")),
+            ),
         ]);
-        let facts = identity(Some(&r));
+        let facts = identity(Some(&whose()), Some(&r));
         assert_eq!(
             labels(&facts),
-            ["Customer", "Short name", "Customer ID", "Region"]
+            [
+                "Short name",
+                "Customer",
+                "Customer ID",
+                "Organisation ID",
+                "Region"
+            ]
         );
-        assert_eq!(facts[0].value.as_deref(), Some("Acme Corp."));
-        assert_eq!(facts[3].value.as_deref(), Some("europe-west3"));
+        assert_eq!(facts[0].reading, value("acme"));
+        assert_eq!(facts[4].reading, value("europe-west3"));
+    }
+
+    /// A param the file does not set says so, even where the core pack's question offers a
+    /// default, and one it sets to `""` says it is empty; before the model is built the
+    /// file has not been read, and the row says that instead of claiming the param is not
+    /// set.
+    #[test]
+    fn a_param_the_file_does_not_set_reads_not_set_and_an_unread_file_says_so() {
+        let mut offered = row("customer_longname", CORE_PACK, None);
+        offered.default = Some(json!("Acme Corp."));
+        let r = report(vec![offered]);
+        let facts = identity(
+            Some(&[
+                param("customer_shortname", "acme"),
+                param("customer_id", ""),
+            ]),
+            Some(&r),
+        );
+        assert_eq!(
+            facts.iter().map(|f| &f.reading).collect::<Vec<_>>(),
+            [
+                &value("acme"),
+                &Reading::NotSet,
+                &Reading::Empty,
+                &Reading::NotSet
+            ]
+        );
+        assert!(
+            identity(None, Some(&r))
+                .iter()
+                .all(|f| f.reading == Reading::NotRead)
+        );
+    }
+
+    /// A string reads as satz reads it — an interpolated param by its value, a Terraform
+    /// reference as written — and a list joined with commas.
+    #[test]
+    fn a_file_value_reads_as_one_line() {
+        let mut long = param("customer_longname", "");
+        long.value = SourceValue::Str {
+            raw: "{customer_shortname} at ${var.site}".to_string(),
+            parts: vec![
+                StrPart::Param {
+                    name: "customer_shortname".to_string(),
+                    resolved: Some(json!("acme")),
+                },
+                StrPart::Lit(" at ".to_string()),
+                StrPart::TfRef("var.site".to_string()),
+            ],
+        };
+        let mut id = param("customer_id", "");
+        id.value = SourceValue::List(vec![
+            SourceValue::Str {
+                raw: "C0example".to_string(),
+                parts: vec![StrPart::Lit("C0example".to_string())],
+            },
+            SourceValue::Bool(true),
+        ]);
+        let facts = identity(Some(&[long, id]), None);
+        assert_eq!(facts[1].reading, value("acme at ${var.site}"));
+        assert_eq!(facts[2].reading, value("C0example, yes"));
     }
 
     /// An unanswered question is SAID to be unanswered. The pack's default is what an
@@ -696,9 +935,9 @@ mod tests {
     #[test]
     fn an_unanswered_question_carries_no_value() {
         let r = report(vec![row("customer_domain", CORE_PACK, None)]);
-        let facts = identity(Some(&r));
-        assert_eq!(labels(&facts), ["Domain"]);
-        assert_eq!(facts[0].value, None);
+        let facts = identity(Some(&[]), Some(&r));
+        assert_eq!(labels(answered_rows(&facts)), ["Domain"]);
+        assert_eq!(answered_rows(&facts)[0].reading, Reading::NotAnswered);
     }
 
     /// The card is the estate's own identity: a pack's question belongs to Decisions, and
@@ -710,7 +949,10 @@ mod tests {
             row("deployment_mode", CORE_PACK, Some(json!("cloud"))),
             row("customer_domain", CORE_PACK, Some(json!("example.com"))),
         ]);
-        assert_eq!(labels(&identity(Some(&r))), ["Domain"]);
+        assert_eq!(
+            labels(answered_rows(&identity(Some(&[]), Some(&r)))),
+            ["Domain"]
+        );
     }
 
     /// A core question satz adds after this file was written is a row under its own name,
@@ -725,17 +967,20 @@ mod tests {
                 Some(json!("example.net")),
             ),
         ]);
-        let facts = identity(Some(&r));
-        assert_eq!(labels(&facts), ["Zone", "Customer second domain"]);
+        let facts = identity(Some(&[]), Some(&r));
+        assert_eq!(
+            labels(answered_rows(&facts)),
+            ["Zone", "Customer second domain"]
+        );
     }
 
-    /// Before the first report there is no card content, and an estate whose packs do not
-    /// include the core one has none either.
+    /// Before the first report, and for an estate whose packs do not include the core one,
+    /// the card carries the four rows the file answers and nothing else.
     #[test]
-    fn no_report_and_no_core_pack_are_both_empty() {
-        assert!(identity(None).is_empty());
+    fn no_report_and_no_core_pack_leave_only_the_file_s_rows() {
+        assert!(answered_rows(&identity(Some(&[]), None)).is_empty());
         let r = report(vec![row("use_budget", "organization-budget", None)]);
-        assert!(identity(Some(&r)).is_empty());
+        assert!(answered_rows(&identity(Some(&[]), Some(&r))).is_empty());
     }
 
     /// A list answer reads as a list, and a boolean as a word.
@@ -749,13 +994,11 @@ mod tests {
             ),
             row("customer_domain", CORE_PACK, Some(json!(true))),
         ]);
-        let facts = identity(Some(&r));
-        assert_eq!(labels(&facts), ["Domain", "First admin"]);
-        assert_eq!(facts[0].value.as_deref(), Some("yes"));
-        assert_eq!(
-            facts[1].value.as_deref(),
-            Some("a@example.com, b@example.com")
-        );
+        let facts = identity(Some(&[]), Some(&r));
+        let rows = answered_rows(&facts);
+        assert_eq!(labels(rows), ["Domain", "First admin"]);
+        assert_eq!(rows[0].reading, value("yes"));
+        assert_eq!(rows[1].reading, value("a@example.com, b@example.com"));
     }
 
     fn model(packs: PacksReport, schema: SchemaStatus) -> EstateModel {
