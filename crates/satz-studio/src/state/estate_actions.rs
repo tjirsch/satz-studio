@@ -796,10 +796,11 @@ async fn merge_presets(session: &Arc<EstateSession>, app: Store<AppStore>) {
                     estate.command_log().push(CliLine::Stdout(line));
                 }
                 queue_notices(app, &report.notices);
-                CommandOutcome {
-                    ok: true,
-                    text: format!("{TOOL} returned"),
+                let outcome = merge_outcome(&report);
+                if !outcome.ok {
+                    toast(app, ToastKind::Error, outcome.text.clone());
                 }
+                outcome
             }
             Err(e) => {
                 toast(app, ToastKind::Error, e.to_string());
@@ -818,6 +819,23 @@ async fn merge_presets(session: &Arc<EstateSession>, app: Store<AppStore>) {
         }
     };
     estate.outcome().set(Some(outcome));
+}
+
+/// The outcome of a merge that returned a report: satz's own verdict. A report with
+/// `attention` is what makes `satz merge-presets` exit non-zero, so it is a failed
+/// outcome here, as a command that exits non-zero is in `run_command`.
+fn merge_outcome(report: &MergeReport) -> CommandOutcome {
+    if report.attention {
+        CommandOutcome {
+            ok: false,
+            text: "satz_merge_presets: the merge needs attention".to_string(),
+        }
+    } else {
+        CommandOutcome {
+            ok: true,
+            text: "satz_merge_presets returned".to_string(),
+        }
+    }
 }
 
 fn open_in_terminal(session: &Arc<EstateSession>, app: Store<AppStore>, args: &[String]) {
@@ -1111,6 +1129,28 @@ mod tests {
         let mut nothing = change("add", &[]);
         nothing.left = vec!["already on — nothing to write".to_string()];
         assert_eq!(switched(&nothing), "already on — nothing to write");
+    }
+
+    /// satz's verdict decides the chip: `attention` is what makes `satz merge-presets`
+    /// exit non-zero, so it is a failed outcome; without it the merge is ok.
+    #[test]
+    fn a_merge_that_needs_attention_is_a_failed_outcome() {
+        let mut report: MergeReport = serde_json::from_value(serde_json::json!({
+            "report_only": false,
+            "events": [],
+            "counts": {
+                "installed": 0, "current": 1, "artifacts_updated": 0, "doc_only": 0,
+                "unused_overwritten": 0, "adopted_in_place": 0, "forked_and_repointed": 0,
+                "fork_diffs_refreshed": 0, "deferred": 0, "refused": 0, "skipped_edited": 0
+            },
+            "attention": true
+        }))
+        .unwrap();
+        let failed = merge_outcome(&report);
+        assert!(!failed.ok);
+        assert!(failed.text.contains("attention"), "{}", failed.text);
+        report.attention = false;
+        assert!(merge_outcome(&report).ok);
     }
 
     #[test]

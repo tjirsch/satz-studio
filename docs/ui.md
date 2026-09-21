@@ -156,9 +156,10 @@ nothing blocks in an event handler.
   - `MergePresets` calls `satz_merge_presets`, which reconciles the estate's library
     with upstream. The log gets the report as sentences (`MergeReport::lines`): one per
     pack the merge changed or would change, satz's warnings, notes and prerequisites,
-    the counts, and each notice it opened with the command that notice names. A
-    refusal is satz's own text; a report the app cannot type is a failed outcome and a
-    toast.
+    the counts, and each notice it opened with the command that notice names. A report
+    with `attention` — what makes `satz merge-presets` exit non-zero — is a failed
+    outcome and a toast, as a command that exits non-zero is. A refusal is satz's own
+    text; a report the app cannot type is a failed outcome and a toast.
 
 An error from either — a refusal, a missing binary, a function another unit has not
 built — is a toast in the snackbar and, where it concerns the estate, a diagnostic in
