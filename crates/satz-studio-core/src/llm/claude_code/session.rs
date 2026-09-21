@@ -17,7 +17,7 @@ use std::collections::BTreeSet;
 use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, Lines};
 use tokio::process::{Child, ChildStdin, ChildStdout};
@@ -29,7 +29,7 @@ use super::events::{CcLine, ControlRequest, ControlResponse, RateLimit, now_seco
 use super::log::{Channel, StreamLog, StreamLogConfig};
 use crate::llm::agent::PREAMBLE;
 use crate::llm::claude::sse::{Assembler, SseEvent};
-use crate::llm::{AgentEvent, Approval, ClaudeError, StopReason, StreamEvent, Usage};
+use crate::llm::{AgentEvent, Approval, ClaudeError, ContentBlock, StopReason, StreamEvent, Usage};
 use crate::satz::{Allow, EstateSession, ToolInfo, ToolOutcome};
 
 /// The MCP server the app gives Claude Code, and the prefix every one of its tools
@@ -488,6 +488,7 @@ impl Session {
                 CcLine::User { message } => {
                     for result in message.tool_results() {
                         let name = fold.tool_name(&result.tool_use_id);
+                        let millis = fold.millis(&result.tool_use_id);
                         send(
                             events,
                             AgentEvent::ToolResult {
@@ -498,7 +499,7 @@ impl Session {
                                     text: result.text,
                                     is_error: result.is_error,
                                 },
-                                millis: 0,
+                                millis,
                             },
                         )
                         .await?;
@@ -517,8 +518,19 @@ impl Session {
                         },
                 } => {
                     let approval = self
-                        .ask(&request_id, &tool_name, tool_use_id, input, events, cancel)
+                        .ask(
+                            &request_id,
+                            &tool_name,
+                            tool_use_id.clone(),
+                            input,
+                            events,
+                            cancel,
+                        )
                         .await?;
+                    // the wait for the operator is not the call's time
+                    if let Some(id) = tool_use_id {
+                        fold.began.insert(id, Instant::now());
+                    }
                     if approval.is_none() {
                         interrupt_pending = true;
                     }
@@ -550,7 +562,8 @@ impl Session {
         }
     }
 
-    /// The turn's end, as the CLI reported it.
+    /// The turn's end, as the CLI reported it. The `result` line's usage is Claude Code's
+    /// own total over every request of the turn.
     async fn ended(
         &mut self,
         subtype: String,
@@ -808,6 +821,9 @@ struct Fold {
     indexes: std::collections::BTreeMap<usize, String>,
     /// tool call id → the name the app shows
     names: std::collections::BTreeMap<String, String>,
+    /// tool call id → when its clock started: its input complete, or the operator's
+    /// answer to its approval card
+    began: std::collections::BTreeMap<String, Instant>,
 }
 
 impl Fold {
@@ -841,7 +857,7 @@ impl Fold {
     /// bookkeeping, and the turn ends on the CLI's `result` line.
     fn translate(&mut self, event: StreamEvent) -> Option<AgentEvent> {
         match event {
-            StreamEvent::Started { .. } => Some(AgentEvent::Started),
+            StreamEvent::Started { model, .. } => Some(AgentEvent::Started { model }),
             StreamEvent::TextDelta(text) => Some(AgentEvent::TextDelta(text)),
             StreamEvent::ThinkingDelta(text) => Some(AgentEvent::ThinkingDelta(text)),
             StreamEvent::ToolUseStart { index, id, name } => {
@@ -860,11 +876,28 @@ impl Fold {
                     id: id.clone(),
                     partial_json,
                 }),
-            StreamEvent::BlockStop { .. } | StreamEvent::Done { .. } => None,
+            // a call's clock starts when its input is complete
+            StreamEvent::BlockStop {
+                block: ContentBlock::ToolUse { id, .. },
+                ..
+            } => {
+                self.began.insert(id, Instant::now());
+                None
+            }
+            StreamEvent::BlockStop { .. } => None,
+            StreamEvent::Done { usage, .. } => Some(AgentEvent::RequestDone { usage }),
             StreamEvent::Error(text) => Some(AgentEvent::Notice(format!(
                 "Claude Code reported a stream error: {text}"
             ))),
         }
+    }
+
+    /// How long a call took, from its clock's start to its result; a result for a call
+    /// the stream never carried took no time the app saw.
+    fn millis(&mut self, id: &str) -> u128 {
+        self.began
+            .remove(id)
+            .map_or(0, |began| began.elapsed().as_millis())
     }
 
     /// The name a tool result is shown under: the call's, when the stream carried it.

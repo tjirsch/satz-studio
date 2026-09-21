@@ -8,7 +8,7 @@ use satz_studio_core::llm::claude_code::{
     ClaudeCodeError, Session, SessionOptions, StreamLogConfig, allowed_tools, command_args,
     mcp_config, system_prompt,
 };
-use satz_studio_core::llm::{AgentEvent, Approval, StopReason};
+use satz_studio_core::llm::{AgentEvent, Approval, StopReason, Usage};
 use satz_studio_core::satz::{Allow, EstateSession};
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
@@ -21,7 +21,11 @@ use support::{Fake, SmokeCopy, copy_smoke, fake, fake_with, satz_binary, signed_
 /// What the tests read back out of one turn: the events in order, flattened.
 #[derive(Debug, Clone, PartialEq)]
 enum Seen {
-    Started,
+    Started(String),
+    RequestDone {
+        input: u64,
+        output: u64,
+    },
     Text(String),
     ToolUseStarted(String),
     ToolInputDelta(String),
@@ -64,7 +68,11 @@ async fn turn(
         let mut seen = Vec::new();
         while let Some(event) = rx.recv().await {
             seen.push(match event {
-                AgentEvent::Started => Seen::Started,
+                AgentEvent::Started { model } => Seen::Started(model),
+                AgentEvent::RequestDone { usage } => Seen::RequestDone {
+                    input: usage.input_tokens,
+                    output: usage.output_tokens,
+                },
                 AgentEvent::TextDelta(t) => {
                     if cancel_on_text {
                         token.cancel();
@@ -279,9 +287,13 @@ async fn a_text_turn_streams_its_deltas_and_ends_with_the_usage() {
     assert_eq!(
         seen,
         vec![
-            Seen::Started,
+            Seen::Started("claude-opus-5".into()),
             Seen::Text("Two questions ".into()),
             Seen::Text("are open.".into()),
+            Seen::RequestDone {
+                input: 12,
+                output: 9
+            },
             Seen::TurnDone(StopReason::EndTurn),
         ]
     );
@@ -313,6 +325,63 @@ async fn a_text_turn_streams_its_deltas_and_ends_with_the_usage() {
 }
 
 #[tokio::test]
+async fn a_turn_names_the_model_it_started_on_and_reports_each_request_and_the_total() {
+    let mut running = start(&["text-turn"], false).await;
+    let (tx, mut rx) = mpsc::channel(64);
+    let collect = async {
+        let mut events = Vec::new();
+        while let Some(event) = rx.recv().await {
+            events.push(event);
+        }
+        events
+    };
+    let (result, events) = tokio::join!(
+        within(running.session.run_turn(
+            "which questions are open?".to_string(),
+            tx,
+            CancellationToken::new()
+        )),
+        collect
+    );
+    result.expect("the turn ends");
+    assert!(
+        matches!(events.first(), Some(AgentEvent::Started { model }) if model == "claude-opus-5"),
+        "{events:?}"
+    );
+    let per_request: Vec<Usage> = events
+        .iter()
+        .filter_map(|e| match e {
+            AgentEvent::RequestDone { usage } => Some(*usage),
+            _ => None,
+        })
+        .collect();
+    // `message_start` gave the input, `message_delta` the output
+    assert_eq!(
+        per_request,
+        [Usage {
+            input_tokens: 12,
+            output_tokens: 9,
+            cache_creation_input_tokens: None,
+            cache_read_input_tokens: None,
+        }]
+    );
+    // the turn's figure is the `result` line's: Claude Code's own total, cache included
+    let Some(AgentEvent::TurnDone { usage, .. }) = events.last() else {
+        panic!("the turn ends in TurnDone: {events:?}");
+    };
+    assert_eq!(
+        *usage,
+        Usage {
+            input_tokens: 12,
+            output_tokens: 9,
+            cache_creation_input_tokens: Some(40),
+            cache_read_input_tokens: Some(100),
+        }
+    );
+    running.session.close().await;
+}
+
+#[tokio::test]
 async fn a_write_tool_raises_the_card_and_allow_once_runs_it() {
     let mut running = start(&["tool-turn"], false).await;
     let (result, seen) = turn(
@@ -326,18 +395,26 @@ async fn a_write_tool_raises_the_card_and_allow_once_runs_it() {
     assert_eq!(
         seen,
         vec![
-            Seen::Started,
+            Seen::Started("claude-opus-5".into()),
             Seen::ToolUseStarted("satz_interview".into()),
             Seen::ToolInputDelta("{\"answers\"".into()),
             Seen::ToolInputDelta(": {\"deployment_mode\": \"cloud\"}}".into()),
+            Seen::RequestDone {
+                input: 12,
+                output: 9
+            },
             Seen::Pending("satz_interview".into()),
             Seen::Result {
                 name: "satz_interview".into(),
                 is_error: false,
                 body: "{\"written\":true}".into(),
             },
-            Seen::Started,
+            Seen::Started("claude-opus-5".into()),
             Seen::Text("Answered.".into()),
+            Seen::RequestDone {
+                input: 12,
+                output: 9
+            },
             Seen::TurnDone(StopReason::EndTurn),
         ]
     );
@@ -602,9 +679,13 @@ async fn a_tool_called_without_arguments_completes_the_turn() {
     assert_eq!(
         seen,
         vec![
-            Seen::Started,
+            Seen::Started("claude-opus-5".into()),
             Seen::ToolUseStarted("satz_transpile_check".into()),
             Seen::ToolInputDelta(String::new()),
+            Seen::RequestDone {
+                input: 12,
+                output: 9
+            },
             Seen::Result {
                 name: "satz_transpile_check".into(),
                 is_error: false,
@@ -616,8 +697,12 @@ async fn a_tool_called_without_arguments_completes_the_turn() {
                 })
                 .to_string(),
             },
-            Seen::Started,
+            Seen::Started("claude-opus-5".into()),
             Seen::Text("It compiles.".into()),
+            Seen::RequestDone {
+                input: 12,
+                output: 9
+            },
             Seen::TurnDone(StopReason::EndTurn),
         ]
     );

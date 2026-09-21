@@ -496,7 +496,12 @@ this section is the API engine.
   refusal leads with satz's sentence, then the structured part it carries, if any — a
   refused `satz_transpile_check` hands over its `CompileSummary` — after a blank line.
   All results of one assistant message go back in one user message.
-- **Ends.** `EndTurn`, `MaxTokens` and `StopSequence` are `AgentEvent::TurnDone`;
+- **Events of a request.** Every request opens with `AgentEvent::Started { model }`,
+  the model the server names in `message_start` — another than the one asked for when
+  the server fell back — and ends with `AgentEvent::RequestDone { usage }`, that
+  request's usage alone.
+- **Ends.** `EndTurn`, `MaxTokens` and `StopSequence` are `AgentEvent::TurnDone`, whose
+  usage is every request of the turn summed (`Usage::plus`);
   `PauseTurn` loops again, ten times at most; `Refusal` is `ClaudeError::Refused` with
   the category, the explanation and the recommended model from `stop_details`. A turn
   that is refused, cancelled or fails is rolled back whole: `messages` is truncated to
@@ -508,6 +513,16 @@ this section is the API engine.
 - **Other providers** implement `ChatProvider`: `OpenAiCompat`
   (`{base_url}/chat/completions`) and `Ollama` (`{base_url}/api/chat`, NDJSON) drop
   thinking, effort and cache breakpoints and say so through `Capabilities`.
+- **The chat's debug log.** `ChatStore.debug` holds one `DebugEvent` per tool call of
+  the conversation, under its call id, whatever the panel shows: opened by
+  `ToolUseStarted`, given the input by `ToolCallPending` or, for a call that asked
+  nobody, by the input the stream carried, and closed by `ToolResult` with the text
+  `result_text` made, `is_error` and the milliseconds. The chat coroutine follows the
+  estate session's `mcp_stderr()` and gives each line to the running turn's first call
+  still without its result; the API engine runs a response's calls in order, so that
+  is the call running. A replayed transcript fills the log from its `tool_use` and
+  `tool_result` blocks. On the Claude Code engine the calls run on Claude Code's own
+  `satz mcp`, whose stderr does not reach the app, and the entry says so.
 - **Transcripts.** `TranscriptStore` writes `<data dir>/satz-studio/transcripts/<sha256
   of the estate path>/<created>.jsonl`: line one the `TranscriptHeader` (estate path,
   model, instant), then one `Message` per line, appended and flushed; an existing file
@@ -543,13 +558,16 @@ Code's and asks it nothing but `claude auth status --json`.
   `can_use_tool` control requests, and a `result` line ending the turn.
 - **The translation.** `stream_event` payloads go through the same `Assembler` the API
   engine uses — a new one per `message_start`, since one turn is many assistant
-  messages, and the tool input rule of section 4c with it — and its `StreamEvent`s become `TextDelta`, `ThinkingDelta`,
-  `ToolUseStarted` and `ToolInputDelta` under the name satz gives the tool, with the
-  `mcp__satz__` prefix stripped. A `tool_result` block becomes `ToolResult`, a
-  `can_use_tool` request becomes `ToolCallPending` whose answer is the control response
-  (`ForSession` remembers the tool, so the next call needs no card), `rate_limit_event`
-  becomes `AgentEvent::Notice` for the footer, and `result` becomes `TurnDone` —
-  `EndTurn`, or `MaxTokens` for `error_max_turns`.
+  messages, and the tool input rule of section 4c with it — and its `StreamEvent`s become `Started { model }`,
+  `TextDelta`, `ThinkingDelta`, `ToolUseStarted` and `ToolInputDelta` under the name satz
+  gives the tool, with the `mcp__satz__` prefix stripped, and `RequestDone { usage }` at
+  each message's end. A `tool_result` block becomes `ToolResult`, its `millis` measured
+  from the call's input being complete, or from the operator's answer when the call
+  raised a card, to the result; a `can_use_tool` request becomes `ToolCallPending` whose
+  answer is the control response (`ForSession` remembers the tool, so the next call needs
+  no card), `rate_limit_event` becomes `AgentEvent::Notice` for the footer, and `result`
+  becomes `TurnDone` — `EndTurn`, or `MaxTokens` for `error_max_turns` — with the
+  `result` line's usage, Claude Code's total over the turn.
 - **The estate's write lock is held for the whole turn**, not per call: Claude Code's
   satz server writes the estate, and the app cannot see the calls it pre-approved. The
   app keeps no transcript for this engine — Claude Code holds the conversation, "New"

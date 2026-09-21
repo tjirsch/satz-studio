@@ -338,6 +338,29 @@ pub struct Usage {
     pub cache_read_input_tokens: Option<u64>,
 }
 
+impl Usage {
+    /// Two figures summed: what several requests cost together. A cache figure either
+    /// side reports is summed; one neither reports stays unreported.
+    pub fn plus(self, other: Usage) -> Usage {
+        let reported = |a: Option<u64>, b: Option<u64>| match (a, b) {
+            (None, None) => None,
+            (a, b) => Some(a.unwrap_or(0) + b.unwrap_or(0)),
+        };
+        Usage {
+            input_tokens: self.input_tokens + other.input_tokens,
+            output_tokens: self.output_tokens + other.output_tokens,
+            cache_creation_input_tokens: reported(
+                self.cache_creation_input_tokens,
+                other.cache_creation_input_tokens,
+            ),
+            cache_read_input_tokens: reported(
+                self.cache_read_input_tokens,
+                other.cache_read_input_tokens,
+            ),
+        }
+    }
+}
+
 /// One request to `POST /v1/messages` — the app's chat request, in Claude's shape.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Request {

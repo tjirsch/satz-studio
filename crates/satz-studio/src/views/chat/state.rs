@@ -12,9 +12,10 @@ use satz_studio_core::llm::{
     StopReason, Usage, result_text,
 };
 use satz_studio_core::model::{EstateModel, ResourceKind, ResourceNode};
-use satz_studio_core::satz::ToolOutcome;
 use satz_studio_core::satz::reports::{QuestionsReport, QuestionsSummary};
 use tokio::sync::oneshot;
+
+use super::summary::summary_line;
 
 /// Whether the agent behind the view exists, and why not.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -64,8 +65,12 @@ pub struct AssistantTurn {
     pub blocks: Vec<Block>,
     /// how many requests the turn took: one, plus one per tool loop
     pub requests: usize,
+    /// the model the server named at the start of the turn's latest request; `None` for
+    /// a replayed turn, whose transcript does not keep it
+    pub model: Option<String>,
     pub stop_reason: Option<StopReason>,
-    /// the last request's usage; `None` for a replayed turn, which has none
+    /// the turn's usage: the requests that ended so far while it streams, the engine's
+    /// total for the turn once it is done; `None` for a replayed turn, which has none
     pub usage: Option<Usage>,
 }
 
@@ -86,24 +91,24 @@ pub enum Block {
     Other(String),
 }
 
+/// One tool call as the conversation shows it: its name, its status, its duration and
+/// one line about its result. The input and the result themselves are the debug log's
+/// ([`DebugEvent`], under the same id).
 #[derive(Debug, Clone, PartialEq)]
 pub struct ToolCard {
     pub id: String,
     pub name: String,
-    /// the input JSON as it streamed; partial until the block stops
+    /// the input JSON as it streamed, partial until the block stops; kept for the debug
+    /// log, never shown on the card
     pub input_json: String,
-    /// the input once it is known whole: from the approval card, from the result, or
-    /// from the transcript
-    pub input: Option<serde_json::Value>,
     /// `None` while the call runs
     pub result: Option<ToolResultView>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ToolResultView {
-    /// what the model read: the text `result_text` makes of the outcome, which a
-    /// replayed transcript carries as it was sent
-    pub body: String,
+    /// the one line [`summary_line`] makes of what the model read
+    pub summary: String,
     pub is_error: bool,
     /// `None` for a replayed result, whose duration was not kept
     pub millis: Option<u128>,
@@ -115,37 +120,103 @@ impl ToolCard {
             id,
             name,
             input_json: String::new(),
-            input: None,
             result: None,
         }
     }
 
-    /// The input as the card shows it: the whole value pretty-printed when known,
-    /// else the JSON exactly as it streamed so far; [`NO_ARGUMENTS`] for a call that has
-    /// none.
-    pub fn input_text(&self) -> String {
-        match &self.input {
-            Some(value) => arguments_text(value),
-            None if self.input_json.trim().is_empty() => NO_ARGUMENTS.to_string(),
-            None => self.input_json.clone(),
+    /// What the card renders, and nothing else.
+    pub fn shown(&self) -> CardText {
+        CardText {
+            name: self.name.clone(),
+            summary: self.result.as_ref().map(|r| r.summary.clone()),
+            duration: self
+                .result
+                .as_ref()
+                .and_then(|r| r.millis)
+                .map(|ms| format!("{ms} ms")),
         }
     }
 
-    fn close(&mut self, outcome: ToolOutcome, millis: u128) {
-        if self.input.is_none() {
-            // the stream carried the whole input by now; what does not parse stays
-            // visible as the raw text through `input_text`
-            self.input = if self.input_json.trim().is_empty() {
-                Some(serde_json::Value::Object(serde_json::Map::new()))
-            } else {
-                serde_json::from_str(&self.input_json).ok()
-            };
+    /// Every text the card renders.
+    #[cfg(test)]
+    pub fn texts(&self) -> Vec<String> {
+        let shown = self.shown();
+        let mut texts = vec![shown.name];
+        texts.extend(shown.summary);
+        texts.extend(shown.duration);
+        texts
+    }
+
+    /// The input the stream carried, as the debug log keeps it: pretty-printed when it
+    /// parses, `{}` when nothing streamed, the raw text when it does not parse.
+    fn streamed_input(&self) -> String {
+        let raw = self.input_json.trim();
+        if raw.is_empty() {
+            return "{}".to_string();
         }
-        self.result = Some(ToolResultView {
-            body: result_text(&outcome),
-            is_error: outcome.is_error,
-            millis: Some(millis),
-        });
+        match serde_json::from_str::<serde_json::Value>(raw) {
+            Ok(value) => pretty(&value),
+            Err(_) => self.input_json.clone(),
+        }
+    }
+}
+
+/// The texts of a tool card: the name, the summary line once the call is done, and
+/// `42 ms` once its duration is known.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CardText {
+    pub name: String,
+    pub summary: Option<String>,
+    pub duration: Option<String>,
+}
+
+/// What the debug log holds of the satz stderr lines of a call.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StderrLines {
+    /// the lines the estate's `satz mcp` wrote while the call was open
+    Lines(Vec<String>),
+    /// this call's stderr does not reach the app, and why
+    Unseen(&'static str),
+}
+
+/// Why a Claude Code call has no stderr in the log.
+pub const CLAUDE_CODE_STDERR: &str =
+    "Claude Code runs its own satz mcp; that process's stderr does not reach the app";
+/// Why a replayed call has no stderr in the log.
+pub const REPLAYED_STDERR: &str = "a transcript does not keep satz's stderr";
+
+/// One tool call in the debug log, under its call id: the input and the result JSON,
+/// whether it was an error, how long it took, and what satz wrote to stderr meanwhile.
+#[derive(Debug, Clone, PartialEq)]
+pub struct DebugEvent {
+    pub id: String,
+    pub name: String,
+    /// the whole input, pretty-printed; `None` until it is known
+    pub input: Option<String>,
+    /// `None` while the call runs
+    pub result: Option<DebugResult>,
+    pub stderr: StderrLines,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct DebugResult {
+    /// what the model read: the text `result_text` makes of the outcome, which a
+    /// replayed transcript carries as it was sent
+    pub body: String,
+    pub is_error: bool,
+    /// `None` for a replayed result, whose duration was not kept
+    pub millis: Option<u128>,
+}
+
+impl DebugEvent {
+    fn open(id: String, name: String, stderr: StderrLines) -> Self {
+        Self {
+            id,
+            name,
+            input: None,
+            result: None,
+            stderr,
+        }
     }
 }
 
@@ -213,7 +284,7 @@ impl Notice {
 /// The usage figures the footer shows: the last turn's and the session's.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct UsageTotals {
-    /// the last completed turn's final request
+    /// the last completed turn, every request of it
     pub turn: Usage,
     /// every completed turn summed
     pub session: Usage,
@@ -224,24 +295,7 @@ impl UsageTotals {
     pub fn add(&mut self, usage: Usage) {
         self.turn = usage;
         self.turns += 1;
-        self.session.input_tokens += usage.input_tokens;
-        self.session.output_tokens += usage.output_tokens;
-        self.session.cache_read_input_tokens = sum_reported(
-            self.session.cache_read_input_tokens,
-            usage.cache_read_input_tokens,
-        );
-        self.session.cache_creation_input_tokens = sum_reported(
-            self.session.cache_creation_input_tokens,
-            usage.cache_creation_input_tokens,
-        );
-    }
-}
-
-/// A figure a provider reports is summed; one it never reports stays unreported.
-fn sum_reported(total: Option<u64>, next: Option<u64>) -> Option<u64> {
-    match (total, next) {
-        (None, None) => None,
-        (a, b) => Some(a.unwrap_or(0) + b.unwrap_or(0)),
+        self.session = self.session.plus(usage);
     }
 }
 
@@ -250,6 +304,14 @@ pub struct ChatStore {
     pub agent: AgentStatus,
     /// the completed turns, mirroring the agent's transcript
     pub turns: Vec<TurnView>,
+    /// every tool call of the conversation, in order, with its JSON: what the debug
+    /// panel shows, kept whether the panel is on or not
+    pub debug: Vec<DebugEvent>,
+    /// the call a tool card's link asked the debug panel to show
+    pub debug_focus: Option<String>,
+    /// where the running turn's calls begin in `debug`: a call before it that has no
+    /// result belongs to a turn that ended first, and no stderr line is its
+    pub debug_turn: usize,
     /// the assistant turn being streamed
     pub streaming: Option<AssistantTurn>,
     pub pending: Option<PendingCall>,
@@ -278,6 +340,9 @@ impl ChatStore {
         Self {
             agent: AgentStatus::Starting,
             turns: Vec::new(),
+            debug: Vec::new(),
+            debug_focus: None,
+            debug_turn: 0,
             streaming: None,
             pending: None,
             notice: None,
@@ -304,6 +369,7 @@ impl ChatStore {
         self.notice = None;
         self.error = None;
         self.turns.push(TurnView::User { text });
+        self.debug_turn = self.debug.len();
         self.streaming = Some(AssistantTurn::default());
         self.busy = true;
     }
@@ -312,7 +378,20 @@ impl ChatStore {
     /// hold it, and the coroutine parks it until the operator answers.
     pub fn apply(&mut self, event: AgentEvent) -> Option<oneshot::Sender<Approval>> {
         match event {
-            AgentEvent::Started => self.with_streaming("Started", |turn| turn.requests += 1),
+            AgentEvent::Started { model } => {
+                // Claude Code names its model when the turn starts, not at spawn: the
+                // footer follows it from here
+                if self.engine.is_claude_code() {
+                    self.model = model.clone();
+                }
+                self.with_streaming("Started", |turn| {
+                    turn.requests += 1;
+                    turn.model = Some(model);
+                });
+            }
+            AgentEvent::RequestDone { usage } => self.with_streaming("RequestDone", |turn| {
+                turn.usage = Some(turn.usage.unwrap_or_default().plus(usage));
+            }),
             AgentEvent::TextDelta(_)
             | AgentEvent::ThinkingDelta(_)
             | AgentEvent::ToolInputDelta { .. } => {
@@ -321,9 +400,12 @@ impl ChatStore {
                 }
             }
             AgentEvent::ToolUseStarted { id, name } => {
+                let stderr = self.fresh_stderr();
+                let entry = DebugEvent::open(id.clone(), name.clone(), stderr);
                 self.with_streaming("ToolUseStarted", |turn| {
                     turn.blocks.push(Block::Tool(ToolCard::open(id, name)));
                 });
+                self.debug.push(entry);
             }
             AgentEvent::ToolCallPending {
                 id,
@@ -331,13 +413,7 @@ impl ChatStore {
                 input,
                 approval,
             } => {
-                let whole = input.clone();
-                let card_id = id.clone();
-                self.with_streaming("ToolCallPending", |turn| {
-                    if let Some(card) = turn.card_mut(&card_id) {
-                        card.input = Some(whole);
-                    }
-                });
+                self.debug_entry_mut(&id, &name).input = Some(pretty(&input));
                 self.pending = Some(PendingCall { id, name, input });
                 return Some(approval);
             }
@@ -347,18 +423,32 @@ impl ChatStore {
                 outcome,
                 millis,
             } => {
-                let mut found = false;
+                let body = result_text(&outcome);
+                let mut streamed = None;
                 self.with_streaming("ToolResult", |turn| {
                     if let Some(card) = turn.card_mut(&id) {
-                        card.close(outcome, millis);
-                        found = true;
+                        card.result = Some(ToolResultView {
+                            summary: summary_line(&body, outcome.is_error),
+                            is_error: outcome.is_error,
+                            millis: Some(millis),
+                        });
+                        streamed = Some(card.streamed_input());
                     }
                 });
-                if !found && self.error.is_none() {
+                if streamed.is_none() && self.error.is_none() {
                     self.error = Some(format!(
                         "a result for {name} ({id}) arrived without its card"
                     ));
                 }
+                let entry = self.debug_entry_mut(&id, &name);
+                if entry.input.is_none() {
+                    entry.input = streamed;
+                }
+                entry.result = Some(DebugResult {
+                    body,
+                    is_error: outcome.is_error,
+                    millis: Some(millis),
+                });
                 self.pending = None;
             }
             AgentEvent::Notice(text) => self.engine_notice = Some(text),
@@ -408,9 +498,70 @@ impl ChatStore {
         }
     }
 
+    /// A line the estate's `satz mcp` wrote to stderr. It belongs to the running turn's
+    /// first call still without its result — the API engine runs a response's calls one
+    /// after another, in order — and to nothing when no call is open. On the Claude Code
+    /// engine the estate's server does not run the chat's calls, so no line is theirs.
+    pub fn debug_stderr(&mut self, line: String) {
+        if !self.has_open_call() {
+            return;
+        }
+        let open = self.debug[self.debug_turn..]
+            .iter_mut()
+            .find(|e| e.result.is_none());
+        if let Some(DebugEvent {
+            stderr: StderrLines::Lines(lines),
+            ..
+        }) = open
+        {
+            lines.push(line);
+        }
+    }
+
+    /// Whether a call is open for a stderr line to belong to.
+    pub fn has_open_call(&self) -> bool {
+        self.busy
+            && !self.engine.is_claude_code()
+            && self
+                .debug
+                .get(self.debug_turn..)
+                .is_some_and(|calls| calls.iter().any(|e| e.result.is_none()))
+    }
+
+    /// The debug log's entry for a call id.
+    #[cfg(test)]
+    pub fn debug_entry(&self, id: &str) -> Option<&DebugEvent> {
+        self.debug.iter().find(|e| e.id == id)
+    }
+
+    /// The entry for `id`, opened here when the stream never announced the call — a
+    /// Claude Code approval for a call its stream did not carry.
+    fn debug_entry_mut(&mut self, id: &str, name: &str) -> &mut DebugEvent {
+        match self.debug.iter().position(|e| e.id == id) {
+            Some(i) => &mut self.debug[i],
+            None => {
+                let stderr = self.fresh_stderr();
+                self.debug
+                    .push(DebugEvent::open(id.to_string(), name.to_string(), stderr));
+                self.debug.last_mut().expect("just pushed")
+            }
+        }
+    }
+
+    fn fresh_stderr(&self) -> StderrLines {
+        if self.engine.is_claude_code() {
+            StderrLines::Unseen(CLAUDE_CODE_STDERR)
+        } else {
+            StderrLines::Lines(Vec::new())
+        }
+    }
+
     /// A new conversation on `model`: everything of the old one goes.
     pub fn reset_conversation(&mut self, model: String) {
         self.turns.clear();
+        self.debug.clear();
+        self.debug_focus = None;
+        self.debug_turn = 0;
         self.streaming = None;
         self.pending = None;
         self.notice = None;
@@ -420,10 +571,11 @@ impl ChatStore {
         self.error = None;
     }
 
-    /// A transcript resumed: its turns, its file, its model.
-    pub fn load_conversation(&mut self, turns: Vec<TurnView>, path: PathBuf, model: String) {
+    /// A transcript resumed: its turns and its calls' debug log, its file, its model.
+    pub fn load_conversation(&mut self, replayed: Replayed, path: PathBuf, model: String) {
         self.reset_conversation(model);
-        self.turns = turns;
+        self.turns = replayed.turns;
+        self.debug = replayed.debug;
         self.transcript = Some(path);
     }
 
@@ -482,7 +634,8 @@ pub fn apply_delta(streaming: &mut Option<AssistantTurn>, event: AgentEvent) -> 
 
 fn event_name(event: &AgentEvent) -> &'static str {
     match event {
-        AgentEvent::Started => "Started",
+        AgentEvent::Started { .. } => "Started",
+        AgentEvent::RequestDone { .. } => "RequestDone",
         AgentEvent::TextDelta(_) => "TextDelta",
         AgentEvent::ThinkingDelta(_) => "ThinkingDelta",
         AgentEvent::ToolUseStarted { .. } => "ToolUseStarted",
@@ -499,18 +652,6 @@ fn event_name(event: &AgentEvent) -> &'static str {
 
 fn pretty(value: &serde_json::Value) -> String {
     serde_json::to_string_pretty(value).expect("a JSON value serialises")
-}
-
-/// What a card says for a tool call without arguments, in place of an empty object.
-pub const NO_ARGUMENTS: &str = "no arguments";
-
-/// A call's arguments as a card shows them: the object pretty-printed, or
-/// [`NO_ARGUMENTS`] when it is empty.
-pub fn arguments_text(value: &serde_json::Value) -> String {
-    match value.as_object() {
-        Some(args) if args.is_empty() => NO_ARGUMENTS.to_string(),
-        _ => pretty(value),
-    }
 }
 
 /// What the estate context is rendered from.
@@ -609,13 +750,23 @@ fn outline_lines(nodes: &[ResourceNode], depth: usize, out: &mut Vec<String>) {
     }
 }
 
-/// A saved transcript as turns. A user message with text opens a user turn; one
-/// carrying only tool results answers the cards of the assistant turn before it; the
-/// assistant messages between two user texts fold into one assistant turn, as the
-/// stream showed them. A user block this view cannot show is an error naming the
-/// message.
-pub fn replay(messages: &[Message]) -> Result<Vec<TurnView>, String> {
+/// A saved transcript as the view shows it: the turns, and the debug log of every call
+/// in them.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Replayed {
+    pub turns: Vec<TurnView>,
+    pub debug: Vec<DebugEvent>,
+}
+
+/// A saved transcript as turns and their calls' debug log. A user message with text
+/// opens a user turn; one carrying only tool results answers the cards of the assistant
+/// turn before it; the assistant messages between two user texts fold into one
+/// assistant turn, as the stream showed them. Each call's input and result go to the
+/// debug log under its id, as a live turn puts them there. A user block this view
+/// cannot show is an error naming the message.
+pub fn replay(messages: &[Message]) -> Result<Replayed, String> {
     let mut turns = Vec::new();
+    let mut debug: Vec<DebugEvent> = Vec::new();
     let mut open: Option<AssistantTurn> = None;
     for (i, message) in messages.iter().enumerate() {
         match message.role {
@@ -645,6 +796,16 @@ pub fn replay(messages: &[Message]) -> Result<Vec<TurnView>, String> {
                                     )
                                 })?;
                             card.result = Some(ToolResultView {
+                                summary: summary_line(content, *is_error),
+                                is_error: *is_error,
+                                millis: None,
+                            });
+                            let entry = debug
+                                .iter_mut()
+                                .rev()
+                                .find(|e| &e.id == tool_use_id)
+                                .expect("every card replayed has its debug entry");
+                            entry.result = Some(DebugResult {
                                 body: content.clone(),
                                 is_error: *is_error,
                                 millis: None,
@@ -679,13 +840,15 @@ pub fn replay(messages: &[Message]) -> Result<Vec<TurnView>, String> {
                             turn.blocks.push(Block::RedactedThinking);
                         }
                         ContentBlock::ToolUse { id, name, input } => {
-                            turn.blocks.push(Block::Tool(ToolCard {
-                                id: id.clone(),
-                                name: name.clone(),
-                                input_json: String::new(),
-                                input: Some(input.clone()),
-                                result: None,
-                            }));
+                            turn.blocks
+                                .push(Block::Tool(ToolCard::open(id.clone(), name.clone())));
+                            let mut entry = DebugEvent::open(
+                                id.clone(),
+                                name.clone(),
+                                StderrLines::Unseen(REPLAYED_STDERR),
+                            );
+                            entry.input = Some(pretty(input));
+                            debug.push(entry);
                         }
                         ContentBlock::ToolResult { .. } => {
                             return Err(format!(
@@ -718,7 +881,7 @@ pub fn replay(messages: &[Message]) -> Result<Vec<TurnView>, String> {
     if let Some(turn) = open.take() {
         turns.push(TurnView::Assistant(turn));
     }
-    Ok(turns)
+    Ok(Replayed { turns, debug })
 }
 
 #[cfg(test)]
@@ -726,6 +889,10 @@ mod tests {
     use super::*;
     use satz_studio_core::diag::DiagSource;
     use satz_studio_core::llm::ClaudeError;
+    use satz_studio_core::satz::ToolOutcome;
+
+    const QUESTIONS: &str =
+        include_str!("../../../../satz-studio-core/tests/fixtures/questions-smoke.json");
 
     fn store() -> ChatStore {
         ChatStore::new("claude-opus-5".to_string(), Effort::High, EngineKind::Api)
@@ -733,7 +900,9 @@ mod tests {
 
     fn started(store: &mut ChatStore, text: &str) {
         store.begin_turn(text.to_string());
-        store.apply(AgentEvent::Started);
+        store.apply(AgentEvent::Started {
+            model: "claude-opus-5".into(),
+        });
     }
 
     fn usage(input: u64, output: u64, cache_read: Option<u64>) -> Usage {
@@ -775,8 +944,23 @@ mod tests {
         assert_eq!(s.error, None);
     }
 
+    fn card(s: &ChatStore, i: usize) -> ToolCard {
+        match &s.streaming.as_ref().unwrap().blocks[i] {
+            Block::Tool(c) => c.clone(),
+            other => panic!("not a tool card: {other:?}"),
+        }
+    }
+
+    fn outcome(structured: Option<serde_json::Value>, text: &str, is_error: bool) -> ToolOutcome {
+        ToolOutcome {
+            structured,
+            text: text.into(),
+            is_error,
+        }
+    }
+
     #[test]
-    fn a_tool_card_opens_on_tool_use_started_and_closes_on_tool_result() {
+    fn a_tool_card_carries_one_line_and_the_debug_log_carries_the_json() {
         let mut s = store();
         started(&mut s, "check");
         s.apply(AgentEvent::ToolUseStarted {
@@ -791,78 +975,64 @@ mod tests {
             id: "t1".into(),
             partial_json: "\"C0example.satz\"}".into(),
         });
-        let card = |s: &ChatStore| match &s.streaming.as_ref().unwrap().blocks[0] {
-            Block::Tool(c) => c.clone(),
-            other => panic!("not a tool card: {other:?}"),
-        };
-        let open = card(&s);
-        assert!(open.result.is_none());
-        assert_eq!(open.input_text(), "{\"estate\": \"C0example.satz\"}");
+        assert!(card(&s, 0).result.is_none());
+        let open = s.debug_entry("t1").unwrap();
+        assert_eq!(open.input, None, "the input is logged once it is whole");
+        assert_eq!(open.result, None);
 
         s.apply(AgentEvent::ToolResult {
             id: "t1".into(),
             name: "satz_transpile_check".into(),
-            outcome: ToolOutcome {
-                structured: Some(serde_json::json!({"addresses": ["google_folder.infra"]})),
-                text: "ok".into(),
-                is_error: false,
-            },
+            outcome: outcome(
+                Some(serde_json::json!({"addresses": ["google_folder.infra"]})),
+                "ok",
+                false,
+            ),
             millis: 42,
         });
-        let closed = card(&s);
-        let result = closed.result.unwrap();
+        let closed = card(&s, 0);
+        let result = closed.result.as_ref().unwrap();
         assert!(!result.is_error);
-        assert_eq!(result.millis, Some(42));
-        assert!(result.body.contains("google_folder.infra"));
-        assert_eq!(
-            closed.input,
-            Some(serde_json::json!({"estate": "C0example.satz"}))
-        );
+        assert_eq!(result.summary, "addresses: 1");
+        assert_eq!(closed.shown().duration.as_deref(), Some("42 ms"));
+
+        let entry = s.debug_entry("t1").unwrap();
+        assert_eq!(entry.name, "satz_transpile_check");
+        let input: serde_json::Value =
+            serde_json::from_str(entry.input.as_deref().unwrap()).unwrap();
+        assert_eq!(input, serde_json::json!({"estate": "C0example.satz"}));
+        let logged = entry.result.as_ref().unwrap();
+        assert!(logged.body.contains("google_folder.infra"));
+        assert!(!logged.is_error);
+        assert_eq!(logged.millis, Some(42));
         assert_eq!(s.error, None);
     }
 
     #[test]
-    fn a_tool_with_no_input_says_it_has_no_arguments() {
+    fn a_call_with_no_input_logs_the_empty_object_and_its_card_shows_none() {
         let mut s = store();
         started(&mut s, "who");
         s.apply(AgentEvent::ToolUseStarted {
             id: "t1".into(),
             name: "satz_whoami".into(),
         });
-        let Block::Tool(open) = &s.streaming.as_ref().unwrap().blocks[0] else {
-            panic!("not a tool card");
-        };
-        assert_eq!(open.input_text(), NO_ARGUMENTS);
         s.apply(AgentEvent::ToolResult {
             id: "t1".into(),
             name: "satz_whoami".into(),
-            outcome: ToolOutcome {
-                structured: None,
-                text: "refused".into(),
-                is_error: true,
-            },
+            outcome: outcome(None, "refused", true),
             millis: 1,
         });
-        let Block::Tool(card) = &s.streaming.as_ref().unwrap().blocks[0] else {
-            panic!("not a tool card");
-        };
-        assert_eq!(card.input, Some(serde_json::json!({})));
-        assert_eq!(card.input_text(), NO_ARGUMENTS);
+        let card = card(&s, 0);
         assert!(card.result.as_ref().unwrap().is_error);
-        assert_eq!(card.result.as_ref().unwrap().body, "refused");
+        assert_eq!(card.result.as_ref().unwrap().summary, "refused");
+        assert!(card.texts().iter().all(|t| !t.contains("{}")));
+        let entry = s.debug_entry("t1").unwrap();
+        assert_eq!(entry.input.as_deref(), Some("{}"));
+        assert_eq!(entry.result.as_ref().unwrap().body, "refused");
     }
 
     #[test]
-    fn the_approval_card_says_no_arguments_for_an_empty_object() {
-        assert_eq!(arguments_text(&serde_json::json!({})), NO_ARGUMENTS);
-        assert_eq!(
-            arguments_text(&serde_json::json!({"answers": {"x": true}})),
-            "{\n  \"answers\": {\n    \"x\": true\n  }\n}"
-        );
-    }
-
-    #[test]
-    fn a_refused_call_shows_its_sentence_before_what_it_carries() {
+    fn a_refused_call_shows_its_sentence_and_the_log_keeps_what_it_carries() {
         let mut s = store();
         started(&mut s, "check");
         s.apply(AgentEvent::ToolUseStarted {
@@ -872,17 +1042,16 @@ mod tests {
         s.apply(AgentEvent::ToolResult {
             id: "t1".into(),
             name: "satz_transpile_check".into(),
-            outcome: ToolOutcome {
-                structured: Some(serde_json::json!({"findings": [{"kind": "parse"}]})),
-                text: "the estate does not compile".into(),
-                is_error: true,
-            },
+            outcome: outcome(
+                Some(serde_json::json!({"findings": [{"kind": "parse"}]})),
+                "the estate does not compile",
+                true,
+            ),
             millis: 3,
         });
-        let Block::Tool(card) = &s.streaming.as_ref().unwrap().blocks[0] else {
-            panic!("not a tool card");
-        };
-        let body = &card.result.as_ref().unwrap().body;
+        let summary = card(&s, 0).result.unwrap().summary;
+        assert_eq!(summary, "the estate does not compile");
+        let body = &s.debug_entry("t1").unwrap().result.as_ref().unwrap().body;
         assert!(
             body.starts_with("the estate does not compile\n\n{"),
             "{body}"
@@ -891,7 +1060,7 @@ mod tests {
     }
 
     #[test]
-    fn a_pending_call_parks_its_sender_and_sets_the_card_input() {
+    fn a_pending_call_parks_its_sender_and_logs_the_input() {
         let mut s = store();
         started(&mut s, "write");
         s.apply(AgentEvent::ToolUseStarted {
@@ -914,15 +1083,157 @@ mod tests {
                 input: serde_json::json!({"answers": {"x": true}}),
             })
         );
-        let Block::Tool(card) = &s.streaming.as_ref().unwrap().blocks[0] else {
-            panic!("not a tool card");
-        };
+        let logged = s.debug_entry("t1").unwrap().input.clone().unwrap();
         assert_eq!(
-            card.input,
-            Some(serde_json::json!({"answers": {"x": true}}))
+            serde_json::from_str::<serde_json::Value>(&logged).unwrap(),
+            serde_json::json!({"answers": {"x": true}})
         );
         parked.send(Approval::Once).unwrap();
         assert_eq!(rx.blocking_recv().unwrap(), Approval::Once);
+    }
+
+    #[test]
+    fn a_questions_turn_puts_no_json_on_any_card_and_the_whole_call_in_the_log() {
+        let questions: serde_json::Value = serde_json::from_str(QUESTIONS).unwrap();
+        let mut s = store();
+        started(&mut s, "which questions are open?");
+        s.apply(AgentEvent::ToolUseStarted {
+            id: "toolu_q".into(),
+            name: "satz_questions".into(),
+        });
+        s.apply(AgentEvent::ToolInputDelta {
+            id: "toolu_q".into(),
+            partial_json: String::new(),
+        });
+        s.apply(AgentEvent::ToolResult {
+            id: "toolu_q".into(),
+            name: "satz_questions".into(),
+            outcome: outcome(Some(questions.clone()), "", false),
+            millis: 120,
+        });
+        s.apply(AgentEvent::TextDelta("Some are open.".into()));
+        s.apply(AgentEvent::TurnDone {
+            stop_reason: StopReason::EndTurn,
+            usage: usage(1, 1, None),
+        });
+        let TurnView::Assistant(turn) = &s.turns[1] else {
+            panic!("the assistant turn");
+        };
+        let cards: Vec<&ToolCard> = turn
+            .blocks
+            .iter()
+            .filter_map(|b| match b {
+                Block::Tool(c) => Some(c),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(cards.len(), 1);
+        for text in cards.iter().flat_map(|c| c.texts()) {
+            assert!(
+                !text.contains('{') && !text.contains('['),
+                "a card renders JSON: {text}"
+            );
+        }
+        let count = questions["questions"].as_array().unwrap().len();
+        assert_eq!(
+            cards[0].result.as_ref().unwrap().summary,
+            format!("questions: {count}")
+        );
+
+        let entry = s
+            .debug_entry("toolu_q")
+            .expect("the call is logged under its id");
+        assert_eq!(entry.input.as_deref(), Some("{}"));
+        let logged: serde_json::Value =
+            serde_json::from_str(&entry.result.as_ref().unwrap().body).unwrap();
+        assert_eq!(logged, questions);
+        assert_eq!(entry.result.as_ref().unwrap().millis, Some(120));
+    }
+
+    #[test]
+    fn stderr_lines_belong_to_the_open_call_of_the_running_turn_only() {
+        let mut s = store();
+        s.debug_stderr("before any turn".into());
+        started(&mut s, "one");
+        s.apply(AgentEvent::ToolUseStarted {
+            id: "t1".into(),
+            name: "satz_questions".into(),
+        });
+        s.apply(AgentEvent::ToolUseStarted {
+            id: "t2".into(),
+            name: "satz_packs".into(),
+        });
+        assert!(s.has_open_call());
+        s.debug_stderr("reading the estate".into());
+        s.apply(AgentEvent::ToolResult {
+            id: "t1".into(),
+            name: "satz_questions".into(),
+            outcome: outcome(None, "ok", false),
+            millis: 1,
+        });
+        s.debug_stderr("reading the packs".into());
+        s.apply(AgentEvent::Cancelled);
+        assert!(!s.has_open_call(), "a call of an ended turn takes no line");
+        s.debug_stderr("after the turn".into());
+        assert_eq!(
+            s.debug_entry("t1").unwrap().stderr,
+            StderrLines::Lines(vec!["reading the estate".into()])
+        );
+        assert_eq!(
+            s.debug_entry("t2").unwrap().stderr,
+            StderrLines::Lines(vec!["reading the packs".into()])
+        );
+
+        // Claude Code's calls run on its own satz mcp: the estate's stderr is not theirs
+        let mut cc = ChatStore::new(String::new(), Effort::High, EngineKind::ClaudeCode);
+        started(&mut cc, "one");
+        cc.apply(AgentEvent::ToolUseStarted {
+            id: "t1".into(),
+            name: "satz_questions".into(),
+        });
+        assert!(!cc.has_open_call());
+        cc.debug_stderr("a line".into());
+        assert_eq!(
+            cc.debug_entry("t1").unwrap().stderr,
+            StderrLines::Unseen(CLAUDE_CODE_STDERR)
+        );
+    }
+
+    #[test]
+    fn a_turn_names_its_model_and_adds_up_every_request() {
+        let mut s = store();
+        started(&mut s, "one");
+        s.apply(AgentEvent::RequestDone {
+            usage: usage(100, 10, Some(0)),
+        });
+        s.apply(AgentEvent::Started {
+            model: "claude-sonnet-5".into(),
+        });
+        s.apply(AgentEvent::RequestDone {
+            usage: usage(200, 20, Some(90)),
+        });
+        let live = s.streaming.as_ref().unwrap();
+        assert_eq!(live.requests, 2);
+        assert_eq!(live.model.as_deref(), Some("claude-sonnet-5"));
+        assert_eq!(
+            live.usage,
+            Some(usage(100, 10, Some(0)).plus(usage(200, 20, Some(90))))
+        );
+        assert_eq!(
+            s.model, "claude-opus-5",
+            "the API engine keeps the model it was asked for"
+        );
+
+        let mut cc = ChatStore::new(
+            "the Claude Code default".into(),
+            Effort::High,
+            EngineKind::ClaudeCode,
+        );
+        started(&mut cc, "one");
+        assert_eq!(
+            cc.model, "claude-opus-5",
+            "Claude Code's model shows as the turn starts"
+        );
     }
 
     #[test]
@@ -1071,7 +1382,9 @@ mod tests {
     fn the_delta_fast_path_matches_the_reducer() {
         let mut streaming = Some(AssistantTurn::default());
         assert!(is_delta(&AgentEvent::TextDelta("a".into())));
-        assert!(!is_delta(&AgentEvent::Started));
+        assert!(!is_delta(&AgentEvent::Started {
+            model: "claude-opus-5".into()
+        }));
         apply_delta(&mut streaming, AgentEvent::TextDelta("a".into())).unwrap();
         apply_delta(&mut streaming, AgentEvent::TextDelta("b".into())).unwrap();
         assert_eq!(
@@ -1079,7 +1392,13 @@ mod tests {
             vec![Block::Text("ab".into())]
         );
         assert_eq!(
-            apply_delta(&mut streaming, AgentEvent::Started).unwrap_err(),
+            apply_delta(
+                &mut streaming,
+                AgentEvent::Started {
+                    model: "claude-opus-5".into()
+                }
+            )
+            .unwrap_err(),
             "Started is not a delta"
         );
         assert_eq!(
@@ -1259,7 +1578,7 @@ mod tests {
                 ContentBlock::text("Welcome."),
             ]),
         ];
-        let turns = replay(&messages).unwrap();
+        let Replayed { turns, debug } = replay(&messages).unwrap();
         assert_eq!(turns.len(), 4);
         assert_eq!(
             turns[0],
@@ -1278,15 +1597,30 @@ mod tests {
         let Block::Tool(card) = &first.blocks[2] else {
             panic!("a tool card");
         };
-        assert_eq!(card.input_text(), NO_ARGUMENTS);
         assert_eq!(
             card.result,
             Some(ToolResultView {
+                summary: "addresses: 0".into(),
+                is_error: false,
+                millis: None,
+            })
+        );
+        assert!(card.texts().iter().all(|t| !t.contains('{')));
+        // the log holds what a live turn would: the call's input and result under its id
+        assert_eq!(debug.len(), 1);
+        let entry = &debug[0];
+        assert_eq!(entry.id, "t1");
+        assert_eq!(entry.name, "satz_transpile_check");
+        assert_eq!(entry.input.as_deref(), Some("{}"));
+        assert_eq!(
+            entry.result,
+            Some(DebugResult {
                 body: "{\n  \"addresses\": []\n}".into(),
                 is_error: false,
                 millis: None,
             })
         );
+        assert_eq!(entry.stderr, StderrLines::Unseen(REPLAYED_STDERR));
         assert_eq!(
             first.blocks[3],
             Block::Fallback {
@@ -1342,7 +1676,10 @@ mod tests {
         });
         s.error = Some("stale".into());
         s.load_conversation(
-            vec![TurnView::User { text: "old".into() }],
+            Replayed {
+                turns: vec![TurnView::User { text: "old".into() }],
+                debug: Vec::new(),
+            },
             PathBuf::from("/t/1.jsonl"),
             "claude-sonnet-5".into(),
         );

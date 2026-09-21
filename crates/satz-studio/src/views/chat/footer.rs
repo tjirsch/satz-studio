@@ -1,17 +1,29 @@
-//! The usage footer: the last turn's figures and the session's, cache reads included
-//! — a zero after the second turn is a cache that did not hit, and it is shown as a
-//! zero — and, on the Claude Code engine, what the subscription's plan windows say.
+//! The usage footer: the turn's figures — every request of it, growing while it runs —
+//! and the session's, cache reads included — a zero after the second turn is a cache
+//! that did not hit, and it is shown as a zero — on the Claude Code engine what the
+//! subscription's plan windows say, and the switch for the debug panel.
 
 use dioxus::prelude::*;
 use satz_studio_core::llm::Usage;
 
+use super::actions::ChatAction;
 use super::state::{ChatStore, ChatStoreStoreExt};
-use crate::components::Icon;
+use crate::components::{Icon, IconButton};
+use crate::state::{AppStore, AppStoreStoreExt};
 
 #[component]
 pub fn UsageFooter() -> Element {
+    let app = use_context::<Store<AppStore>>();
     let chat = use_context::<Store<ChatStore>>();
+    let handle = use_coroutine_handle::<ChatAction>();
+    let debug_on = app.settings().read().chat_debug_log;
     let usage = chat.usage().cloned();
+    // the running turn's requests so far; a memo, so a delta does not re-render the footer
+    let running = use_memo(move || chat.streaming().read().as_ref().map(|t| t.usage));
+    let (turn_label, turn_usage) = match running() {
+        Some(so_far) => ("this turn so far", so_far.unwrap_or_default()),
+        None => ("this turn", usage.turn),
+    };
     let model = chat.model().cloned();
     let notice = chat.engine_notice().cloned();
     let transcript = chat.transcript().cloned();
@@ -23,8 +35,8 @@ pub fn UsageFooter() -> Element {
         footer { class: "chat__footer",
             Icon { name: "data_usage", size: 16 }
             span { class: "chat__footer-group",
-                span { class: "chat__footer-label", "this turn" }
-                span { {usage_text(&usage.turn)} }
+                span { class: "chat__footer-label", "{turn_label}" }
+                span { {usage_text(&turn_usage)} }
             }
             span { class: "chat__footer-group",
                 span { class: "chat__footer-label", "session, {usage.turns} turns" }
@@ -40,6 +52,12 @@ pub fn UsageFooter() -> Element {
             span { class: "chat__footer-group",
                 code { "{model}" }
                 span { class: "chat__footer-label", "{kept}" }
+            }
+            IconButton {
+                icon: "data_object",
+                label: if debug_on { "Hide the debug log" } else { "Show the debug log" },
+                selected: debug_on,
+                onclick: move |_| handle.send(ChatAction::SetDebugLog(!debug_on)),
             }
         }
     }
