@@ -67,7 +67,7 @@ async fn the_session_reads_the_identity_and_answers_a_tool_call() {
     .unwrap()
     .unwrap();
     let report: QuestionsReport = outcome.typed("satz_questions").unwrap();
-    assert_eq!(report.summary.total, 27);
+    assert_eq!(report.summary.total, 28);
 
     let _guard = session.write_lock().await;
 }

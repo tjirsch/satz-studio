@@ -22,7 +22,7 @@ pub fn DiagnosticsDrawer() -> Element {
     let (errors, warnings, notes) = (
         count(Severity::Error),
         count(Severity::Warning),
-        count(Severity::Note),
+        count(Severity::Info),
     );
     let selected = (selection.0)();
 
@@ -40,7 +40,7 @@ pub fn DiagnosticsDrawer() -> Element {
                     if diagnostics.is_empty() {
                         p { class: "drawer__empty", "No diagnostics." }
                     }
-                    for (severity, title, icon) in [(Severity::Error, "Errors", "error"), (Severity::Warning, "Warnings", "warning"), (Severity::Note, "Notes", "info")] {
+                    for (severity, title, icon) in [(Severity::Error, "Errors", "error"), (Severity::Warning, "Warnings", "warning"), (Severity::Info, "Info", "info")] {
                         {
                             let group: Vec<Diagnostic> = diagnostics.iter().filter(|d| d.severity == severity).cloned().collect();
                             let base = base.clone();

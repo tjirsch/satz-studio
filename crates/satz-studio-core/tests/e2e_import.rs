@@ -17,7 +17,7 @@ mod support;
 
 use std::path::Path;
 
-use satz_studio_core::satz::import::{ImportShape, YamlKind, satz_files, written_since};
+use satz_studio_core::satz::import::{ImportShape, satz_files, written_since};
 use satz_studio_core::satz::{CliLine, ImportOptions, ImportReport, SatzCli, SatzError};
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
@@ -191,67 +191,5 @@ async fn a_raw_tfstate_is_refused_by_the_form_and_by_satz_alike() {
         refused.to_string().contains("values.root_module")
             && refused.to_string().contains("tofu show -json > state.json"),
         "the form says what satz says: {refused}"
-    );
-}
-
-/// The legacy YAML shape, over satz's own corpus fixtures: the conversion is written
-/// BESIDE its source rather than into `yaml_dir`, a pack conversion declares no estate
-/// and an estate conversion does — which is what decides whether anything opens.
-#[tokio::test]
-async fn the_yaml_shape_writes_beside_its_source_and_only_an_estate_opens() {
-    let estate = support::estate_dir(None);
-    let corpus = support::vendor()
-        .join("tests")
-        .join("corpus")
-        .join("yaml-estate");
-    let legacy = estate.root.join("legacy");
-    std::fs::create_dir_all(&legacy).unwrap();
-    for name in ["pack.yaml", "main.yaml"] {
-        std::fs::copy(corpus.join(name), legacy.join(name)).unwrap();
-    }
-
-    let converted = |file: &str, kind: YamlKind| ImportOptions {
-        shape: ImportShape::Yaml,
-        source: format!("legacy/{file}"),
-        kind,
-        ..Default::default()
-    };
-    let dir = satz_studio_core::estate::EstateDir::open(&estate.root).unwrap();
-    let dirs = converted("pack.yaml", YamlKind::Pack).write_dirs(&dir);
-    assert_eq!(
-        dirs,
-        [legacy.clone()].as_slice(),
-        "beside the source, not in yaml_dir"
-    );
-
-    // the pack first: satz refuses an estate that still `use`s a YAML pack
-    let before = satz_files(&dirs).unwrap();
-    let options = converted("pack.yaml", YamlKind::Pack);
-    let (ok, lines) = run_in(&estate.root, &options.argv()).await;
-    assert!(ok, "{}", stderr(&lines));
-    let written = written_since(&before, &dirs).unwrap();
-    assert_eq!(written.len(), 1, "{written:?}");
-    assert!(
-        !written[0].declares_estate,
-        "a converted pack is a file, not an estate"
-    );
-
-    let before = satz_files(&dirs).unwrap();
-    let options = converted("main.yaml", YamlKind::Estate);
-    let (ok, lines) = run_in(&estate.root, &options.argv()).await;
-    assert!(ok, "{}", stderr(&lines));
-    let written = written_since(&before, &dirs).unwrap();
-    assert_eq!(written.len(), 1, "{written:?}");
-    assert!(written[0].declares_estate);
-    assert_eq!(
-        written[0].path.file_name().unwrap().to_string_lossy(),
-        "main.satz"
-    );
-    let report = ImportReport::of(&lines);
-    assert_eq!(report.wrote.len(), 1, "{report:?}");
-    assert!(
-        report.wrote[0].starts_with("converted "),
-        "{:?}",
-        report.wrote
     );
 }

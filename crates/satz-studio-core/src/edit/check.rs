@@ -1,29 +1,29 @@
 //! The two checkers: `satz_transpile_check` over the estate's MCP session, and
-//! `satz --config <dir> transpile <file> --check` through the CLI runner. The verdict
-//! and the diagnostics are what they share; the summary is not — the CLI prints no
-//! address list and no findings, so [`CliChecker`] returns empty ones.
+//! `satz --config <dir> transpile <file> --check --format json` through the CLI runner.
+//! Both answer with satz's `CompileSummary` — the addresses the estate emits and the
+//! findings the compile reports as data — so the two read one shape and agree by
+//! construction. A refusal is that summary carrying the findings that refused it. A
+//! failure that never reached the compile (a file that is not there) carries none, and
+//! then its text is what satz said.
 //!
-//! What the compile finds after the front end is a list satz reports as data, and both
-//! checkers read that list rather than the sentences it renders to: the MCP session
-//! gets it as JSON, the CLI as the `Debug` of the `CompileRefusal` it exits on. A
-//! refusal that never reached the compile — a missing file — has no findings, and its
-//! text is read as satz's output.
+//! A finding's `file` is relative to the estate's directory — the one `config.toml` is in,
+//! which is what `--config` names — so that directory is what it resolves against, not the
+//! directory of the `.satz` file being checked.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
 use super::{CheckFailure, CheckFuture, Checker};
-use crate::diag::{DiagSource, Diagnostic, Severity, parse_satz_output};
-use crate::satz::reports::{CompileSummary, Finding, FindingSeverity, Refusal};
+use crate::diag::{DiagSource, Diagnostic, parse_satz_output};
+use crate::satz::reports::{CompileSummary, Finding, Refusal};
 use crate::satz::{CliLine, EstateSession, SatzCli, SatzError, ToolOutcome};
 
 /// `satz_transpile_check {estate: <path>}` on the session's `satz mcp`. A refusal's
 /// findings are its `structuredContent`; a refusal that carries none is read from the
-/// tool's text (`transpile --check: file:line: msg`). A pass returns the summary, the
-/// warnings and notes of the compile included.
+/// tool's text. A pass returns the summary, the compile's warnings and infos included.
 pub struct McpChecker {
     pub session: Arc<EstateSession>,
 }
@@ -31,7 +31,7 @@ pub struct McpChecker {
 impl Checker for McpChecker {
     fn check<'a>(&'a self, estate: &'a Path) -> CheckFuture<'a> {
         Box::pin(async move {
-            let base = parent_of(estate);
+            let base = self.session.cli.config_dir.clone();
             let estate = absolute_utf8(estate, "satz_transpile_check")?;
             let mut args = serde_json::Map::new();
             args.insert(
@@ -71,22 +71,13 @@ fn mcp_refusal(base: &Path, outcome: &ToolOutcome) -> Result<Vec<Diagnostic>, Sa
         }
         None => Vec::new(),
     };
-    if findings.is_empty() {
-        return Ok(parse_satz_output(&outcome.text, DiagSource::Check));
-    }
-    Ok(findings
-        .iter()
-        .map(|f| Diagnostic::from_finding(base, f, DiagSource::Check))
-        .collect())
+    Ok(diagnostics(base, &findings, &outcome.text))
 }
 
-/// `satz --config <dir> transpile <path> --check`. Exit 0 is a pass with an empty
-/// address list and no findings — the CLI prints neither as data. A non-zero exit is a
-/// refusal whose diagnostics are decoded from the final `Error: ` line satz prints —
-/// a `CompileRefusal { message, findings }` rendered with `Debug` becomes one
-/// diagnostic per finding, a `PipelineError { file, line, msg }` one located
-/// diagnostic, any other payload one diagnostic without a location — and, when no such
-/// line exists, from everything stderr said.
+/// `satz --config <dir> transpile <path> --check --format json`: the same
+/// `CompileSummary` on stdout that the MCP tool returns, exit 0 for a pass and 1 for a
+/// refusal. A failure that is no verdict on the estate prints `error: …` on stderr and
+/// nothing on stdout.
 pub struct CliChecker {
     pub cli: SatzCli,
 }
@@ -94,12 +85,13 @@ pub struct CliChecker {
 impl Checker for CliChecker {
     fn check<'a>(&'a self, estate: &'a Path) -> CheckFuture<'a> {
         Box::pin(async move {
-            let base = parent_of(estate);
             let estate_str = absolute_utf8(estate, "transpile --check")?;
             let args = vec![
                 "transpile".to_string(),
                 estate_str.to_string(),
                 "--check".to_string(),
+                "--format".to_string(),
+                "json".to_string(),
             ];
             let (tx, mut rx) = mpsc::channel::<CliLine>(256);
             let collect = tokio::spawn(async move {
@@ -120,29 +112,66 @@ impl Checker for CliChecker {
                     source: std::io::Error::other(e),
                 })
             })?;
-            if status.success() {
-                return Ok(CompileSummary {
-                    estate: estate.display().to_string(),
-                    addresses: Vec::new(),
-                    written: Vec::new(),
-                    findings: Vec::new(),
-                });
+            let (mut stdout, mut stderr) = (Vec::new(), Vec::new());
+            for line in lines {
+                match line {
+                    CliLine::Stdout(s) => stdout.push(s),
+                    CliLine::Stderr(s) => stderr.push(s),
+                }
             }
-            let stderr: Vec<String> = lines
-                .into_iter()
-                .filter_map(|l| match l {
-                    CliLine::Stderr(s) => Some(s),
-                    CliLine::Stdout(_) => None,
-                })
-                .collect();
-            Err(CheckFailure::Refused(refusal(&stderr, &base)))
+            cli_verdict(
+                status.success(),
+                &stdout.join("\n"),
+                &stderr.join("\n"),
+                &self.cli.config_dir,
+            )
         })
     }
 }
 
-/// The directory a finding's relative file resolves against: the estate's own.
-fn parent_of(estate: &Path) -> PathBuf {
-    estate.parent().unwrap_or(Path::new(".")).to_path_buf()
+/// The verdict of `transpile --check --format json` from its exit and its two streams.
+/// A pass is always data: a zero exit whose stdout is not a summary is satz changing
+/// shape, and is reported as that rather than read as a pass.
+fn cli_verdict(
+    success: bool,
+    stdout: &str,
+    stderr: &str,
+    base: &Path,
+) -> Result<CompileSummary, CheckFailure> {
+    let summary = serde_json::from_str::<CompileSummary>(stdout);
+    match (success, summary) {
+        (true, Ok(summary)) => Ok(summary),
+        (true, Err(e)) => Err(CheckFailure::Failed(SatzError::Json {
+            command: "transpile --check --format json".to_string(),
+            source: e,
+        })),
+        (false, Ok(summary)) => Err(CheckFailure::Refused(diagnostics(
+            base,
+            &summary.findings,
+            stderr,
+        ))),
+        (false, Err(_)) => Err(CheckFailure::Refused(diagnostics(base, &[], stderr))),
+    }
+}
+
+/// One diagnostic per finding, each at its own file and line; without findings, what
+/// satz said in `text`, and when that is empty too, one diagnostic saying so — a refusal
+/// is never an empty list.
+fn diagnostics(base: &Path, findings: &[Finding], text: &str) -> Vec<Diagnostic> {
+    if !findings.is_empty() {
+        return findings
+            .iter()
+            .map(|f| Diagnostic::from_finding(base, f, DiagSource::Check))
+            .collect();
+    }
+    let diags = parse_satz_output(text, DiagSource::Check);
+    if diags.is_empty() {
+        return vec![Diagnostic::error(
+            "satz refused the estate and said nothing about why",
+            DiagSource::Check,
+        )];
+    }
+    diags
 }
 
 /// The path as the check takes it: absolute, since satz resolves a relative name inside
@@ -164,287 +193,39 @@ fn absolute_utf8<'a>(estate: &'a Path, what: &str) -> Result<&'a str, CheckFailu
         .ok_or_else(|| refuse("not a UTF-8 path, and the argument is a string"))
 }
 
-/// The diagnostics of a failed CLI check, from its stderr lines.
-fn refusal(stderr: &[String], base: &Path) -> Vec<Diagnostic> {
-    let Some(payload) = stderr.iter().rev().find_map(|l| l.strip_prefix("Error: ")) else {
-        return parse_satz_output(&stderr.join("\n"), DiagSource::Check);
-    };
-    if let Some(findings) = compile_refusal(payload)
-        && !findings.is_empty()
-    {
-        return findings
-            .iter()
-            .map(|f| Diagnostic::from_finding(base, f, DiagSource::Check))
-            .collect();
-    }
-    if let Some(d) = pipeline_error(payload) {
-        return vec![d];
-    }
-    let message = debug_string(payload)
-        .filter(|(_, rest)| rest.is_empty())
-        .map_or_else(|| payload.to_string(), |(s, _)| s);
-    // A front-end refusal satz renders itself — one that carries a hint beside the
-    // parser's sentence — is a plain `<file>:<line>: message`. Read that location, or
-    // the drawer cannot point at the line the estate is wrong on.
-    let mut diags = parse_satz_output(&message, DiagSource::Check);
-    if diags.is_empty() {
-        return vec![Diagnostic::error(message, DiagSource::Check)];
-    }
-    for d in &mut diags {
-        if let Some(file) = &d.file
-            && file.is_relative()
-        {
-            d.file = Some(base.join(file));
-        }
-    }
-    diags
-}
-
-/// `CompileRefusal { message: "…", findings: [Finding { … }, …] }` as `Debug` renders
-/// it: the same findings the MCP session gets as JSON, which is why the message — the
-/// text those findings render to — is read past.
-fn compile_refusal(payload: &str) -> Option<Vec<Finding>> {
-    let rest = payload.strip_prefix("CompileRefusal { message: ")?;
-    let (_, rest) = debug_string(rest)?;
-    let mut rest = rest.strip_prefix(", findings: [")?;
-    let mut findings = Vec::new();
-    loop {
-        if let Some(end) = rest.strip_prefix("] }") {
-            return end.is_empty().then_some(findings);
-        }
-        if !findings.is_empty() {
-            rest = rest.strip_prefix(", ")?;
-        }
-        let (finding, after) = debug_finding(rest)?;
-        findings.push(finding);
-        rest = after;
-    }
-}
-
-/// One `Finding { severity: Error, kind: UnadoptedPack, group: Some("…"), file: None,
-/// line: Some(12), message: "…" }`, and what follows its closing brace. The fields are
-/// in declaration order, which is the order `Debug` prints them.
-fn debug_finding(s: &str) -> Option<(Finding, &str)> {
-    let rest = s.strip_prefix("Finding { severity: ")?;
-    let (severity, rest) = debug_word(rest, ", kind: ")?;
-    let severity = match severity {
-        "Error" => FindingSeverity::Error,
-        "Warning" => FindingSeverity::Warning,
-        "Note" => FindingSeverity::Note,
-        _ => return None,
-    };
-    let (kind, rest) = debug_word(rest, ", group: ")?;
-    let (group, rest) = debug_option_string(rest, ", file: ")?;
-    let (file, rest) = debug_option_string(rest, ", line: ")?;
-    let (line, rest) = debug_option_line(rest, ", message: ")?;
-    let (message, rest) = debug_string(rest)?;
-    let rest = rest.strip_prefix(" }")?;
-    Some((
-        Finding {
-            severity,
-            kind: kebab_case(kind),
-            group,
-            file,
-            line,
-            message,
-        },
-        rest,
-    ))
-}
-
-/// The bare word `s` starts with, followed by `until` — a `Debug`-printed enum variant.
-fn debug_word<'a>(s: &'a str, until: &str) -> Option<(&'a str, &'a str)> {
-    let end = s
-        .find(|c: char| !c.is_ascii_alphanumeric())
-        .unwrap_or(s.len());
-    if end == 0 {
-        return None;
-    }
-    Some((&s[..end], s[end..].strip_prefix(until)?))
-}
-
-/// `Some("…")` or `None`, up to `until`.
-fn debug_option_string<'a>(s: &'a str, until: &str) -> Option<(Option<String>, &'a str)> {
-    if let Some(rest) = s.strip_prefix("None") {
-        return Some((None, rest.strip_prefix(until)?));
-    }
-    let (value, rest) = debug_string(s.strip_prefix("Some(")?)?;
-    Some((Some(value), rest.strip_prefix(')')?.strip_prefix(until)?))
-}
-
-/// `Some(12)` or `None`, up to `until`.
-fn debug_option_line<'a>(s: &'a str, until: &str) -> Option<(Option<u32>, &'a str)> {
-    if let Some(rest) = s.strip_prefix("None") {
-        return Some((None, rest.strip_prefix(until)?));
-    }
-    let rest = s.strip_prefix("Some(")?;
-    let digits = rest.chars().take_while(char::is_ascii_digit).count();
-    if digits == 0 {
-        return None;
-    }
-    let line: u32 = rest[..digits].parse().ok()?;
-    Some((
-        Some(line),
-        rest[digits..].strip_prefix(')')?.strip_prefix(until)?,
-    ))
-}
-
-/// A `Debug`-printed variant name as serde's `rename_all = "kebab-case"` writes it:
-/// `UnadoptedPack` → `unadopted-pack`. The MCP session reads the same kinds off the
-/// wire already spelled this way.
-fn kebab_case(variant: &str) -> String {
-    let mut out = String::with_capacity(variant.len() + 2);
-    for (i, c) in variant.chars().enumerate() {
-        if c.is_ascii_uppercase() {
-            if i > 0 {
-                out.push('-');
-            }
-            out.push(c.to_ascii_lowercase());
-        } else {
-            out.push(c);
-        }
-    }
-    out
-}
-
-/// `PipelineError { file: "…", line: N, msg: "…" }` as `Debug` renders it.
-fn pipeline_error(payload: &str) -> Option<Diagnostic> {
-    let rest = payload.strip_prefix("PipelineError { file: ")?;
-    let (file, rest) = debug_string(rest)?;
-    let rest = rest.strip_prefix(", line: ")?;
-    let digits = rest.chars().take_while(char::is_ascii_digit).count();
-    if digits == 0 {
-        return None;
-    }
-    let line: u32 = rest[..digits].parse().ok()?;
-    let rest = rest[digits..].strip_prefix(", msg: ")?;
-    let (message, rest) = debug_string(rest)?;
-    if rest != " }" {
-        return None;
-    }
-    Some(Diagnostic {
-        file: Some(PathBuf::from(file)),
-        line: Some(line),
-        severity: Severity::Error,
-        kind: None,
-        message,
-        source: DiagSource::Check,
-    })
-}
-
-/// A string as `Debug` prints it — `"…"` with `\"`, `\\`, `\n`, `\r`, `\t`, `\'`, `\0`
-/// and `\u{…}` escapes — decoded, and what follows its closing quote.
-fn debug_string(s: &str) -> Option<(String, &str)> {
-    let body = s.strip_prefix('"')?;
-    let mut out = String::new();
-    let mut chars = body.char_indices();
-    while let Some((i, c)) = chars.next() {
-        match c {
-            '"' => return Some((out, &body[i + 1..])),
-            '\\' => {
-                let (_, e) = chars.next()?;
-                match e {
-                    'n' => out.push('\n'),
-                    'r' => out.push('\r'),
-                    't' => out.push('\t'),
-                    '0' => out.push('\0'),
-                    '\\' | '"' | '\'' => out.push(e),
-                    'u' => {
-                        if chars.next()?.1 != '{' {
-                            return None;
-                        }
-                        let mut hex = String::new();
-                        loop {
-                            let (_, h) = chars.next()?;
-                            if h == '}' {
-                                break;
-                            }
-                            hex.push(h);
-                        }
-                        out.push(char::from_u32(u32::from_str_radix(&hex, 16).ok()?)?);
-                    }
-                    _ => return None,
-                }
-            }
-            c => out.push(c),
-        }
-    }
-    None
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::diag::Severity;
 
-    const BASE: &str = "/e/yaml";
+    /// the estate's directory — where `config.toml` is, and what `file` is relative to
+    const BASE: &str = "/e";
 
-    #[test]
-    fn a_pipeline_error_rendered_with_debug_becomes_one_located_diagnostic() {
-        let stderr = [
-            "satz v0.56.1 (built 2026-09-13 13:56:42)".to_string(),
-            "Loaded 45 resource types from schema file 'google.json'".to_string(),
-            r#"Error: PipelineError { file: "/e/yaml/acme.studio-tmp.satz", line: 143, msg: "unknown param 'nobody'" }"#.to_string(),
-        ];
-        let d = refusal(&stderr, Path::new(BASE));
-        assert_eq!(d.len(), 1);
-        assert_eq!(
-            d[0].file.as_deref(),
-            Some(Path::new("/e/yaml/acme.studio-tmp.satz"))
-        );
-        assert_eq!(d[0].line, Some(143));
-        assert_eq!(d[0].message, "unknown param 'nobody'");
-        assert_eq!(d[0].severity, Severity::Error);
-        assert_eq!(d[0].kind, None);
-        assert_eq!(d[0].source, DiagSource::Check);
+    fn refused(r: Result<CompileSummary, CheckFailure>) -> Vec<Diagnostic> {
+        match r {
+            Err(CheckFailure::Refused(d)) => d,
+            other => panic!("expected a refusal, got {other:?}"),
+        }
     }
 
-    /// satz renders a front-end refusal itself where it has something to add to the
-    /// parser's sentence, and then the error is a plain string: the location in front
-    /// of it is what the drawer points at.
-    #[test]
-    fn a_front_end_refusal_satz_rendered_itself_keeps_its_file_and_line() {
-        let stderr = [
-            "satz v0.67.0 (built 2026-09-20 05:23:53)".to_string(),
-            concat!(
-                r#"Error: "/e/yaml/acme.satz:24: unknown param 'nobody' — the pack graph: "#,
-                r#"`presets/cis/CIS-GCP-Foundation-4.0.satz` needs `presets/estate-map.satz`, which is off""#,
-            )
-            .to_string(),
-        ];
-        let d = refusal(&stderr, Path::new(BASE));
-        assert_eq!(d.len(), 1, "{d:?}");
-        assert_eq!(d[0].file.as_deref(), Some(Path::new("/e/yaml/acme.satz")));
-        assert_eq!(d[0].line, Some(24));
-        assert!(d[0].message.starts_with("unknown param 'nobody'"), "{d:?}");
-        assert_eq!(d[0].severity, Severity::Error);
-        assert_eq!(d[0].source, DiagSource::Check);
-    }
-
-    /// The same refusal with a relative file, as satz names one it loaded by a `use`
-    /// path: resolved against the estate's own directory.
-    #[test]
-    fn a_relative_file_in_a_rendered_refusal_resolves_against_the_estate() {
-        let stderr = [r#"Error: "acme.satz:7: unknown param 'nobody'""#.to_string()];
-        let d = refusal(&stderr, Path::new(BASE));
-        assert_eq!(d.len(), 1, "{d:?}");
-        assert_eq!(d[0].file.as_deref(), Some(Path::new("/e/yaml/acme.satz")));
-        assert_eq!(d[0].line, Some(7));
-    }
+    /// recorded from `satz transpile --check --format json` at the pinned release
+    const REFUSED: &str = r#"{
+      "estate": "/e/yaml/acme.satz",
+      "addresses": [],
+      "written": [],
+      "findings": [
+        {"severity": "error", "kind": "missing-required", "group": "required arguments missing:",
+         "file": "yaml/acme.satz", "line": 110,
+         "message": "google_storage_bucket.state: the provider requires \"location\"",
+         "fix": null, "silenced": false, "shared": false},
+        {"severity": "info", "kind": "unadopted-pack",
+         "message": "`use_budget` is true and this estate has no line for it"}
+      ]
+    }"#;
 
     #[test]
-    fn a_compile_refusal_rendered_with_debug_becomes_one_diagnostic_per_finding() {
-        let stderr = [
-            "satz v0.56.14 (built 2026-09-14 16:04:19)".to_string(),
-            concat!(
-                r#"Error: CompileRefusal { message: "whatever the CLI prints", findings: ["#,
-                r#"Finding { severity: Error, kind: MissingRequired, group: Some("required arguments missing:"), "#,
-                r#"file: Some("/e/yaml/acme.satz"), line: Some(110), message: "google_storage_bucket.state: the provider requires \"location\"" }, "#,
-                r#"Finding { severity: Warning, kind: UnadoptedPack, group: None, file: None, line: None, "#,
-                r#"message: "`use_budget` is true and this estate has no line for it" }] }"#,
-            )
-            .to_string(),
-        ];
-        let d = refusal(&stderr, Path::new(BASE));
+    fn a_refusal_is_one_diagnostic_per_finding_resolved_against_the_estate_directory() {
+        let d = refused(cli_verdict(false, REFUSED, "", Path::new(BASE)));
         assert_eq!(d.len(), 2, "{d:?}");
         assert_eq!(d[0].severity, Severity::Error);
         assert_eq!(d[0].kind.as_deref(), Some("missing-required"));
@@ -454,38 +235,32 @@ mod tests {
             d[0].message,
             "required arguments missing: google_storage_bucket.state: the provider requires \"location\""
         );
-        assert_eq!(d[1].severity, Severity::Warning);
-        assert_eq!(d[1].kind.as_deref(), Some("unadopted-pack"));
+        assert_eq!(d[1].severity, Severity::Info);
         assert_eq!((d[1].file.as_deref(), d[1].line), (None, None));
-        assert_eq!(
-            d[1].message,
-            "`use_budget` is true and this estate has no line for it"
-        );
     }
 
     #[test]
-    fn a_relative_file_in_a_finding_resolves_against_the_estates_directory() {
-        let stderr = [concat!(
-            r#"Error: CompileRefusal { message: "m", findings: [Finding { severity: Error, "#,
-            r#"kind: DryRunConflict, group: None, file: Some("presets/cis-4.0.satz"), line: Some(4), message: "m" }] }"#,
-        )
-        .to_string()];
-        let d = refusal(&stderr, Path::new(BASE));
-        assert_eq!(
-            d[0].file.as_deref(),
-            Some(Path::new("/e/yaml/presets/cis-4.0.satz"))
-        );
-        assert_eq!(d[0].kind.as_deref(), Some("dry-run-conflict"));
+    fn a_pass_is_the_summary_and_a_pass_that_is_not_data_is_a_failure() {
+        let ok = r#"{"estate": "/e/yaml/acme.satz", "addresses": ["google_folder.a"], "written": [], "findings": []}"#;
+        let s = cli_verdict(true, ok, "", Path::new(BASE)).unwrap();
+        assert_eq!(s.addresses, vec!["google_folder.a".to_string()]);
+        assert!(matches!(
+            cli_verdict(true, "transpile --check: OK", "", Path::new(BASE)),
+            Err(CheckFailure::Failed(SatzError::Json { .. }))
+        ));
     }
 
     #[test]
-    fn a_refusal_shape_the_parser_does_not_know_is_one_diagnostic_with_the_payload() {
-        let payload = "CompileRefusal { message: \"m\", findings: [Finding { severity: Loud }] }";
-        assert!(compile_refusal(payload).is_none());
-        let d = refusal(&[format!("Error: {payload}")], Path::new(BASE));
-        assert_eq!(d.len(), 1);
-        assert_eq!(d[0].message, payload);
-        assert_eq!(d[0].kind, None);
+    fn a_failure_before_the_compile_is_what_stderr_said() {
+        let stderr =
+            "satz v0.73.0 (built now)\nerror: /e/yaml/acme.satz: no such file or directory";
+        let d = refused(cli_verdict(false, "", stderr, Path::new(BASE)));
+        assert_eq!(d.len(), 1, "{d:?}");
+        assert_eq!(d[0].severity, Severity::Error);
+        assert!(d[0].message.contains("no such file"), "{d:?}");
+
+        let d = refused(cli_verdict(false, "", "", Path::new(BASE)));
+        assert_eq!(d.len(), 1, "a refusal is never an empty list");
     }
 
     #[test]
@@ -495,26 +270,11 @@ mod tests {
             text: "transpile --check: /e/yaml/acme.satz: file not found".to_string(),
             is_error: true,
         };
-        // recorded from `satz mcp` at the pinned release
-        let structured = serde_json::json!({
-            "addresses": [],
-            "estate": "/e/yaml/acme.satz",
-            "findings": [{
-                "file": "/e/yaml/acme.satz",
-                "group": "required arguments missing:",
-                "kind": "missing-required",
-                "line": 109,
-                "message": "google_storage_bucket.state (/e/yaml/acme.satz:109): the provider requires location",
-                "severity": "error"
-            }]
-        });
+        let structured: serde_json::Value = serde_json::from_str(REFUSED).unwrap();
         let d = mcp_refusal(Path::new(BASE), &outcome(Some(structured))).unwrap();
-        assert_eq!(d.len(), 1);
+        assert_eq!(d.len(), 2);
         assert_eq!(d[0].file.as_deref(), Some(Path::new("/e/yaml/acme.satz")));
-        assert_eq!(d[0].line, Some(109));
         assert_eq!(d[0].kind.as_deref(), Some("missing-required"));
-        assert_eq!(d[0].severity, Severity::Error);
-        assert!(d[0].message.starts_with("required arguments missing: "));
 
         // a refusal before the compile carries none: the text is what satz said
         let d = mcp_refusal(Path::new(BASE), &outcome(None)).unwrap();
@@ -526,43 +286,5 @@ mod tests {
         let bad =
             serde_json::json!({"findings": [{"severity": "loud", "kind": "k", "message": "m"}]});
         assert!(mcp_refusal(Path::new(BASE), &outcome(Some(bad))).is_err());
-    }
-
-    #[test]
-    fn debug_escapes_are_decoded() {
-        let (s, rest) = debug_string(r#""say \"hi\" \\ \n \u{e9}" tail"#).unwrap();
-        assert_eq!(s, "say \"hi\" \\ \n é");
-        assert_eq!(rest, " tail");
-        assert!(debug_string("\"open").is_none());
-        assert!(debug_string("bare").is_none());
-    }
-
-    #[test]
-    fn another_error_payload_is_one_diagnostic_without_a_location() {
-        let d = refusal(
-            &["Error: \"YAML-dialect estate: convert it first\"".to_string()],
-            Path::new(BASE),
-        );
-        assert_eq!(d.len(), 1);
-        assert_eq!(d[0].message, "YAML-dialect estate: convert it first");
-        assert_eq!(d[0].line, None);
-        let d = refusal(
-            &["Error: Os { code: 2, kind: NotFound }".to_string()],
-            Path::new(BASE),
-        );
-        assert_eq!(d[0].message, "Os { code: 2, kind: NotFound }");
-    }
-
-    #[test]
-    fn without_an_error_line_everything_stderr_said_is_kept() {
-        let d = refusal(
-            &[
-                "satz v0.56.1 (built now)".to_string(),
-                "thread 'main' panicked at x".to_string(),
-            ],
-            Path::new(BASE),
-        );
-        assert_eq!(d.len(), 1);
-        assert_eq!(d[0].message, "thread 'main' panicked at x");
     }
 }

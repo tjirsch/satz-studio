@@ -1037,7 +1037,7 @@ mod tests {
             pack: "presets/cis/block-project-ssh-keys.satz".to_string(),
             text: "Import what is live first.".to_string(),
             run: "satz adopt <estate> --execute --import".to_string(),
-            before: Some(satz_studio_core::satz::reports::NoticeBefore::Apply),
+            severity: satz_studio_core::satz::reports::FindingSeverity::Error,
             acknowledged: false,
         }
     }

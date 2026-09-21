@@ -111,14 +111,25 @@ fn smoke_is_configuration_then_maps_of_resources() {
             "google_billing_account_iam_member",
         ]
     );
-    // The one use line of smoke that sits outside every block: since satz v0.64.0
-    // (ADR 0028) the CIS baseline declares its own `google_org_policy_policy` and is
-    // `use`d bare, so the estate has no `google_org_policy_policy` block of its own —
-    // the keys above say so — and the baseline is an estate-level use. Every other use
-    // line still sits in the block it fills.
-    assert_eq!(m.uses.len(), 1, "{:?}", m.uses);
-    assert_eq!(m.uses[0].path, "presets/cis/CIS-GCP-Foundation-4.0.satz");
-    assert_eq!(m.uses[0].state, UseState::Active);
+    // A pack is used at the top level, never inside a folder's body: the CIS baseline and
+    // the two logging packs stand outside every block. The one `use` inside a block is
+    // the contacts list, which is the content of the resource map it stands in.
+    let paths: Vec<&str> = m.uses.iter().map(|u| u.path.as_str()).collect();
+    assert_eq!(
+        paths,
+        [
+            "presets/cis/CIS-GCP-Foundation-4.0.satz",
+            "presets/monitoring/organization-audit-logsink.satz",
+            "presets/monitoring/organization-cis-log-alerts-central.satz",
+        ],
+        "{:?}",
+        m.uses
+    );
+    assert!(
+        m.uses.iter().all(|u| u.state == UseState::Active),
+        "{:?}",
+        m.uses
+    );
     assert!(m.uses[0].as_key.is_none(), "{:?}", m.uses[0]);
 
     let terraform = child(&m.outline, "terraform");
@@ -222,9 +233,14 @@ fn smoke_nests_the_hierarchy_and_types_the_rows() {
 
     let logging = child(&folders.children, "logging");
     assert_eq!(logging.kind, ResourceKind::Resource);
-    let paths: Vec<&str> = logging.uses.iter().map(|u| u.path.as_str()).collect();
+    assert!(
+        logging.uses.is_empty(),
+        "a pack is used at the top level, not in the folder it fills: {:?}",
+        logging.uses
+    );
+    let paths: Vec<&str> = m.uses.iter().map(|u| u.path.as_str()).collect();
     assert_eq!(
-        paths,
+        paths[1..],
         [
             "presets/monitoring/organization-audit-logsink.satz",
             "presets/monitoring/organization-cis-log-alerts-central.satz"
@@ -309,6 +325,7 @@ fn showcase_decodes_references_locks_import_ids_and_keeps_statements_out() {
             "google_cloud_identity_group",
             "google_organization_iam_member",
             "google_folder",
+            "google_project",
         ],
         "claim, question, action, suppress and hcl are not blocks"
     );
@@ -513,7 +530,5 @@ fn without_a_registry_everything_typed_is_unknown() {
             assert!(all_unknown(node), "{} is not all unknown", node.key);
         }
     }
-    let folder = child(&m.outline, "google_folder");
-    let logging = child(&folder.children, "logging");
-    assert_eq!(logging.uses.len(), 2, "the use lines are still found");
+    assert_eq!(m.uses.len(), 3, "the use lines are still found");
 }

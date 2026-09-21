@@ -107,7 +107,8 @@ async fn the_two_checkers_agree_on_six_cases() {
             (Ok(a), Ok(b)) => {
                 assert!(good, "{what}: both checkers passed a bad edit");
                 assert!(!a.addresses.is_empty(), "{what}");
-                assert!(b.addresses.is_empty(), "{what}");
+                assert_eq!(a.addresses, b.addresses, "{what}");
+                assert_eq!(a.findings, b.findings, "{what}");
                 assert!(a.written.is_empty() && b.written.is_empty(), "{what}");
                 assert_eq!(Path::new(&b.estate), tmp, "{what}");
             }
@@ -156,7 +157,7 @@ async fn a_refusal_is_the_same_findings_through_both_checkers() {
     assert_eq!(pack.severity, Severity::Error);
     assert!(
         pack.message.contains(&format!(
-            "`use_budget` is true and this estate has no line for `{BUDGET}` — `satz add-pack` writes it where the pack graph places it"
+            "`use_budget` is true and this estate has no line for `{BUDGET}` — the command writes it where the pack graph places it"
         )),
         "{}",
         pack.message
@@ -165,7 +166,7 @@ async fn a_refusal_is_the_same_findings_through_both_checkers() {
 }
 
 #[tokio::test]
-async fn a_check_that_passes_carries_its_warnings_in_the_mcp_summary() {
+async fn a_check_that_passes_carries_its_warnings_through_both_checkers() {
     let copy = support::copy_smoke();
     let session = copy.open("smoke.satz").await;
     let tmp = asks_for_a_pack_it_does_not_use(&copy, &session.main);
@@ -185,9 +186,9 @@ async fn a_check_that_passes_carries_its_warnings_in_the_mcp_summary() {
     );
     assert!(pack.message.contains(BUDGET), "{pack:?}");
 
-    // the CLI prints its findings as sentences and returns none, as with the addresses
+    // the CLI returns the same summary: `transpile --check --format json` is the data
     let b = support::within(cli.check(&tmp)).await.unwrap();
-    assert!(b.addresses.is_empty());
-    assert!(b.findings.is_empty());
+    assert_eq!(b.addresses, a.addresses);
+    assert_eq!(b.findings, a.findings);
     std::fs::remove_file(&tmp).unwrap();
 }

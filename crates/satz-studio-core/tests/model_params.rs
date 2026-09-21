@@ -73,6 +73,7 @@ async fn showcase_params_carry_their_questions_and_leave_the_gates_out() {
             "audit_retention_days",
             "pack_bucket_location",
             "pack_bucket_adopted",
+            "archive_project_folder",
         ],
         "want_optional gates a line and the group_model options are a oneof: pack rows"
     );
