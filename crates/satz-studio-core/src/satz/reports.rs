@@ -212,20 +212,6 @@ pub struct OpenReport {
     pub runs_as: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct EstateEntry {
-    pub config: String,
-    pub estate: String,
-    #[serde(default)]
-    pub deployment_mode: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct EstatesReport {
-    pub root: String,
-    pub estates: Vec<EstateEntry>,
-}
-
 /// How bad a finding is. `Error` refuses the compile; `Warning` and `Info` come back
 /// with a summary that passed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
