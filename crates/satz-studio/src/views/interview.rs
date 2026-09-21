@@ -20,6 +20,7 @@ use crate::components::{
     LinearProgress, List, ListItem, Switch, TypedField,
 };
 use crate::state::{AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt};
+use crate::views::export::{ExportCard, Moment};
 
 /// The questions in the order the view walks them: the unanswered ones as the report
 /// lists them, then — when asked for — the answered ones and the ones not asked. `held`
@@ -426,6 +427,7 @@ pub fn DecisionsView() -> Element {
                     }
                 }
             }
+            ExportCard { moment: Moment::SignOff }
         }
     }
 }

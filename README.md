@@ -60,6 +60,18 @@ the screen, so it cannot go stale, and the card is gone when there is nothing in
 Nothing about how an estate reached the app is remembered: created, imported and opened
 estates show the same list, because the same facts are true of them.
 
+The two documents a customer receives are `satz questions` in two renderings: the
+**decisions sheet** — every decision the estate rests on, what it is set to, whether it
+was chosen or taken as offered, and what changing it later costs — and the
+**workbook**, the same catalog as a spreadsheet the customer fills in and sends back.
+Decisions carries them as the sign-off sheet, read before an organisation is touched,
+and the Overview as the handover record after the rollout. Pick a format, choose where
+the file goes, and satz writes it (`satz questions <estate> --format <format> --out
+<file>`); the app opens it once it is there. The formats are the ones the installed satz
+lists in `satz questions --help`, so the picker offers exactly what satz can produce. The
+sheet is derived from the estate: after an edit, "Export again" writes the same format
+over the same file.
+
 A pack can name one command to run once it is switched on — `satz adopt` for the CIS
 org-policy packs, so every policy that is already live is in the state before the first
 apply. Switching such a pack on raises that notice as a dialog: it carries the pack's
