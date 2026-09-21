@@ -17,6 +17,7 @@ pub mod map;
 pub mod overview;
 pub mod params;
 pub mod resources;
+pub mod review;
 pub mod satz_release;
 pub mod settings;
 

@@ -879,7 +879,8 @@ pub fn CommandPalette() -> Element {
     }
 }
 
-fn copy_to_clipboard(app: Store<AppStore>, text: &str) {
+/// `text` onto the system clipboard, and a toast saying so.
+pub(crate) fn copy_to_clipboard(app: Store<AppStore>, text: &str) {
     let literal = serde_json::to_string(text).unwrap_or_default();
     let _ = document::eval(&format!("navigator.clipboard.writeText({literal})"));
     toast(app, ToastKind::Info, "Copied");

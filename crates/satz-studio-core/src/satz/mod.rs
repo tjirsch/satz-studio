@@ -2,7 +2,8 @@
 //! ([`cli`]), the decisions sheet and the workbook `satz questions` writes ([`export`]),
 //! satz's own installer verified before it runs ([`install`]), `satz init` and
 //! what it leaves behind ([`init`]), `satz import` and what it wrote and found
-//! ([`import`]), what `satz self-update --check-only` found ([`self_update`]), the MCP
+//! ([`import`]), `satz review-pack` and the two places a reviewed pack goes ([`review`]),
+//! what `satz self-update --check-only` found ([`self_update`]), the MCP
 //! session over `satz mcp` ([`mcp`]), and one session per open estate that the command
 //! decks and the agent share ([`session`]). [`reports`] are the JSON payloads a reporting command
 //! writes with `--format json` and the server returns as `structuredContent`.
@@ -15,6 +16,7 @@ pub mod init;
 pub mod install;
 pub mod mcp;
 pub mod reports;
+pub mod review;
 pub mod self_update;
 pub mod session;
 
@@ -88,6 +90,14 @@ pub enum SatzError {
         command: String,
         status: std::process::ExitStatus,
         stderr: String,
+    },
+    /// A command whose exit status is a verdict and whose report says the other thing:
+    /// one of the two is wrong, and the app believes neither.
+    #[error("`satz {command}` exited with {status}, and its report says {report}")]
+    Verdict {
+        command: String,
+        status: std::process::ExitStatus,
+        report: String,
     },
     #[error("`satz {command}` printed a help this app cannot read: {reason}")]
     Help { command: String, reason: String },
