@@ -1698,6 +1698,49 @@
   color: var(--md-sys-color-on-surface-variant);
 }
 
+/* ---- export ------------------------------------------------------------------- */
+
+.export {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.export__head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.export__title {
+  font: var(--md-sys-typescale-title-medium);
+}
+
+.export__text,
+.export__note {
+  font: var(--md-sys-typescale-body-medium);
+  color: var(--md-sys-color-on-surface-variant);
+  max-width: 90ch;
+}
+
+.export__error {
+  font: var(--md-sys-typescale-body-medium);
+  color: var(--md-sys-color-error);
+}
+
+.export__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.export__last {
+  font: var(--md-sys-typescale-body-small);
+  color: var(--md-sys-color-on-surface-variant);
+  overflow-wrap: anywhere;
+}
+
 /* ---- overview ----------------------------------------------------------------- */
 
 .overview__owed,

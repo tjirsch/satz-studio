@@ -26,7 +26,7 @@ use satz_studio_core::llm::CredentialSource;
 use satz_studio_core::model::EstateModel;
 use satz_studio_core::satz::reports::{InterviewReport, NoticeRow, QuestionsReport};
 use satz_studio_core::satz::self_update::SatzRelease;
-use satz_studio_core::satz::{CliLine, EstateSession, ImportReport, SatzBinary};
+use satz_studio_core::satz::{CliLine, EstateSession, ImportReport, QuestionsFormat, SatzBinary};
 use satz_studio_core::settings::Settings;
 
 pub use ansi::strip_ansi;
@@ -327,6 +327,19 @@ pub struct EstateStore {
     /// whether git holds the estate file's directory in a work tree, asked at every
     /// reload and after `InitRepository`; `None` until it has been asked
     pub work_tree: Option<WorkTree>,
+    /// the formats `satz questions` offers, read from the installed satz's help when the
+    /// session opens — or why they could not be read; `None` until then
+    pub export_formats: Option<Result<Vec<QuestionsFormat>, String>>,
+    /// the last decisions sheet or workbook this session wrote, which "Export again"
+    /// writes over
+    pub last_export: Option<Exported>,
+}
+
+/// A document an export wrote: the format and the file.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Exported {
+    pub format: String,
+    pub path: PathBuf,
 }
 
 /// How a command or a tool call ended, shown under the log.

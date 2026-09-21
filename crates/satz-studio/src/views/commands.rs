@@ -19,6 +19,7 @@ use std::path::{Path, PathBuf};
 
 use dioxus::prelude::*;
 use satz_studio_core::satz::CliLine;
+use satz_studio_core::satz::export::extension;
 
 use crate::components::{
     Button, ButtonVariant, Card, CardVariant, Chip, ChipKind, Dialog, Icon, LinearProgress, List,
@@ -109,17 +110,6 @@ pub struct CommandSpec {
     pub reports: bool,
     /// runs in the OS terminal, never in the app
     pub external: bool,
-}
-
-/// The file extension of a `--format` value: the destination says what it holds.
-pub fn extension(format: &str) -> &'static str {
-    match format {
-        "markdown" => "md",
-        "json" => "json",
-        "pdf" => "pdf",
-        "xlsx" => "xlsx",
-        _ => "txt",
-    }
 }
 
 /// The palette entries a deck with `tools` offers as one click each, at their default
