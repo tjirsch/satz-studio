@@ -520,6 +520,11 @@ Code's and asks it nothing but `claude auth status --json`.
   and `--append-system-prompt` with `PREAMBLE`, the MCP server's instructions, the text
   of `satz://guide` and which estate this session is about. `--bare` is never passed:
   bare mode does not read the subscription login.
+- **The environment** sets `MAX_MCP_OUTPUT_TOKENS` to `session::MAX_MCP_OUTPUT_TOKENS`
+  (100,000). Above its limit Claude Code cuts a tool result into text that is no longer JSON
+  or saves it to a file, which a session without built-in tools cannot read; satz's largest
+  result, `satz_report_compliance` for every framework the estate is held to, is about
+  19,000 tokens per framework.
 - **The protocol.** The client writes one JSON object per line on stdin: an initialize
   control request at spawn, then `{"type":"user",…}` per turn, a `control_response` per
   approval, and an `interrupt` control request to cancel. The CLI writes one per line

@@ -118,6 +118,18 @@ pub fn system_prompt(estate: &EstateSession) -> String {
     parts.join("\n\n")
 }
 
+/// The largest tool result the session's Claude Code passes through whole, set as its
+/// `MAX_MCP_OUTPUT_TOKENS`.
+///
+/// Above the limit Claude Code cuts a result into text that is no longer JSON, or saves it
+/// to a file — and a session started with `--tools ""` has no tool that reads a file, so the
+/// result is lost to the model either way. Claude Code's own default is 25,000. satz's
+/// largest result is `satz_report_compliance`, about 19,000 tokens per framework for one
+/// organisation, growing with the estate; called without a framework it returns one report
+/// per framework the estate is held to, and satz ships three catalogs. Three reports is
+/// about 57,000 tokens, and this leaves room above that for a larger estate.
+pub const MAX_MCP_OUTPUT_TOKENS: u32 = 100_000;
+
 /// The command line the session is spawned with. `--tools \"\"` leaves Claude Code
 /// without a built-in tool, so the satz server is all it can call; `--setting-sources
 /// \"\"` keeps the user's own Claude Code settings out of the app's session, and
@@ -225,6 +237,7 @@ impl Session {
         };
         let spawned = tokio::process::Command::new(&cli.path)
             .args(&args)
+            .env("MAX_MCP_OUTPUT_TOKENS", MAX_MCP_OUTPUT_TOKENS.to_string())
             .current_dir(&estate.dir.dir)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
