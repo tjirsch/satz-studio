@@ -3,6 +3,10 @@
 //! shared log ([`CommandDeck`]), the log on its own ([`CommandLog`]), and the palette
 //! over the window ([`CommandPalette`]).
 //!
+//! What a command prints into the log is for a person: every entry runs in the format
+//! a person reads — `text` where satz offers it, `markdown` where it does not — and
+//! `json` stays a choice in the format picker for whoever wants the file.
+//!
 //! The commands are grouped by the job: [`CHECKS`] is what judges the estate and
 //! [`DEPLOY`] is what hands it off, each a destination of its own. The palette holds
 //! every entry, including the ones neither destination gathers, and opens on ⌘K /
@@ -118,24 +122,10 @@ pub fn extension(format: &str) -> &'static str {
     }
 }
 
-/// The read-only session tools the view offers as one click: name and what it answers.
-pub const SESSION_TOOLS: &[(&str, &str, &str)] = &[
-    (
-        "satz_whoami",
-        "person_search",
-        "both halves of the identity, with the live checks that decide whether the next call works",
-    ),
-    (
-        "satz_transpile_check",
-        "fact_check",
-        "compile in memory over the session, write nothing",
-    ),
-    (
-        "satz_questions",
-        "quiz",
-        "the questions the estate's packs declare, with their state",
-    ),
-];
+/// The palette entries a deck with `tools` offers as one click each, at their default
+/// values: who the estate runs as, whether it compiles, and what its packs ask. Each
+/// is satz's own command, so the log holds satz's own text.
+pub const ONE_CLICK: &[&str] = &["whoami", "transpile-check", "questions"];
 
 /// The palette, in the order the view lists it.
 pub const PALETTE: &[CommandSpec] = &[
@@ -193,7 +183,7 @@ pub const PALETTE: &[CommandSpec] = &[
                 flag: "--format",
                 label: "Format",
                 options: &["text", "markdown", "json"],
-                default: "json",
+                default: "text",
             },
             Field::Flag {
                 key: "unanswered",
@@ -218,7 +208,7 @@ pub const PALETTE: &[CommandSpec] = &[
                 flag: "--format",
                 label: "Format",
                 options: &["text", "json"],
-                default: "json",
+                default: "text",
             },
             Field::Option {
                 key: "pristine_dir",
@@ -240,11 +230,28 @@ pub const PALETTE: &[CommandSpec] = &[
         // `--report-only` is fixed: the command writes the estate file by default, and
         // a write from the palette would have to hold the session's write lock and
         // reload the model, which `RunCommand` does neither of. The writing mode is
-        // the terminal's and the agent's (`satz_update_prerequisites`).
+        // the terminal's and the agent's (`satz_update_prerequisites`). The format is
+        // satz's default, text.
         head: &["update-prerequisites"],
         estate: EstateArg::Positional,
-        tail: &["--report-only", "--format", "json"],
+        tail: &["--report-only"],
         fields: &[],
+        reports: false,
+        external: false,
+    },
+    CommandSpec {
+        id: "whoami",
+        label: "whoami",
+        icon: "person_search",
+        description: "Who the estate's live commands run as: the credentials, the service account a cloud-mode estate impersonates, and — checked live — whether this credential may, whether the quota project is reachable, and which permissions the estate's resource types need.",
+        head: &["whoami"],
+        estate: EstateArg::Positional,
+        tail: &[],
+        fields: &[Field::Flag {
+            key: "offline",
+            flag: "--offline",
+            label: "Read the credentials file only: no network, nothing checked",
+        }],
         reports: false,
         external: false,
     },
@@ -526,6 +533,13 @@ pub fn spec_of(id: &str) -> Option<&'static CommandSpec> {
     PALETTE.iter().find(|s| s.id == id)
 }
 
+/// The argument vector of a palette entry at its default values, as one click runs it:
+/// a reporting command writes into the app's own file, which the log is filled from.
+pub fn one_click(spec: &CommandSpec, estate: &str) -> Result<Vec<String>, String> {
+    let values = defaults(spec);
+    build_args(spec, estate, &values, &report_path(spec, &values))
+}
+
 /// Whether a command line — the arguments after `satz` — is one the app hands to the OS
 /// terminal rather than running itself: `apply`, `bootstrap` and `migrate` are, by the
 /// same table that decides it for the decks (ADR 0006, ADR 0012). Read by the notice
@@ -787,17 +801,26 @@ pub fn CommandDeck(ids: Vec<&'static str>, #[props(default)] tools: bool) -> Ele
                 }
                 if tools {
                     Card { variant: CardVariant::Outlined, class: "commands__tools",
-                        h2 { class: "commands__heading", Icon { name: "handyman", size: 22 } "Session tools" }
-                        p { class: "commands__description", "One call on this estate's satz mcp session, as the agent would make it; the result lands in the log." }
+                        h2 { class: "commands__heading", Icon { name: "handyman", size: 22 } "One click" }
+                        p { class: "commands__description", "Who the estate runs as, whether it compiles, and what its packs ask: satz's own answer, in the log." }
                         div { class: "commands__actions commands__actions--start",
-                            for (name, icon, description) in SESSION_TOOLS {
-                                Tooltip { key: "{name}", text: description.to_string(),
-                                    Button {
-                                        variant: ButtonVariant::Tonal,
-                                        icon: icon.to_string(),
-                                        disabled: running,
-                                        onclick: move |_| handle.send(EstateAction::RunTool { name: name.to_string(), args: serde_json::Map::new() }),
-                                        "{name}"
+                            for s in ONE_CLICK.iter().filter_map(|id| spec_of(id)) {
+                                {
+                                    let args = one_click(s, &open.name);
+                                    rsx! {
+                                        Tooltip { key: "{s.id}", text: s.description.to_string(),
+                                            Button {
+                                                variant: ButtonVariant::Tonal,
+                                                icon: s.icon.to_string(),
+                                                disabled: running || args.is_err(),
+                                                onclick: move |_| {
+                                                    if let Ok(args) = &args {
+                                                        handle.send(EstateAction::RunCommand(args.clone()));
+                                                    }
+                                                },
+                                                "{s.label}"
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -1058,14 +1081,68 @@ mod tests {
         }
         let prerequisites = spec("update-prerequisites");
         assert!(!prerequisites.reports);
-        assert_eq!(prerequisites.tail, ["--report-only", "--format", "json"]);
+        assert_eq!(prerequisites.tail, ["--report-only"]);
         let args = built(
             "update-prerequisites",
             "C0example.satz",
             &defaults(prerequisites),
         );
-        assert!(!args.iter().any(|a| a == "--out"), "{args:?}");
-        assert!(args.iter().any(|a| a == "--report-only"), "{args:?}");
+        assert_eq!(
+            args,
+            ["update-prerequisites", "C0example.satz", "--report-only"]
+        );
+    }
+
+    /// The log is for a person: no entry opens on `json`, and no entry's fixed words
+    /// fix a format. `json` stays a choice for whoever wants the file.
+    #[test]
+    fn no_entry_defaults_to_json_and_no_tail_fixes_a_format() {
+        for s in PALETTE {
+            assert!(
+                !s.tail.iter().any(|w| *w == "--format" || *w == "json"),
+                "{}: {:?}",
+                s.id,
+                s.tail
+            );
+            for f in s.fields {
+                if let Field::Choice {
+                    flag: "--format",
+                    options,
+                    default,
+                    ..
+                } = f
+                {
+                    assert_ne!(*default, "json", "{}", s.id);
+                    assert!(options.contains(default), "{}", s.id);
+                }
+            }
+            let args = built(s.id, "C0example.satz", &defaults(s));
+            assert!(!args.iter().any(|a| a == "json"), "{}: {args:?}", s.id);
+        }
+    }
+
+    /// The one-click entries are palette entries the app runs itself, at their
+    /// defaults: satz's own command, with the estate, in the format a person reads.
+    #[test]
+    fn one_click_runs_satz_s_own_commands_in_text() {
+        let run = |id: &str| one_click(spec(id), "C0example.satz").unwrap();
+        for id in ONE_CLICK {
+            assert!(!spec(id).external, "{id}");
+        }
+        assert_eq!(run("whoami"), ["whoami", "C0example.satz"]);
+        assert_eq!(
+            run("transpile-check"),
+            ["transpile", "C0example.satz", "--check"]
+        );
+        let questions = run("questions");
+        assert_eq!(
+            questions[..4],
+            ["questions", "C0example.satz", "--format", "text"]
+        );
+        assert!(
+            Path::new(questions.last().unwrap()).starts_with(reports_dir()),
+            "{questions:?}"
+        );
     }
 
     #[test]
@@ -1077,7 +1154,7 @@ mod tests {
                 "questions",
                 "C0example.satz",
                 "--format",
-                "json",
+                "text",
                 "--out",
                 OUT
             ]
@@ -1095,17 +1172,17 @@ mod tests {
         let mut v = defaults(s);
         assert_eq!(
             report_path(s, &v).file_name().unwrap(),
-            std::ffi::OsStr::new("questions.json")
+            std::ffi::OsStr::new("questions.txt")
         );
         v.insert("format".into(), "markdown".into());
         assert_eq!(
             report_path(s, &v).file_name().unwrap(),
             std::ffi::OsStr::new("questions.md")
         );
-        v.insert("format".into(), "text".into());
+        v.insert("format".into(), "json".into());
         assert_eq!(
             report_path(s, &v).file_name().unwrap(),
-            std::ffi::OsStr::new("questions.txt")
+            std::ffi::OsStr::new("questions.json")
         );
         assert!(report_path(s, &v).starts_with(reports_dir()));
     }

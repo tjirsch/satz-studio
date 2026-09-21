@@ -25,9 +25,10 @@ use crate::components::{
     Segment, SegmentedButton, Switch, TextField,
 };
 use crate::state::{
-    AppAction, AppStore, AppStoreStoreExt, CommandOutcome, EstateAction, ImportStoreStoreExt, View,
-    run_line,
+    AppAction, AppStore, AppStoreStoreExt, CommandOutcome, EstateAction, ImportStoreStoreExt,
+    ToastKind, View, run_line, toast,
 };
+use crate::views::commands::{one_click, spec_of};
 
 /// The provider set `satz init --defaults` knows; it expands to `google` and
 /// `google-beta` and fetches the schema of each with the Terraform tool.
@@ -471,10 +472,16 @@ fn ImportReportCard(report: ImportReport, outcome: Option<CommandOutcome>) -> El
                         variant: ButtonVariant::Filled,
                         icon: "fact_check",
                         onclick: move |_| {
-                            handle.send(EstateAction::RunTool {
-                                name: "satz_transpile_check".to_string(),
-                                args: serde_json::Map::new(),
-                            });
+                            // the estate the import opened: `transpile --check` on it, as
+                            // the Checks deck runs it, with satz's text in the log
+                            let Some(open) = app.open().cloned() else {
+                                toast(app, ToastKind::Error, "no estate is open to check");
+                                return;
+                            };
+                            match spec_of("transpile-check").ok_or_else(|| "the palette has no transpile-check".to_string()).and_then(|s| one_click(s, &open.name)) {
+                                Ok(args) => handle.send(EstateAction::RunCommand(args)),
+                                Err(e) => toast(app, ToastKind::Error, e),
+                            }
                             app.nav().set(View::Checks);
                         },
                         "Check it compiles"

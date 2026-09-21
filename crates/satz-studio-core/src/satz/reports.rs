@@ -447,6 +447,209 @@ pub struct PackChange {
     pub notices: Vec<NoticeRow>,
 }
 
+/// What `satz_merge_presets` returns: the run as events in walk order, the count of
+/// each outcome, whether a human has to act, and the notices the merge opened.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct MergeReport {
+    /// nothing was written
+    pub report_only: bool,
+    pub events: Vec<MergeEvent>,
+    pub counts: MergeCounts,
+    /// something needs a human: the CLI exits non-zero on it
+    pub attention: bool,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub notices: Vec<NoticeRow>,
+}
+
+/// One line of a merge run, as satz tags it.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "kind", rename_all = "kebab-case")]
+pub enum MergeEvent {
+    Pack {
+        /// the path under `presets_dir`
+        file: String,
+        /// what the run did to it, kebab-case as satz writes it (`installed`,
+        /// `forked-and-repointed`, …); a `String`, so an outcome satz adds is carried
+        action: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        fork: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        diff: Option<String>,
+        /// `2.7 -> 2.8`, where both versions are known
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        versions: Option<String>,
+        /// why, for a refusal
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        reason: Option<String>,
+    },
+    /// upstream changed a pack's content without moving its version
+    Warning { file: String, text: String },
+    /// something the run said that is not about one pack
+    Note { text: String },
+    /// what an adoption changes in the emission
+    EmissionDelta { lines: Vec<String> },
+    /// the roles and APIs the estate's resource types need and it did not declare
+    Prerequisites {
+        wrote: Vec<String>,
+        missing: Vec<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        refused: Option<String>,
+    },
+}
+
+/// How many packs each outcome took; a report-only run counts what it would do.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct MergeCounts {
+    pub installed: usize,
+    pub current: usize,
+    pub artifacts_updated: usize,
+    pub doc_only: usize,
+    pub unused_overwritten: usize,
+    pub adopted_in_place: usize,
+    pub forked_and_repointed: usize,
+    pub fork_diffs_refreshed: usize,
+    pub deferred: usize,
+    pub refused: usize,
+    pub skipped_edited: usize,
+}
+
+impl MergeReport {
+    /// The run as the command log shows it: one sentence per pack the run changed or
+    /// would change, satz's warnings, notes and prerequisites, the counts, and each
+    /// notice the merge opened with the command it names. A pack that is current says
+    /// nothing; the counts carry it.
+    pub fn lines(&self) -> Vec<String> {
+        let dry = self.report_only;
+        let verb = |would: &str, did: &str| if dry { would } else { did }.to_string();
+        let mut out = Vec::new();
+        for e in &self.events {
+            match e {
+                MergeEvent::Pack {
+                    file,
+                    action,
+                    fork,
+                    diff,
+                    versions,
+                    reason,
+                } => {
+                    let fork = fork.as_deref().unwrap_or("its fork");
+                    let diff = diff.as_deref().unwrap_or("the delta file");
+                    let versions = versions
+                        .as_deref()
+                        .map(|v| format!(" ({v})"))
+                        .unwrap_or_default();
+                    let line = match action.as_str() {
+                        "current" => continue,
+                        "installed" => format!("{} {file}", verb("would install", "installed")),
+                        "artifact-updated" => {
+                            format!("{} {file}", verb("would update", "updated"))
+                        }
+                        "doc-only" => format!(
+                            "{} {file}: comments and layout only",
+                            verb("would update", "updated")
+                        ),
+                        "unused-overwritten" => format!(
+                            "{} {file}, which the estate does not use",
+                            verb("would overwrite", "overwrote")
+                        ),
+                        "adopted-in-place" => format!(
+                            "{} {file} in place{versions}; the estate keeps its name",
+                            verb("would adopt", "adopted")
+                        ),
+                        "forked-and-repointed" => format!(
+                            "{} {file} to {fork} and {} the estate at it{versions}; the adoption delta is {diff}",
+                            verb("would fork", "forked"),
+                            verb("point", "pointed")
+                        ),
+                        "fork-diff-refreshed" => format!(
+                            "{file} moved upstream{versions}: {} the delta in {diff} beside {fork}",
+                            verb("would refresh", "refreshed")
+                        ),
+                        "deferred" => format!(
+                            "{file} is deferred: it needs a fork, which cannot share a run with --adopt; run merge-presets without it"
+                        ),
+                        "refused" => format!(
+                            "{file} is refused: {}",
+                            reason.as_deref().unwrap_or("satz gave no reason")
+                        ),
+                        "skipped-edited" => format!(
+                            "{file} is skipped: it has upstream's version and other content, which is a local edit; name it to overwrite it"
+                        ),
+                        other => format!("{file}: {}", other.replace('-', " ")),
+                    };
+                    out.push(line);
+                }
+                MergeEvent::Warning { file, text } => out.push(format!("warning: {file}: {text}")),
+                MergeEvent::Note { text } => out.push(text.clone()),
+                MergeEvent::EmissionDelta { lines } => {
+                    out.push("What the adoption changes in the emission:".to_string());
+                    out.extend(lines.iter().map(|l| format!("  {l}")));
+                    out.push(
+                        "hcl/ is not regenerated by the merge: transpile, then plan, before applying."
+                            .to_string(),
+                    );
+                }
+                MergeEvent::Prerequisites {
+                    wrote,
+                    missing,
+                    refused,
+                } => {
+                    out.extend(wrote.iter().map(|w| format!("prerequisite written: {w}")));
+                    if let Some(why) = refused {
+                        out.push(format!("prerequisites not written: {why}"));
+                    }
+                    let lead = verb("would declare", "still missing:");
+                    out.extend(missing.iter().map(|m| format!("{lead} {m}")));
+                }
+            }
+        }
+        out.push(self.summary());
+        for n in &self.notices {
+            out.push(format!("notice from {}: {}", n.pack, n.text));
+            out.push(format!("  run: {}", n.run));
+        }
+        out
+    }
+
+    /// One sentence: whether anything was written, and every outcome that took a pack.
+    fn summary(&self) -> String {
+        let c = &self.counts;
+        let parts: Vec<String> = [
+            (c.installed, "installed"),
+            (c.artifacts_updated, "artifacts updated"),
+            (c.doc_only, "comments and layout only"),
+            (c.unused_overwritten, "unused and overwritten"),
+            (c.adopted_in_place, "adopted in place"),
+            (c.forked_and_repointed, "forked and repointed"),
+            (c.fork_diffs_refreshed, "fork deltas refreshed"),
+            (c.deferred, "deferred"),
+            (c.refused, "refused"),
+            (c.skipped_edited, "skipped as local edits"),
+            (c.current, "current"),
+        ]
+        .into_iter()
+        .filter(|(n, _)| *n > 0)
+        .map(|(n, what)| format!("{n} {what}"))
+        .collect();
+        let counted = if parts.is_empty() {
+            "no pack in the library".to_string()
+        } else {
+            parts.join(", ")
+        };
+        let lead = if self.report_only {
+            "Report only, nothing written"
+        } else {
+            "Merged"
+        };
+        let attention = if self.attention {
+            " Something above needs you."
+        } else {
+            ""
+        };
+        format!("{lead}: {counted}.{attention}")
+    }
+}
+
 /// What a compile produced: the emitted addresses, the files written (empty for a
 /// check), and what the compile found and did not refuse on.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -477,6 +680,93 @@ mod tests {
     use super::*;
 
     const SMOKE: &str = include_str!("../../tests/fixtures/questions-smoke.json");
+
+    /// `satz_merge_presets {report_only: true}` of satz's smoke estate, recorded from the
+    /// release the app is tested against, over a pristine library in which upstream
+    /// added a file, moved a pack the estate uses to a new version and touched the
+    /// comments of one it does not use. The diff path is written relative.
+    const MERGE: &str = include_str!("../../tests/fixtures/merge-presets-smoke.json");
+
+    #[test]
+    fn the_recorded_merge_report_round_trips() {
+        let report: MergeReport = serde_json::from_str(MERGE).unwrap();
+        assert_eq!(report.counts.current, 100);
+        let again: serde_json::Value = serde_json::to_value(&report).unwrap();
+        let original: serde_json::Value = serde_json::from_str(MERGE).unwrap();
+        assert_eq!(again, original);
+    }
+
+    /// The log reads the merge as sentences: what it would do to each pack it touches,
+    /// the counts, and never a line of the JSON it came as.
+    #[test]
+    fn a_merge_reads_as_sentences_in_the_log() {
+        let report: MergeReport = serde_json::from_str(MERGE).unwrap();
+        let lines = report.lines();
+        assert!(
+            lines.iter().any(|l| l
+                == "would fork essential-contacts-organization.satz to essential-contacts-organization.local.satz and point the estate at it (1.4 -> 1.5); the adoption delta is presets/essential-contacts-organization.diff.satz"),
+            "{lines:#?}"
+        );
+        assert!(
+            lines.iter().any(|l| l == "would install notes-new.md"),
+            "{lines:#?}"
+        );
+        assert!(
+            lines
+                .iter()
+                .any(|l| l == "would update cis/dns-logging.satz: comments and layout only"),
+            "{lines:#?}"
+        );
+        assert_eq!(
+            lines.last().unwrap(),
+            "Report only, nothing written: 1 installed, 1 comments and layout only, 1 forked and repointed, 100 current. Something above needs you."
+        );
+        // a pack that is current says nothing: the counts carry it
+        assert_eq!(lines.len(), 4, "{lines:#?}");
+        for l in &lines {
+            let t = l.trim_start();
+            assert!(!t.starts_with('{') && !t.starts_with('['), "{l}");
+        }
+    }
+
+    #[test]
+    fn a_notice_a_merge_opened_names_the_command_to_run() {
+        let mut report: MergeReport = serde_json::from_str(MERGE).unwrap();
+        report.report_only = false;
+        report.attention = false;
+        report.notices.push(NoticeRow {
+            param: "cis_baseline_adopted".into(),
+            pack: "presets/cis/block-project-ssh-keys.satz".into(),
+            text: "Import what is live first.".into(),
+            run: "satz adopt <estate> --execute --import".into(),
+            severity: FindingSeverity::Error,
+            acknowledged: false,
+        });
+        let lines = report.lines();
+        assert!(
+            lines.iter().any(|l| l == "installed notes-new.md"),
+            "{lines:#?}"
+        );
+        assert!(
+            lines.iter().any(|l| l.starts_with("Merged: 1 installed")),
+            "{lines:#?}"
+        );
+        assert!(
+            lines.ends_with(&[
+                "notice from presets/cis/block-project-ssh-keys.satz: Import what is live first."
+                    .to_string(),
+                "  run: satz adopt <estate> --execute --import".to_string(),
+            ]),
+            "{lines:#?}"
+        );
+    }
+
+    #[test]
+    fn a_merge_event_of_a_kind_the_app_does_not_read_fails_the_report() {
+        let mut v: serde_json::Value = serde_json::from_str(MERGE).unwrap();
+        v["events"][0]["kind"] = "rename".into();
+        assert!(serde_json::from_value::<MergeReport>(v).is_err());
+    }
 
     #[test]
     fn the_recorded_questions_report_round_trips() {

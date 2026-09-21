@@ -233,3 +233,82 @@ async fn cancellation_returns_cancelled_or_the_command_finished_first() {
     }
     drain.await.unwrap();
 }
+
+/// Every line a run printed, both streams, and the file it wrote when it wrote one:
+/// what the command log shows for that run.
+async fn log_of(cli: &SatzCli, argv: &[String], wrote: Option<&Path>) -> Vec<String> {
+    let (tx, mut rx) = mpsc::channel(256);
+    let collect = tokio::spawn(async move {
+        let mut lines = Vec::new();
+        while let Some(line) = rx.recv().await {
+            lines.push(match line {
+                CliLine::Stdout(s) | CliLine::Stderr(s) => s,
+            });
+        }
+        lines
+    });
+    let status = tokio::time::timeout(TIME_BOX, cli.run(argv, tx, CancellationToken::new()))
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(status.success(), "{argv:?}: {status}");
+    let mut lines = collect.await.unwrap();
+    if let Some(path) = wrote {
+        lines.extend(
+            std::fs::read_to_string(path)
+                .unwrap()
+                .lines()
+                .map(str::to_string),
+        );
+    }
+    lines
+}
+
+/// The one-click commands beside the palette — `whoami`, `transpile --check` and
+/// `questions --format text` on the estate — put satz's own prose into the log: lines
+/// of text, and none that opens a JSON object or array. `whoami` runs `--offline`
+/// here, which needs no credential; the button runs it online.
+#[tokio::test]
+async fn the_one_click_commands_print_prose() {
+    let cli = cli().await;
+    let out = tempfile::tempdir().unwrap();
+    let questions = out.path().join("questions.txt");
+    let runs: [(Vec<String>, Option<&Path>, &str); 3] = [
+        (
+            args(&["whoami", "smoke.satz", "--offline"]),
+            None,
+            "runs as:",
+        ),
+        (
+            args(&["transpile", "smoke.satz", "--check"]),
+            None,
+            "transpile --check: OK",
+        ),
+        (
+            args(&[
+                "questions",
+                "smoke.satz",
+                "--format",
+                "text",
+                "--out",
+                &questions.display().to_string(),
+            ]),
+            Some(&questions),
+            "essential_contacts_email",
+        ),
+    ];
+    for (argv, wrote, says) in runs {
+        let lines = log_of(&cli, &argv, wrote).await;
+        assert!(
+            lines.iter().any(|l| l.contains(says)),
+            "{argv:?}: {lines:#?}"
+        );
+        for l in &lines {
+            let t = l.trim_start();
+            assert!(
+                !t.starts_with('{') && !t.starts_with('['),
+                "{argv:?} printed JSON: {l}"
+            );
+        }
+    }
+}

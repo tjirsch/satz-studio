@@ -1,0 +1,537 @@
+{
+  "attention": true,
+  "counts": {
+    "adopted_in_place": 0,
+    "artifacts_updated": 0,
+    "current": 100,
+    "deferred": 0,
+    "doc_only": 1,
+    "fork_diffs_refreshed": 0,
+    "forked_and_repointed": 1,
+    "installed": 1,
+    "refused": 0,
+    "skipped_edited": 0,
+    "unused_overwritten": 0
+  },
+  "events": [
+    {
+      "action": "current",
+      "file": "README.md",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "billing-account-permissions.satz",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "cai-asset-types.txt",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "catalogs/cis-gcp-4.0.yaml",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "catalogs/cis-gcp-5.0.yaml",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "catalogs/iso27001-2022.yaml",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "ci/verification-runner-grant.satz",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "ci/verification-runner.satz",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "cis/CIS-GCP-Foundation-4.0.satz",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "cis/access-approval.satz",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "cis/api-key-services-dry-run.satz",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "cis/api-key-services.satz",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "cis/block-project-ssh-keys-dry-run.satz",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "cis/block-project-ssh-keys.satz",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "cis/bucket-retention-dry-run.satz",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "cis/bucket-retention.satz",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "cis/cloud-sql-dry-run.satz",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "cis/cloud-sql-iam-and-deletion-protection-dry-run.satz",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "cis/cloud-sql-iam-and-deletion-protection.satz",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "cis/cloud-sql.satz",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "cis/cmek.satz",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "cis/confidential-computing-dry-run.satz",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "cis/confidential-computing.satz",
+      "kind": "pack"
+    },
+    {
+      "action": "doc-only",
+      "file": "cis/dns-logging.satz",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "cis/internet-ssh-rdp.satz",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "cis/shielded-vm.satz",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "docs/CIS-GCP-Foundation-4.0.md",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "docs/README.md",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "docs/access-approval.md",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "docs/api-key-services-dry-run.md",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "docs/api-key-services.md",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "docs/billing-account-permissions.md",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "docs/block-project-ssh-keys-dry-run.md",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "docs/block-project-ssh-keys.md",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "docs/bucket-retention-dry-run.md",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "docs/bucket-retention.md",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "docs/cloud-sql-dry-run.md",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "docs/cloud-sql-iam-and-deletion-protection-dry-run.md",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "docs/cloud-sql-iam-and-deletion-protection.md",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "docs/cloud-sql.md",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "docs/cmek.md",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "docs/confidential-computing-dry-run.md",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "docs/confidential-computing.md",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "docs/dns-logging.md",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "docs/essential-contacts-organization.md",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "docs/estate-core.md",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "docs/estate-map.md",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "docs/exemption-tag.md",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "docs/internet-ssh-rdp.md",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "docs/microsoft-defender-for-cloud-cspm-role-default.md",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "docs/microsoft-defender-for-cloud-cspm-role-least-privilege.md",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "docs/microsoft-defender-for-cloud-cspm.md",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "docs/microsoft-defender-for-cloud.md",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "docs/microsoft-sentinel-auditlogs.md",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "docs/microsoft-sentinel-network-logs.md",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "docs/microsoft-sentinel.md",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "docs/organization-audit-logsink.md",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "docs/organization-budget.md",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "docs/organization-cis-log-alerts-central.md",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "docs/project-cis-log-alerts.md",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "docs/s1-group-definitions.md",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "docs/s1-group-permissions.md",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "docs/s1-security-groups.md",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "docs/s2-security-groups.md",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "docs/sa-security-audit.md",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "docs/scc-export.md",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "docs/scc-findings-mail.md",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "docs/scc-findings-siem.md",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "docs/scc-notifications.md",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "docs/scc-service-enablement.md",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "docs/shielded-vm.md",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "docs/verification-runner-grant.md",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "docs/verification-runner.md",
+      "kind": "pack"
+    },
+    {
+      "action": "forked-and-repointed",
+      "diff": "presets/essential-contacts-organization.diff.satz",
+      "file": "essential-contacts-organization.satz",
+      "fork": "essential-contacts-organization.local.satz",
+      "kind": "pack",
+      "versions": "1.4 -> 1.5"
+    },
+    {
+      "action": "current",
+      "file": "estate-core.satz",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "estate-map.satz",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "exemptions/exemption-tag.satz",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "import-config.yaml",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "integrations/microsoft-defender-for-cloud-cspm-role-default.satz",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "integrations/microsoft-defender-for-cloud-cspm-role-least-privilege.satz",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "integrations/microsoft-defender-for-cloud-cspm.satz",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "integrations/microsoft-defender-for-cloud.satz",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "integrations/microsoft-sentinel-auditlogs.satz",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "integrations/microsoft-sentinel-network-logs.satz",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "integrations/microsoft-sentinel.satz",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "managed-constraint-equivalents.txt",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "monitoring/organization-audit-logsink.satz",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "monitoring/organization-cis-log-alerts-central.satz",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "monitoring/project-cis-log-alerts.satz",
+      "kind": "pack"
+    },
+    {
+      "action": "installed",
+      "file": "notes-new.md",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "organization-budget.satz",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "pack-graph.json",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "scc/scc-enable-all.sh",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "scc/scc-export.satz",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "scc/scc-findings-mail.satz",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "scc/scc-findings-siem.satz",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "scc/scc-notifications.satz",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "scc/scc-service-enablement.satz",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "security-audit/sa-security-audit.satz",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "security-group-models/s1-group-definitions.satz",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "security-group-models/s1-group-permissions.satz",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "security-group-models/s1-security-groups.satz",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "security-group-models/s2-security-groups.satz",
+      "kind": "pack"
+    }
+  ],
+  "report_only": true
+}
