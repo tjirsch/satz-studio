@@ -159,7 +159,7 @@ fn short_pack(pack: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use satz_studio_core::satz::reports::NoticeBefore;
+    use satz_studio_core::satz::reports::FindingSeverity;
 
     fn notice() -> NoticeRow {
         NoticeRow {
@@ -167,7 +167,7 @@ mod tests {
             pack: "presets/cis/CIS-GCP-Foundation-4.0.satz".to_string(),
             text: "Import what is live first.".to_string(),
             run: "satz adopt <estate> --execute --import".to_string(),
-            before: Some(NoticeBefore::Apply),
+            severity: FindingSeverity::Error,
             acknowledged: false,
         }
     }
@@ -210,7 +210,7 @@ mod tests {
         assert!(said.contains("cis_baseline_adopted = true"), "{said}");
         assert!(said.contains("apply and bootstrap refuse"), "{said}");
         let mut soft = notice();
-        soft.before = None;
+        soft.severity = FindingSeverity::Warning;
         assert!(!consequence(&soft).contains("refuse"));
     }
 

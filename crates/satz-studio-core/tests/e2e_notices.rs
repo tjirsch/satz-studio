@@ -14,7 +14,7 @@ mod support;
 use satz_studio_core::cst::Cst;
 use satz_studio_core::estate::EstateDir;
 use satz_studio_core::satz::CliLine;
-use satz_studio_core::satz::reports::{NoticeBefore, QuestionState};
+use satz_studio_core::satz::reports::{FindingSeverity, QuestionState};
 
 /// Everything `transpile --check` printed, whichever stream it used.
 fn said(lines: &[CliLine]) -> String {
@@ -71,7 +71,7 @@ async fn a_pack_switched_on_returns_its_notice_once_and_the_binding_takes_it_awa
     assert_eq!(notice.param, ACK);
     assert_eq!(notice.pack, PACK);
     assert_eq!(notice.run, "satz adopt <estate> --execute --import");
-    assert_eq!(notice.before, Some(NoticeBefore::Apply));
+    assert_eq!(notice.severity, FindingSeverity::Error);
     assert!(notice.holds_up_apply());
     assert!(!notice.acknowledged);
     assert!(!notice.text.is_empty());
@@ -91,7 +91,7 @@ async fn a_pack_switched_on_returns_its_notice_once_and_the_binding_takes_it_awa
     let (passed, lines) = support::check_lines(&estate.cli().await, &main).await;
     assert!(passed, "a notice is a warning, not a refusal");
     let printed = said(&lines);
-    assert!(printed.contains("notice(s) open"), "{printed}");
+    assert!(printed.contains("notices open"), "{printed}");
     assert!(printed.contains(ACK), "{printed}");
 
     // "I ran it": the param bound true through satz's own writer

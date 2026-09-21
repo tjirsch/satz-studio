@@ -31,7 +31,7 @@ pub const TIME_BOX: Duration = Duration::from_secs(120);
 /// The seven values `vendor/satz/scripts/smoke.sh` types into the interview
 /// (`printf '%s\n' y C0example 123456789012 example.com acme Acme first.admin
 /// 012345-6789AB-CDEF01 '' '' …`), in the order the pack asks them. The `y` before them
-/// accepts the seven defaults; the empty lines after them accept the two names derived
+/// accepts the eight defaults; the empty lines after them accept the two names derived
 /// from the short name. Every value is a documented example value.
 pub const TYPED: [(&str, &str); 7] = [
     ("customer_id", "C0example"),
@@ -47,7 +47,7 @@ pub const TYPED: [(&str, &str); 7] = [
 pub fn smoke_input() -> Vec<String> {
     let mut lines = vec!["y".to_string()];
     lines.extend(TYPED.iter().map(|(_, v)| v.to_string()));
-    lines.extend(std::iter::repeat_n(String::new(), 9));
+    lines.extend(std::iter::repeat_n(String::new(), 10));
     lines
 }
 

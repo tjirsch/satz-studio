@@ -15,7 +15,7 @@ use crate::satz::reports::{Finding, FindingSeverity};
 pub enum Severity {
     Error,
     Warning,
-    Note,
+    Info,
 }
 
 /// Where a diagnostic came from, so the drawer can group and the reader can judge.
@@ -114,7 +114,7 @@ impl Diagnostic {
             severity: match f.severity {
                 FindingSeverity::Error => Severity::Error,
                 FindingSeverity::Warning => Severity::Warning,
-                FindingSeverity::Note => Severity::Note,
+                FindingSeverity::Info => Severity::Info,
             },
             kind: Some(f.kind.clone()),
             message,
@@ -171,25 +171,82 @@ pub fn plain(path: &Path) -> PathBuf {
 }
 
 /// Parse what satz printed — its stderr, or the text of a refused tool call — into
-/// diagnostics. The banner (`satz vX (built …)`) is dropped; `error: `, `warning: ` and
-/// `note: ` set the severity; `transpile --check: ` is stripped; `file:line: msg` gives
-/// the location and `satz: line N: msg` the line alone; an indented line continues the
-/// diagnostic above it (satz prints a fold conflict as a header and its origins
-/// indented under it). A line that fits none of that is a diagnostic without a
-/// location, verbatim — nothing satz says is dropped.
+/// diagnostics.
+///
+/// satz lays its findings out for a reader (its `src/findings.rs`, `lay_out`): a group's
+/// title, `<title> (<count>)`; per finding a first line of columns — severity, kind,
+/// `file:line`, subject — with the message indented under it and `fix: <command>` last;
+/// findings of one group that say the same thing as ONE block, their first lines as a
+/// table and the message once, which belongs to every row; and a footer of counts. Each
+/// row is a diagnostic at its own location, its message the group's title and the text
+/// under the block — the same message [`Diagnostic::from_finding`] builds from the JSON.
+///
+/// Around the findings satz prints other lines, read as before: the banner
+/// (`satz vX (built …)`) is dropped; `error: `, `warning: ` and `info: ` set the
+/// severity; `transpile --check: ` is stripped; `file:line: msg` gives the location and
+/// `satz: line N: msg` the line alone; an indented line continues the diagnostic above
+/// it. A line that fits none of that is a diagnostic without a location, verbatim —
+/// nothing satz says is dropped, bar the title and the footer, which count what the rows
+/// already carry.
 pub fn parse_satz_output(text: &str, source: DiagSource) -> Vec<Diagnostic> {
     let mut out: Vec<Diagnostic> = Vec::new();
+    // per diagnostic: the group title it stands under, and the subject its row named
+    let mut titles: Vec<Option<String>> = Vec::new();
+    let mut subjects: Vec<String> = Vec::new();
+    let mut title: Option<String> = None;
+    // the first diagnostic an indented line belongs to — a block's rows share the text
+    // under them — and whether the line before was a row, so the next row joins it
+    let mut body_from = 0;
+    let mut in_rows = false;
     for raw in text.lines() {
         let line = raw.trim_end();
-        if line.trim().is_empty() || is_banner(line) {
+        if line.trim().is_empty() {
+            in_rows = false;
             continue;
         }
-        let continuation = raw.starts_with(' ') || raw.starts_with('\t');
-        if continuation && let Some(last) = out.last_mut() {
-            last.message.push('\n');
-            last.message.push_str(line.trim_start());
+        if is_banner(line) {
             continue;
         }
+        if raw.starts_with(' ') || raw.starts_with('\t') {
+            for d in out.iter_mut().skip(body_from) {
+                if !d.message.is_empty() {
+                    d.message.push('\n');
+                }
+                d.message.push_str(line.trim_start());
+            }
+            in_rows = false;
+            continue;
+        }
+        if let Some(t) = group_title(line) {
+            title = Some(t.to_string());
+            in_rows = false;
+            continue;
+        }
+        if is_footer(line) {
+            continue;
+        }
+        if let Some(row) = finding_row(line) {
+            if !in_rows {
+                body_from = out.len();
+            }
+            in_rows = true;
+            let (file, line) = match row.location.map(split_at) {
+                Some((file, line)) => (Some(PathBuf::from(file)), line),
+                None => (None, None),
+            };
+            out.push(Diagnostic {
+                file,
+                line,
+                severity: row.severity,
+                kind: Some(row.kind.to_string()),
+                message: String::new(),
+                source: source.clone(),
+            });
+            titles.push(title.clone());
+            subjects.push(row.subject.to_string());
+            continue;
+        }
+        in_rows = false;
         let (severity, rest) = strip_severity(line.trim_start());
         let rest = rest.strip_prefix("transpile --check: ").unwrap_or(rest);
         let mut d = Diagnostic {
@@ -208,7 +265,22 @@ pub fn parse_satz_output(text: &str, source: DiagSource) -> Vec<Diagnostic> {
             d.line = Some(n);
             d.message = msg.to_string();
         }
+        body_from = out.len();
         out.push(d);
+        titles.push(None);
+        subjects.push(String::new());
+    }
+    for ((d, title), subject) in out.iter_mut().zip(titles).zip(subjects) {
+        if d.message.is_empty() {
+            d.message = subject;
+        }
+        if let Some(title) = title {
+            d.message = format!(
+                "{}: {}",
+                title.strip_suffix(':').unwrap_or(&title),
+                d.message
+            );
+        }
     }
     out
 }
@@ -217,13 +289,110 @@ fn is_banner(line: &str) -> bool {
     line.starts_with("satz v") && line.contains("(built ")
 }
 
+/// A finding's first line, in satz's columns: severity, kind, where, what.
+struct Row<'a> {
+    severity: Severity,
+    kind: &'a str,
+    location: Option<&'a str>,
+    subject: &'a str,
+}
+
+/// `error    unadopted-pack  yaml/acme.satz:12  use_budget` — the severity word padded
+/// into its column, so it is followed by two spaces or more, never by `: `. The columns
+/// are separated by two spaces or more; `file:line` stands before the subject, and a
+/// finding with no location leaves its column blank.
+fn finding_row(line: &str) -> Option<Row<'_>> {
+    let (severity, rest) = [
+        ("error", Severity::Error),
+        ("warning", Severity::Warning),
+        ("info", Severity::Info),
+    ]
+    .into_iter()
+    .find_map(|(word, s)| {
+        line.strip_prefix(word)
+            .filter(|r| r.starts_with("  "))
+            .map(|r| (s, r))
+    })?;
+    let mut columns = rest.split("  ").map(str::trim).filter(|c| !c.is_empty());
+    let kind = columns.next()?;
+    if !kind.chars().all(|c| c.is_ascii_lowercase() || c == '-') {
+        return None;
+    }
+    let rest: Vec<&str> = columns.collect();
+    let (location, subject) = match rest.split_first() {
+        None => (None, ""),
+        Some((first, more)) if is_location(first) => {
+            (Some(*first), more.first().copied().unwrap_or_default())
+        }
+        Some((first, _)) => (None, *first),
+    };
+    // a subject with two spaces inside it is cut at them; its first part is kept, and the
+    // message under the row says the whole of it
+    Some(Row {
+        severity,
+        kind,
+        location,
+        subject,
+    })
+}
+
+/// `file:line`, or a file alone when the whole file is the subject.
+fn is_location(s: &str) -> bool {
+    split_at(s).1.is_some() || s.ends_with(".satz") || s.ends_with(".tf")
+}
+
+/// `file:line` → (file, Some(line)); anything else is a file with no line. The LAST `:`
+/// is the separator, so a Windows drive letter stays with its path.
+fn split_at(s: &str) -> (&str, Option<u32>) {
+    match s.rsplit_once(':') {
+        Some((file, n))
+            if !file.is_empty() && !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()) =>
+        {
+            (file, n.parse().ok())
+        }
+        _ => (s, None),
+    }
+}
+
+/// `<title> (<count>)` or `<title> (<shown> of <all>, <n> silenced)`: the line a group of
+/// findings stands under.
+fn group_title(line: &str) -> Option<&str> {
+    let body = line.strip_suffix(')')?;
+    let (title, count) = body.rsplit_once(" (")?;
+    let first = count.split(' ').next()?;
+    (first.parse::<usize>().is_ok() && (count == first || count.ends_with(" silenced")))
+        .then_some(title)
+}
+
+/// The last line of a run: `1 error, 10 warnings`, `…; 3 silenced (2 estate, 1 run) — …`,
+/// or the silenced part alone.
+fn is_footer(line: &str) -> bool {
+    let counted = |part: &str| {
+        let mut words = part.splitn(2, ' ');
+        words.next().is_some_and(|n| n.parse::<usize>().is_ok())
+            && words.next().is_some_and(|w| {
+                matches!(
+                    w,
+                    "error" | "errors" | "warning" | "warnings" | "info" | "infos"
+                )
+            })
+    };
+    let head = line.split(';').next().unwrap_or(line);
+    head.split(", ").all(counted)
+        || (line
+            .split(' ')
+            .next()
+            .is_some_and(|n| n.parse::<usize>().is_ok())
+            && line.contains(" silenced ("))
+}
+
 fn strip_severity(line: &str) -> (Severity, &str) {
     if let Some(r) = line.strip_prefix("error: ") {
         (Severity::Error, r)
     } else if let Some(r) = line.strip_prefix("warning: ") {
         (Severity::Warning, r)
-    } else if let Some(r) = line.strip_prefix("note: ") {
-        (Severity::Note, r)
+    } else if let Some(r) = line.strip_prefix("info: ") {
+        (Severity::Info, r)
     } else {
         (Severity::Error, line)
     }
@@ -277,6 +446,80 @@ mod tests {
         assert_eq!(d[0].line, Some(12));
         assert_eq!(d[0].message, "unknown param 'x'");
         assert_eq!(d[0].severity, Severity::Error);
+    }
+
+    /// satz's own layout (`lay_out`): a title, a block of two rows sharing one message
+    /// and one command, a second group, and the footer.
+    const LAID_OUT: &str = "satz v0.73.0 (built 2026-09-21 07:30:15)
+packs on while a pack they need is off (2)
+
+warning  pack-requirement  yaml/smoke.satz:139  presets/monitoring/organization-audit-logsink.satz
+warning  pack-requirement  yaml/smoke.satz:140  presets/monitoring/organization-cis-log-alerts-central.satz
+    needs `presets/estate-map.satz`, which is off
+    fix: satz add-pack smoke.satz presets/estate-map.satz
+
+notices open — what a pack asks to be run once it is on (1)
+
+error    notice            yaml/new.satz:79     cis_baseline_adopted
+    Run satz adopt first.
+    fix: satz adopt new.satz --execute --import
+
+info     unadopted-pack                         use_budget
+
+1 error, 2 warnings, 1 info
+";
+
+    #[test]
+    fn the_laid_out_findings_are_one_diagnostic_per_row() {
+        let d = parse_satz_output(LAID_OUT, DiagSource::Check);
+        assert_eq!(
+            d.len(),
+            4,
+            "the title and the footer are no findings: {d:?}"
+        );
+
+        // a block: each row at its own line, the one message under it said by both
+        for (i, line) in [(0, 139), (1, 140)] {
+            assert_eq!(d[i].severity, Severity::Warning);
+            assert_eq!(d[i].kind.as_deref(), Some("pack-requirement"));
+            assert_eq!(d[i].file.as_deref(), Some(Path::new("yaml/smoke.satz")));
+            assert_eq!(d[i].line, Some(line));
+            assert_eq!(
+                d[i].message,
+                "packs on while a pack they need is off: needs `presets/estate-map.satz`, which is off\nfix: satz add-pack smoke.satz presets/estate-map.satz"
+            );
+        }
+
+        assert_eq!(d[2].severity, Severity::Error);
+        assert_eq!(d[2].kind.as_deref(), Some("notice"));
+        assert_eq!(
+            (d[2].file.as_deref(), d[2].line),
+            (Some(Path::new("yaml/new.satz")), Some(79))
+        );
+        assert!(
+            d[2].message.starts_with(
+                "notices open — what a pack asks to be run once it is on: Run satz adopt first."
+            ),
+            "{}",
+            d[2].message
+        );
+
+        // no location, no text under it: the subject is what it says
+        assert_eq!(d[3].severity, Severity::Info);
+        assert_eq!((d[3].file.as_deref(), d[3].line), (None, None));
+        assert!(d[3].message.ends_with(": use_budget"), "{}", d[3].message);
+    }
+
+    #[test]
+    fn a_line_that_only_starts_with_a_severity_word_is_no_row() {
+        let d = parse_satz_output(
+            "error: transpile --check: yaml/a.satz:3: bad",
+            DiagSource::Check,
+        );
+        assert_eq!(d[0].kind, None);
+        assert_eq!((d[0].line, d[0].message.as_str()), (Some(3), "bad"));
+        let d = parse_satz_output("errors happen", DiagSource::Check);
+        assert_eq!(d[0].message, "errors happen");
     }
 
     #[test]
@@ -394,10 +637,10 @@ mod tests {
     fn a_note_without_a_group_keeps_its_message_verbatim() {
         let d = Diagnostic::from_finding(
             Path::new("/e/yaml"),
-            &finding(FindingSeverity::Note, "prerequisites"),
+            &finding(FindingSeverity::Info, "prerequisites"),
             DiagSource::Tool("satz_transpile_check".to_string()),
         );
-        assert_eq!(d.severity, Severity::Note);
+        assert_eq!(d.severity, Severity::Info);
         assert_eq!(d.message, "the provider requires location");
         assert_eq!(
             d.source,

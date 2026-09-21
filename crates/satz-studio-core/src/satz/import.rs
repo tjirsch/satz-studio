@@ -9,14 +9,14 @@
 //!
 //! The SOURCE decides the shape ([`ImportShape`]) and the shape decides the flags:
 //! `--on-collision`, `--only`, `--exclude`, `--all`, `--customer-shortname` and
-//! `--output` belong to a state file or a live scope, `--wrap-all` to Terraform HCL,
-//! `--gate`, `--kind` and `--fork` to the legacy YAML dialect. [`ImportOptions::argv`]
+//! `--output` belong to a state file or a live scope, `--wrap-all` to Terraform HCL.
+//! [`ImportOptions::argv`]
 //! renders exactly the flags of the chosen shape, so no form can send satz a flag it
 //! would ignore.
 //!
 //! What the run WROTE is read back rather than predicted ([`written_since`]): the file
 //! name differs by shape — `discovered.satz` from a state file or a live scope,
-//! `imported-hcl.satz` from Terraform, `<stem>.satz` beside the source from YAML — and
+//! `imported-hcl.satz` from Terraform — and
 //! `--output` moves it again. And what the run FOUND is its console output:
 //! `satz import` writes no JSON report, so [`ImportReport`] splits the lines it streamed
 //! into the sections an operator acts on, which is what makes a dropped, skipped or
@@ -44,17 +44,10 @@ pub enum ImportShape {
     Live,
     /// Terraform HCL: a `.tf` file or the directory holding them
     Hcl,
-    /// the legacy YAML dialect, which exists only to be migrated
-    Yaml,
 }
 
 impl ImportShape {
-    pub const ALL: [ImportShape; 4] = [
-        ImportShape::State,
-        ImportShape::Live,
-        ImportShape::Hcl,
-        ImportShape::Yaml,
-    ];
+    pub const ALL: [ImportShape; 3] = [ImportShape::State, ImportShape::Live, ImportShape::Hcl];
 
     /// The value of `--from`. Every run states it: the form knows the shape, so satz is
     /// told rather than left to infer one from a path.
@@ -63,7 +56,6 @@ impl ImportShape {
             ImportShape::State => "state",
             ImportShape::Live => "org",
             ImportShape::Hcl => "hcl",
-            ImportShape::Yaml => "yaml",
         }
     }
 
@@ -73,7 +65,6 @@ impl ImportShape {
             ImportShape::State => "state",
             ImportShape::Live => "live",
             ImportShape::Hcl => "hcl",
-            ImportShape::Yaml => "yaml",
         }
     }
 
@@ -107,34 +98,6 @@ impl OnCollision {
     }
 }
 
-/// `--kind`: what a converted YAML file declares itself to be.
-///
-/// satz's own default is `pack`; this door's is `estate`, because starting an estate is
-/// what the door is for, and the command line the form shows says which it sends. A
-/// conversion declared an estate is compiled before it is kept — satz removes a file
-/// that does not compile and says so.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum YamlKind {
-    #[default]
-    Estate,
-    Pack,
-}
-
-impl YamlKind {
-    pub const ALL: [YamlKind; 2] = [YamlKind::Estate, YamlKind::Pack];
-
-    pub fn as_arg(self) -> &'static str {
-        match self {
-            YamlKind::Estate => "estate",
-            YamlKind::Pack => "pack",
-        }
-    }
-
-    pub fn parse(value: &str) -> Option<Self> {
-        YamlKind::ALL.into_iter().find(|k| k.as_arg() == value)
-    }
-}
-
 /// The arguments of one `satz import` run, as the form holds them.
 ///
 /// Every field is a flag `satz import` has, and a field of a shape other than
@@ -146,7 +109,7 @@ impl YamlKind {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ImportOptions {
     pub shape: ImportShape,
-    /// the positional source: a path for the state, hcl and yaml shapes, a scope for
+    /// the positional source: a path for the state and hcl shapes, a scope for
     /// the live one, empty for the live shape's "the import config's `root`"
     pub source: String,
     /// `--only`: the resource types to import (state, live)
@@ -169,12 +132,6 @@ pub struct ImportOptions {
     pub verbose: bool,
     /// `--wrap-all`: carry every block verbatim inside `hcl trust` (hcl)
     pub wrap_all: bool,
-    /// `--gate`: the estate a converted pack is compiled in the context of (yaml)
-    pub gate: String,
-    /// `--kind` (yaml)
-    pub kind: YamlKind,
-    /// `--fork`: write the conversion as a `<stem>.local.satz` fork (yaml)
-    pub fork: bool,
 }
 
 impl ImportOptions {
@@ -209,37 +166,14 @@ impl ImportOptions {
                     argv.push("--wrap-all".to_string());
                 }
             }
-            ImportShape::Yaml => {
-                push_value(&mut argv, "--gate", &self.gate);
-                argv.push("--kind".to_string());
-                argv.push(self.kind.as_arg().to_string());
-                if self.fork {
-                    argv.push("--fork".to_string());
-                }
-            }
         }
         argv
     }
 
     /// The directories this import writes a `.satz` file into, which is where the run is
-    /// read back from.
-    ///
-    /// The state, live and hcl shapes write inside the estate, into `yaml_dir`. The yaml
-    /// shape converts a file in place and writes the result BESIDE its source, which is
-    /// `yaml_dir` only when the legacy file is already there.
+    /// read back from: `yaml_dir`, for every shape.
     pub fn write_dirs(&self, estate: &EstateDir) -> Vec<PathBuf> {
-        match self.shape {
-            ImportShape::State | ImportShape::Live | ImportShape::Hcl => vec![estate.yaml_dir()],
-            ImportShape::Yaml => {
-                let source = resolve(&estate.dir, self.source.trim());
-                vec![
-                    source
-                        .parent()
-                        .map(Path::to_path_buf)
-                        .unwrap_or_else(|| estate.dir.clone()),
-                ]
-            }
-        }
+        vec![estate.yaml_dir()]
     }
 
     /// That the source is THERE, and that a live scope is one: the half a form can ask on
@@ -248,7 +182,7 @@ impl ImportOptions {
     pub fn check_source_exists(&self, dir: &Path) -> Result<(), SatzError> {
         let source = self.source.trim();
         match self.shape {
-            ImportShape::State | ImportShape::Yaml => {
+            ImportShape::State => {
                 let path = resolve(dir, source);
                 if path.is_file() {
                     Ok(())
@@ -324,8 +258,7 @@ pub fn plan(dir: &Path) -> Result<ImportPlan, SatzError> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Written {
     pub path: PathBuf,
-    /// the file declares an estate, so it is one the app can open; a converted pack
-    /// does not
+    /// the file declares an estate, so it is one the app can open
     pub declares_estate: bool,
 }
 
@@ -431,9 +364,7 @@ impl ImportReport {
             } else if trimmed.starts_with("import: skipped") {
                 in_skipped = true;
                 report.skipped.push(text.clone());
-            } else if !indented
-                && (trimmed.starts_with("Wrote ") || trimmed.starts_with("converted "))
-            {
+            } else if !indented && trimmed.starts_with("Wrote ") {
                 report.wrote.push(text.clone());
             } else {
                 report.rest.push(text.clone());
@@ -610,15 +541,6 @@ mod tests {
             .argv(),
             ["import", "src", "--from", "hcl"]
         );
-        assert_eq!(
-            ImportOptions {
-                shape: ImportShape::Yaml,
-                source: "old.yaml".to_string(),
-                ..Default::default()
-            }
-            .argv(),
-            ["import", "old.yaml", "--from", "yaml", "--kind", "estate"]
-        );
     }
 
     #[test]
@@ -681,32 +603,6 @@ mod tests {
         );
     }
 
-    #[test]
-    fn the_yaml_shape_renders_its_own_three_flags() {
-        let options = ImportOptions {
-            shape: ImportShape::Yaml,
-            source: "yaml/pack.yaml".to_string(),
-            gate: "yaml/main.satz".to_string(),
-            kind: YamlKind::Pack,
-            fork: true,
-            ..Default::default()
-        };
-        assert_eq!(
-            options.argv(),
-            [
-                "import",
-                "yaml/pack.yaml",
-                "--from",
-                "yaml",
-                "--gate",
-                "yaml/main.satz",
-                "--kind",
-                "pack",
-                "--fork",
-            ]
-        );
-    }
-
     /// The whole point of a shape-scoped render: a form that carries every field must
     /// still send only the flags of the shape it is on, because satz would refuse or
     /// ignore the rest.
@@ -722,9 +618,6 @@ mod tests {
             output: "discovery.satz".to_string(),
             verbose: true,
             wrap_all: true,
-            gate: "yaml/main.satz".to_string(),
-            kind: YamlKind::Pack,
-            fork: true,
             shape: ImportShape::State,
         };
         let state_only = [
@@ -737,29 +630,11 @@ mod tests {
             "--verbose",
         ];
         let hcl_only = ["--wrap-all"];
-        let yaml_only = ["--gate", "--kind", "--fork"];
 
         for (shape, mine, others) in [
-            (
-                ImportShape::State,
-                state_only.as_slice(),
-                [hcl_only.as_slice(), yaml_only.as_slice()].concat(),
-            ),
-            (
-                ImportShape::Live,
-                state_only.as_slice(),
-                [hcl_only.as_slice(), yaml_only.as_slice()].concat(),
-            ),
-            (
-                ImportShape::Hcl,
-                hcl_only.as_slice(),
-                [state_only.as_slice(), yaml_only.as_slice()].concat(),
-            ),
-            (
-                ImportShape::Yaml,
-                yaml_only.as_slice(),
-                [state_only.as_slice(), hcl_only.as_slice()].concat(),
-            ),
+            (ImportShape::State, state_only.as_slice(), hcl_only.to_vec()),
+            (ImportShape::Live, state_only.as_slice(), hcl_only.to_vec()),
+            (ImportShape::Hcl, hcl_only.as_slice(), state_only.to_vec()),
         ] {
             let argv = ImportOptions {
                 shape,
@@ -957,12 +832,6 @@ mod tests {
             };
             assert_eq!(options.write_dirs(&estate), [yaml_dir.clone()].as_slice());
         }
-        let converted = ImportOptions {
-            shape: ImportShape::Yaml,
-            source: "legacy/main.yaml".to_string(),
-            ..Default::default()
-        };
-        assert_eq!(converted.write_dirs(&estate), [tmp.path().join("legacy")]);
     }
 
     /// The read-back: a file that is new is what the run wrote, and so is one whose
@@ -1104,20 +973,5 @@ mod tests {
         assert_eq!(report.rest.len(), 3);
         // and the skipped block stays whole, heading and items
         assert_eq!(report.skipped.len(), 2);
-    }
-
-    /// The yaml shape says `converted <source> -> <file>` and reports what compiled.
-    #[test]
-    fn the_yaml_report_reads_the_conversion_as_a_written_file() {
-        let lines = vec![
-            CliLine::Stdout("converted yaml/main.yaml -> yaml/main.satz".to_string()),
-            CliLine::Stdout(
-                "CONVERTED: yaml/main.satz compiles — 5 resources emitted:".to_string(),
-            ),
-            CliLine::Stdout("     1 google_folder".to_string()),
-        ];
-        let report = ImportReport::of(&lines);
-        assert_eq!(report.wrote, ["converted yaml/main.yaml -> yaml/main.satz"]);
-        assert_eq!(report.rest.len(), 2);
     }
 }

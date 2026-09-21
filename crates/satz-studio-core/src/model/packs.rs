@@ -28,7 +28,7 @@ use crate::cst::{UseLine, UseState};
 use crate::diag::{DiagSource, Diagnostic, Severity};
 use crate::satz::reports::{OptionRow, QuestionKind, QuestionRow, QuestionsReport};
 
-/// The rows, and one `Note` per line that is active while its gate is false: satz
+/// The rows, and one `Info` per line that is active while its gate is false: satz
 /// leaves such a pack out, and nothing else says so.
 pub(super) fn build(
     main: &Path,
@@ -101,7 +101,7 @@ pub(super) fn build(
                 Diagnostic {
                     file: None,
                     line: None,
-                    severity: Severity::Note,
+                    severity: Severity::Info,
                     kind: None,
                     message: format!(
                         "line active, gate false: `use \"{}\" when {gate}` is in, but `{gate}` is false, so the pack is left out",
@@ -185,7 +185,7 @@ fn oneof_choice(q: &QuestionRow, o: &OptionRow) -> Choice {
     }
 }
 
-/// The edges between `rows`, and one `Note` per declaration that could not become one.
+/// The edges between `rows`, and one `Info` per declaration that could not become one.
 ///
 /// An `ask_when` is an edge when its gate is a row's gate and at least one of the
 /// question's own gates is too — the param a question answers, or the options of a
@@ -310,7 +310,7 @@ fn model_note(message: String) -> Diagnostic {
     Diagnostic {
         file: None,
         line: None,
-        severity: Severity::Note,
+        severity: Severity::Info,
         kind: None,
         message,
         source: DiagSource::Model,
@@ -480,7 +480,7 @@ mod tests {
         let (_, notes) = edges(Path::new("acme.satz"), &[], &d);
         assert_eq!(notes.len(), 1);
         assert_eq!(notes[0].line, Some(7));
-        assert_eq!(notes[0].severity, Severity::Note);
+        assert_eq!(notes[0].severity, Severity::Info);
         assert!(notes[0].message.contains("presets/gone.satz"));
     }
 }

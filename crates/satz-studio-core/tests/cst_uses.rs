@@ -168,8 +168,8 @@ fn the_interview_skeleton_is_scanned_line_for_line() {
         assert_eq!(u.gate.as_deref(), Some(gate));
         let line = cst.slice(u.span);
         assert!(
-            line.starts_with("    // use \""),
-            "indentation kept: {line:?}"
+            line.starts_with("// use \""),
+            "a `use` stands at the top level, outside every folder: {line:?}"
         );
         assert_eq!(line.trim_start(), format!("// use \"{path}\" when {gate}"));
         assert!(u.phase_comment.is_some(), "{path} has a caption");
