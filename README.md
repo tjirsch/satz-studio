@@ -33,8 +33,9 @@ reason for each, and its warnings.
 beside it.
 
 Once an estate is open the window is ordered by the job, and the rail reads in that
-order: **Overview**, which estate this is — the customer, the organisation and the
-infrastructure it names, in its own answers — and what it still has to do; **Packs**,
+order: **Overview**, which estate this is — its short name, the customer, the customer
+id and the organisation id as its own file sets them, then the infrastructure it names,
+in its own answers — and what it still has to do; **Packs**,
 every pack satz's pack graph offers, as the estate has it, the packs that need another
 hung below it, each switched on and off by satz's own `add-pack` and `remove-pack`;
 **Decisions**, the
