@@ -2,7 +2,9 @@
 
 - **Status:** accepted; its rule that `MIN_SATZ` names the submodule's tag is superseded
   by [ADR 0014](0014-a-newer-satz-is-a-notice-and-the-app-looks-for-releases.md), where
-  `MIN_SATZ` is the oldest satz the build works with
+  `MIN_SATZ` is the oldest satz the build works with; its Windows half — satz has no Windows release, so
+  the Windows CI job builds satz from the submodule — no longer holds: satz publishes a
+  Windows build, and the app and the Windows CI job install it through `satz-installer.ps1`
 - **Date:** 2026-09-13
 - **Deciders:** the maintainer
 
