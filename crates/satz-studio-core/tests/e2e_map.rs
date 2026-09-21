@@ -5,7 +5,9 @@
 //! names why; and a gate bound true whose line is gone, which satz's pack report shows as
 //! an absent pack with the finding and the command that answers it, and which
 //! `satz transpile --check` names — a warning at satz's default validation level, a
-//! refusal at `error`.
+//! refusal at `error`. And a gate answered through `satz_interview` that satz refuses
+//! after it has written the file: the file is back as it was either way, and the refusal
+//! says it was put back exactly when it was.
 
 #[path = "fixtures/e2e/support.rs"]
 mod support;
@@ -13,8 +15,8 @@ mod support;
 use satz_studio_core::cst::{Cst, TypedValue, UseState, scan_uses};
 use satz_studio_core::diag::{DiagSource, Severity, parse_satz_output};
 use satz_studio_core::edit::{
-    CheckFailure, Checker, CliChecker, CommitError, Edit, EditSession, McpChecker, Rollback,
-    sha256_hex,
+    Cause, CheckFailure, Checker, CliChecker, CommitError, Delegated, Edit, EditSession,
+    McpChecker, Restore, Rollback, sha256_hex,
 };
 use satz_studio_core::satz::reports::{AddPackArgs, PackLine, QuestionState};
 use std::sync::Arc;
@@ -307,5 +309,77 @@ async fn a_gate_bound_true_without_its_line_is_absent_and_the_check_names_the_pa
     let row = m.packs.row(BUDGET).unwrap();
     assert_eq!((row.line, row.deploys), (PackLine::Active, true));
     assert!(row.findings.is_empty(), "{:?}", row.findings);
+    assert!(estate.temp_files().is_empty(), "{:?}", estate.temp_files());
+}
+
+#[tokio::test]
+async fn a_refused_answer_leaves_the_file_as_it_was_and_says_so_when_satz_had_changed_it() {
+    let estate = support::estate_dir(None);
+    let main = estate.create_skeleton("new.satz").await;
+    let session = estate.open("new.satz").await;
+    support::answer_like_the_smoke_matrix(&session).await;
+    let (change, _) = support::switch(
+        &session,
+        "satz_add_pack",
+        &AddPackArgs {
+            pack: support::MAP.to_string(),
+            with_requirements: true,
+        },
+    )
+    .await
+    .unwrap_or_else(|e| panic!("add-pack the map: {e}"));
+    assert_eq!(change.switched, [support::MAP]);
+
+    // the central alerts read the audit logsink's project, and the logsink is off: the
+    // answer does not compile. satz 0.73.1 binds the gate and uncomments the line before
+    // it refuses; a satz that refuses first writes nothing. Either way the file is what it
+    // was, and the refusal names a restore exactly when there was one.
+    let before = support::read(&main);
+    let alerts = "// use \"presets/monitoring/organization-cis-log-alerts-central.satz\" when use_central_alerts";
+    assert!(before.contains(alerts), "{before}");
+    let delegated = support::delegate(
+        &session,
+        "satz_interview",
+        &support::one_answer("use_central_alerts", serde_json::json!(true)),
+    )
+    .await;
+    let Delegated::NotLanded(refused) = delegated else {
+        panic!("the answer landed: {delegated:?}")
+    };
+    let Cause::Refused(outcome) = &refused.cause else {
+        panic!("{refused:?}")
+    };
+    assert!(outcome.text.contains("logsink"), "{}", outcome.text);
+    assert_eq!(support::read(&main), before, "the file is back as it was");
+    let message = refused.message("satz_interview");
+    match &refused.restore {
+        Restore::Restored(path) => {
+            assert_eq!(path, &session.main);
+            assert!(
+                message
+                    .ends_with("satz refused and had changed new.satz; the file is back as it was"),
+                "{message}"
+            );
+        }
+        Restore::Untouched => assert_eq!(message, outcome.text),
+        Restore::Failed(e) => panic!("{e}"),
+    }
+
+    // a refusal that wrote nothing: the file untouched, satz's sentence and no more
+    let args = AddPackArgs {
+        pack: BILLING.to_string(),
+        with_requirements: false,
+    };
+    let Delegated::NotLanded(refused) = support::delegate(&session, "satz_add_pack", &args).await
+    else {
+        panic!("billing without a security model landed")
+    };
+    let Cause::Refused(outcome) = &refused.cause else {
+        panic!("{refused:?}")
+    };
+    assert!(matches!(refused.restore, Restore::Untouched), "{refused:?}");
+    assert_eq!(refused.message("satz_add_pack"), outcome.text);
+    assert!(!outcome.text.contains("had changed"), "{}", outcome.text);
+    assert_eq!(support::read(&main), before);
     assert!(estate.temp_files().is_empty(), "{:?}", estate.temp_files());
 }

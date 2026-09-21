@@ -130,10 +130,13 @@ nothing blocks in an event handler.
   reload:
 
   - `Answer { subject, value }` is satz's own writer: `Snapshot::take` of the main file,
-    `satz_interview {answers: {subject: value}}` (for a `oneof` the value is the chosen
-    option's param name), then `Snapshot::verify` through `McpChecker` on the real path.
-    A refused tool call wrote nothing and is satz's own sentence in a toast (the brace
-    refusal included). A check that refuses restores the bytes, puts its diagnostics in
+    then `Snapshot::delegate` around `satz_interview {answers: {subject: value}}` (for a
+    `oneof` the value is the chosen option's param name), with `McpChecker` on the real
+    path. A refused tool call is satz's own sentence in a toast and in the drawer (the
+    brace refusal included); when satz had changed the file before it refused, or a call
+    that returned no result had, the bytes are put back and the sentence ends "satz
+    refused and had changed `<file>`; the file is back as it was". A check that refuses
+    restores the bytes, puts its diagnostics in
     the drawer — they stay through the reload that follows — and a toast names the
     first line; a check that passes puts the findings it reported there instead, so a
     warning shows at its line beside the write that landed. `AcceptDefaults` is the
@@ -149,8 +152,9 @@ nothing blocks in an event handler.
     writes it where the pack graph places it — the map's line as much as any other;
     `satz_remove_pack` binds the gate false and leaves the line. A switch satz refuses —
     a pack it needs is off, a pack that needs it is on, a line not gated on its gate —
-    wrote nothing: satz's sentence is a toast and a diagnostic in the drawer, beside what
-    the reload's check says of the file. A switch that lands says what it switched and
+    is satz's sentence in a toast and a diagnostic in the drawer, beside what the
+    reload's check says of the file, and the file is compared with its record and put
+    back as an answer's is. A switch that lands says what it switched and
     what it opened, and raises the notices it opened as an answer does. The app writes
     no pack line itself.
   - `WritePrerequisites` is the same delegated write over `satz_update_prerequisites

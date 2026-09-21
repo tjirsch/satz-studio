@@ -4,11 +4,11 @@
 //! `satz transpile --check`, then the real file is replaced atomically. A file that
 //! changed under the app is refused, never merged. Answers and pack toggles do not
 //! come through here — they are satz's own writer, called through `satz_interview`;
-//! [`Snapshot`] is the shape that write takes.
+//! [`Snapshot::delegate`] is the shape that write takes.
 //!
 //! The lock lives in the session: a caller holds [`EstateSession::write_lock`] across
-//! [`EditSession::apply`] and [`Proposed::commit`], and across a delegated write and
-//! its [`Snapshot::verify`], so one writer at a time reaches the file.
+//! [`EditSession::apply`] and [`Proposed::commit`], and across a delegated write
+//! ([`Snapshot::delegate`]), so one writer at a time reaches the file.
 //!
 //! [`EstateSession::write_lock`]: crate::satz::EstateSession::write_lock
 
@@ -21,7 +21,7 @@ use std::path::{Path, PathBuf};
 use std::pin::Pin;
 
 pub use check::{CliChecker, McpChecker};
-pub use snapshot::Snapshot;
+pub use snapshot::{Cause, Delegated, NotLanded, Restore, Snapshot};
 
 use crate::cst::{Cst, NodeId, TypedValue};
 use crate::diag::Diagnostic;
