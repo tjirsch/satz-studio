@@ -119,13 +119,13 @@ proves of the core.
 - **The bundles.** `.github/workflows/release.yml` builds the `.app` and `.dmg` on
   `macos-15` (arm64 — macOS is Apple silicon alone), the `.deb` and `.AppImage` on
   `ubuntu-24.04` and the `.msi` on `windows-2022`, both x86_64. Every bundle carries
-  `LICENSE` and `NOTICE` (`bundle.resources` in `crates/satz-studio/Dioxus.toml`): in
+  `LICENSE`, `NOTICE`, `THIRD-PARTY-LICENSES.md` (the licence text of every crate the app is compiled from), `LICENSE-MaterialSymbols` (the icon font's) and `LICENSE-satz-tree-sitter` (the vendored grammar's) (`bundle.resources` in `crates/satz-studio/Dioxus.toml`): in
   `SatzStudio.app/Contents/Resources/`, in the MSI's install directory beside the
   executable, and in `/usr/lib/SatzStudio/` in the `.deb` and the AppImage. The macOS job
-  compares the two files in the `.app` with the checkout's and fails without them,
+  compares the five files in the `.app` with the checkout's and fails without them,
   because dx skips a resource it cannot find with a warning and exits 0; the `.deb`, the
   AppImage and the MSI are opened by hand after a tag to see them. A local
-  `dx bundle` runs from the repository root, where dx finds the two paths. That each bundle launches and opens
+  `dx bundle` runs from the repository root, where dx finds the five paths. That each bundle launches and opens
   the fixture estate is checked by hand on a machine of that OS: unzip or mount, start
   the app past the unsigned-build prompt the README names, the Open door → the
   repository's `tests/fixtures` → Open → the top bar shows `smoke.satz`, and the window
@@ -146,6 +146,7 @@ cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo test --workspace --locked                                # every unit and integration test
 bash scripts/e2e.sh                                            # the satz gate, the e2e tests, a build of the app
 bash scripts/check-names.sh                                    # the privacy gate over the tree
+bash scripts/update-third-party-licenses.sh --check            # THIRD-PARTY-LICENSES.md against Cargo.lock (cargo-about 0.9.2, after cargo fetch --locked)
 dx bundle --package satz-studio --platform desktop --release   # this machine's bundle, under target/dx/satz-studio/bundle/
 ```
 

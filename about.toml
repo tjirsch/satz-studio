@@ -1,0 +1,51 @@
+# cargo-about — the licence texts of the crates compiled into satz-studio.
+#
+#   scripts/update-third-party-licenses.sh           # rewrite THIRD-PARTY-LICENSES.md
+#   scripts/update-third-party-licenses.sh --check    # fail when it is stale
+#
+# The generated file travels in every bundle (`resources` in
+# crates/satz-studio/Dioxus.toml), which is what MIT and Apache 2.0 ask of a binary
+# redistribution. `NOTICE` names the material that is not a crate.
+
+# The allow-list, and the preference order for a crate that offers a choice. A
+# dependency under a licence that is not here fails the generate, so a new licence
+# reaches a person instead of the file. Apache-2.0 first: a crate offered as
+# `MIT OR Apache-2.0` is taken under Apache 2.0, satz-studio's own licence.
+accepted = [
+    "Apache-2.0",
+    # the LLVM exception adds a permission to Apache 2.0 and takes none away; the
+    # crates that carry it offer no plain-Apache arm
+    "Apache-2.0 WITH LLVM-exception",
+    "MIT",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "Unicode-3.0",
+    "CC0-1.0",
+    # file-level copyleft: it binds the files of the crate that carries it, which are
+    # used unmodified from crates.io, and asks nothing of the rest of the app beyond
+    # its text in this file (option-ext, through dirs-sys, through dirs and wry)
+    "MPL-2.0",
+]
+
+# The three platforms satz-studio is bundled for (.github/workflows/release.yml).
+# Fixing them here makes the file the same on every machine: a dependency that only
+# Windows or only Linux pulls in is in it wherever it is generated.
+targets = [
+    "aarch64-apple-darwin",
+    "x86_64-unknown-linux-gnu",
+    "x86_64-pc-windows-msvc",
+]
+
+# Test-only crates are compiled by `cargo test` and never shipped. Build
+# dependencies stay IN: a build script is how C code reaches the binary that is
+# shipped.
+ignore-dev-dependencies = true
+ignore-build-dependencies = false
+
+# satz-studio and satz-studio-core are this repository, satz-core and satz-hcl the
+# pinned satz submodule (all `publish = false`). Their licence is Apache 2.0: this
+# repository's LICENSE, and satz's, which NOTICE names.
+[private]
+ignore = true
