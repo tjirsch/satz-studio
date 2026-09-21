@@ -607,9 +607,9 @@ Code's and asks it nothing but `claude auth status --json`.
 
 ## 5. Deployment and CI
 
-`Dioxus.toml` names the bundle identity and the two files every bundle carries,
-`LICENSE` and `NOTICE` (`bundle.resources`, which dx resolves against the directory it
-runs in — the repository root); `dx bundle --release --platform desktop` produces the
+`Dioxus.toml` names the bundle identity and the five files every bundle carries,
+`LICENSE`, `NOTICE`, `THIRD-PARTY-LICENSES.md` (the licence text of every crate the app is compiled from), `LICENSE-MaterialSymbols` (the icon font's) and `LICENSE-satz-tree-sitter` (the vendored grammar's) (`bundle.resources`, which dx resolves against the directory it runs in — the
+repository root — and copies under the file name alone, so no two may share one); `dx bundle --release --platform desktop` produces the
 bundle per OS, and U10 builds the release workflow that runs it. The
 webview is a runtime dependency: WebView2 on Windows, `webkit2gtk-4.1` on Linux.
 
@@ -618,7 +618,11 @@ request for a branch, on the push for `main`, since a branch's pull request alre
 the jobs on the branch merged into `main`: the desktop crate's system libraries, then `scripts/install-satz.sh`, then
 `cargo fmt -p satz-studio-core -p satz-studio -- --check` (the two packages;
 `vendor/satz` is satz's own), `cargo clippy --workspace --all-targets --locked -- -D
-warnings`, `cargo test --workspace --locked` and `cargo build -p satz-studio --locked`.
+warnings`, `cargo test --workspace --locked` and `cargo build -p satz-studio --locked`, then
+`cargo fetch --locked` and `scripts/update-third-party-licenses.sh --check` with the
+cargo-about version the script names, which fails when `THIRD-PARTY-LICENSES.md` is not
+what `Cargo.lock` generates or a dependency's licence is not on `about.toml`'s
+allow-list.
 `install-satz.sh` downloads the cargo-dist installer of the newest satz release with
 its SHA-256 sidecar, refuses an installer without one, and refuses a release below
 `MIN_SATZ`; a tag given as its one argument installs that release instead. It follows

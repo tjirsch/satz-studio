@@ -21,7 +21,7 @@
 #
 # bash 3.2 compatible (macOS default).
 #
-# Copied from tjirsch/satz scripts/check-names.sh at v0.56.1; satz-studio adds its vendor hosts to ALLOW_DOMAIN and excludes vendor/ and the fixtures' generated JSON.
+# Copied from tjirsch/satz scripts/check-names.sh at v0.56.1; satz-studio adds its vendor hosts to ALLOW_DOMAIN and excludes vendor/ and the fixtures' generated JSON. THIRD-PARTY-LICENSES.md is skipped as satz skips it: upstream authors' addresses and domains, written by cargo about.
 set -uo pipefail
 orig_pwd="$PWD"
 cd "$(git rev-parse --show-toplevel)"
@@ -74,7 +74,7 @@ if [[ -n "$range" ]]; then
     git rev-parse --verify --quiet "$r^{commit}" >/dev/null || { echo "check-names: unusable commit range '$range' ($r does not resolve)"; exit 1; }
   done
 fi
-files=$(printf '%s\n' $files | grep -v -E '^(Cargo\.lock|tests/schemas/.*|vendor/.*|crates/satz-studio-core/tests/fixtures/.*\.json|.*\.(png|jpg|gif|svg))$' || true)
+files=$(printf '%s\n' $files | grep -v -E '^(Cargo\.lock|THIRD-PARTY-LICENSES\.md|tests/schemas/.*|vendor/.*|crates/satz-studio-core/tests/fixtures/.*\.json|.*\.(png|jpg|gif|svg))$' || true)
 
 fail=0
 report() { # $1 rule, $2 matching lines — no subshell, the flag must survive

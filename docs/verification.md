@@ -51,6 +51,7 @@ carry a claim the harness relies on.
 | The shape the pack declares decides an answer's shape, and a question declared without one takes the shape of the value it offers; a map and a question with neither have no typed field. A list field starts empty, is empty until a value is added, and sends one value as a JSON array of one | `src/model/params.rs`, `crates/satz-studio/src/components/typed_field.rs` | `the_declared_shape_decides_and_an_offer_answers_for_a_param_declared_without_one`, `one_value_in_a_list_field_is_sent_as_a_list_of_one` |
 | An estate directory outside every repository is `Outside` in git's own words; `init_steps` run through `git::run` make a repository that holds the estate file's directory with one commit naming the estate and the `.gitignore`d state left out; with an empty identity git refuses the commit on stderr, the run is a failure and nothing is committed; a git that cannot be run is `NoGit` and a missing directory is not mistaken for one | `tests/git_work_tree.rs`, `src/git.rs` | all |
 | The Overview owes a repository while git holds the estate outside one, with `InitRepository` offered and git's words in the row; without git the row names it and offers nothing to press; inside a repository, or before the first reload has asked, it owes none | `crates/satz-studio/src/views/overview.rs` | `an_estate_outside_a_repository_owes_one_with_the_fix_offered_and_git_s_own_words`, `without_git_the_row_names_git_and_offers_nothing_to_press`, `a_repository_or_a_fact_not_yet_read_owes_nothing` |
+| The repository's `NOTICE`, which every bundle carries, contains `vendor/satz/NOTICE` verbatim, so a pin bump that changes satz's notices fails until they are copied | `tests/notice.rs` | `notice_carries_the_notice_of_satz_verbatim` |
 | `Cst::text()` is the file; every `.satz` under `vendor/satz` parses through the grammar and lowers through `satz_core::satz::parse` | `tests/cst_roundtrip.rs`, `src/cst/grammar.rs` | all |
 | `scan_uses` finds every line of a `satz interview --create` skeleton and only the exact shape satz's `pack_line` writes | `tests/cst_uses.rs` | `the_interview_skeleton_is_scanned_line_for_line`, `only_the_exact_shape_is_a_pack_line` |
 | The model's pack report is satz's: read over the session as the reload reads it (`satz_packs`), every row — role, gate, answer, default, value, line state and number, `deploys`, each requirement with `met`, `required_by`, `excludes`, notices, findings — the unmanaged lines and the findings equal what `satz packs --format json` writes for the same estate, on the skeleton as written and interviewed with the map, the audit-log archive and the central alerts on. The rows carry the dependencies no `ask_when` declares: the central alerts and Sentinel need the archive, the findings mail the central alerts, the billing permissions a security-group model, the runner grant the runner. The archive switched off while the central alerts need it is refused, naming them. A pin bump that changes the graph is checked here without being named | `tests/e2e_pack_edges.rs` | `the_skeleton_s_rows_are_the_rows_satz_packs_writes`, `an_interviewed_estate_s_rows_are_the_rows_satz_packs_writes` |
@@ -119,13 +120,13 @@ proves of the core.
 - **The bundles.** `.github/workflows/release.yml` builds the `.app` and `.dmg` on
   `macos-15` (arm64 — macOS is Apple silicon alone), the `.deb` and `.AppImage` on
   `ubuntu-24.04` and the `.msi` on `windows-2022`, both x86_64. Every bundle carries
-  `LICENSE` and `NOTICE` (`bundle.resources` in `crates/satz-studio/Dioxus.toml`): in
+  `LICENSE`, `NOTICE`, `THIRD-PARTY-LICENSES.md` (the licence text of every crate the app is compiled from), `LICENSE-MaterialSymbols` (the icon font's) and `LICENSE-satz-tree-sitter` (the vendored grammar's) (`bundle.resources` in `crates/satz-studio/Dioxus.toml`): in
   `SatzStudio.app/Contents/Resources/`, in the MSI's install directory beside the
   executable, and in `/usr/lib/SatzStudio/` in the `.deb` and the AppImage. The macOS job
-  compares the two files in the `.app` with the checkout's and fails without them,
+  compares the five files in the `.app` with the checkout's and fails without them,
   because dx skips a resource it cannot find with a warning and exits 0; the `.deb`, the
   AppImage and the MSI are opened by hand after a tag to see them. A local
-  `dx bundle` runs from the repository root, where dx finds the two paths. That each bundle launches and opens
+  `dx bundle` runs from the repository root, where dx finds the five paths. That each bundle launches and opens
   the fixture estate is checked by hand on a machine of that OS: unzip or mount, start
   the app past the unsigned-build prompt the README names, the Open door → the
   repository's `tests/fixtures` → Open → the top bar shows `smoke.satz`, and the window
@@ -146,6 +147,7 @@ cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo test --workspace --locked                                # every unit and integration test
 bash scripts/e2e.sh                                            # the satz gate, the e2e tests, a build of the app
 bash scripts/check-names.sh                                    # the privacy gate over the tree
+bash scripts/update-third-party-licenses.sh --check            # THIRD-PARTY-LICENSES.md against Cargo.lock (cargo-about 0.9.2, after cargo fetch --locked)
 dx bundle --package satz-studio --platform desktop --release   # this machine's bundle, under target/dx/satz-studio/bundle/
 ```
 

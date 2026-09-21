@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 # sync-grammar.sh — refreshes the vendored tree-sitter grammar, vendor/satz-tree-sitter/,
 # from a checkout of the satz-tree-sitter repository (generated code, hence vendored): src/
-# whole (parser.c, grammar.json, node-types.json, tree_sitter/*.h), LICENSE, and
-# COMMIT — the checkout's HEAD, so the copy names what it was taken from.
+# whole (parser.c, grammar.json, node-types.json, tree_sitter/*.h), LICENSE as
+# LICENSE-satz-tree-sitter, and COMMIT — the checkout's HEAD, so the copy names what it
+# was taken from. The licence gets its own name because every bundle carries it beside
+# the app's own LICENSE, and dx copies a resource under its file name alone
+# (crates/satz-studio/Dioxus.toml).
 #
 #   scripts/sync-grammar.sh <path-to-satz-tree-sitter-checkout>
 #
@@ -31,6 +34,6 @@ new=$(git -C "$src" rev-parse HEAD)
 
 rm -rf "$dest/src"
 cp -R "$src/src" "$dest/src"
-cp "$src/LICENSE" "$dest/LICENSE"
+cp "$src/LICENSE" "$dest/LICENSE-satz-tree-sitter"
 printf '%s\n' "$new" > "$dest/COMMIT"
 echo "sync-grammar: vendor/satz-tree-sitter $old -> $new"

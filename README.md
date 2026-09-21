@@ -170,8 +170,8 @@ a fake CLI and need Python 3.
 | `vendor/satz-tree-sitter/` | the generated tree-sitter parser for Satz (`src/`), copied from the grammar repository at the commit named in `COMMIT`; `scripts/sync-grammar.sh` refreshes it and `crates/satz-studio-core/build.rs` compiles it |
 | `tests/fixtures/` | an estate directory over satz's smoke estates, its `config.toml` pointing into the submodule; a test that writes copies it first |
 | `docs/` | [`architecture.md`](docs/architecture.md), [`ui.md`](docs/ui.md), [`verification.md`](docs/verification.md) and the decision records under [`adr/`](docs/adr/README.md) |
-| `scripts/` | the privacy gate (`check-names.sh`), the satz installer CI runs on Linux and macOS (`install-satz.sh`, the newest satz release verified against its SHA-256 sidecar and held to `MIN_SATZ` or newer; the Windows job does the same in a PowerShell step of `ci.yml`), the verification harness (`e2e.sh`), the grammar refresh (`sync-grammar.sh`) |
-| `.github/workflows/` | `ci.yml` (formatting, clippy, tests, the verification harness, a build of the app; Linux, macOS on Apple silicon, and Windows on every push), `release.yml` (the bundles of the three operating systems on a tag) and `names-gate.yml` (the privacy gate over the tree and the commits) |
+| `scripts/` | the privacy gate (`check-names.sh`), the satz installer CI runs on Linux and macOS (`install-satz.sh`, the newest satz release verified against its SHA-256 sidecar and held to `MIN_SATZ` or newer; the Windows job does the same in a PowerShell step of `ci.yml`), the verification harness (`e2e.sh`), the grammar refresh (`sync-grammar.sh`), the third-party licence texts (`update-third-party-licenses.sh`, which writes `THIRD-PARTY-LICENSES.md` from `Cargo.lock` with `cargo about`; `about.toml` is its allow-list of licences and its targets, `about.hbs` its layout) |
+| `.github/workflows/` | `ci.yml` (formatting, clippy, tests, the verification harness, a build of the app, the third-party licence texts against `Cargo.lock`; Linux, macOS on Apple silicon, and Windows on every push), `release.yml` (the bundles of the three operating systems on a tag) and `names-gate.yml` (the privacy gate over the tree and the commits) |
 | `.githooks/` | the pre-commit and commit-msg hooks that run the gate locally |
 
 ## Release
@@ -192,7 +192,7 @@ artifacts.
 | `satz-studio_<version>_amd64.deb`, `satz-studio_<version>_x86_64.AppImage` | `ubuntu-24.04` |
 | `SatzStudio_<version>_x64.msi` | `windows-2022` |
 
-Every bundle carries `LICENSE` and `NOTICE`: in `SatzStudio.app/Contents/Resources/`,
+Every bundle carries `LICENSE`, `NOTICE`, `THIRD-PARTY-LICENSES.md` (the licence text of every crate the app is compiled from), `LICENSE-MaterialSymbols` (the icon font's) and `LICENSE-satz-tree-sitter` (the vendored grammar's): in `SatzStudio.app/Contents/Resources/`,
 beside the executable in the MSI's install directory, and in `/usr/lib/SatzStudio/` from
 the `.deb` and the AppImage.
 
@@ -248,5 +248,9 @@ app does; what is still to do is planned outside the repository.
 
 Apache License 2.0, see [`LICENSE`](LICENSE). [`NOTICE`](NOTICE) names the material
 this repository bundles under other terms — the Material Symbols font and the vendored
-tree-sitter grammar — and travels with a redistribution; every release bundle carries
-both files.
+tree-sitter grammar — ends with satz's own NOTICE verbatim, since satz-core is compiled
+into the app, and travels with a redistribution.
+[`THIRD-PARTY-LICENSES.md`](THIRD-PARTY-LICENSES.md) is the licence text of every crate
+the app is compiled from, generated from `Cargo.lock` by
+`scripts/update-third-party-licenses.sh`. Every release bundle carries those three files
+and the licence texts of the font and the grammar.

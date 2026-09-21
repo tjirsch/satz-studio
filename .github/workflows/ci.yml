@@ -62,6 +62,17 @@ jobs:
         run: bash scripts/e2e.sh --ci
       - name: build the app
         run: cargo build -p satz-studio --locked
+      # cargo-about at the exact version the script names: a different one can read a
+      # crate's licence file differently, and the file would then differ between a
+      # machine and CI with nothing in the repository having changed. `cargo fetch`
+      # unpacks the sources of all three release targets, which the script reads
+      # offline.
+      - uses: cargo-bins/cargo-binstall@main
+      - name: third-party licence texts match Cargo.lock
+        run: |
+          cargo binstall -y --locked "cargo-about@$(sed -n 's/^WANT=//p' scripts/update-third-party-licenses.sh)"
+          cargo fetch --locked
+          bash scripts/update-third-party-licenses.sh --check
 
   platforms:
     strategy:

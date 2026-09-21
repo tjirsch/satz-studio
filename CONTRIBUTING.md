@@ -72,7 +72,7 @@ below).
    `cargo install dioxus-cli@0.7.10` or `cargo binstall dioxus-cli@0.7.10`. Then
    `dx serve --package satz-studio` runs the app with hot reload and
    `dx bundle --package satz-studio --platform desktop --release`, run from the
-   repository root, builds this machine's bundle with `LICENSE` and `NOTICE` in it. `cargo run -p satz-studio` runs the app without it.
+   repository root, builds this machine's bundle with `LICENSE`, `NOTICE`, `THIRD-PARTY-LICENSES.md` and the licence texts of the font and the grammar in it. `cargo run -p satz-studio` runs the app without it.
 5. **The platform's webview.** Windows 10 and 11 ship WebView2. Linux needs
    `webkit2gtk-4.1`, and the build needs
    `libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev`
@@ -176,3 +176,23 @@ itself; there is no separate agreement to sign and none is asked for.
 
 A change that bundles a file from somewhere else adds its line to [`NOTICE`](NOTICE) in
 the same pull request, with the licence it comes under and where that licence text sits.
+
+A change that moves `Cargo.lock` regenerates
+[`THIRD-PARTY-LICENSES.md`](THIRD-PARTY-LICENSES.md), the licence text of every crate the
+app is compiled from, in the same pull request:
+
+```sh
+cargo binstall cargo-about@0.9.2   # the version scripts/update-third-party-licenses.sh names
+cargo fetch --locked
+bash scripts/update-third-party-licenses.sh
+```
+
+`ci.yml` runs the script with `--check` and fails on a stale file. A dependency under a
+licence `about.toml` does not accept fails the script, naming the crate; whether to accept
+that licence is the maintainer's decision, not the pull request's.
+
+A change that moves the `vendor/satz` pin and changes satz's own `NOTICE` copies the new
+`vendor/satz/NOTICE` over the text under "The NOTICE of satz" at the end of
+[`NOTICE`](NOTICE), verbatim, in the same pull request: satz-core is compiled into the
+app, so every bundle carries satz's notices, and `tests/notice.rs` in satz-studio-core
+fails until the two agree.
