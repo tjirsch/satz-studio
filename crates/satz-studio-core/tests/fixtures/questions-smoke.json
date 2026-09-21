@@ -343,6 +343,21 @@
       "pack": "monitoring.organization_audit_logsink"
     },
     {
+      "subject": "logsink_project_folder",
+      "kind": "param",
+      "prompt": "The folder the audit-archive project is created in — a folder the estate declares as `google_folder.<label>.name`, an existing one by its numeric id, or empty for the organisation",
+      "why": "It is the only thing that decides where the project lands. Left empty, the project is created directly under the organisation and inherits the organisation's policies and IAM alone; an estate `satz init` wrote has its infrastructure folder as `google_folder.infra_folder.name`. Changing it afterwards moves a live project between parents, which changes the policies and the grants it inherits.",
+      "reversal": "edit",
+      "blast": "low",
+      "state": "answered",
+      "current": "google_folder.logging.name",
+      "blocking": false,
+      "shape": "string",
+      "pack_description": "Organization-wide audit log sink into a GCS bucket — the compliance archive.",
+      "from": "presets/monitoring/organization-audit-logsink.satz",
+      "pack": "monitoring.organization_audit_logsink"
+    },
+    {
       "subject": "logsink_bucket_name",
       "kind": "param",
       "prompt": "The archive bucket's name (globally unique)",
@@ -419,8 +434,8 @@
     }
   ],
   "summary": {
-    "total": 27,
-    "answered": 1,
+    "total": 28,
+    "answered": 2,
     "unanswered": 26,
     "not_applicable": 0,
     "blocking": 0,
