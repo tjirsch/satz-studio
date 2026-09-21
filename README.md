@@ -73,14 +73,13 @@ that holds them up — in front of apply and bootstrap, which satz refuses.
   app or the app starts using something a later satz introduced, not with every satz
   release. Install satz with its installer or bring it up to date with `satz
   self-update`. The app looks at the path set in Settings, then on `PATH`, then at
-  `~/.local/bin/satz`. An older binary is refused at startup, naming the version found;
-  the banner runs `satz self-update` on it. With no satz at all, the banner runs satz's
-  own installer, checked against the SHA-256 its release publishes, into `~/.local/bin`
-  and without touching your shell profile — except on Windows. satz has published a
-  Windows build since 0.63.0, but it installs through PowerShell and this app does not
-  run that installer yet: install satz with
-  `irm https://github.com/tjirsch/satz/releases/latest/download/satz-installer.ps1 | iex`,
-  and the app finds `satz.exe` on `PATH`. A satz NEWER than the one the build was tested against runs, and a banner says
+  `~/.local/bin/satz` (`%USERPROFILE%\.local\bin\satz.exe` on Windows). An older binary
+  is refused at startup, naming the version found; the banner runs `satz self-update` on
+  it. With no satz at all, the banner runs satz's own installer — the shell script, or
+  `satz-installer.ps1` through PowerShell on Windows — checked against the SHA-256 its
+  release publishes, into `~/.local/bin` and without touching your `PATH` or shell
+  profile. On Windows `satz self-update` does not install, so "Update satz" runs that
+  PowerShell installer into the folder of the satz in use. A satz NEWER than the one the build was tested against runs, and a banner says
   so: both versions, and what satz's release rule makes of the difference — a patch
   changes nothing an estate needs; a minor may mean edits, refusals or a different plan
   — until you dismiss it for that version. Nothing runs without satz; the app has no
@@ -147,7 +146,7 @@ a fake CLI and need Python 3.
 | `vendor/satz-tree-sitter/` | the generated tree-sitter parser for Satz (`src/`), copied from the grammar repository at the commit named in `COMMIT`; `scripts/sync-grammar.sh` refreshes it and `crates/satz-studio-core/build.rs` compiles it |
 | `tests/fixtures/` | an estate directory over satz's smoke estates, its `config.toml` pointing into the submodule; a test that writes copies it first |
 | `docs/` | [`architecture.md`](docs/architecture.md), [`ui.md`](docs/ui.md), [`verification.md`](docs/verification.md) and the decision records under [`adr/`](docs/adr/README.md) |
-| `scripts/` | the privacy gate (`check-names.sh`), the satz installer CI runs (`install-satz.sh`, the newest satz release verified against its SHA-256 sidecar and held to `MIN_SATZ` or newer), the verification harness (`e2e.sh`), the grammar refresh (`sync-grammar.sh`) |
+| `scripts/` | the privacy gate (`check-names.sh`), the satz installer CI runs on Linux and macOS (`install-satz.sh`, the newest satz release verified against its SHA-256 sidecar and held to `MIN_SATZ` or newer; the Windows job does the same in a PowerShell step of `ci.yml`), the verification harness (`e2e.sh`), the grammar refresh (`sync-grammar.sh`) |
 | `.github/workflows/` | `ci.yml` (formatting, clippy, tests, the verification harness, a build of the app; Linux, macOS on Apple silicon, and Windows on every push), `release.yml` (the bundles of the three operating systems on a tag) and `names-gate.yml` (the privacy gate over the tree and the commits) |
 | `.githooks/` | the pre-commit and commit-msg hooks that run the gate locally |
 

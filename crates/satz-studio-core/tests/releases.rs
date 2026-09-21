@@ -219,14 +219,15 @@ async fn no_release_and_a_tag_that_is_not_a_version_are_said_as_such() {
 
 // ---- satz's installer ------------------------------------------------------------
 
-/// The installer runs with `sh`; satz's Windows installer is PowerShell, which the app does
-/// not run: these are unix tests.
-#[cfg(not(windows))]
+/// The fetch and the check run for both installers on every system; the run is the
+/// system's own — `sh` off Windows, `powershell` on it.
 mod installer {
-    use satz_studio_core::satz::install::{INSTALLER, SIDECAR};
+    use satz_studio_core::satz::install::Installer;
     use sha2::{Digest, Sha256};
 
     use super::*;
+
+    const BOTH: [Installer; 2] = [Installer::Shell, Installer::PowerShell];
 
     fn bytes(body: &[u8]) -> Canned {
         Canned {
@@ -236,24 +237,31 @@ mod installer {
         }
     }
 
-    fn sidecar_of(script: &[u8]) -> String {
-        format!("{}  {INSTALLER}\n", hex::encode(Sha256::digest(script)))
+    fn sidecar_of(installer: Installer, script: &[u8]) -> String {
+        format!(
+            "{}  {}\n",
+            hex::encode(Sha256::digest(script)),
+            installer.asset()
+        )
     }
 
-    /// A release of satz whose installer is `script` and whose sidecar says `sidecar`; the
-    /// asset URLs point back at the same server.
+    /// A release of satz that publishes both installers with their sidecars, as satz does;
+    /// the asset URLs point back at the same server, which answers the first download with
+    /// `script` and the second with `sidecar`.
     fn satz_release(script: Vec<u8>, sidecar: String) -> Server {
         Server::start(move |base| {
+            let assets: Vec<(&str, String)> = BOTH
+                .iter()
+                .flat_map(|i| [i.asset(), i.sidecar()])
+                .map(|name| (name, format!("{base}/download/{name}")))
+                .collect();
             vec![
                 Canned::json(
                     200,
                     release_json(
                         "v0.59.7",
                         "https://github.com/tjirsch/satz/releases/tag/v0.59.7",
-                        &[
-                            (INSTALLER, format!("{base}/download/{INSTALLER}")),
-                            (SIDECAR, format!("{base}/download/{SIDECAR}")),
-                        ],
+                        &assets,
                     ),
                 ),
                 bytes(&script),
@@ -262,116 +270,145 @@ mod installer {
         })
     }
 
-    async fn fetch(server: &Server) -> Result<install::VerifiedInstaller, InstallError> {
+    async fn fetch(
+        installer: Installer,
+        server: &Server,
+    ) -> Result<install::VerifiedInstaller, InstallError> {
         tokio::time::timeout(
             TIME_BOX,
-            install::fetch_verified(&github::client(), &server.base_url),
+            install::fetch_verified(installer, &github::client(), &server.base_url),
         )
         .await
         .expect("the fetch ends")
     }
 
-    /// A script that says what the installer is run with — whether the shell profile is left
-    /// alone, and whether stdin is closed — and leaves a mark where it ran.
-    fn fake_installer(mark: &std::path::Path) -> Vec<u8> {
-        format!(
-            "#!/bin/sh\necho \"no-modify-path=$SATZ_NO_MODIFY_PATH\"\nif read line; then echo \"stdin=open\"; else echo \"stdin=closed\"; fi\ntouch '{}'\n",
-            mark.display()
-        )
-        .into_bytes()
-    }
-
     #[tokio::test]
-    async fn an_installer_that_matches_its_sidecar_runs_without_a_path_edit_or_a_prompt() {
-        use satz_studio_core::satz::CliLine;
-        use tokio_util::sync::CancellationToken;
-
-        let tmp = tempfile::tempdir().unwrap();
-        let mark = tmp.path().join("ran");
-        let script = fake_installer(&mark);
-        let server = satz_release(script.clone(), sidecar_of(&script));
-
-        let verified = fetch(&server).await.unwrap();
-        assert_eq!(verified.release, "v0.59.7");
-        assert_eq!(verified.sha256, hex::encode(Sha256::digest(&script)));
-        // the release is read as `latest`, and both assets come from that one object
-        assert_eq!(
-            server.request_lines(),
-            [
-                "GET /repos/tjirsch/satz/releases/latest HTTP/1.1".to_string(),
-                format!("GET /download/{INSTALLER} HTTP/1.1"),
-                format!("GET /download/{SIDECAR} HTTP/1.1"),
-            ]
-        );
-
-        let (tx, mut rx) = tokio::sync::mpsc::channel(64);
-        let status = tokio::time::timeout(TIME_BOX, verified.run(tx, CancellationToken::new()))
-            .await
-            .expect("the installer ends")
-            .unwrap();
-        assert!(status.success());
-        let mut out = Vec::new();
-        while let Some(line) = rx.recv().await {
-            if let CliLine::Stdout(s) = line {
-                out.push(s);
-            }
+    async fn each_installer_and_its_sidecar_come_from_the_one_latest_release() {
+        for installer in BOTH {
+            let script = b"echo installed\n".to_vec();
+            let server = satz_release(script.clone(), sidecar_of(installer, &script));
+            let verified = fetch(installer, &server).await.unwrap();
+            assert_eq!(verified.release, "v0.59.7");
+            assert_eq!(verified.installer, installer);
+            assert_eq!(verified.sha256, hex::encode(Sha256::digest(&script)));
+            assert_eq!(
+                server.request_lines(),
+                [
+                    "GET /repos/tjirsch/satz/releases/latest HTTP/1.1".to_string(),
+                    format!("GET /download/{} HTTP/1.1", installer.asset()),
+                    format!("GET /download/{} HTTP/1.1", installer.sidecar()),
+                ]
+            );
         }
-        assert_eq!(out, ["no-modify-path=1", "stdin=closed"]);
-        assert!(mark.is_file(), "the verified installer ran");
     }
 
     #[tokio::test]
     async fn an_installer_that_does_not_match_its_sidecar_is_refused_and_never_runs() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mark = tmp.path().join("ran");
-        let script = fake_installer(&mark);
-        // the sidecar of another script
-        let server = satz_release(script, sidecar_of(b"#!/bin/sh\necho another release\n"));
-
-        let e = fetch(&server).await.unwrap_err();
-        let said = e.to_string();
-        assert!(matches!(e, InstallError::Mismatch { .. }), "{e:?}");
-        assert!(said.contains("nothing was run"), "{said}");
-        // there is no verified installer to run, and the script left no mark
-        assert!(!mark.exists());
+        for installer in BOTH {
+            let server = satz_release(
+                b"echo this release\n".to_vec(),
+                // the sidecar of another script
+                sidecar_of(installer, b"echo another release\n"),
+            );
+            let e = fetch(installer, &server).await.unwrap_err();
+            let said = e.to_string();
+            assert!(matches!(e, InstallError::Mismatch { .. }), "{e:?}");
+            assert!(said.contains("nothing was run"), "{said}");
+            assert!(said.contains(installer.asset()), "{said}");
+        }
     }
 
     #[tokio::test]
     async fn a_release_without_a_sidecar_is_refused_before_anything_is_downloaded() {
-        let server = Server::start(|base| {
-            vec![Canned::json(
-                200,
-                release_json(
-                    "v0.59.7",
-                    "https://github.com/tjirsch/satz/releases/tag/v0.59.7",
-                    &[(INSTALLER, format!("{base}/download/{INSTALLER}"))],
-                ),
-            )]
-        });
-        let e = fetch(&server).await.unwrap_err();
-        assert!(
-            matches!(e, InstallError::NoSidecar { ref release } if release == "v0.59.7"),
-            "{e:?}"
-        );
-        assert_eq!(server.request_lines().len(), 1, "only the release was read");
+        for installer in BOTH {
+            let server = Server::start(|base| {
+                vec![Canned::json(
+                    200,
+                    release_json(
+                        "v0.59.7",
+                        "https://github.com/tjirsch/satz/releases/tag/v0.59.7",
+                        &[(
+                            installer.asset(),
+                            format!("{base}/download/{}", installer.asset()),
+                        )],
+                    ),
+                )]
+            });
+            let e = fetch(installer, &server).await.unwrap_err();
+            assert!(
+                matches!(e, InstallError::NoSidecar { ref release, sidecar } if release == "v0.59.7" && sidecar == installer.sidecar()),
+                "{e:?}"
+            );
+            assert_eq!(server.request_lines().len(), 1, "only the release was read");
+        }
     }
 
     #[tokio::test]
     async fn a_sidecar_that_is_not_a_sha256_is_refused() {
-        let script = b"#!/bin/sh\necho installed\n".to_vec();
-        let server = satz_release(script, "<html>not found</html>".to_string());
-        let e = fetch(&server).await.unwrap_err();
-        assert!(matches!(e, InstallError::SidecarUnreadable(_)), "{e:?}");
+        for installer in BOTH {
+            let server = satz_release(
+                b"echo installed\n".to_vec(),
+                "<html>not found</html>".to_string(),
+            );
+            let e = fetch(installer, &server).await.unwrap_err();
+            assert!(matches!(e, InstallError::SidecarUnreadable { .. }), "{e:?}");
+        }
     }
-}
 
-/// On Windows nothing is fetched: the app does not run satz's PowerShell installer.
-#[cfg(windows)]
-#[tokio::test]
-async fn windows_fetches_nothing_and_says_why() {
-    let e = install::fetch_verified(&github::client(), "http://127.0.0.1:9")
-        .await
-        .unwrap_err();
-    assert!(matches!(e, InstallError::NoWindowsInstall), "{e:?}");
-    assert!(e.to_string().contains("does not install satz on Windows"));
+    /// A script, in this system's installer language, that says what it is run with —
+    /// the folder it is told, whether the `PATH` is left alone, whether stdin is closed —
+    /// and leaves a mark where it ran.
+    fn fake_installer(mark: &std::path::Path) -> Vec<u8> {
+        let script = if cfg!(windows) {
+            format!(
+                "Write-Output \"install-dir=$env:SATZ_INSTALL_DIR\"\r\nWrite-Output \"no-modify-path=$env:SATZ_NO_MODIFY_PATH\"\r\nif ($null -eq [Console]::In.ReadLine()) {{ Write-Output 'stdin=closed' }} else {{ Write-Output 'stdin=open' }}\r\nNew-Item -ItemType File -Path '{}' | Out-Null\r\n",
+                mark.display()
+            )
+        } else {
+            format!(
+                "#!/bin/sh\necho \"install-dir=$SATZ_INSTALL_DIR\"\necho \"no-modify-path=$SATZ_NO_MODIFY_PATH\"\nif read line; then echo \"stdin=open\"; else echo \"stdin=closed\"; fi\ntouch '{}'\n",
+                mark.display()
+            )
+        };
+        script.into_bytes()
+    }
+
+    #[tokio::test]
+    async fn this_system_s_installer_runs_into_the_named_folder_without_a_path_edit_or_a_prompt() {
+        use satz_studio_core::satz::CliLine;
+        use tokio_util::sync::CancellationToken;
+
+        let installer = Installer::for_this_system();
+        let tmp = tempfile::tempdir().unwrap();
+        let mark = tmp.path().join("ran");
+        let bin = tmp.path().join("bin");
+        let script = fake_installer(&mark);
+        let server = satz_release(script.clone(), sidecar_of(installer, &script));
+        let verified = fetch(installer, &server).await.unwrap();
+
+        let (tx, mut rx) = tokio::sync::mpsc::channel(64);
+        let status =
+            tokio::time::timeout(TIME_BOX, verified.run(&bin, tx, CancellationToken::new()))
+                .await
+                .expect("the installer ends")
+                .unwrap();
+        let mut out = Vec::new();
+        let mut err = Vec::new();
+        while let Some(line) = rx.recv().await {
+            match line {
+                CliLine::Stdout(s) => out.push(s),
+                CliLine::Stderr(s) => err.push(s),
+            }
+        }
+        assert!(status.success(), "{status}: {err:?}");
+        assert_eq!(
+            out,
+            [
+                format!("install-dir={}", bin.display()),
+                "no-modify-path=1".to_string(),
+                "stdin=closed".to_string(),
+            ]
+        );
+        assert!(mark.is_file(), "the verified installer ran");
+    }
 }

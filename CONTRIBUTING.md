@@ -63,11 +63,11 @@ below).
    tests that drive it. On Windows that script does not run: satz's Windows release
    installs through PowerShell, with
    `irm https://github.com/tjirsch/satz/releases/latest/download/satz-installer.ps1 | iex`,
-   which puts `satz.exe` in `%USERPROFILE%\.local\bin` and on `PATH`. There is no
-   ARM64 Windows build; on that machine, and on any host the release does not cover,
-   build satz from the submodule with
+   which puts `satz.exe` in `%USERPROFILE%\.local\bin` and on `PATH`; the Windows CI
+   job runs the same installer, verified against its sidecar first. On a host the
+   release does not cover, build satz from the submodule with
    `cargo build --release --manifest-path vendor/satz/Cargo.toml` and put
-   `vendor/satz/target/release` on `PATH`, as the Windows CI job does.
+   `vendor/satz/target/release` on `PATH`.
 4. **dioxus-cli 0.7.10**, for running and bundling the app:
    `cargo install dioxus-cli@0.7.10` or `cargo binstall dioxus-cli@0.7.10`. Then
    `dx serve --package satz-studio` runs the app with hot reload and

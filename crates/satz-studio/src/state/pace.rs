@@ -132,8 +132,6 @@ pub enum InstallOffer {
     /// Settings name a satz binary: the installer writes `~/.local/bin/satz`, which the
     /// search does not look at while a path is set
     PathSet,
-    /// satz has a Windows build; this app does not run its installer yet
-    NoWindowsInstall,
 }
 
 impl InstallOffer {
@@ -144,27 +142,18 @@ impl InstallOffer {
     pub fn sentence(self) -> &'static str {
         match self {
             InstallOffer::Offered => {
-                "Install satz here — satz's own installer, checked against the SHA-256 its release publishes, writes ~/.local/bin/satz and leaves your shell profile alone — or set its path in Settings."
+                "Install satz here — satz's own installer, checked against the SHA-256 its release publishes, writes satz into ~/.local/bin and leaves your PATH and shell profile alone — or set its path in Settings."
             }
             InstallOffer::PathSet => {
                 "Correct the satz path in Settings, or clear it to have satz installed into ~/.local/bin."
-            }
-            InstallOffer::NoWindowsInstall => {
-                "satz-studio does not install satz on Windows yet: satz publishes a Windows build, through a PowerShell installer this app does not run. Install satz with that one-liner — `irm https://github.com/tjirsch/satz/releases/latest/download/satz-installer.ps1 | iex` in PowerShell — and this window finds satz.exe on PATH, or set its path in Settings."
             }
         }
     }
 }
 
-/// The offer on this system, with or without a satz path in Settings.
+/// The offer with or without a satz path in Settings.
 pub fn install_offer(path_set: bool) -> InstallOffer {
-    install_offer_on(cfg!(windows), path_set)
-}
-
-fn install_offer_on(windows: bool, path_set: bool) -> InstallOffer {
-    if windows {
-        InstallOffer::NoWindowsInstall
-    } else if path_set {
+    if path_set {
         InstallOffer::PathSet
     } else {
         InstallOffer::Offered
@@ -379,27 +368,15 @@ mod tests {
     }
 
     #[test]
-    fn windows_is_never_offered_the_installer_and_says_why() {
-        for path_set in [false, true] {
-            let offer = install_offer_on(true, path_set);
-            assert_eq!(offer, InstallOffer::NoWindowsInstall);
-            assert!(!offer.offered());
-            // what is true since satz 0.63.0: there IS a Windows build, and the app
-            // does not run its PowerShell installer yet
-            assert!(
-                offer
-                    .sentence()
-                    .contains("does not install satz on Windows yet")
-            );
-            assert!(offer.sentence().contains("satz-installer.ps1"));
-        }
-        assert!(install_offer_on(false, false).offered());
+    fn the_installer_is_offered_unless_settings_name_a_satz() {
+        let offer = install_offer(false);
+        assert!(offer.offered());
         assert!(
-            install_offer_on(false, false)
+            offer
                 .sentence()
-                .contains("leaves your shell profile alone")
+                .contains("leaves your PATH and shell profile alone")
         );
-        assert_eq!(install_offer_on(false, true), InstallOffer::PathSet);
-        assert!(!install_offer_on(false, true).offered());
+        assert_eq!(install_offer(true), InstallOffer::PathSet);
+        assert!(!install_offer(true).offered());
     }
 }

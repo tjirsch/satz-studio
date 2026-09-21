@@ -58,7 +58,9 @@ pub enum AppAction {
     /// `satz self-update` on the satz that is installed, streamed into the update log,
     /// followed by locating satz again so the new version is the one in use. satz owns
     /// its own updater; the app only runs it. `check_only` passes `--check-only`, which
-    /// reports without installing.
+    /// reports without installing. On Windows, where `satz self-update` does not install,
+    /// the update is satz's PowerShell installer, verified and run into the folder of the
+    /// satz in use
     UpdateSatz {
         check_only: bool,
     },
@@ -71,9 +73,9 @@ pub enum AppAction {
     /// look, never an update: nothing is downloaded, run or written. The app looks once at
     /// launch on its own; this is the look again, when asked
     LookForStudioUpdate,
-    /// satz's own installer, verified against its SHA-256 sidecar and run without editing
-    /// the shell profile, while no satz is found; then satz is located again. Not offered
-    /// on Windows, where satz publishes no build
+    /// satz's own installer — the shell script, or the PowerShell script on Windows —
+    /// verified against its SHA-256 sidecar and run into `~/.local/bin` without editing the
+    /// `PATH` or the shell profile, while no satz is found; then satz is located again
     InstallSatz,
     CancelInstall,
     /// write the settings file, then locate satz again
@@ -158,6 +160,10 @@ pub async fn app_coroutine(mut rx: UnboundedReceiver<AppAction>, app: Store<AppS
 /// as well as a current one: a too-old satz updating itself is the entire point of the
 /// offer, and the path is the one the refusal carried.
 ///
+/// On Windows `satz self-update` checks but does not install, so an update there is
+/// [`install::update_by_installer`]: satz's PowerShell installer, verified against its
+/// sidecar and run into the folder of that same binary.
+///
 /// A `check_only` run is read: satz's `Latest version:` line against the satz that was
 /// asked becomes `update.found`, which the top bar, the title and Settings offer. An
 /// install clears it. A run the app started on its own ([`Asked::AtLaunch`]) says a failure
@@ -182,6 +188,11 @@ fn update_satz(app: Store<AppStore>, check_only: bool, asked: Asked) -> Option<C
         }
         return None;
     };
+    // satz's `self-update` refuses to install on Windows and names its PowerShell
+    // installer; the check alone runs there as everywhere
+    if cfg!(windows) && !check_only {
+        return install::update_by_installer(app, &path);
+    }
     // the version of the satz asked, which the check's answer is compared with
     let current = match &*app.satz().read() {
         SatzStatus::Located(bin) => Some(bin.version.clone()),
