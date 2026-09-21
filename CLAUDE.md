@@ -37,8 +37,9 @@ the rules that apply to every change, whoever or whatever makes it.
 - **satz is pinned once; `MIN_SATZ` is the oldest satz the app works with.** The
   submodule `vendor/satz` is the satz the app is built and tested against. `MIN_SATZ`
   (`crates/satz-studio-core/src/satz/binary.rs`) may sit below it, and a test holds it at
-  or below. Moving the pin is one pull request that moves the submodule and the recorded
-  reports under `tests/fixtures`, and leaves `MIN_SATZ` alone. `MIN_SATZ` rises only when
+  or below. Moving the pin is one pull request that moves the submodule, the recorded
+  reports under `tests/fixtures` and, when satz's `NOTICE` changed, its verbatim copy at
+  the end of `NOTICE` (`tests/notice.rs` holds the two together), and leaves `MIN_SATZ` alone. `MIN_SATZ` rises only when
   a satz release breaks the app — answered by a satz-studio patch release the same day —
   or when the app starts using something a later satz introduced (a flag, a tool, a report
   field), whose tests are what make that version the requirement (ADR 0014). There is no

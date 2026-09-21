@@ -248,7 +248,8 @@ app does; what is still to do is planned outside the repository.
 
 Apache License 2.0, see [`LICENSE`](LICENSE). [`NOTICE`](NOTICE) names the material
 this repository bundles under other terms — the Material Symbols font and the vendored
-tree-sitter grammar — and travels with a redistribution.
+tree-sitter grammar — ends with satz's own NOTICE verbatim, since satz-core is compiled
+into the app, and travels with a redistribution.
 [`THIRD-PARTY-LICENSES.md`](THIRD-PARTY-LICENSES.md) is the licence text of every crate
 the app is compiled from, generated from `Cargo.lock` by
 `scripts/update-third-party-licenses.sh`. Every release bundle carries those three files

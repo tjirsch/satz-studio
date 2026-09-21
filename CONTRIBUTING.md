@@ -190,3 +190,9 @@ bash scripts/update-third-party-licenses.sh
 `ci.yml` runs the script with `--check` and fails on a stale file. A dependency under a
 licence `about.toml` does not accept fails the script, naming the crate; whether to accept
 that licence is the maintainer's decision, not the pull request's.
+
+A change that moves the `vendor/satz` pin and changes satz's own `NOTICE` copies the new
+`vendor/satz/NOTICE` over the text under "The NOTICE of satz" at the end of
+[`NOTICE`](NOTICE), verbatim, in the same pull request: satz-core is compiled into the
+app, so every bundle carries satz's notices, and `tests/notice.rs` in satz-studio-core
+fails until the two agree.
