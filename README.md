@@ -44,7 +44,9 @@ to the compliance catalogs; **Deploy**, what hands it off. Chat and Settings sit
 foot of the rail, with Commands between them. Beside the estate the top bar names sit
 reload, "Switch estate" — the Start screen with your estates listed — and "Close estate";
 every satz command the app runs is one keystroke away in the commands palette (⌘K,
-Ctrl+K on Windows and Linux, or that footer button).
+Ctrl+K on Windows and Linux, or that footer button). What a command prints lands in the
+log in the form satz writes for a person — text, or markdown for the evidence report;
+`json` is a format you pick when you want the file.
 
 The Overview is one card, and it lists what the estate owes — no git repository, which
 `satz merge-presets` needs before it edits the estate, so an estate outside one cannot

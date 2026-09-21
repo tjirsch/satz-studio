@@ -25,7 +25,7 @@ use satz_studio_core::estate::{EstateDir, HclState};
 use satz_studio_core::git::{self, WorkTree};
 use satz_studio_core::model::EstateModel;
 use satz_studio_core::satz::reports::{
-    AddPackArgs, InterviewArgs, InterviewReport, NoticeRow, PackChange, PacksReport,
+    AddPackArgs, InterviewArgs, InterviewReport, MergeReport, NoticeRow, PackChange, PacksReport,
     PrerequisitesResult, QuestionsReport, RemovePackArgs,
 };
 use satz_studio_core::satz::{CliLine, EstateSession, ToolOutcome};
@@ -49,11 +49,6 @@ pub enum EstateAction {
     /// --import` puts the live ids in it and binds the notice's param itself
     RunNoticeCommand(Vec<String>),
     CancelCommand,
-    /// one MCP tool on this estate's session, its result into the log
-    RunTool {
-        name: String,
-        args: serde_json::Map<String, serde_json::Value>,
-    },
     /// `apply` or `bootstrap`: a one-shot script, opened in the OS terminal
     OpenInTerminal(Vec<String>),
     /// one answer through satz's own writer, `satz_interview {answers: {subject:
@@ -107,9 +102,6 @@ pub async fn estate_coroutine(
                 running.started(run_command(&session, app, args, After::Reload))
             }
             EstateAction::CancelCommand => running.cancel(),
-            EstateAction::RunTool { name, args } => {
-                run_tool(&session, app, name, args).await;
-            }
             EstateAction::OpenInTerminal(args) => open_in_terminal(&session, app, &args),
             EstateAction::Answer { subject, value } => {
                 let args = InterviewArgs {
@@ -134,23 +126,7 @@ pub async fn estate_coroutine(
             EstateAction::MergePresets => {
                 {
                     let _lock = session.write_lock().await;
-                    let outcome = run_tool(
-                        &session,
-                        app,
-                        "satz_merge_presets".to_string(),
-                        serde_json::Map::new(),
-                    )
-                    .await;
-                    // a merge that brings a pack in, or a pack that gained one, opens
-                    // notices of its own: the same window raises them
-                    if let Some(outcome) = outcome.filter(|o| !o.is_error) {
-                        match outcome.typed::<MergeNotices>("satz_merge_presets") {
-                            Ok(merged) => queue_notices(app, &merged.notices),
-                            Err(e) => {
-                                toast(app, ToastKind::Error, format!("satz_merge_presets: {e}"))
-                            }
-                        }
-                    }
+                    merge_presets(&session, app).await;
                 }
                 reload(&session, app).await;
             }
@@ -360,14 +336,6 @@ pub fn switched(change: &PackChange) -> String {
         n => text.push_str(&format!(" · {n} notices opened")),
     }
     text
-}
-
-/// The half of `satz_merge_presets`'s report the app reads: what a merge opened. The
-/// rest of it is the log the tool call already printed.
-#[derive(Debug, Clone, PartialEq, serde::Deserialize)]
-struct MergeNotices {
-    #[serde(default)]
-    notices: Vec<NoticeRow>,
 }
 
 /// The notices the window holds after a write: the ones it held, plus the ones this
@@ -800,51 +768,56 @@ async fn run_steps(
     }
 }
 
-async fn run_tool(
-    session: &Arc<EstateSession>,
-    app: Store<AppStore>,
-    name: String,
-    args: serde_json::Map<String, serde_json::Value>,
-) -> Option<ToolOutcome> {
+/// `satz_merge_presets` on the session, into the log: the report typed and written as
+/// sentences ([`MergeReport::lines`]), and the notices it opened queued — a merge that
+/// brings a pack in, or a pack that gained one, opens notices of its own, and the same
+/// window raises them. A refusal is satz's own text; a report the app cannot type is a
+/// failure in the log's outcome and a toast, never the JSON it came as.
+async fn merge_presets(session: &Arc<EstateSession>, app: Store<AppStore>) {
+    const TOOL: &str = "satz_merge_presets";
     let estate = app.estate();
-    let shown = serde_json::to_string(&args).unwrap_or_default();
-    estate.last_command().set(Some(format!("{name} {shown}")));
+    estate.last_command().set(Some(TOOL.to_string()));
     estate.command_log().clear();
     estate.outcome().set(None);
-    match session.tool(&name, args).await {
-        Ok(outcome) => {
-            for line in outcome.text.lines() {
-                estate.command_log().push(CliLine::Stdout(line.to_string()));
+    let outcome = match session.tool(TOOL, serde_json::Map::new()).await {
+        Ok(o) if o.is_error => {
+            for line in o.text.lines() {
+                estate.command_log().push(CliLine::Stderr(line.to_string()));
             }
-            if let Some(structured) = &outcome.structured {
-                let pretty = serde_json::to_string_pretty(structured).unwrap_or_default();
-                for line in pretty.lines() {
-                    estate.command_log().push(CliLine::Stdout(line.to_string()));
+            toast(app, ToastKind::Error, format!("{TOOL}: {}", o.text));
+            CommandOutcome {
+                ok: false,
+                text: format!("{TOOL} refused"),
+            }
+        }
+        Ok(o) => match o.typed::<MergeReport>(TOOL) {
+            Ok(report) => {
+                for line in report.lines() {
+                    estate.command_log().push(CliLine::Stdout(line));
+                }
+                queue_notices(app, &report.notices);
+                CommandOutcome {
+                    ok: true,
+                    text: format!("{TOOL} returned"),
                 }
             }
-            let text = if outcome.is_error {
-                format!("{name} refused")
-            } else {
-                format!("{name} returned")
-            };
-            if outcome.is_error {
-                toast(app, ToastKind::Error, format!("{name}: {}", outcome.text));
+            Err(e) => {
+                toast(app, ToastKind::Error, e.to_string());
+                CommandOutcome {
+                    ok: false,
+                    text: e.to_string(),
+                }
             }
-            estate.outcome().set(Some(CommandOutcome {
-                ok: !outcome.is_error,
-                text,
-            }));
-            Some(outcome)
-        }
+        },
         Err(e) => {
-            toast(app, ToastKind::Error, format!("{name}: {e}"));
-            estate.outcome().set(Some(CommandOutcome {
+            toast(app, ToastKind::Error, format!("{TOOL}: {e}"));
+            CommandOutcome {
                 ok: false,
                 text: e.to_string(),
-            }));
-            None
+            }
         }
-    }
+    };
+    estate.outcome().set(Some(outcome));
 }
 
 fn open_in_terminal(session: &Arc<EstateSession>, app: Store<AppStore>, args: &[String]) {
