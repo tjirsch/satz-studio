@@ -1,9 +1,9 @@
 //! Shared by every `e2e_*` test: a temporary estate directory whose `config.toml`
 //! names the presets, the schema and the include directory of `vendor/satz` by
 //! absolute path; the skeleton `satz interview --create` writes into it; the answers
-//! satz's smoke matrix pipes; the answer path the app takes (`Snapshot::take`,
-//! `satz_interview`, `Snapshot::verify` through `McpChecker`); a pack switched as the
-//! app switches it (`satz_add_pack`, `satz_remove_pack`); the model built as the app
+//! satz's smoke matrix pipes; the answer path the app takes (`Snapshot::take`, then
+//! `Snapshot::delegate` around `satz_interview` with `McpChecker`); a pack switched as
+//! the app switches it (`satz_add_pack`, `satz_remove_pack`); the model built as the app
 //! builds it; and the output of `satz transpile --check` with the banner stripped. Each test file
 //! includes it with `#[path = "fixtures/e2e/support.rs"]` and uses the part it needs.
 #![allow(dead_code)]
@@ -16,7 +16,7 @@ use std::time::Duration;
 
 use satz_studio_core::cst::{Cst, NodeKind, UseState, scan_uses};
 use satz_studio_core::diag::{Diagnostic, plain};
-use satz_studio_core::edit::{Committed, McpChecker, Snapshot};
+use satz_studio_core::edit::{Committed, Delegated, McpChecker, Restore, Snapshot};
 use satz_studio_core::estate::EstateDir;
 use satz_studio_core::model::EstateModel;
 use satz_studio_core::satz::reports::{
@@ -253,29 +253,41 @@ pub fn accept_defaults() -> InterviewArgs {
     }
 }
 
-/// The path the app's `Answer` and `AcceptDefaults` actions take
-/// (`crates/satz-studio/src/state/estate_actions.rs`): the write lock, the bytes
-/// recorded, `satz_interview` on the session, the real path checked through
-/// `McpChecker`. A refused call or a failed check fails the test.
-pub async fn answer(
+/// The path every delegated write of the app takes
+/// (`delegated_write` in `crates/satz-studio/src/state/estate_actions.rs`): the write
+/// lock, the bytes recorded, the tool on the session inside `Snapshot::delegate`, with
+/// `McpChecker` for the check of a call that landed.
+pub async fn delegate<A: serde::Serialize>(
     session: &Arc<EstateSession>,
-    args: InterviewArgs,
-) -> (InterviewReport, Committed) {
+    tool: &str,
+    args: &A,
+) -> Delegated {
     let _lock = session.write_lock().await;
     let snapshot = Snapshot::take(&session.main).unwrap();
-    let args = serde_json::to_value(&args)
+    let args = serde_json::to_value(args)
         .unwrap()
         .as_object()
         .cloned()
         .unwrap();
-    let outcome = within(session.tool("satz_interview", args)).await.unwrap();
-    assert!(!outcome.is_error, "{}", outcome.text);
-    let report: InterviewReport = outcome.typed("satz_interview").unwrap();
     let checker = McpChecker {
         session: Arc::clone(session),
     };
-    let committed = within(snapshot.verify(&checker)).await.unwrap();
-    (report, committed)
+    within(snapshot.delegate(session.tool(tool, args), &checker)).await
+}
+
+/// The path the app's `Answer` and `AcceptDefaults` actions take: [`delegate`] over
+/// `satz_interview`. A call that does not land fails the test.
+pub async fn answer(
+    session: &Arc<EstateSession>,
+    args: InterviewArgs,
+) -> (InterviewReport, Committed) {
+    match delegate(session, "satz_interview", &args).await {
+        Delegated::Landed { outcome, committed } => {
+            (outcome.typed("satz_interview").unwrap(), committed)
+        }
+        Delegated::RolledBack { error, .. } => panic!("satz_interview rolled back: {error}"),
+        Delegated::NotLanded(n) => panic!("{}", n.message("satz_interview")),
+    }
 }
 
 /// The interview the smoke matrix pipes, taken the app's way: the seven typed answers
@@ -307,37 +319,25 @@ pub async fn packs(session: &EstateSession) -> PacksReport {
     outcome.typed("satz_packs").unwrap()
 }
 
-/// The path the app's `AddPack` and `RemovePack` actions take
-/// (`crates/satz-studio/src/state/estate_actions.rs`): the write lock, the bytes
-/// recorded, the tool on the session, the real path checked through `McpChecker`. A
-/// refusal is `Err` with satz's sentence, the file as it was.
+/// The path the app's `AddPack` and `RemovePack` actions take: [`delegate`] over the
+/// tool. A refusal is `Err` with satz's sentence, and a switch satz refuses wrote
+/// nothing; a check that rolls back fails the test.
 pub async fn switch<A: serde::Serialize>(
     session: &Arc<EstateSession>,
     tool: &str,
     args: &A,
 ) -> Result<(PackChange, Committed), String> {
-    let _lock = session.write_lock().await;
-    let snapshot = Snapshot::take(&session.main).unwrap();
-    let args = serde_json::to_value(args)
-        .unwrap()
-        .as_object()
-        .cloned()
-        .unwrap();
-    let outcome = within(session.tool(tool, args)).await.unwrap();
-    if outcome.is_error {
-        assert_eq!(
-            std::fs::read(&session.main).unwrap(),
-            snapshot.bytes(),
-            "a refused switch wrote nothing"
-        );
-        return Err(outcome.text);
+    match delegate(session, tool, args).await {
+        Delegated::Landed { outcome, committed } => Ok((outcome.typed(tool).unwrap(), committed)),
+        Delegated::RolledBack { error, .. } => panic!("{tool} rolled back: {error}"),
+        Delegated::NotLanded(n) => {
+            assert!(
+                matches!(n.restore, Restore::Untouched),
+                "a refused switch wrote nothing: {n:?}"
+            );
+            Err(n.message(tool))
+        }
     }
-    let change: PackChange = outcome.typed(tool).unwrap();
-    let checker = McpChecker {
-        session: Arc::clone(session),
-    };
-    let committed = within(snapshot.verify(&checker)).await.unwrap();
-    Ok((change, committed))
 }
 
 /// `satz_add_pack` on `pack`, the app's way; a refusal fails the test.

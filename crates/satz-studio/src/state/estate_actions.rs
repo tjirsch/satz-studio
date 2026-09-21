@@ -18,9 +18,9 @@ use dioxus::prelude::*;
 use futures_util::StreamExt;
 use satz_studio_core::cst::Cst;
 use satz_studio_core::diag::{DiagSource, Diagnostic, Severity};
-use satz_studio_core::edit::snapshot::Snapshot;
 use satz_studio_core::edit::{
-    CheckFailure, Checker, CommitError, Committed, Edit, EditSession, McpChecker, Rollback,
+    CheckFailure, Checker, CommitError, Committed, Delegated, Edit, EditSession, McpChecker,
+    Rollback, Snapshot,
 };
 use satz_studio_core::estate::{EstateDir, HclState};
 use satz_studio_core::git::{self, WorkTree};
@@ -238,11 +238,14 @@ impl Carried {
 }
 
 /// A delegated write: satz's own writer works on the real file, so the bytes are
-/// recorded first and the check runs on the real path afterwards; a refusal restores
-/// them. A refused tool call wrote nothing and is satz's own sentence, in a toast and in
-/// the drawer. `landed` reads the outcome of a call that landed and says what the toast
-/// says — `Err` for an outcome the app could not type, which is a toast in the error
-/// colour over a write that is already on disk.
+/// recorded first and [`Snapshot::delegate`] runs the call around them — a call that
+/// landed is checked on the real path and restored when the check refuses; a refusal, or
+/// a call that returned nothing, is compared with the record and restored when satz had
+/// changed the file. A call that did not land is satz's own sentence, followed by what
+/// became of the file when satz had changed it, in a toast and in the drawer. `landed`
+/// reads the outcome of a call that landed and says what the toast says — `Err` for an
+/// outcome the app could not type, which is a toast in the error colour over a write that
+/// is already on disk.
 async fn delegated_write<F>(
     session: &Arc<EstateSession>,
     app: Store<AppStore>,
@@ -261,35 +264,26 @@ where
             return Carried::default();
         }
     };
-    let outcome = match session.tool(name, args).await {
-        Ok(o) => o,
-        Err(e) => {
-            toast(app, ToastKind::Error, format!("{name}: {e}"));
-            return Carried::default();
-        }
-    };
-    if outcome.is_error {
-        toast(app, ToastKind::Error, outcome.text.clone());
-        return Carried {
-            checked: Vec::new(),
-            refused: Some(Diagnostic::error(
-                outcome.text.clone(),
-                DiagSource::Tool(name.to_string()),
-            )),
-        };
-    }
     let checker = McpChecker {
         session: Arc::clone(session),
     };
-    match snapshot.verify(&checker).await {
-        Ok(committed) => {
+    match snapshot.delegate(session.tool(name, args), &checker).await {
+        Delegated::Landed { outcome, committed } => {
             match landed(&outcome) {
                 Ok(text) => toast(app, ToastKind::Info, text),
                 Err(e) => toast(app, ToastKind::Error, e),
             }
             Carried::checked(carried_findings(&committed))
         }
-        Err(e) => Carried::checked(rolled_back(app, e)),
+        Delegated::RolledBack { error, .. } => Carried::checked(rolled_back(app, error)),
+        Delegated::NotLanded(not_landed) => {
+            let text = not_landed.message(name);
+            toast(app, ToastKind::Error, text.clone());
+            Carried {
+                checked: Vec::new(),
+                refused: Some(Diagnostic::error(text, DiagSource::Tool(name.to_string()))),
+            }
+        }
     }
 }
 

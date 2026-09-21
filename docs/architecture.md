@@ -93,7 +93,7 @@ Two crates in one workspace, satz pinned once as the submodule `vendor/satz`
 |---|---|---|
 | `src/estate.rs` | an estate directory as satz sees it: `config.toml` read into `ToolConfig` with satz's defaults and resolved against its own directory; `discover` walks a folder for every `config.toml` (depth 6, at most 200, skipping `hcl/`, `target/`, `evidence/`, `node_modules/` and dot-directories); `estates` lists the `.satz` files in `yaml_dir` that declare an `estate`, skipping a checked temp file (`is_checked_temp`); `loader` resolves `use "…"` as satz does (the file's directory, then `include_dirs`); `params` and `deployment_mode` read the resolved params without a schema, and `acknowledged` asks satz's own rule whether those params acknowledge a pack's notice; `HclState::read` answers two facts about `hcl_dir` and no more — `main.tf` is there, so the estate has been transpiled here, and `.terraform` is there, so the tool's init has run | `EstateDir`, `ToolConfig`, `EstateError`, `HclState`, `declares_an_estate` |
 | `src/cst/` | the lossless document layer over the vendored tree-sitter grammar ([ADR 0003](adr/0003-the-document-layer-is-the-tree-sitter-grammar.md)); `grammar.rs` exposes the compiled parser, `build.rs` walks the tree into nodes with byte spans, `uses.rs` and `render.rs` read the pack lines and write values | `Cst`, `Node`, `NodeKind`, `Span`, `UseLine`, `UseState`, `TypedValue`, `StyleCtx`, `scan_uses`, `render_value`, `style_of`, `grammar::language` |
-| `src/edit/` | the edit primitives and the write discipline (section 4b): `apply.rs` the splice and its proof, `commit.rs` the temp file and the rename, `check.rs` the two checkers, `snapshot.rs` the delegated write | `Edit`, `EditSession`, `Proposed`, `Committed`, `Rollback`, `Checker`, `CheckFailure`, `McpChecker`, `CliChecker`, `Snapshot`, `sha256_hex` |
+| `src/edit/` | the edit primitives and the write discipline (section 4b): `apply.rs` the splice and its proof, `commit.rs` the temp file and the rename, `check.rs` the two checkers, `snapshot.rs` the delegated write | `Edit`, `EditSession`, `Proposed`, `Committed`, `Rollback`, `Checker`, `CheckFailure`, `McpChecker`, `CliChecker`, `Snapshot`, `Delegated`, `NotLanded`, `Cause`, `Restore`, `sha256_hex` |
 | `src/schema.rs` | the provider schema as `satz update-schema` writes it, the types lifted from satz's `src/schema.rs`; `load_all` reads every `*.json` in `schema_dir` and is `SchemaError::Missing` for a directory that is absent or holds no resource type; `AttrType` decodes Terraform's type expression and prints it in Terraform's spelling | `ResourceRegistry`, `AttrType`, `BlockSchema`, `AttributeSchema`, `SchemaError` |
 | `src/model/` | the view model, built pure and rebuilt after every commit and reload: `outline.rs` classifies the blocks as satz's `EstateResolver` and `is_child` do, `params.rs` joins the `params { }` block with the questions and holds `answer_kind`, the shape an interview answer is typed in — satz's own, read off the report, `value.rs` decodes a string as satz's lexer reads it, and `hcl_blocks` reads the file's `hcl` statements with whether each carries a `trust` reason. The packs are satz's `PacksReport`, carried as `satz_packs` returned it, with the phase comment above each `use` line by its number ([ADR 0018](adr/0018-the-packs-view-shows-satzs-pack-graph.md)) | `EstateModel`, `ResourceNode`, `ResourceKind`, `AttrRow`, `ParamRow`, `ParamKind`, `SourceValue`, `StrPart`, `EditMode`, `HclBlock`, `SchemaStatus`, `answer_kind` |
 | `src/git.rs` | what `satz merge-presets` needs from git: it edits the estate file in place and asks `git status` in the estate file's directory for the undo, refusing outside a work tree or without git. `WorkTree::read` asks `git rev-parse --is-inside-work-tree` in that directory — a repository above it counts — and answers `Inside`, `Outside` with git's own words, or `NoGit`; `init_steps` are `git init -b main`, `git add -A` and one commit naming the estate; `run` streams one git command's lines and is cancellable | `WorkTree`, `GitError`, `init_steps`, `run` |
@@ -449,12 +449,30 @@ A delegated write is satz's own writer on the real file: an answer or a `oneof` 
 is `satz_interview`, a pack switched on is `satz_add_pack` — its gate bound true, an
 option's siblings false, its line uncommented or written where the pack graph places
 it, the map's as much as any other — and a pack switched off is `satz_remove_pack`,
-which binds the gate false and leaves the line. `Snapshot::take(path)` records the bytes
-first; `Snapshot::verify(&dyn Checker)` then checks the real path and is `Committed` on
-a pass; a refusal, or a checker that could not run, writes the recorded bytes back. A
-tool that refuses — a switch while a pack it needs is off, or while a pack that needs it
-is on — wrote nothing; its sentence is a toast and a `DiagSource::Tool` diagnostic in the
-drawer, beside what the reload's own check says of the file.
+which binds the gate false and leaves the line; `satz_update_prerequisites
+{report_only: false}` writes the roles and APIs the estate lacks. `Snapshot::take(path)`
+records the bytes before the call, and `Snapshot::delegate(call, &dyn Checker)` runs the
+call and decides what stands, whatever the call comes to (`Delegated`):
+
+- the call landed: `Snapshot::verify` checks the real path and is `Landed` with the
+  `Committed` on a pass; a refusal, or a checker that could not run, writes the recorded
+  bytes back and is `RolledBack`;
+- satz refused the call (`is_error`), or the call returned no result — the session
+  died, the server answered with an error in place of one: `NotLanded` with its `Cause`,
+  and `Snapshot::restore_if_changed` compares the file with the record byte for byte. A
+  file that differs, or is gone, gets the recorded bytes back (`Restore::Restored`); one
+  that is the same is `Restore::Untouched`; a write-back that fails is `Restore::Failed`
+  with its path. A tool that refuses has not necessarily written nothing, so the
+  comparison runs on every refusal.
+
+`NotLanded::message` is what the operator reads: satz's sentence (or the tool's name
+and the error), followed, when the bytes were put back, by "satz refused and had
+changed `<file>`; the file is back as it was". It is a toast and a `DiagSource::Tool`
+diagnostic in the drawer, beside what the reload's own check says of the file.
+`satz_merge_presets` is outside this discipline: it writes the library as well as the
+estate file, so a record of the estate file alone cannot put the estate back — restoring
+it over a repointed fork would point the estate at the changed upstream pack — and
+satz runs it only inside a git work tree, whose history is its undo.
 `EstateDir::estates` never lists a checked temp file; `.gitignore` carries the suffix.
 
 ### 4c. An agent turn
