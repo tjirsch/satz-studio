@@ -28,14 +28,14 @@ use satz_studio_core::satz::reports::{
     AddPackArgs, InterviewArgs, InterviewReport, MergeReport, NoticeRow, PackChange, PacksReport,
     PrerequisitesResult, QuestionsReport, RemovePackArgs,
 };
-use satz_studio_core::satz::{CliLine, EstateSession, ToolOutcome};
+use satz_studio_core::satz::{CliLine, EstateSession, ToolOutcome, export};
 use satz_studio_core::schema::{ResourceRegistry, SchemaError};
 use tokio_util::sync::CancellationToken;
 
 use super::app_actions::close_estate;
 use super::{
-    AppStore, AppStoreStoreExt, CommandOutcome, Door, EstateStore, EstateStoreStoreExt, ToastKind,
-    strip_ansi, toast,
+    AppStore, AppStoreStoreExt, CommandOutcome, Door, EstateStore, EstateStoreStoreExt, Exported,
+    ToastKind, strip_ansi, toast,
 };
 
 pub enum EstateAction {
@@ -49,6 +49,13 @@ pub enum EstateAction {
     /// --import` puts the live ids in it and binds the notice's param itself
     RunNoticeCommand(Vec<String>),
     CancelCommand,
+    /// `satz questions <estate> --format <format> --out <out>`, run like any other
+    /// command: the decisions sheet or the workbook at the path the operator chose,
+    /// opened once satz has written it
+    Export {
+        format: String,
+        out: PathBuf,
+    },
     /// `apply` or `bootstrap`: a one-shot script, opened in the OS terminal
     OpenInTerminal(Vec<String>),
     /// one answer through satz's own writer, `satz_interview {answers: {subject:
@@ -91,6 +98,7 @@ pub async fn estate_coroutine(
 ) {
     app.estate().set(EstateStore::default());
     reload(&session, app).await;
+    read_export_formats(&session, app).await;
     let mut running = RunningCommand::default();
     while let Some(action) = rx.next().await {
         match action {
@@ -102,6 +110,19 @@ pub async fn estate_coroutine(
                 running.started(run_command(&session, app, args, After::Reload))
             }
             EstateAction::CancelCommand => running.cancel(),
+            EstateAction::Export { format, out } => {
+                let Some(open) = app.open().cloned() else {
+                    toast(app, ToastKind::Error, "no estate is open to export");
+                    continue;
+                };
+                let args = export::args(&open.name, &format, &out);
+                running.started(run_command(
+                    &session,
+                    app,
+                    args,
+                    After::Open(Exported { format, path: out }),
+                ));
+            }
             EstateAction::OpenInTerminal(args) => open_in_terminal(&session, app, &args),
             EstateAction::Answer { subject, value } => {
                 let args = InterviewArgs {
@@ -536,11 +557,45 @@ pub fn quote(word: &str) -> String {
     }
 }
 
-/// What follows a run: nothing, or the estate read again because the command wrote it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// What follows a run: nothing, the estate read again because the command wrote it, or
+/// the document an export wrote checked and opened.
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum After {
     Nothing,
     Reload,
+    Open(Exported),
+}
+
+/// The formats `satz questions` offers, read from the installed satz's help once per
+/// session for the export cards. A help the app cannot read is a toast and the reason
+/// the cards show, never an empty picker.
+async fn read_export_formats(session: &Arc<EstateSession>, app: Store<AppStore>) {
+    let formats = export::formats(&session.cli)
+        .await
+        .map_err(|e| e.to_string());
+    if let Err(e) = &formats {
+        toast(app, ToastKind::Error, format!("the export formats: {e}"));
+    }
+    app.estate().export_formats().set(Some(formats));
+}
+
+/// An export that exited zero: the file is checked — there and not empty — then
+/// remembered for "Export again" and opened in the application the system gives its
+/// type. A file that is not there is the run's failure; one that does not open is a
+/// toast over a file that is written.
+fn opened(app: Store<AppStore>, exported: Exported) -> Result<(), String> {
+    export::written(&exported.path)?;
+    let path = exported.path.clone();
+    app.estate().last_export().set(Some(exported));
+    match open::that(&path) {
+        Ok(()) => toast(app, ToastKind::Info, format!("{} written", path.display())),
+        Err(e) => toast(
+            app,
+            ToastKind::Error,
+            format!("{} written, but it did not open: {e}", path.display()),
+        ),
+    }
+    Ok(())
 }
 
 fn run_command(
@@ -608,6 +663,12 @@ fn run_command(
                 }
                 Err(e) => outcome = CommandOutcome { ok: false, text: e },
             }
+        }
+        if outcome.ok
+            && let After::Open(exported) = &after
+            && let Err(e) = opened(app, exported.clone())
+        {
+            outcome = CommandOutcome { ok: false, text: e };
         }
         if !outcome.ok {
             toast(app, ToastKind::Error, outcome.text.clone());

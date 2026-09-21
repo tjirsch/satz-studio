@@ -31,6 +31,7 @@ use satz_studio_core::satz::reports::{PackLine, QuestionRow, QuestionState, Ques
 use crate::components::{Button, ButtonVariant, Card, CardVariant, Chip, ChipKind, Icon};
 use crate::state::{AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt, View};
 use crate::views::commands::CommandLog;
+use crate::views::export::{ExportCard, Moment};
 
 /// What the estate is, as the Overview reads it. Borrowed rather than cloned: this is
 /// built on every render.
@@ -629,6 +630,8 @@ pub fn OverviewView() -> Element {
                     }
                 }
             }
+
+            ExportCard { moment: Moment::Handover }
 
             if last_command.is_some() {
                 CommandLog {}

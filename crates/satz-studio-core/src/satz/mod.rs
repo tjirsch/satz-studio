@@ -1,5 +1,6 @@
 //! The satz driver: the binary and its version gate ([`binary`]), the CLI runner
-//! ([`cli`]), satz's own installer verified before it runs ([`install`]), `satz init` and
+//! ([`cli`]), the decisions sheet and the workbook `satz questions` writes ([`export`]),
+//! satz's own installer verified before it runs ([`install`]), `satz init` and
 //! what it leaves behind ([`init`]), `satz import` and what it wrote and found
 //! ([`import`]), what `satz self-update --check-only` found ([`self_update`]), the MCP
 //! session over `satz mcp` ([`mcp`]), and one session per open estate that the command
@@ -8,6 +9,7 @@
 
 pub mod binary;
 pub mod cli;
+pub mod export;
 pub mod import;
 pub mod init;
 pub mod install;
@@ -18,6 +20,7 @@ pub mod session;
 
 pub use binary::{Ahead, MIN_SATZ, SatzBinary};
 pub use cli::{CliLine, SatzCli};
+pub use export::QuestionsFormat;
 pub use import::{ImportOptions, ImportPlan, ImportReport, ImportShape};
 pub use init::InitOptions;
 pub use mcp::{McpSession, ToolAnnotations, ToolInfo, ToolOutcome};
@@ -86,6 +89,8 @@ pub enum SatzError {
         status: std::process::ExitStatus,
         stderr: String,
     },
+    #[error("`satz {command}` printed a help this app cannot read: {reason}")]
+    Help { command: String, reason: String },
     #[error("`satz {command}` answered with JSON this app does not understand: {source}")]
     Json {
         command: String,

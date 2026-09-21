@@ -86,6 +86,30 @@ impl SatzCli {
         stream(cmd, format!("satz {}", args.join(" ")), out, cancel).await
     }
 
+    /// `satz --config <dir> <command…> --help`: the long help, as satz prints it on
+    /// stdout. A non-zero exit is an error carrying stderr.
+    pub async fn help(&self, command: &[&str]) -> Result<String, SatzError> {
+        let mut argv: Vec<String> = command.iter().map(|w| (*w).to_string()).collect();
+        argv.push("--help".to_string());
+        let line = argv.join(" ");
+        let output = self
+            .command(&argv)
+            .output()
+            .await
+            .map_err(|e| SatzError::Io {
+                context: format!("running `satz {line}`"),
+                source: e,
+            })?;
+        if !output.status.success() {
+            return Err(SatzError::Exit {
+                command: line,
+                status: output.status,
+                stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+            });
+        }
+        Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+    }
+
     /// Run a reporting command and type the report it wrote. A reporting command takes
     /// one format and writes one file (satz's ADR 0021): `args` is the command and its
     /// own arguments, and this appends `--format json` and an `--out` of its own — a
