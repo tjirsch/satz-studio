@@ -480,6 +480,7 @@ enum ClaudeCodeProbe {
 fn ClaudeCodeCard(draft: Signal<Settings>) -> Element {
     use satz_studio_core::llm::claude_code::StreamLogConfig;
     use satz_studio_core::llm::claude_code::log::{MAX_BYTES, MAX_FILES};
+    use satz_studio_core::llm::claude_code::session::MAX_MCP_OUTPUT_TOKENS;
 
     let app = use_context::<Store<AppStore>>();
     let handle = use_coroutine_handle::<AppAction>();
@@ -547,6 +548,9 @@ fn ClaudeCodeCard(draft: Signal<Settings>) -> Element {
             toast(app, ToastKind::Error, e);
         }
     };
+    let output_limit = format!(
+        "The app starts Claude Code with MAX_MCP_OUTPUT_TOKENS at {MAX_MCP_OUTPUT_TOKENS}, above satz's largest result — an evidence report for every framework the estate is held to — so no satz result reaches the model cut short."
+    );
     let log_bounds = format!(
         "One file per conversation under the app's data directory, the {MAX_FILES} newest kept, each up to {} MiB; a change applies from the next conversation.",
         MAX_BYTES / (1024 * 1024)
@@ -570,6 +574,7 @@ fn ClaudeCodeCard(draft: Signal<Settings>) -> Element {
                 Button { variant: ButtonVariant::Text, onclick: move |_| check(), "Check again" }
             }
             p { class: "settings__label", "This engine runs on the claude.ai subscription the CLI is signed in to; no API key is used and none is stored. Signing in opens a browser from your terminal." }
+            p { class: "settings__label", "{output_limit}" }
             Switch { label: "Log every line Claude Code and the app exchange", checked: draft().claude_code_log, onchange: move |v| draft.write().claude_code_log = v }
             p { class: "settings__label", "The log holds the estate's contents, its resource names and everything you type, and never leaves this machine." }
             p { class: "settings__status",

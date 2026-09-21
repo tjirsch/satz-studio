@@ -397,7 +397,9 @@ render from it.
   button sends, so it saves the whole draft. The provider segmented control above stays
   the primary selector; this button is a second door to it, not a second setting. "Sign
   in" and "Sign out" write a one-shot script and open the user's terminal, because the
-  login opens a browser. Below them, the switch "Log every line Claude Code and the app
+  login opens a browser. Under the subscription sentence, one more says the output limit the session
+  starts with: `MAX_MCP_OUTPUT_TOKENS` at `session::MAX_MCP_OUTPUT_TOKENS`, above satz's largest
+  result, so no satz result reaches the model cut short. Below them, the switch "Log every line Claude Code and the app
   exchange" edits `claude_code_log` in the draft, saved with the rest; under it one
   sentence says what a log holds — "The log holds the estate's contents, its resource
   names and everything you type, and never leaves this machine." — and a state line
