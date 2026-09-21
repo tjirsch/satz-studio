@@ -204,17 +204,6 @@ fn needs_source(value: &SourceValue) -> bool {
     }
 }
 
-/// How satz reads a param as a gate (`pipeline::truthy`): a bool is itself, a string
-/// is true unless empty or `"false"`, nothing is false, anything else is true.
-pub fn truthy(v: Option<&serde_yaml::Value>) -> bool {
-    match v {
-        Some(serde_yaml::Value::Bool(b)) => *b,
-        Some(serde_yaml::Value::String(s)) => !s.is_empty() && s != "false",
-        Some(serde_yaml::Value::Null) | None => false,
-        Some(_) => true,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -280,16 +269,5 @@ mod tests {
     fn an_unterminated_reference_stays_literal() {
         let (_, parts) = decode_string("\"a ${{b\"", 1, &env()).unwrap();
         assert_eq!(parts, vec![StrPart::Lit("a ${b".to_string())]);
-    }
-
-    #[test]
-    fn truthy_reads_a_gate_as_satz_does() {
-        assert!(truthy(Some(&serde_yaml::Value::Bool(true))));
-        assert!(!truthy(Some(&serde_yaml::Value::String(
-            "false".to_string()
-        ))));
-        assert!(!truthy(Some(&serde_yaml::Value::String(String::new()))));
-        assert!(truthy(Some(&serde_yaml::Value::String("yes".to_string()))));
-        assert!(!truthy(None));
     }
 }

@@ -47,7 +47,7 @@ async fn a_pack_switched_on_returns_its_notice_once_and_the_binding_takes_it_awa
     .await;
     assert!(report.notices.is_empty(), "{:?}", report.notices);
 
-    support::enable_map(&session).await;
+    support::add_pack(&session, support::MAP).await;
     let open = support::questions(&session).await;
     let gate = open
         .questions
@@ -125,7 +125,7 @@ async fn a_notice_is_acknowledged_with_true_and_with_nothing_else() {
     estate.create_skeleton("new.satz").await;
     let session = estate.open("new.satz").await;
     support::answer_like_the_smoke_matrix(&session).await;
-    support::enable_map(&session).await;
+    support::add_pack(&session, support::MAP).await;
     support::answer(&session, support::one_answer(GATE, serde_json::json!(true))).await;
 
     let args = serde_json::to_value(support::one_answer(ACK, serde_json::json!(false)))

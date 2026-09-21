@@ -21,8 +21,8 @@ use std::path::{Path, PathBuf};
 use satz_core::satz::{File, Value};
 use satz_studio_core::cst::Cst;
 use satz_studio_core::estate::EstateDir;
-use satz_studio_core::model::{EstateModel, PackDecls, ParamKind, SourceValue, answer_kind};
-use satz_studio_core::satz::reports::{QuestionKind, QuestionState, QuestionsReport};
+use satz_studio_core::model::{EstateModel, ParamKind, SourceValue, answer_kind};
+use satz_studio_core::satz::reports::{PacksReport, QuestionKind, QuestionState, QuestionsReport};
 use satz_studio_core::schema::ResourceRegistry;
 
 /// Every pack file under `vendor/satz/presets`, parsed, by the path a `use` names it with.
@@ -163,7 +163,10 @@ async fn every_question_of_every_pack_is_answered_in_the_shape_its_param_is_decl
     let env = dir.params(&main).unwrap();
     let registry = ResourceRegistry::load_all(&dir.schema_dir()).unwrap();
     let cst = Cst::parse(&text).unwrap();
-    let decls = PackDecls::read(&main, &cst, &dir.loader(&main));
+    let packs: PacksReport =
+        support::within(cli.json_report(&["packs".to_string(), main.display().to_string()]))
+            .await
+            .unwrap();
     // the model builds over an estate that uses every pack there is
     EstateModel::build(
         &main,
@@ -171,7 +174,7 @@ async fn every_question_of_every_pack_is_answered_in_the_shape_its_param_is_decl
         Ok(&registry),
         &env,
         &report,
-        &decls,
+        &packs,
         Vec::new(),
     )
     .unwrap();

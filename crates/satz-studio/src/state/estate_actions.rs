@@ -2,8 +2,9 @@
 //! It reloads the model, runs CLI commands with their output streamed into the store,
 //! calls tools, hands `apply` and `bootstrap` to the OS terminal, and is the one place
 //! the estate is written from: an answer through satz's own writer, a value through
-//! the app's, the map line by the app itself — each under the session's write lock,
-//! each verified by `satz transpile --check`, each followed by a reload. A running
+//! the app's, a pack switched through `satz_add_pack` and `satz_remove_pack` — each under
+//! the session's write lock, each verified by `satz transpile --check`, each followed by
+//! a reload. A running
 //! command streams from a tokio task into a local task, so the loop stays free to take
 //! `CancelCommand`; the three git commands that put the estate in a repository run the
 //! same way, when the operator asks for them.
@@ -14,7 +15,7 @@ use std::sync::Arc;
 
 use dioxus::prelude::*;
 use futures_util::StreamExt;
-use satz_studio_core::cst::{Cst, Span, UseState, scan_uses};
+use satz_studio_core::cst::Cst;
 use satz_studio_core::diag::{DiagSource, Diagnostic, Severity};
 use satz_studio_core::edit::snapshot::Snapshot;
 use satz_studio_core::edit::{
@@ -22,9 +23,10 @@ use satz_studio_core::edit::{
 };
 use satz_studio_core::estate::{EstateDir, HclState};
 use satz_studio_core::git::{self, WorkTree};
-use satz_studio_core::model::{EstateModel, MAP_PATH, PackDecls};
+use satz_studio_core::model::EstateModel;
 use satz_studio_core::satz::reports::{
-    InterviewArgs, InterviewReport, NoticeRow, PrerequisitesResult, QuestionsReport,
+    AddPackArgs, InterviewArgs, InterviewReport, NoticeRow, PackChange, PacksReport,
+    PrerequisitesResult, QuestionsReport, RemovePackArgs,
 };
 use satz_studio_core::satz::{CliLine, EstateSession, ToolOutcome};
 use satz_studio_core::schema::{ResourceRegistry, SchemaError};
@@ -69,9 +71,11 @@ pub enum EstateAction {
     /// the app's own writer: the edit applied in memory, checked as a temp file
     /// beside the real one, renamed over it
     CommitEdit(Edit),
-    /// uncomment `// use "presets/estate-map.satz"`, the one pack line no question
-    /// gates and so no satz writer activates
-    EnableMap,
+    /// `satz_add_pack`: the pack's gate bound true and its line made active where the
+    /// pack graph places it, by satz's own writer — the map's line as much as any other
+    AddPack(AddPackArgs),
+    /// `satz_remove_pack`: the pack's gate bound false, its line left as it is
+    RemovePack(RemovePackArgs),
     /// `satz_merge_presets`: the line for a pack the library gained
     MergePresets,
     /// `git init -b main`, `git add -A` and one commit in the estate directory, streamed
@@ -123,7 +127,10 @@ pub async fn estate_coroutine(
             }
             EstateAction::WritePrerequisites => write_prerequisites(&session, app).await,
             EstateAction::CommitEdit(edit) => commit_edit(&session, app, edit).await,
-            EstateAction::EnableMap => enable_map(&session, app).await,
+            EstateAction::AddPack(args) => switch_pack(&session, app, "satz_add_pack", &args).await,
+            EstateAction::RemovePack(args) => {
+                switch_pack(&session, app, "satz_remove_pack", &args).await
+            }
             EstateAction::MergePresets => {
                 {
                     let _lock = session.write_lock().await;
@@ -178,22 +185,39 @@ impl RunningCommand {
     }
 }
 
+/// What a write hands the reload that follows it.
+#[derive(Debug, Default)]
+struct Carried {
+    /// what the check of the write said — the findings of a check that passed, or the
+    /// refusal's own — which the reload keeps instead of running the check again
+    checked: Vec<Diagnostic>,
+    /// a tool that refused: satz's own sentence, in the drawer beside what the reload's
+    /// check says of the file it left as it was
+    refused: Option<Diagnostic>,
+}
+
+impl Carried {
+    fn checked(checked: Vec<Diagnostic>) -> Carried {
+        Carried {
+            checked,
+            refused: None,
+        }
+    }
+}
+
 /// A delegated write: satz's own writer works on the real file, so the bytes are
 /// recorded first and the check runs on the real path afterwards; a refusal restores
-/// them. A refused tool call wrote nothing and is satz's own sentence in a toast.
-/// `landed` reads the outcome of a call that landed and says what the toast says —
-/// `Err` for an outcome the app could not type, which is a toast in the error colour
-/// over a write that is already on disk.
-///
-/// The returned diagnostics are what the reload carries: the findings of a check that
-/// passed, or the refusal's own.
+/// them. A refused tool call wrote nothing and is satz's own sentence, in a toast and in
+/// the drawer. `landed` reads the outcome of a call that landed and says what the toast
+/// says — `Err` for an outcome the app could not type, which is a toast in the error
+/// colour over a write that is already on disk.
 async fn delegated_write<F>(
     session: &Arc<EstateSession>,
     app: Store<AppStore>,
     name: &str,
     args: serde_json::Map<String, serde_json::Value>,
     landed: F,
-) -> Vec<Diagnostic>
+) -> Carried
 where
     F: FnOnce(&ToolOutcome) -> Result<String, String>,
 {
@@ -202,19 +226,25 @@ where
         Ok(s) => s,
         Err(e) => {
             toast(app, ToastKind::Error, e.to_string());
-            return Vec::new();
+            return Carried::default();
         }
     };
     let outcome = match session.tool(name, args).await {
         Ok(o) => o,
         Err(e) => {
             toast(app, ToastKind::Error, format!("{name}: {e}"));
-            return Vec::new();
+            return Carried::default();
         }
     };
     if outcome.is_error {
         toast(app, ToastKind::Error, outcome.text.clone());
-        return Vec::new();
+        return Carried {
+            checked: Vec::new(),
+            refused: Some(Diagnostic::error(
+                outcome.text.clone(),
+                DiagSource::Tool(name.to_string()),
+            )),
+        };
     }
     let checker = McpChecker {
         session: Arc::clone(session),
@@ -225,9 +255,9 @@ where
                 Ok(text) => toast(app, ToastKind::Info, text),
                 Err(e) => toast(app, ToastKind::Error, e),
             }
-            carried_findings(&committed)
+            Carried::checked(carried_findings(&committed))
         }
-        Err(e) => rolled_back(app, e),
+        Err(e) => Carried::checked(rolled_back(app, e)),
     }
 }
 
@@ -266,6 +296,70 @@ async fn interview(session: &Arc<EstateSession>, app: Store<AppStore>, args: Int
     })
     .await;
     reload_with(session, app, carried).await;
+}
+
+/// One pack switched on or off by satz's own pack logic: `satz_add_pack` or
+/// `satz_remove_pack` on the real file, under the delegated-write discipline. satz binds
+/// the gate, writes or uncomments the line, compiles the estate and restores it when the
+/// compile refuses; a switch satz refuses — a pack it needs is off, a pack that needs it
+/// is on, a line not gated on its gate — wrote nothing and names why. A switch that
+/// turns a pack on can open its notices, which the window raises as an answer's do.
+async fn switch_pack<A: serde::Serialize>(
+    session: &Arc<EstateSession>,
+    app: Store<AppStore>,
+    tool: &'static str,
+    args: &A,
+) {
+    let Some(args) = serde_json::to_value(args)
+        .ok()
+        .and_then(|v| v.as_object().cloned())
+    else {
+        toast(
+            app,
+            ToastKind::Error,
+            format!("{tool}: the arguments did not serialise to an object"),
+        );
+        return;
+    };
+    let carried = delegated_write(session, app, tool, args, |outcome| {
+        let change = outcome
+            .typed::<PackChange>(tool)
+            .map_err(|e| format!("{tool}: {e}"))?;
+        queue_notices(app, &change.notices);
+        Ok(switched(&change))
+    })
+    .await;
+    reload_with(session, app, carried).await;
+}
+
+/// What the toast says after a switch landed: the packs it switched, or what satz left
+/// as it was when it switched nothing.
+pub fn switched(change: &PackChange) -> String {
+    let verb = if change.action == "remove" {
+        "off"
+    } else {
+        "on"
+    };
+    let mut text = match change.switched.as_slice() {
+        [] => change
+            .left
+            .first()
+            .cloned()
+            .unwrap_or_else(|| "nothing switched".to_string()),
+        [one] => format!("{one} {verb}"),
+        many => format!("{} packs {verb}", many.len()),
+    };
+    match change.opened.len() {
+        0 => {}
+        1 => text.push_str(" · 1 question opened"),
+        n => text.push_str(&format!(" · {n} questions opened")),
+    }
+    match change.notices.len() {
+        0 => {}
+        1 => text.push_str(" · 1 notice opened"),
+        n => text.push_str(&format!(" · {n} notices opened")),
+    }
+    text
 }
 
 /// The half of `satz_merge_presets`'s report the app reads: what a merge opened. The
@@ -364,100 +458,7 @@ async fn commit_edit(session: &Arc<EstateSession>, app: Store<AppStore>, edit: E
             Err(e) => rolled_back(app, e),
         }
     };
-    reload_with(session, app, carried).await;
-}
-
-/// The map line is the one pack line no question gates, so no satz writer activates
-/// it: the app splices the exact line `pack_line` writes without its `// `, under the
-/// delegated-write discipline — the bytes recorded, the real path checked, a refusal
-/// restored. Nothing else is ever uncommented by the app.
-async fn enable_map(session: &Arc<EstateSession>, app: Store<AppStore>) {
-    let carried = {
-        let _lock = session.write_lock().await;
-        let snapshot = match Snapshot::take(&session.main) {
-            Ok(s) => s,
-            Err(e) => {
-                toast(app, ToastKind::Error, e.to_string());
-                return;
-            }
-        };
-        let text = match std::str::from_utf8(snapshot.bytes()) {
-            Ok(t) => t.to_string(),
-            Err(e) => {
-                toast(
-                    app,
-                    ToastKind::Error,
-                    format!("{}: not UTF-8: {e}", session.main.display()),
-                );
-                return;
-            }
-        };
-        let cst = match Cst::parse(&text) {
-            Ok(c) => c,
-            Err(e) => {
-                toast(app, ToastKind::Error, e.to_string());
-                return;
-            }
-        };
-        let Some(line) = scan_uses(&cst).into_iter().find(|u| {
-            u.path == MAP_PATH
-                && u.gate.is_none()
-                && u.as_key.is_none()
-                && u.state == UseState::Commented
-        }) else {
-            toast(
-                app,
-                ToastKind::Error,
-                format!("no commented `use \"{MAP_PATH}\"` line in this estate"),
-            );
-            return;
-        };
-        let new_text = match uncomment_line(&text, line.span) {
-            Ok(t) => t,
-            Err(e) => {
-                toast(app, ToastKind::Error, e);
-                return;
-            }
-        };
-        if let Err(e) = std::fs::write(&session.main, new_text) {
-            toast(
-                app,
-                ToastKind::Error,
-                format!("{}: {e}", session.main.display()),
-            );
-            return;
-        }
-        let checker = McpChecker {
-            session: Arc::clone(session),
-        };
-        match snapshot.verify(&checker).await {
-            Ok(committed) => {
-                toast(
-                    app,
-                    ToastKind::Info,
-                    "the map is in: its questions are open",
-                );
-                carried_findings(&committed)
-            }
-            Err(e) => rolled_back(app, e),
-        }
-    };
-    reload_with(session, app, carried).await;
-}
-
-/// The line at `span` with its `// ` removed and its indentation kept.
-pub fn uncomment_line(text: &str, span: Span) -> Result<String, String> {
-    let line = &text[span.start..span.end];
-    let body = line.trim_start();
-    let indent = &line[..line.len() - body.len()];
-    let Some(rest) = body.strip_prefix("// ") else {
-        return Err(format!("not a commented line: `{line}`"));
-    };
-    Ok(format!(
-        "{}{indent}{rest}{}",
-        &text[..span.start],
-        &text[span.end..]
-    ))
+    reload_with(session, app, Carried::checked(carried)).await;
 }
 
 /// The findings of a check that passed, as diagnostics to carry through the reload: a
@@ -865,7 +866,7 @@ fn open_in_terminal(session: &Arc<EstateSession>, app: Store<AppStore>, args: &[
 }
 
 async fn reload(session: &Arc<EstateSession>, app: Store<AppStore>) {
-    reload_with(session, app, Vec::new()).await;
+    reload_with(session, app, Carried::default()).await;
 }
 
 /// `satz_transpile_check` on the estate as it stands: the findings of a compile that
@@ -890,12 +891,12 @@ async fn check(session: &Arc<EstateSession>) -> Vec<Diagnostic> {
     }
 }
 
-/// Questions through the session, then the file, the params and the schema on a
-/// blocking thread, then the model, then the compile's own check. Every failure is a
-/// diagnostic and a toast; the model stays what it was. `carried` — the diagnostics of
-/// the write this reload follows — stays in the drawer, at its line in the file as it
-/// is, and is what the check already said, so the reload does not run it again.
-async fn reload_with(session: &Arc<EstateSession>, app: Store<AppStore>, carried: Vec<Diagnostic>) {
+/// Questions and packs through the session, then the file, the params and the schema on
+/// a blocking thread, then the model, then the compile's own check. Every failure is a
+/// diagnostic and a toast; the model stays what it was. `carried` — what the write this
+/// reload follows said — stays in the drawer, at its line in the file as it is: what the
+/// check already said, so the reload does not run it again, and a tool's refusal.
+async fn reload_with(session: &Arc<EstateSession>, app: Store<AppStore>, carried: Carried) {
     let estate = app.estate();
     estate.loading().set(true);
     estate.hcl().set(HclState::read(&session.dir.hcl_dir()));
@@ -920,6 +921,21 @@ async fn reload_with(session: &Arc<EstateSession>, app: Store<AppStore>, carried
     };
     estate.questions().set(questions.clone());
 
+    let packs = match session
+        .tool("satz_packs", serde_json::Map::new())
+        .await
+        .and_then(|o| o.typed::<PacksReport>("satz_packs"))
+    {
+        Ok(report) => Some(report),
+        Err(e) => {
+            diagnostics.push(Diagnostic::error(
+                e.to_string(),
+                DiagSource::Tool("satz_packs".to_string()),
+            ));
+            None
+        }
+    };
+
     let main = session.main.clone();
     let dir = session.dir.clone();
     // The error is boxed: a `Diagnostic` is a path, a message and a source, which is
@@ -937,15 +953,12 @@ async fn reload_with(session: &Arc<EstateSession>, app: Store<AppStore>, carried
             .params(&main)
             .map_err(|e| Box::new(Diagnostic::from_pipeline_error(&dir.dir, &e)))?;
         let registry = ResourceRegistry::load_all(&dir.schema_dir());
-        // what the packs declare between the choices is read here, off the async task,
-        // with the loader the params fold above used
-        let decls = PackDecls::read(&main, &cst, &dir.loader(&main));
-        Ok::<_, Box<Diagnostic>>((cst, env, registry, decls))
+        Ok::<_, Box<Diagnostic>>((cst, env, registry))
     })
     .await;
 
     let built = match parsed {
-        Ok(Ok((cst, env, registry, decls))) => {
+        Ok(Ok((cst, env, registry))) => {
             // What takes a notice off the window: the estate binds its param, whether
             // the operator pressed "I ran it" or the command the notice names bound it
             // itself. satz's own rule judges it, over the params of this reload.
@@ -966,14 +979,14 @@ async fn reload_with(session: &Arc<EstateSession>, app: Store<AppStore>, carried
                     None
                 }
             };
-            questions.as_ref().map(|q| {
+            questions.as_ref().zip(packs.as_ref()).map(|(q, p)| {
                 EstateModel::build(
                     &session.main,
                     &cst,
                     registry.as_ref().ok_or(schema_dir.as_path()),
                     &env,
                     q,
-                    &decls,
+                    p,
                     diagnostics.clone(),
                 )
                 .map(|model| (model, cst))
@@ -1009,10 +1022,11 @@ async fn reload_with(session: &Arc<EstateSession>, app: Store<AppStore>, carried
     // data the estate carries and the app has no other way to learn. It is read here,
     // once per reload, and only when the front end got as far as a model: a file the
     // front end refused has already said why, and the check would say it twice.
-    if built_ok && carried.is_empty() {
+    if built_ok && carried.checked.is_empty() {
         diagnostics.extend(check(session).await);
     }
-    diagnostics.extend(carried);
+    diagnostics.extend(carried.checked);
+    diagnostics.extend(carried.refused);
     if let Some(first) = diagnostics
         .iter()
         .find(|d| d.severity == satz_studio_core::diag::Severity::Error)
@@ -1087,33 +1101,43 @@ mod tests {
         assert!(!first.is_cancelled());
     }
 
-    #[test]
-    fn the_map_line_loses_its_marker_and_keeps_its_indentation_and_neighbours() {
-        let text = "estate e\n\n// the map\n  // use \"presets/estate-map.satz\"\nuse \"x.satz\"\n";
-        let cst = Cst::parse(text).unwrap();
-        let line = scan_uses(&cst)
-            .into_iter()
-            .find(|u| u.path == MAP_PATH)
-            .unwrap();
-        assert_eq!(line.state, UseState::Commented);
-        assert_eq!(
-            uncomment_line(text, line.span).unwrap(),
-            "estate e\n\n// the map\n  use \"presets/estate-map.satz\"\nuse \"x.satz\"\n"
-        );
+    fn change(action: &str, switched: &[&str]) -> PackChange {
+        PackChange {
+            estate: "C0example.satz".to_string(),
+            action: action.to_string(),
+            switched: switched.iter().map(|s| s.to_string()).collect(),
+            bound: Vec::new(),
+            lines: Vec::new(),
+            left: Vec::new(),
+            opened: Vec::new(),
+            notices: Vec::new(),
+        }
     }
 
     #[test]
-    fn a_line_without_the_marker_is_refused() {
-        let text = "use \"presets/estate-map.satz\"\n";
-        let span = Span {
-            start: 0,
-            end: text.len() - 1,
-        };
-        assert!(
-            uncomment_line(text, span)
-                .unwrap_err()
-                .starts_with("not a commented line")
+    fn a_switch_says_what_it_switched_and_what_it_opened() {
+        assert_eq!(
+            switched(&change("add", &["presets/organization-budget.satz"])),
+            "presets/organization-budget.satz on"
         );
+        let mut two = change(
+            "remove",
+            &[
+                "presets/scc/scc-notifications.satz",
+                "presets/scc/scc-findings-mail.satz",
+            ],
+        );
+        assert_eq!(switched(&two), "2 packs off");
+        two.action = "add".to_string();
+        two.opened = vec!["scc_notification_topic".to_string()];
+        two.notices = vec![notice("cis_baseline_adopted")];
+        assert_eq!(
+            switched(&two),
+            "2 packs on · 1 question opened · 1 notice opened"
+        );
+        let mut nothing = change("add", &[]);
+        nothing.left = vec!["already on — nothing to write".to_string()];
+        assert_eq!(switched(&nothing), "already on — nothing to write");
     }
 
     #[test]

@@ -22,8 +22,8 @@ use dioxus::prelude::*;
 use satz_studio_core::diag::Diagnostic;
 use satz_studio_core::estate::HclState;
 use satz_studio_core::git::WorkTree;
-use satz_studio_core::model::{EstateModel, LineState, PackRowKind, SchemaStatus};
-use satz_studio_core::satz::reports::{QuestionRow, QuestionState, QuestionsReport};
+use satz_studio_core::model::{EstateModel, SchemaStatus};
+use satz_studio_core::satz::reports::{PackLine, QuestionRow, QuestionState, QuestionsReport};
 
 use crate::components::{Button, ButtonVariant, Card, CardVariant, Chip, ChipKind, Icon};
 use crate::state::{AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt, View};
@@ -64,8 +64,6 @@ pub enum Remedy {
         icon: &'static str,
         args: Vec<String>,
     },
-    /// `satz merge-presets`, under the estate's write lock
-    Merge,
     /// `git init -b main`, `git add -A` and one commit in the estate directory, run when
     /// the operator presses it and never on the app's own account
     InitRepository,
@@ -168,44 +166,35 @@ pub fn owed(f: &Facts) -> Vec<Owed> {
     }
 
     if let Some(model) = f.model {
-        let map = model
-            .packs
-            .iter()
-            .find(|r| r.kind == PackRowKind::Map)
-            .map(|r| r.state);
-        match map {
-            Some(LineState::Off) => out.push(Owed {
+        match model.packs.map().map(|m| m.line) {
+            Some(PackLine::Commented) => out.push(Owed {
                 id: "map-off",
                 icon: "inventory_2",
                 title: "The pack map is switched off".to_string(),
                 detail: "`use \"presets/estate-map.satz\"` is commented out, so no pack asks this estate anything. Switching it on is what opens the questions the library declares.".to_string(),
                 remedies: vec![Remedy::Go(View::Packs)],
             }),
-            Some(LineState::Absent) => out.push(Owed {
+            Some(PackLine::Absent) => out.push(Owed {
                 id: "map-absent",
                 icon: "inventory_2",
                 title: "The estate has no pack map".to_string(),
-                detail: "The file carries no line for `presets/estate-map.satz`, the map of pack choices every other question hangs from. `satz merge-presets` writes the lines the library has and this estate does not.".to_string(),
-                remedies: vec![Remedy::Merge, Remedy::Go(View::Packs)],
+                detail: "The file carries no line for `presets/estate-map.satz`, the map of pack choices every other question hangs from. Switching it on in Packs writes the line where the pack graph places it.".to_string(),
+                remedies: vec![Remedy::Go(View::Packs)],
             }),
             _ => {}
         }
 
-        let absent = model
-            .packs
-            .iter()
-            .filter(|r| r.kind == PackRowKind::Choice && r.state == LineState::Absent)
-            .count();
-        if absent > 0 {
+        let findings = &model.packs.findings;
+        if let Some(first) = findings.first() {
             out.push(Owed {
-                id: "packs-absent",
-                icon: "playlist_add",
-                title: match absent {
-                    1 => "1 pack choice has no line in this estate".to_string(),
-                    n => format!("{n} pack choices have no line in this estate"),
+                id: "pack-findings",
+                icon: "account_tree",
+                title: match findings.len() {
+                    1 => "The pack graph has 1 finding".to_string(),
+                    n => format!("The pack graph has {n} findings"),
                 },
-                detail: "The map asks for them and the file has nothing to switch: the library gained a pack after this estate was written. `satz merge-presets` installs what is missing and writes the commented `use` line for each.".to_string(),
-                remedies: vec![Remedy::Merge, Remedy::Go(View::Packs)],
+                detail: first.message.clone(),
+                remedies: vec![Remedy::Go(View::Packs)],
             });
         }
 
@@ -545,15 +534,6 @@ pub fn OverviewView() -> Element {
                                                     "Show the notices"
                                                 }
                                             },
-                                            Remedy::Merge => rsx! {
-                                                Button {
-                                                    key: "{i}",
-                                                    variant: ButtonVariant::Filled,
-                                                    icon: "merge",
-                                                    onclick: move |_| handle.send(EstateAction::MergePresets),
-                                                    "Run merge-presets"
-                                                }
-                                            },
                                         }
                                     }
                                 }
@@ -657,8 +637,10 @@ fn IdentityCard(facts: Vec<Fact>) -> Element {
 mod tests {
     use super::*;
     use satz_studio_core::diag::DiagSource;
-    use satz_studio_core::model::{Choice, PackRow};
     use satz_studio_core::satz::reports::QuestionsSummary;
+    use satz_studio_core::satz::reports::{
+        Finding, FindingSeverity, PackRole, PackRow, PacksReport,
+    };
     use serde_json::json;
     use std::path::PathBuf;
 
@@ -776,13 +758,13 @@ mod tests {
         );
     }
 
-    fn model(packs: Vec<PackRow>, schema: SchemaStatus) -> EstateModel {
+    fn model(packs: PacksReport, schema: SchemaStatus) -> EstateModel {
         EstateModel {
             main: PathBuf::from("/estates/acme/C0example.satz"),
             outline: Vec::new(),
             params: Vec::new(),
             packs,
-            pack_edges: Vec::new(),
+            phases: Default::default(),
             uses: Vec::new(),
             hcl: Vec::new(),
             diagnostics: Vec::new(),
@@ -797,16 +779,44 @@ mod tests {
         }
     }
 
-    fn pack(kind: PackRowKind, state: LineState) -> PackRow {
-        PackRow {
-            kind,
-            gate: Some("use_budget".to_string()),
-            path: Some("presets/organization-budget.satz".to_string()),
-            state,
-            choice: Choice::Line,
-            question: None,
-            phase: None,
-            line: Some(4),
+    /// A report whose map line stands as `map` and that carries `findings` pack findings.
+    fn packs(map: PackLine, findings: usize) -> PacksReport {
+        PacksReport {
+            estate: "C0example.satz".to_string(),
+            note: None,
+            packs: vec![PackRow {
+                path: "presets/estate-map.satz".to_string(),
+                role: PackRole::Map,
+                gate: None,
+                gate_declared_in: None,
+                answer: None,
+                default: None,
+                value: None,
+                line: map,
+                at_line: (map != PackLine::Absent).then_some(4),
+                written: None,
+                gated_on: None,
+                deploys: map == PackLine::Active,
+                requires: Vec::new(),
+                required_by: Vec::new(),
+                excludes: Vec::new(),
+                by_hand: None,
+                notices: Vec::new(),
+                findings: Vec::new(),
+            }],
+            unmanaged: Vec::new(),
+            findings: (0..findings)
+                .map(|i| Finding {
+                    severity: FindingSeverity::Warning,
+                    kind: "unadopted-pack".to_string(),
+                    group: None,
+                    file: None,
+                    line: None,
+                    subject: Some("presets/organization-budget.satz".to_string()),
+                    message: format!("finding {i}"),
+                    fix: None,
+                })
+                .collect(),
         }
     }
 
@@ -851,7 +861,7 @@ mod tests {
 
     #[test]
     fn an_estate_that_owes_nothing_has_no_rows() {
-        let m = model(vec![pack(PackRowKind::Map, LineState::On)], loaded());
+        let m = model(packs(PackLine::Active, 0), loaded());
         let q = questions(0, 0);
         let rows = owed(&facts(
             Some("cloud"),
@@ -868,7 +878,7 @@ mod tests {
 
     #[test]
     fn day_zero_is_owed_by_a_cloud_estate_whose_hcl_was_never_initialised_and_by_no_local_one() {
-        let m = model(vec![pack(PackRowKind::Map, LineState::On)], loaded());
+        let m = model(packs(PackLine::Active, 0), loaded());
         let q = questions(0, 0);
         let fresh = HclState::default();
         let rows = owed(&facts(Some("cloud"), fresh, Some(&q), Some(&m), &[]));
@@ -884,7 +894,7 @@ mod tests {
 
     #[test]
     fn a_directory_that_was_never_initialised_is_the_only_proof_that_no_plan_has_run() {
-        let m = model(vec![pack(PackRowKind::Map, LineState::On)], loaded());
+        let m = model(packs(PackLine::Active, 0), loaded());
         let q = questions(0, 0);
         let emitted = HclState {
             transpiled: true,
@@ -909,7 +919,7 @@ mod tests {
 
     #[test]
     fn the_questions_row_counts_the_unanswered_and_names_the_blocking() {
-        let m = model(vec![pack(PackRowKind::Map, LineState::On)], loaded());
+        let m = model(packs(PackLine::Active, 0), loaded());
         let q = questions(4, 2);
         let rows = owed(&facts(
             Some("local"),
@@ -928,36 +938,35 @@ mod tests {
     }
 
     #[test]
-    fn a_map_that_is_off_and_a_pack_without_a_line_are_two_different_rows() {
+    fn a_map_that_is_off_one_that_is_absent_and_the_pack_findings_are_three_rows() {
         let q = questions(0, 0);
         let hcl = HclState {
             transpiled: true,
             initialised: true,
         };
-        let m = model(vec![pack(PackRowKind::Map, LineState::Off)], loaded());
+        let m = model(packs(PackLine::Commented, 0), loaded());
         assert_eq!(
             ids(&owed(&facts(None, hcl, Some(&q), Some(&m), &[]))),
             ["map-off"]
         );
-        let m = model(
-            vec![
-                pack(PackRowKind::Map, LineState::On),
-                pack(PackRowKind::Choice, LineState::Absent),
-                pack(PackRowKind::Choice, LineState::Absent),
-            ],
-            loaded(),
+        let m = model(packs(PackLine::Absent, 0), loaded());
+        assert_eq!(
+            ids(&owed(&facts(None, hcl, Some(&q), Some(&m), &[]))),
+            ["map-absent"]
         );
+        let m = model(packs(PackLine::Active, 2), loaded());
         let rows = owed(&facts(None, hcl, Some(&q), Some(&m), &[]));
-        assert_eq!(ids(&rows), ["packs-absent"]);
-        assert_eq!(rows[0].title, "2 pack choices have no line in this estate");
-        assert_eq!(rows[0].remedies[0], Remedy::Merge);
+        assert_eq!(ids(&rows), ["pack-findings"]);
+        assert_eq!(rows[0].title, "The pack graph has 2 findings");
+        assert_eq!(rows[0].detail, "finding 0");
+        assert_eq!(rows[0].remedies, [Remedy::Go(View::Packs)]);
     }
 
     #[test]
     fn a_missing_schema_names_the_directory_and_offers_the_command_that_fills_it() {
         let q = questions(0, 0);
         let m = model(
-            vec![pack(PackRowKind::Map, LineState::On)],
+            packs(PackLine::Active, 0),
             SchemaStatus::Missing(PathBuf::from("/estates/acme/schema")),
         );
         let rows = owed(&facts(
@@ -986,7 +995,7 @@ mod tests {
             transpiled: true,
             initialised: true,
         };
-        let mut m = model(vec![pack(PackRowKind::Map, LineState::On)], loaded());
+        let mut m = model(packs(PackLine::Active, 0), loaded());
         m.hcl = vec![
             HclBlock {
                 line: 12,
@@ -1013,7 +1022,7 @@ mod tests {
     #[test]
     fn the_notices_row_counts_the_compiles_own_findings_and_offers_the_dialog_it_holds() {
         let q = questions(0, 0);
-        let m = model(vec![pack(PackRowKind::Map, LineState::On)], loaded());
+        let m = model(packs(PackLine::Active, 0), loaded());
         let hcl = HclState {
             transpiled: true,
             initialised: true,
@@ -1041,7 +1050,7 @@ mod tests {
     #[test]
     fn the_prerequisites_row_comes_from_the_compiles_own_finding() {
         let q = questions(0, 0);
-        let m = model(vec![pack(PackRowKind::Map, LineState::On)], loaded());
+        let m = model(packs(PackLine::Active, 0), loaded());
         let hcl = HclState {
             transpiled: true,
             initialised: true,
@@ -1073,7 +1082,7 @@ mod tests {
     #[test]
     fn an_estate_outside_a_repository_owes_one_with_the_fix_offered_and_git_s_own_words() {
         let q = questions(0, 0);
-        let m = model(vec![pack(PackRowKind::Map, LineState::On)], loaded());
+        let m = model(packs(PackLine::Active, 0), loaded());
         let hcl = HclState {
             transpiled: true,
             initialised: true,
@@ -1095,7 +1104,7 @@ mod tests {
     #[test]
     fn without_git_the_row_names_git_and_offers_nothing_to_press() {
         let q = questions(0, 0);
-        let m = model(vec![pack(PackRowKind::Map, LineState::On)], loaded());
+        let m = model(packs(PackLine::Active, 0), loaded());
         let hcl = HclState {
             transpiled: true,
             initialised: true,
@@ -1115,7 +1124,7 @@ mod tests {
     #[test]
     fn a_repository_or_a_fact_not_yet_read_owes_nothing() {
         let q = questions(0, 0);
-        let m = model(vec![pack(PackRowKind::Map, LineState::On)], loaded());
+        let m = model(packs(PackLine::Active, 0), loaded());
         let hcl = HclState {
             transpiled: true,
             initialised: true,

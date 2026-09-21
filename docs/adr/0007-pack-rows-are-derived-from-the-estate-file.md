@@ -1,6 +1,6 @@
 # 0007 — pack rows are derived from the estate file, no copied table
 
-- **Status:** accepted
+- **Status:** superseded by [ADR-0018](0018-the-packs-view-shows-satzs-pack-graph.md)
 - **Date:** 2026-09-13
 - **Deciders:** the maintainer
 

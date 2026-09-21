@@ -2,9 +2,9 @@
 //! names the presets, the schema and the include directory of `vendor/satz` by
 //! absolute path; the skeleton `satz interview --create` writes into it; the answers
 //! satz's smoke matrix pipes; the answer path the app takes (`Snapshot::take`,
-//! `satz_interview`, `Snapshot::verify` through `McpChecker`); the map line
-//! uncommented as the app uncomments it; the model built as the app builds it; and
-//! the output of `satz transpile --check` with the banner stripped. Each test file
+//! `satz_interview`, `Snapshot::verify` through `McpChecker`); a pack switched as the
+//! app switches it (`satz_add_pack`, `satz_remove_pack`); the model built as the app
+//! builds it; and the output of `satz transpile --check` with the banner stripped. Each test file
 //! includes it with `#[path = "fixtures/e2e/support.rs"]` and uses the part it needs.
 #![allow(dead_code)]
 
@@ -14,12 +14,15 @@ use std::process::Stdio;
 use std::sync::Arc;
 use std::time::Duration;
 
-use satz_studio_core::cst::{Cst, NodeKind, Span, UseState, scan_uses};
+use satz_studio_core::cst::{Cst, NodeKind, UseState, scan_uses};
 use satz_studio_core::diag::{Diagnostic, plain};
 use satz_studio_core::edit::{Committed, McpChecker, Snapshot};
 use satz_studio_core::estate::EstateDir;
-use satz_studio_core::model::{EstateModel, MAP_PATH, PackDecls};
-use satz_studio_core::satz::reports::{InterviewArgs, InterviewReport, QuestionsReport};
+use satz_studio_core::model::EstateModel;
+use satz_studio_core::satz::reports::{
+    AddPackArgs, InterviewArgs, InterviewReport, PackChange, PacksReport, QuestionsReport,
+    RemovePackArgs,
+};
 use satz_studio_core::satz::{Allow, CliLine, EstateSession, SatzBinary, SatzCli};
 use satz_studio_core::schema::ResourceRegistry;
 use tokio::io::AsyncWriteExt;
@@ -27,6 +30,9 @@ use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
 pub const TIME_BOX: Duration = Duration::from_secs(120);
+
+/// The map pack, as its `use` line names it.
+pub const MAP: &str = "presets/estate-map.satz";
 
 /// The seven values `vendor/satz/scripts/smoke.sh` types into the interview
 /// (`printf '%s\n' y C0example 123456789012 example.com acme Acme first.admin
@@ -292,64 +298,87 @@ pub async fn questions(session: &EstateSession) -> QuestionsReport {
     outcome.typed("satz_questions").unwrap()
 }
 
-/// The line at `span` with its `// ` removed and its indentation kept — the rule of
-/// the app's `uncomment_line` in `crates/satz-studio/src/state/estate_actions.rs`.
-pub fn uncomment_line(text: &str, span: Span) -> Result<String, String> {
-    let line = &text[span.start..span.end];
-    let body = line.trim_start();
-    let indent = &line[..line.len() - body.len()];
-    let Some(rest) = body.strip_prefix("// ") else {
-        return Err(format!("not a commented line: `{line}`"));
-    };
-    Ok(format!(
-        "{}{indent}{rest}{}",
-        &text[..span.start],
-        &text[span.end..]
-    ))
+/// `satz_packs` over the session.
+pub async fn packs(session: &EstateSession) -> PacksReport {
+    let outcome = within(session.tool("satz_packs", serde_json::Map::new()))
+        .await
+        .unwrap();
+    assert!(!outcome.is_error, "{}", outcome.text);
+    outcome.typed("satz_packs").unwrap()
 }
 
-/// The app's `EnableMap`: the commented map line `scan_uses` finds, uncommented by
-/// the rule above, under the delegated-write discipline — the bytes recorded, the
-/// real path checked through `McpChecker`.
-pub async fn enable_map(session: &Arc<EstateSession>) -> Committed {
+/// The path the app's `AddPack` and `RemovePack` actions take
+/// (`crates/satz-studio/src/state/estate_actions.rs`): the write lock, the bytes
+/// recorded, the tool on the session, the real path checked through `McpChecker`. A
+/// refusal is `Err` with satz's sentence, the file as it was.
+pub async fn switch<A: serde::Serialize>(
+    session: &Arc<EstateSession>,
+    tool: &str,
+    args: &A,
+) -> Result<(PackChange, Committed), String> {
     let _lock = session.write_lock().await;
     let snapshot = Snapshot::take(&session.main).unwrap();
-    let text = std::str::from_utf8(snapshot.bytes()).unwrap().to_string();
-    let cst = Cst::parse(&text).unwrap();
-    let line = scan_uses(&cst)
-        .into_iter()
-        .find(|u| {
-            u.path == MAP_PATH
-                && u.gate.is_none()
-                && u.as_key.is_none()
-                && u.state == UseState::Commented
-        })
-        .expect("a commented map line");
-    let new_text = uncomment_line(&text, line.span).unwrap();
-    std::fs::write(&session.main, new_text).unwrap();
+    let args = serde_json::to_value(args)
+        .unwrap()
+        .as_object()
+        .cloned()
+        .unwrap();
+    let outcome = within(session.tool(tool, args)).await.unwrap();
+    if outcome.is_error {
+        assert_eq!(
+            std::fs::read(&session.main).unwrap(),
+            snapshot.bytes(),
+            "a refused switch wrote nothing"
+        );
+        return Err(outcome.text);
+    }
+    let change: PackChange = outcome.typed(tool).unwrap();
     let checker = McpChecker {
         session: Arc::clone(session),
     };
-    within(snapshot.verify(&checker)).await.unwrap()
+    let committed = within(snapshot.verify(&checker)).await.unwrap();
+    Ok((change, committed))
 }
 
-/// The model as the app's reload builds it: the questions over the session, the main
-/// file parsed, the params resolved, the schema loaded, what the files the estate reads
-/// declare between its choices, and `diagnostics` as what the compile said.
+/// `satz_add_pack` on `pack`, the app's way; a refusal fails the test.
+pub async fn add_pack(session: &Arc<EstateSession>, pack: &str) -> (PackChange, Committed) {
+    let args = AddPackArgs {
+        pack: pack.to_string(),
+        with_requirements: false,
+    };
+    switch(session, "satz_add_pack", &args)
+        .await
+        .unwrap_or_else(|e| panic!("add-pack {pack}: {e}"))
+}
+
+/// `satz_remove_pack` on `pack`, the app's way; a refusal fails the test.
+pub async fn remove_pack(session: &Arc<EstateSession>, pack: &str) -> (PackChange, Committed) {
+    let args = RemovePackArgs {
+        pack: pack.to_string(),
+        cascade: false,
+    };
+    switch(session, "satz_remove_pack", &args)
+        .await
+        .unwrap_or_else(|e| panic!("remove-pack {pack}: {e}"))
+}
+
+/// The model as the app's reload builds it: the questions and the packs over the
+/// session, the main file parsed, the params resolved, the schema loaded, and
+/// `diagnostics` as what the compile said.
 pub async fn model(session: &EstateSession, diagnostics: Vec<Diagnostic>) -> EstateModel {
     let report = questions(session).await;
+    let packs = packs(session).await;
     let text = read(&session.main);
     let cst = Cst::parse(&text).unwrap();
     let env = session.dir.params(&session.main).unwrap();
     let registry = ResourceRegistry::load_all(&session.dir.schema_dir()).unwrap();
-    let decls = PackDecls::read(&session.main, &cst, &session.dir.loader(&session.main));
     EstateModel::build(
         &session.main,
         &cst,
         Ok(&registry),
         &env,
         &report,
-        &decls,
+        &packs,
         diagnostics,
     )
     .unwrap()

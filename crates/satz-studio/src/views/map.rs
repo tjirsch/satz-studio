@@ -1,100 +1,53 @@
-//! The Packs destination: the pack rows — the map line first, then the gated lines under the
-//! phase each can be adopted in, then the choices the file has no line for. A pack that
-//! others wait on is a tree: its card, and the cards of the packs asked only when it is on
-//! hung below it by right-angle connectors, whatever phase their lines stand under. A
-//! toggle is an answer written by `satz_interview`; the one line the app writes itself is
-//! the map's, which no question gates.
+//! The Packs destination: satz's pack report (`satz_packs`) as cards. The map first; then
+//! every pack whose line the file carries, under the phase that line stands under; then
+//! the packs the file has no line for; then the `use` lines the pack graph does not know.
+//! A pack that another needs — and that meets that need alone — is a tree: its card, and
+//! the cards of the packs that need it hung below by right-angle connectors, whatever
+//! phase their lines stand under. A switch is `satz_add_pack` or `satz_remove_pack`: what
+//! a pack needs, what it deploys and what a switch does are satz's pack graph, and the
+//! view derives none of it.
+
+use std::collections::BTreeMap;
 
 use dioxus::prelude::*;
-use satz_studio_core::diag::{DiagSource, Diagnostic};
-use satz_studio_core::model::{Choice, LineState, PackEdge, PackRow, PackRowKind};
-use satz_studio_core::satz::reports::QuestionRow;
+use satz_studio_core::satz::reports::{
+    AddPackArgs, Finding, PackLine, PackRole, PackRow, PacksReport, QuestionsReport,
+    RemovePackArgs, Requirement, RequirementKind,
+};
 
 use crate::components::{
     Button, ButtonVariant, Card, CardVariant, Chip, ChipKind, ConnectorBranch, ConnectorLine,
-    ConnectorTree, Icon, Segment, SegmentedButton, Switch,
+    ConnectorTree, Icon, Switch,
 };
 use crate::state::{AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt};
 
-/// The header of the section for rows the file has no line for.
+/// The header of the section for packs the file has no line for.
 pub const ABSENT_HEADER: &str = "Not in this file";
-/// The header of the section for rows above which no phase comment stands.
+/// The header of the section for lines above which no phase comment stands.
 pub const NO_PHASE_HEADER: &str = "No phase";
-
-/// One card's worth of rows: a single gated line, or a `oneof` group's lines together.
-#[derive(Debug, Clone, PartialEq)]
-pub enum Entry {
-    Single(PackRow),
-    Group {
-        group: String,
-        question: Option<QuestionRow>,
-        rows: Vec<PackRow>,
-    },
-}
-
-impl Entry {
-    /// The gates the card switches: its row's, or every row's of the group.
-    pub fn gates(&self) -> Vec<&str> {
-        match self {
-            Entry::Single(row) => row.gate.as_deref().into_iter().collect(),
-            Entry::Group { rows, .. } => rows.iter().filter_map(|r| r.gate.as_deref()).collect(),
-        }
-    }
-
-    /// Whether the card's pack is in the estate: a row's line is on and its gate is on —
-    /// for a group, any option's.
-    pub fn in_estate(&self) -> bool {
-        match self {
-            Entry::Single(row) => in_estate(row),
-            Entry::Group { rows, .. } => rows.iter().any(in_estate),
-        }
-    }
-}
-
-/// A line that is on with its gate on: the pack is folded into the estate. A line that is
-/// on while its gate is off emits nothing, and has its own note.
-pub fn in_estate(row: &PackRow) -> bool {
-    row.state == LineState::On
-        && match row.choice {
-            Choice::Bool { current, .. } => current == Some(true),
-            Choice::OneofOption { selected, .. } => selected,
-            Choice::Line => true,
-        }
-}
 
 /// What a section's grid holds: a card in a cell, or a tree across the whole row.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Item {
-    /// a card no other card waits on and that waits on none
-    Cell(Entry),
-    /// a card others wait on, with them below it
+    /// a pack no other card hangs from and that hangs from none
+    Cell(PackRow),
+    /// a pack others need, with them below it
     Tree(Node),
 }
 
 /// A card and the branches that hang from it.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Node {
-    pub entry: Entry,
+    pub row: PackRow,
     pub children: Vec<Branch>,
-}
-
-/// How a child hangs from its parent.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Link {
-    /// asked only while the parent's gate is on
-    AskedWhen,
-    /// asked only when, and on while the parent is until somebody answers it: its binding
-    /// is the parent's gate by reference
-    Follows,
 }
 
 /// One connector and the card it leads to.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Branch {
-    /// the gate the child waits on
-    pub parent_gate: String,
-    pub link: Link,
-    /// the child's pack is in the estate while the parent's is not
+    /// the child's requirement the parent meets: satz's own, `met` included
+    pub requirement: Requirement,
+    /// the child deploys while its requirement is not met
     pub warn: bool,
     /// a later sibling's connector warns, so the trunk past this branch leads to it
     pub trunk_warn: bool,
@@ -115,35 +68,54 @@ pub fn phase_header(phase: &str) -> String {
     phase.lines().next().unwrap_or_default().trim().to_string()
 }
 
-/// The choice rows in sections, with the packs that wait on another hung below it.
+/// The pack `row` hangs from and the requirement that makes it: the first of its
+/// requirements, in satz's order, that exactly one pack meets, where that pack is a menu
+/// pack. A requirement several packs can meet is the operator's choice between them and
+/// hangs the card under none; the map and the core pack stand at the head of the page,
+/// and every menu pack needs the map.
+pub fn parent_of<'a>(row: &'a PackRow, rows: &[PackRow]) -> Option<(&'a str, &'a Requirement)> {
+    row.requires.iter().find_map(|r| match r.any_of.as_slice() {
+        [one]
+            if rows
+                .iter()
+                .any(|p| p.path == *one && p.role == PackRole::Pack) =>
+        {
+            Some((one.as_str(), r))
+        }
+        _ => None,
+    })
+}
+
+/// The packs in sections, with the packs that need another hung below it.
 ///
-/// First the flat sections: a row with a phase comment opens the section that comment's
-/// first line names, a row without one joins the section open at that point (or
-/// [`NO_PHASE_HEADER`] when none is), and every `Absent` row goes last under
-/// [`ABSENT_HEADER`]; within a section the rows of one `oneof` group share an entry.
+/// First the flat sections: the packs whose line the file carries, in the file's order —
+/// a line with a phase comment opens the section that comment's first line names, a line
+/// without one joins the section open at that point (or [`NO_PHASE_HEADER`] when none
+/// is) — then every pack the file has no line for, in the graph's order, under
+/// [`ABSENT_HEADER`]. The map is the page's head and in no section.
 ///
-/// Then the edges: an entry holding one of an edge's gates hangs below the first entry
-/// holding the edge's parent gate, wherever that entry stands, and leaves its own section.
-/// An entry that nothing hangs from and that hangs from nothing stays a [`Item::Cell`]; one
-/// with children is an [`Item::Tree`] in its own section, its children in document order.
-/// A section left with nothing is dropped. The model's edges are a forest; should a
-/// grouping of rows still close a loop, the entry where it closes stays at the top.
-pub fn sections(rows: &[PackRow], edges: &[PackEdge]) -> Vec<Section> {
-    let flat = flat_sections(rows);
-    let entries: Vec<(usize, &Entry)> = flat
+/// Then the edges: a pack hangs below the pack [`parent_of`] names, wherever that one
+/// stands, and leaves its own section. A pack nothing hangs from and that hangs from
+/// nothing stays an [`Item::Cell`]; one with children is an [`Item::Tree`] in its own
+/// section, its children in section order. A section left with nothing is dropped. The
+/// graph's requirements do not loop; should they, the pack where the loop closes stays at
+/// the top.
+pub fn sections(report: &PacksReport, phases: &BTreeMap<u32, String>) -> Vec<Section> {
+    let flat = flat_sections(report, phases);
+    let entries: Vec<(usize, &PackRow)> = flat
         .iter()
         .enumerate()
-        .flat_map(|(s, (_, es))| es.iter().map(move |e| (s, e)))
+        .flat_map(|(s, (_, rows))| rows.iter().map(move |r| (s, r)))
         .collect();
-    let holder = |gate: &str| entries.iter().position(|(_, e)| e.gates().contains(&gate));
-    let mut parent: Vec<Option<(usize, &PackEdge)>> = entries
+    let mut parent: Vec<Option<(usize, &Requirement)>> = entries
         .iter()
-        .map(|(_, e)| {
-            let gates = e.gates();
-            edges
-                .iter()
-                .find(|edge| edge.gates.iter().any(|g| gates.contains(&g.as_str())))
-                .and_then(|edge| holder(&edge.parent).map(|p| (p, edge)))
+        .map(|(_, row)| {
+            parent_of(row, &report.packs).and_then(|(path, req)| {
+                entries
+                    .iter()
+                    .position(|(_, e)| e.path == path)
+                    .map(|p| (p, req))
+            })
         })
         .collect();
     for i in 0..entries.len() {
@@ -160,7 +132,6 @@ pub fn sections(rows: &[PackRow], edges: &[PackEdge]) -> Vec<Section> {
         }
     }
 
-    let node = |i: usize| build_node(i, &entries, &parent, &flat, rows);
     flat.iter()
         .enumerate()
         .map(|(s, (header, _))| Section {
@@ -169,10 +140,10 @@ pub fn sections(rows: &[PackRow], edges: &[PackEdge]) -> Vec<Section> {
                 .iter()
                 .enumerate()
                 .filter(|(i, (es, _))| *es == s && parent[*i].is_none())
-                .map(|(i, (_, e))| {
-                    let n = node(i);
+                .map(|(i, (_, row))| {
+                    let n = build_node(i, &entries, &parent, &flat);
                     if n.children.is_empty() {
-                        Item::Cell((*e).clone())
+                        Item::Cell((*row).clone())
                     } else {
                         Item::Tree(n)
                     }
@@ -185,34 +156,24 @@ pub fn sections(rows: &[PackRow], edges: &[PackEdge]) -> Vec<Section> {
 
 fn build_node(
     i: usize,
-    entries: &[(usize, &Entry)],
-    parent: &[Option<(usize, &PackEdge)>],
-    flat: &[(String, Vec<Entry>)],
-    rows: &[PackRow],
+    entries: &[(usize, &PackRow)],
+    parent: &[Option<(usize, &Requirement)>],
+    flat: &[(String, Vec<PackRow>)],
 ) -> Node {
     let mut children: Vec<Branch> = parent
         .iter()
         .enumerate()
-        .filter_map(|(c, p)| p.filter(|(p, _)| *p == i).map(|(_, edge)| (c, edge)))
-        .map(|(c, edge)| {
+        .filter_map(|(c, p)| p.filter(|(p, _)| *p == i).map(|(_, req)| (c, req)))
+        .map(|(c, req)| {
             let (child_section, child) = entries[c];
-            let parent_on = rows
-                .iter()
-                .filter(|r| r.gate.as_deref() == Some(edge.parent.as_str()))
-                .any(in_estate);
             let header = &flat[child_section].0;
             Branch {
-                parent_gate: edge.parent.clone(),
-                link: if edge.follows {
-                    Link::Follows
-                } else {
-                    Link::AskedWhen
-                },
-                warn: child.in_estate() && !parent_on,
+                requirement: req.clone(),
+                warn: child.deploys && !req.met,
                 trunk_warn: false,
                 phase: (child_section != entries[i].0 && header != ABSENT_HEADER)
                     .then(|| header.clone()),
-                node: build_node(c, entries, parent, flat, rows),
+                node: build_node(c, entries, parent, flat),
             }
         })
         .collect();
@@ -220,58 +181,101 @@ fn build_node(
         children[j].trunk_warn = children[j + 1..].iter().any(|b| b.warn);
     }
     Node {
-        entry: entries[i].1.clone(),
+        row: entries[i].1.clone(),
         children,
     }
 }
 
-/// The sections before any card is hung below another: a header and its entries.
-fn flat_sections(rows: &[PackRow]) -> Vec<(String, Vec<Entry>)> {
-    let mut out: Vec<(String, Vec<Entry>)> = Vec::new();
-    let mut absent: Vec<PackRow> = Vec::new();
-    for row in rows
+/// The sections before any card is hung below another: a header and its packs.
+fn flat_sections(
+    report: &PacksReport,
+    phases: &BTreeMap<u32, String>,
+) -> Vec<(String, Vec<PackRow>)> {
+    let mut lined: Vec<&PackRow> = report
+        .packs
         .iter()
-        .filter(|r| matches!(r.kind, PackRowKind::Choice | PackRowKind::Plain))
-    {
-        if row.state == LineState::Absent {
-            absent.push(row.clone());
-            continue;
-        }
-        if let Some(phase) = &row.phase {
+        .filter(|r| r.role != PackRole::Map && r.at_line.is_some())
+        .collect();
+    lined.sort_by_key(|r| r.at_line);
+    let mut out: Vec<(String, Vec<PackRow>)> = Vec::new();
+    for row in lined {
+        if let Some(phase) = row.at_line.and_then(|l| phases.get(&l)) {
             out.push((phase_header(phase), Vec::new()));
         } else if out.is_empty() {
             out.push((NO_PHASE_HEADER.to_string(), Vec::new()));
         }
-        let (_, entries) = out.last_mut().expect("a section was opened above");
-        push_entry(entries, row.clone());
+        let (_, rows) = out.last_mut().expect("a section was opened above");
+        rows.push(row.clone());
     }
+    let absent: Vec<PackRow> = report
+        .packs
+        .iter()
+        .filter(|r| r.role != PackRole::Map && r.at_line.is_none())
+        .cloned()
+        .collect();
     if !absent.is_empty() {
-        let mut entries = Vec::new();
-        for row in absent {
-            push_entry(&mut entries, row);
-        }
-        out.push((ABSENT_HEADER.to_string(), entries));
+        out.push((ABSENT_HEADER.to_string(), absent));
     }
     out
 }
 
-fn push_entry(entries: &mut Vec<Entry>, row: PackRow) {
-    if let Choice::OneofOption { group, .. } = &row.choice {
-        let existing = entries.iter_mut().find_map(|e| match e {
-            Entry::Group { group: g, rows, .. } if g == group => Some(rows),
-            _ => None,
-        });
-        match existing {
-            Some(rows) => rows.push(row),
-            None => entries.push(Entry::Group {
-                group: group.clone(),
-                question: row.question.clone(),
-                rows: vec![row],
-            }),
+/// Each of the compile's findings about `row`, with the command that answers it where
+/// satz names one: the sentences are the row's, the commands the report's findings whose
+/// subject is the pack.
+pub fn row_findings(report: &PacksReport, row: &PackRow) -> Vec<(String, Option<String>)> {
+    row.findings
+        .iter()
+        .map(|message| {
+            let fix = report
+                .findings
+                .iter()
+                .find(|f| f.subject.as_deref() == Some(row.path.as_str()) && f.message == *message)
+                .and_then(|f| f.fix.clone());
+            (message.clone(), fix)
+        })
+        .collect()
+}
+
+/// The report's findings about no pack it has a row for: they have no card to stand on.
+pub fn loose_findings(report: &PacksReport) -> Vec<Finding> {
+    report
+        .findings
+        .iter()
+        .filter(|f| f.subject.as_deref().is_none_or(|s| report.row(s).is_none()))
+        .cloned()
+        .collect()
+}
+
+/// The question that asks the gate, as the interview puts it: its prompt, and the option's
+/// or the question's `why`. `None` while no pack the estate uses asks it.
+pub fn prompt_of(questions: &QuestionsReport, gate: &str) -> Option<(String, Option<String>)> {
+    questions.questions.iter().find_map(|q| {
+        if q.subject == gate {
+            return Some((q.prompt.clone(), q.why.clone()));
         }
-    } else {
-        entries.push(Entry::Single(row));
-    }
+        q.options.iter().find(|o| o.param == gate).map(|o| {
+            (
+                format!("{} — {}", q.prompt, o.label),
+                o.why.clone().or(q.why.clone()),
+            )
+        })
+    })
+}
+
+/// The requirements a card lists: every one that is not met, and the met ones the tree
+/// does not already draw — neither its parent's connector nor the map every menu pack
+/// needs.
+pub fn listed_requirements<'a>(row: &'a PackRow, report: &PacksReport) -> Vec<&'a Requirement> {
+    let drawn = parent_of(row, &report.packs).map(|(_, r)| r);
+    let map = report.map().map(|m| m.path.as_str());
+    row.requires
+        .iter()
+        .filter(|r| {
+            !r.met
+                || !(drawn == Some(*r)
+                    || (r.any_of.len() == 1 && Some(r.any_of[0].as_str()) == map))
+        })
+        .collect()
 }
 
 #[component]
@@ -280,14 +284,7 @@ pub fn PacksView() -> Element {
     let handle = use_coroutine_handle::<EstateAction>();
     let model = app.estate().model().cloned();
     let loading = app.estate().loading().cloned();
-    let notes: Vec<Diagnostic> = app
-        .estate()
-        .diagnostics()
-        .read()
-        .iter()
-        .filter(|d| d.source == DiagSource::Model)
-        .cloned()
-        .collect();
+    let questions = app.estate().questions().cloned();
     let Some(model) = model else {
         return rsx! {
             div { class: "view packs",
@@ -299,67 +296,97 @@ pub fn PacksView() -> Element {
             }
         };
     };
-    let map_row = model
-        .packs
-        .iter()
-        .find(|r| r.kind == PackRowKind::Map)
-        .cloned();
-    let sections = sections(&model.packs, &model.pack_edges);
+    let report = model.packs.clone();
+    let map_row = report.map().cloned();
+    let sections = sections(&report, &model.phases);
+    let loose = loose_findings(&report);
+    let unmanaged = report.unmanaged.clone();
 
     rsx! {
         div { class: "view packs",
             h1 { class: "view__title", "Packs" }
-            if let Some(map) = map_row {
-                match map.state {
-                    LineState::Off => rsx! {
-                        Card { variant: CardVariant::Filled, class: "map__map-card",
-                            Icon { name: "map", size: 32, class: "placeholder__icon" }
-                            div { class: "grow",
-                                h2 { class: "map__map-title", "The map declares the choices; enable it to answer them." }
-                                p { code { "// use \"{map.path.clone().unwrap_or_default()}\"" } " is commented out" if let Some(l) = map.line { " on line {l}" } ". While it is, no pack question is asked and every switch below is off." }
-                            }
-                            Button { variant: ButtonVariant::Filled, icon: "toggle_on", disabled: loading, onclick: move |_| handle.send(EstateAction::EnableMap), "Enable the map" }
-                        }
-                    },
-                    LineState::Absent => rsx! {
-                        Card { variant: CardVariant::Filled, class: "map__map-card",
-                            Icon { name: "map", size: 32, class: "placeholder__icon" }
-                            div { class: "grow",
-                                h2 { class: "map__map-title", "This estate has no map line." }
-                                p { code { "use \"{map.path.clone().unwrap_or_default()}\"" } " is neither active nor commented in the file; " code { "satz merge-presets" } " writes the lines the library declares." }
-                            }
-                            Button { variant: ButtonVariant::Tonal, icon: "merge", disabled: loading, onclick: move |_| handle.send(EstateAction::MergePresets), "Run merge-presets" }
-                        }
-                    },
-                    LineState::On => rsx! {
-                        div { class: "map__map-on",
-                            Chip { kind: ChipKind::Assist, icon: "check_circle", label: "map on" }
-                            span { "{map.path.clone().unwrap_or_default()}" if let Some(l) = map.line { ", line {l}" } }
-                            span { class: "grow" }
-                            Button {
-                                variant: ButtonVariant::Tonal,
-                                icon: "merge",
-                                disabled: loading,
-                                onclick: move |_| handle.send(EstateAction::MergePresets),
-                                "Run merge-presets"
-                            }
-                        }
-                    },
+            if let Some(note) = &report.note {
+                Card { variant: CardVariant::Filled, class: "map__map-card",
+                    Icon { name: "map", size: 32, class: "placeholder__icon" }
+                    p { class: "grow", "{note}" }
                 }
             }
-            p { class: "view__lead", "merge-presets reconciles this estate's library with upstream: a pack that is missing is installed and gets its commented line here, an unmodified one is upgraded, an edited one is forked rather than overwritten. Its flags — a report-only run, a pristine directory, adopting one pack in place — are in the commands palette." }
-            for section in sections {
-                section { key: "{section.header}", class: "map__section",
+            if let Some(map) = map_row {
+                if map.deploys {
+                    div { class: "map__map-on",
+                        Chip { kind: ChipKind::Assist, icon: "check_circle", label: "map on" }
+                        span { "{map.path}" if let Some(l) = map.at_line { ", line {l}" } }
+                        span { class: "grow" }
+                        Button {
+                            variant: ButtonVariant::Tonal,
+                            icon: "merge",
+                            disabled: loading,
+                            onclick: move |_| handle.send(EstateAction::MergePresets),
+                            "Run merge-presets"
+                        }
+                    }
+                } else {
+                    Card { variant: CardVariant::Filled, class: "map__map-card",
+                        Icon { name: "map", size: 32, class: "placeholder__icon" }
+                        div { class: "grow",
+                            if map.line == PackLine::Absent {
+                                h2 { class: "map__map-title", "This estate has no map line." }
+                                p { "The map declares the choices every other pack hangs from. Switching it on writes " code { "use \"{map.path}\"" } " where the pack graph places it." }
+                            } else {
+                                h2 { class: "map__map-title", "The map declares the choices; switch it on to answer them." }
+                                p { code { "use \"{map.path}\"" } " is {map.line.word()}" if let Some(l) = map.at_line { " on line {l}" } ". While it is, no pack question is asked and no pack the map gates deploys." }
+                            }
+                        }
+                        Button {
+                            variant: ButtonVariant::Filled,
+                            icon: "toggle_on",
+                            disabled: loading,
+                            onclick: {
+                                let path = map.path.clone();
+                                move |_| handle.send(EstateAction::AddPack(AddPackArgs { pack: path.clone(), with_requirements: false }))
+                            },
+                            "Switch the map on"
+                        }
+                    }
+                }
+            }
+            p { class: "view__lead", "A switch is satz's add-pack or remove-pack: satz binds the gate, writes the line where the pack graph places it, and refuses a switch while a pack it needs is off or a pack that needs it is on. merge-presets reconciles this estate's library with upstream: a pack that is missing is installed, an unmodified one is upgraded, an edited one is forked rather than overwritten. Its flags are in the commands palette." }
+            for (i, f) in loose.iter().enumerate() {
+                div { key: "loose-{i}", class: "pack-card__diag",
+                    Icon { name: "error", size: 18 }
+                    span { "{f.message}" }
+                }
+            }
+            for (s, section) in sections.into_iter().enumerate() {
+                section { key: "{s}-{section.header}", class: "map__section",
                     h2 { class: "map__section-title", "{section.header}" }
                     div { class: "map__cards",
-                        for (i, item) in section.items.into_iter().enumerate() {
+                        for item in section.items {
                             match item {
-                                Item::Cell(entry) => rsx! {
-                                    PackCard { key: "{i}-{entry_key(&entry)}", entry, notes: notes.clone(), loading }
+                                Item::Cell(row) => rsx! {
+                                    PackCard { key: "{row.path}", row: row.clone(), report: report.clone(), questions: questions.clone(), loading }
                                 },
                                 Item::Tree(node) => rsx! {
-                                    PackTree { key: "{i}-tree-{entry_key(&node.entry)}", node, notes: notes.clone(), loading }
+                                    PackTree { key: "tree-{node.row.path}", node, report: report.clone(), questions: questions.clone(), loading }
                                 },
+                            }
+                        }
+                    }
+                }
+            }
+            if !unmanaged.is_empty() {
+                section { class: "map__section",
+                    h2 { class: "map__section-title", "Not in the pack graph" }
+                    div { class: "map__cards",
+                        for u in unmanaged {
+                            Card { key: "{u.path}-{u.at_line}", variant: CardVariant::Outlined, class: "pack-card",
+                                div { class: "pack-card__head",
+                                    Icon { name: "extension_off", size: 20 }
+                                    code { class: "pack-card__path", "{u.path}" }
+                                    span { class: "grow" }
+                                    Chip { kind: ChipKind::Assist, icon: "check_circle", label: "line {u.at_line}" }
+                                }
+                                p { class: "pack-card__why", "The pack graph does not know this file, so no switch here changes its line: it is the estate's own." }
                             }
                         }
                     }
@@ -369,59 +396,60 @@ pub fn PacksView() -> Element {
     }
 }
 
-/// The key a card is rendered under.
-fn entry_key(entry: &Entry) -> String {
-    match entry {
-        Entry::Single(r) => format!(
-            "{}-{}",
-            r.gate.clone().unwrap_or_default(),
-            r.path.clone().unwrap_or_default()
-        ),
-        Entry::Group { group, .. } => format!("group-{group}"),
-    }
-}
-
-/// A card others wait on, across the whole row, with the cards that wait on it below.
+/// A pack others need, across the whole row, with the packs that need it below.
 #[component]
-fn PackTree(node: Node, notes: Vec<Diagnostic>, loading: bool) -> Element {
-    let Node { entry, children } = node;
+fn PackTree(
+    node: Node,
+    report: PacksReport,
+    questions: Option<QuestionsReport>,
+    loading: bool,
+) -> Element {
+    let Node { row, children } = node;
     rsx! {
         ConnectorTree {
             class: "pack-tree",
-            root: rsx! { PackCard { entry, notes: notes.clone(), loading } },
+            root: rsx! { PackCard { row, report: report.clone(), questions: questions.clone(), loading } },
             for branch in children {
-                PackBranch { key: "{entry_key(&branch.node.entry)}", branch, notes: notes.clone(), loading }
+                PackBranch { key: "{branch.node.row.path}", branch, report: report.clone(), questions: questions.clone(), loading }
             }
         }
     }
 }
 
-/// One connector, the card it leads to, and what hangs from that card in turn.
+/// One connector, the card it leads to, and what hangs from that card in turn. A data
+/// requirement — the child reads params the parent declares — is dashed and names them.
 #[component]
-fn PackBranch(branch: Branch, notes: Vec<Diagnostic>, loading: bool) -> Element {
+fn PackBranch(
+    branch: Branch,
+    report: PacksReport,
+    questions: Option<QuestionsReport>,
+    loading: bool,
+) -> Element {
     let Branch {
-        parent_gate,
-        link,
+        requirement,
         warn,
         trunk_warn,
         phase,
-        node: Node { entry, children },
+        node: Node { row, children },
     } = branch;
-    let labelled = warn || link == Link::Follows || phase.is_some();
+    let reads = (requirement.kind == RequirementKind::Data && !requirement.params.is_empty())
+        .then(|| requirement.params.join(", "));
+    let parent = requirement.any_of.first().cloned().unwrap_or_default();
+    let labelled = warn || reads.is_some() || phase.is_some();
     let label = labelled.then(|| {
         rsx! {
             if warn {
                 span { class: "pack-tree__warn",
                     Icon { name: "error", size: 16 }
-                    "on while " code { "{parent_gate}" } " is off"
+                    "deploys while " code { "{parent}" } " is off"
                 }
             }
-            if link == Link::Follows {
+            if let Some(reads) = &reads {
                 span {
-                    class: "pack-tree__follows",
-                    title: "Its default is {parent_gate} by reference: on while {parent_gate} is on, until answered.",
+                    class: "pack-tree__reads",
+                    title: "It reads params the pack above declares.",
                     Icon { name: "link", size: 16 }
-                    "follows " code { "{parent_gate}" }
+                    "reads " code { "{reads}" }
                 }
             }
             if let Some(phase) = &phase {
@@ -432,184 +460,206 @@ fn PackBranch(branch: Branch, notes: Vec<Diagnostic>, loading: bool) -> Element 
     let branches = (!children.is_empty()).then(|| {
         rsx! {
             for child in children {
-                PackBranch { key: "{entry_key(&child.node.entry)}", branch: child, notes: notes.clone(), loading }
+                PackBranch { key: "{child.node.row.path}", branch: child, report: report.clone(), questions: questions.clone(), loading }
             }
         }
     });
     rsx! {
         ConnectorBranch {
-            line: if link == Link::Follows { ConnectorLine::Dashed } else { ConnectorLine::Solid },
+            line: if requirement.kind == RequirementKind::Data { ConnectorLine::Dashed } else { ConnectorLine::Solid },
             error: warn,
             trunk_error: trunk_warn,
             label,
             branches,
-            node: rsx! { PackCard { entry, notes: notes.clone(), loading } },
+            node: rsx! { PackCard { row, report: report.clone(), questions: questions.clone(), loading } },
         }
     }
 }
 
-fn state_chip(state: LineState) -> Element {
-    match state {
-        LineState::On => {
-            rsx! { Chip { kind: ChipKind::Assist, icon: "check_circle", label: "on" } }
-        }
-        LineState::Off => {
-            rsx! { Chip { kind: ChipKind::Assist, icon: "radio_button_unchecked", label: "off" } }
-        }
-        LineState::Absent => {
-            rsx! { Chip { kind: ChipKind::Assist, icon: "error", label: "absent", error: true } }
+/// The word a line state reads as on a chip and in a sentence.
+trait Word {
+    fn word(self) -> &'static str;
+}
+
+impl Word for PackLine {
+    fn word(self) -> &'static str {
+        match self {
+            PackLine::Active => "active",
+            PackLine::Ungated => "ungated",
+            PackLine::Commented => "commented out",
+            PackLine::Absent => "absent",
+            PackLine::Forked => "forked",
+            PackLine::Misplaced => "misplaced",
         }
     }
 }
 
-/// The notes the model raised on this row's line.
-fn notes_at(notes: &[Diagnostic], line: Option<u32>) -> Vec<Diagnostic> {
-    notes
-        .iter()
-        .filter(|d| d.line.is_some() && d.line == line)
-        .cloned()
-        .collect()
+fn line_chip(row: &PackRow) -> Element {
+    let icon = if row.deploys {
+        "check_circle"
+    } else {
+        "radio_button_unchecked"
+    };
+    let error = matches!(row.line, PackLine::Ungated | PackLine::Misplaced);
+    let label = match row.at_line {
+        Some(at) => format!("{} · line {at}", row.line.word()),
+        None => row.line.word().to_string(),
+    };
+    rsx! { Chip { kind: ChipKind::Assist, icon, label, error } }
+}
+
+/// What the gate is in this estate, as satz reports it: the value, and whether the estate
+/// answered it or the library's default gives it.
+fn gate_text(row: &PackRow, gate: &str) -> String {
+    let value = row
+        .value
+        .map(|v| v.to_string())
+        .unwrap_or_else(|| "unset".to_string());
+    match (&row.answer, &row.default) {
+        (Some(a), _) => format!("{gate} = {value} (answered {a})"),
+        (None, Some(d)) => format!("{gate} = {value} (default {d})"),
+        (None, None) => format!("{gate} = {value}"),
+    }
 }
 
 #[component]
-fn PackCard(entry: Entry, notes: Vec<Diagnostic>, loading: bool) -> Element {
+fn PackCard(
+    row: PackRow,
+    report: PacksReport,
+    questions: Option<QuestionsReport>,
+    loading: bool,
+) -> Element {
     let handle = use_coroutine_handle::<EstateAction>();
-    match entry {
-        Entry::Single(row) => {
-            let gate = row.gate.clone().unwrap_or_default();
-            let path = row.path.clone();
-            let (current, default) = match row.choice {
-                Choice::Bool { current, default } => (current, default),
-                _ => (None, None),
-            };
-            let checked = current.or(default).unwrap_or(false);
-            let asked = row.question.is_some();
-            let row_notes = notes_at(&notes, row.line);
-            let toggle_gate = gate.clone();
-            rsx! {
-                Card { variant: CardVariant::Outlined, class: "pack-card",
-                    div { class: "pack-card__head",
-                        Icon { name: "extension", size: 20 }
-                        code { class: "pack-card__path", {path.clone().unwrap_or_else(|| format!("no line for {gate}"))} }
-                        span { class: "grow" }
-                        {state_chip(row.state)}
+    let prompt = row
+        .gate
+        .as_deref()
+        .zip(questions.as_ref())
+        .and_then(|(g, q)| prompt_of(q, g));
+    // (met, the packs any of which meets it, the params a data requirement reads, the
+    // one pack whose switch meets it)
+    let requirements: Vec<(bool, String, Option<String>, Option<String>)> =
+        listed_requirements(&row, &report)
+            .into_iter()
+            .map(|r| {
+                (
+                    r.met,
+                    r.any_of.join(" or "),
+                    (r.kind == RequirementKind::Data && !r.params.is_empty())
+                        .then(|| r.params.join(", ")),
+                    match (r.met, r.any_of.as_slice()) {
+                        (false, [one]) => Some(one.clone()),
+                        _ => None,
+                    },
+                )
+            })
+            .collect();
+    let gate = row.gate.as_deref().map(|g| gate_text(&row, g));
+    let label = row.gate.clone().unwrap_or_else(|| row.path.clone());
+    let required_by = row.required_by.join(", ");
+    let excludes = row.excludes.join(", ");
+    let findings = row_findings(&report, &row);
+    let switchable = row.role == PackRole::Pack && row.by_hand.is_none();
+    let path = row.path.clone();
+    rsx! {
+        Card { variant: CardVariant::Outlined, class: "pack-card",
+            div { class: "pack-card__head",
+                Icon { name: "extension", size: 20 }
+                code { class: "pack-card__path", "{row.path}" }
+                span { class: "grow" }
+                {line_chip(&row)}
+            }
+            if let Some((prompt, why)) = &prompt {
+                p { class: "pack-card__prompt", "{prompt}" }
+                if let Some(why) = why {
+                    p { class: "pack-card__why", "{why}" }
+                }
+            }
+            if let Some(gate) = &gate {
+                p { class: "pack-card__note", code { "{gate}" } }
+            }
+            if let Some(written) = &row.written {
+                p { class: "pack-card__note", "The line names " code { "{written}" } "." }
+            }
+            if let Some(on) = &row.gated_on {
+                p { class: "pack-card__note", "The line is gated on " code { "{on}" } ", not on the pack's own gate." }
+            }
+            if row.role == PackRole::Core {
+                p { class: "pack-card__why", "The day-0 pack every estate starts with: satz does not switch it." }
+            }
+            if let Some(why) = &row.by_hand {
+                p { class: "pack-card__why", "Its line is written by hand, never by satz: {why}." }
+            }
+            if switchable {
+                div { class: "pack-card__control",
+                    Switch {
+                        label,
+                        checked: row.deploys,
+                        disabled: loading,
+                        onchange: move |on: bool| {
+                            let pack = path.clone();
+                            handle.send(if on {
+                                EstateAction::AddPack(AddPackArgs { pack, with_requirements: false })
+                            } else {
+                                EstateAction::RemovePack(RemovePackArgs { pack, cascade: false })
+                            })
+                        },
                     }
-                    if row.kind == PackRowKind::Plain {
-                        p { class: "pack-card__why",
-                            "No gate: this line carries no " code { "when" } ", so the file decides the pack and no question does. Write a "
-                            code { "when <param>" } " on it to make it a choice, or comment the line out to take the pack off."
-                        }
-                    } else {
-                        match &row.question {
-                            Some(q) => rsx! {
-                                p { class: "pack-card__prompt", "{q.prompt}" }
-                                if let Some(why) = &q.why {
-                                    p { class: "pack-card__why", "{why}" }
-                                }
-                            },
-                            None => rsx! {
-                                p { class: "pack-card__why", "No question: the map does not declare one for " code { "{gate}" } ", or the map is not in." }
-                            },
-                        }
-                    }
-                    if row.kind == PackRowKind::Plain {
-                        // no switch: there is no param to write, and the app never
-                        // comments or uncomments a line the operator wrote by hand
-                    } else if row.state == LineState::Absent {
-                        div { class: "pack-card__remedy",
-                            Icon { name: "info", size: 20 }
-                            span { "The estate has no line for this pack: " code { "satz merge-presets" } " writes it under its phase." }
-                            span { class: "grow" }
-                            Button { variant: ButtonVariant::Tonal, icon: "merge", disabled: loading, onclick: move |_| handle.send(EstateAction::MergePresets), "Run merge-presets" }
-                        }
-                    } else {
-                        div { class: "pack-card__control",
-                            Switch {
-                                label: "{gate}",
-                                checked,
-                                disabled: loading || !asked,
-                                onchange: move |v: bool| handle.send(EstateAction::Answer { subject: toggle_gate.clone(), value: serde_json::Value::Bool(v) }),
-                            }
-                            span { class: "pack-card__note",
-                                if checked {
-                                    "On: satz uncomments the line when the answer lands."
-                                } else {
-                                    "Off keeps the commented line where it is; satz never re-comments one."
-                                }
-                            }
-                        }
-                    }
-                    for (i, n) in row_notes.iter().enumerate() {
-                        div { key: "{i}", class: "pack-card__diag",
-                            Icon { name: "info", size: 18 }
-                            span { "{n.message}" }
+                    span { class: "pack-card__note",
+                        if row.deploys {
+                            "On. Off binds the gate false and leaves the line: a gated line with a false gate deploys nothing."
+                        } else {
+                            "Off. On binds the gate true and makes the line active where the pack graph places it."
                         }
                     }
                 }
             }
-        }
-        Entry::Group {
-            group,
-            question,
-            rows,
-        } => {
-            let options: Vec<Segment> = question
-                .as_ref()
-                .map(|q| {
-                    q.options
-                        .iter()
-                        .map(|o| Segment::new(o.param.clone(), o.label.clone()))
-                        .collect()
-                })
-                .unwrap_or_default();
-            let selected = rows
-                .iter()
-                .find(|r| matches!(r.choice, Choice::OneofOption { selected: true, .. }))
-                .and_then(|r| r.gate.clone())
-                .unwrap_or_default();
-            let subject = group.clone();
-            rsx! {
-                Card { variant: CardVariant::Outlined, class: "pack-card pack-card--group",
-                    div { class: "pack-card__head",
-                        Icon { name: "alt_route", size: 20 }
-                        code { class: "pack-card__path", "{group}" }
-                        span { class: "grow" }
-                        Chip { kind: ChipKind::Assist, icon: "rule", label: "one of" }
+            if !requirements.is_empty() {
+                ul { class: "pack-card__lines",
+                    for (i, (met, any_of, reads, one)) in requirements.into_iter().enumerate() {
+                        li { key: "{i}", class: "pack-card__line",
+                            Icon { name: if met { "check_circle" } else { "error" }, size: 18 }
+                            span { class: "grow",
+                                "needs " code { "{any_of}" }
+                                if let Some(reads) = reads {
+                                    " (reads " code { "{reads}" } ")"
+                                }
+                            }
+                            if let Some(one) = one {
+                                Button {
+                                    variant: ButtonVariant::Text,
+                                    icon: "toggle_on",
+                                    disabled: loading,
+                                    onclick: move |_| handle.send(EstateAction::AddPack(AddPackArgs { pack: one.clone(), with_requirements: false })),
+                                    "Switch on"
+                                }
+                            }
+                        }
                     }
-                    match &question {
-                        Some(q) => rsx! {
-                            p { class: "pack-card__prompt", "{q.prompt}" }
-                            if let Some(why) = &q.why {
-                                p { class: "pack-card__why", "{why}" }
-                            }
-                            SegmentedButton {
-                                options,
-                                selected,
-                                onselect: move |v: String| handle.send(EstateAction::Answer { subject: subject.clone(), value: serde_json::Value::String(v) }),
-                            }
-                        },
-                        None => rsx! {
-                            p { class: "pack-card__why", "No question: the map is not in, so the choice cannot be made here." }
-                        },
+                }
+            }
+            if row.role == PackRole::Pack && !row.required_by.is_empty() {
+                p { class: "pack-card__note", "Needed by " code { "{required_by}" } "." }
+            }
+            if !row.excludes.is_empty() {
+                p { class: "pack-card__note", "Excludes " code { "{excludes}" } "." }
+            }
+            for n in row.notices.iter() {
+                div { key: "{n.param}", class: "pack-card__remedy",
+                    Icon { name: if n.acknowledged { "task_alt" } else { "assignment_late" }, size: 20 }
+                    span {
+                        if n.acknowledged { "Ran " } else if row.deploys { "Run " } else { "Once on, run " }
+                        code { "{n.run}" } ", then bind " code { "{n.param} = true" } "."
                     }
-                    ul { class: "pack-card__lines",
-                        for r in rows.iter() {
-                            li { key: "{r.gate.clone().unwrap_or_default()}", class: "pack-card__line",
-                                code { class: "pack-card__path", {r.path.clone().unwrap_or_else(|| format!("no line for {}", r.gate.clone().unwrap_or_default()))} }
-                                if let Some(q) = &question {
-                                    if let Some(o) = q.options.iter().find(|o| Some(&o.param) == r.gate.as_ref()) {
-                                        span { class: "pack-card__option-label", "{o.label}" }
-                                    }
-                                }
-                                span { class: "grow" }
-                                {state_chip(r.state)}
-                                if r.state == LineState::Absent {
-                                    Button { variant: ButtonVariant::Text, icon: "merge", disabled: loading, onclick: move |_| handle.send(EstateAction::MergePresets), "merge-presets" }
-                                }
-                                for (i, n) in notes_at(&notes, r.line).iter().enumerate() {
-                                    span { key: "{i}", class: "pack-card__diag", Icon { name: "info", size: 18 } "{n.message}" }
-                                }
-                            }
+                }
+            }
+            for (i, (message, fix)) in findings.iter().enumerate() {
+                div { key: "{i}", class: "pack-card__diag",
+                    Icon { name: "error", size: 18 }
+                    span {
+                        "{message}"
+                        if let Some(fix) = fix {
+                            br {}
+                            code { "{fix}" }
                         }
                     }
                 }
@@ -621,73 +671,88 @@ fn PackCard(entry: Entry, notes: Vec<Diagnostic>, loading: bool) -> Element {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use satz_studio_core::satz::reports::FindingSeverity;
 
-    fn row(path: Option<&str>, gate: &str, state: LineState, phase: Option<&str>) -> PackRow {
+    fn row(path: &str, at_line: Option<u32>) -> PackRow {
         PackRow {
-            kind: PackRowKind::Choice,
-            gate: Some(gate.to_string()),
-            path: path.map(str::to_string),
-            state,
-            choice: Choice::Bool {
-                current: None,
-                default: None,
+            path: path.to_string(),
+            role: PackRole::Pack,
+            gate: Some(format!("use_{}", path.trim_end_matches(".satz"))),
+            gate_declared_in: Some("presets/estate-map.satz".to_string()),
+            answer: None,
+            default: None,
+            value: None,
+            line: if at_line.is_some() {
+                PackLine::Commented
+            } else {
+                PackLine::Absent
             },
-            question: None,
-            phase: phase.map(str::to_string),
-            line: Some(1),
+            at_line,
+            written: None,
+            gated_on: None,
+            deploys: false,
+            requires: vec![need(
+                RequirementKind::Gate,
+                &["presets/estate-map.satz"],
+                true,
+            )],
+            required_by: Vec::new(),
+            excludes: Vec::new(),
+            by_hand: None,
+            notices: Vec::new(),
+            findings: Vec::new(),
         }
     }
 
-    fn oneof(path: &str, gate: &str, group: &str) -> PackRow {
-        PackRow {
-            choice: Choice::OneofOption {
-                group: group.to_string(),
-                selected: false,
-            },
-            ..row(Some(path), gate, LineState::Off, None)
+    fn need(kind: RequirementKind, any_of: &[&str], met: bool) -> Requirement {
+        Requirement {
+            kind,
+            any_of: any_of.iter().map(|p| p.to_string()).collect(),
+            params: Vec::new(),
+            met,
         }
     }
 
-    /// A line in the file, with its gate bound `gate_on`.
-    fn line(gate: &str, state: LineState, gate_on: bool, phase: Option<&str>) -> PackRow {
-        PackRow {
-            choice: Choice::Bool {
-                current: Some(gate_on),
-                default: None,
-            },
-            ..row(Some(&format!("presets/{gate}.satz")), gate, state, phase)
+    /// `child` needs `parent`, and whether that is met.
+    fn needs(mut child: PackRow, parent: &str, met: bool) -> PackRow {
+        child
+            .requires
+            .push(need(RequirementKind::Data, &[parent], met));
+        child
+    }
+
+    fn report(mut packs: Vec<PackRow>) -> PacksReport {
+        let mut map = row("presets/estate-map.satz", Some(1));
+        map.role = PackRole::Map;
+        map.gate = None;
+        map.requires = Vec::new();
+        map.line = PackLine::Active;
+        map.deploys = true;
+        packs.insert(0, map);
+        PacksReport {
+            estate: "C0example.satz".to_string(),
+            note: None,
+            packs,
+            unmanaged: Vec::new(),
+            findings: Vec::new(),
         }
     }
 
-    fn edge(parent: &str, child: &str) -> PackEdge {
-        PackEdge {
-            parent: parent.to_string(),
-            child: child.to_string(),
-            gates: vec![child.to_string()],
-            follows: false,
-            file: "presets/estate-map.satz".to_string(),
-            line: 1,
-        }
-    }
-
-    fn name(entry: &Entry) -> String {
-        match entry {
-            Entry::Single(r) => r.gate.clone().unwrap(),
-            Entry::Group { group, rows, .. } => format!("{group}:{}", rows.len()),
-        }
+    fn phases(v: &[(u32, &str)]) -> BTreeMap<u32, String> {
+        v.iter().map(|(l, p)| (*l, p.to_string())).collect()
     }
 
     /// `a[b[d, e], c]` for a tree, `a` for a cell.
     fn outline(item: &Item) -> String {
         fn node(n: &Node) -> String {
             if n.children.is_empty() {
-                return name(&n.entry);
+                return n.row.path.clone();
             }
             let children: Vec<String> = n.children.iter().map(|b| node(&b.node)).collect();
-            format!("{}[{}]", name(&n.entry), children.join(", "))
+            format!("{}[{}]", n.row.path, children.join(", "))
         }
         match item {
-            Item::Cell(e) => name(e),
+            Item::Cell(r) => r.path.clone(),
             Item::Tree(n) => node(n),
         }
     }
@@ -704,7 +769,7 @@ mod tests {
             .iter()
             .flat_map(|s| s.items.iter())
             .find_map(|i| match i {
-                Item::Tree(n) if name(&n.entry) == root => Some(n),
+                Item::Tree(n) if n.row.path == root => Some(n),
                 _ => None,
             })
             .unwrap_or_else(|| panic!("no tree rooted at {root}: {:?}", shape(sections)))
@@ -728,240 +793,284 @@ mod tests {
     }
 
     #[test]
-    fn a_phase_opens_a_section_a_bare_row_joins_it_and_absent_rows_go_last() {
-        let rows = vec![
-            PackRow {
-                kind: PackRowKind::Map,
-                gate: None,
-                path: Some("presets/estate-map.satz".into()),
-                state: LineState::On,
-                choice: Choice::Line,
-                question: None,
-                phase: Some("the map".into()),
-                line: Some(1),
-            },
-            row(
-                Some("a.satz"),
-                "use_a",
-                LineState::Off,
-                Some("once A\ndetail"),
-            ),
-            row(Some("b.satz"), "use_b", LineState::On, None),
-            row(None, "use_z", LineState::Absent, None),
-            oneof("s1.satz", "model_s1", "model"),
-            oneof("s2.satz", "model_s2", "model"),
-            row(Some("c.satz"), "use_c", LineState::Off, Some("once C")),
-        ];
+    fn lines_go_in_file_order_under_their_phase_and_packs_without_one_go_last() {
+        // the graph's order is not the file's: the file decides the sections
+        let r = report(vec![
+            row("c.satz", Some(30)),
+            row("z.satz", None),
+            row("a.satz", Some(10)),
+            row("b.satz", Some(20)),
+            row("y.satz", None),
+        ]);
+        let p = phases(&[(10, "once A\ndetail"), (30, "once C")]);
         assert_eq!(
-            shape(&sections(&rows, &[])),
+            shape(&sections(&r, &p)),
             owned(&[
-                ("once A", &["use_a", "use_b", "model:2"]),
-                ("once C", &["use_c"]),
-                (ABSENT_HEADER, &["use_z"]),
+                ("once A", &["a.satz", "b.satz"]),
+                ("once C", &["c.satz"]),
+                (ABSENT_HEADER, &["z.satz", "y.satz"]),
             ])
         );
     }
 
     #[test]
-    fn a_row_before_any_phase_opens_the_no_phase_section() {
-        let rows = vec![row(Some("a.satz"), "use_a", LineState::Off, None)];
-        assert_eq!(sections(&rows, &[])[0].header, NO_PHASE_HEADER);
+    fn a_line_before_any_phase_opens_the_no_phase_section() {
+        let r = report(vec![row("a.satz", Some(3))]);
+        assert_eq!(sections(&r, &BTreeMap::new())[0].header, NO_PHASE_HEADER);
     }
 
-    /// The SCC shape: enablement in an early phase, notifications and export in a later
-    /// one, the mail and the SIEM each in a phase of its own — three levels.
-    fn scc_rows() -> Vec<PackRow> {
-        vec![
-            line("use_budget", LineState::Off, false, Some("once alone")),
-            line("use_scc", LineState::Off, false, None),
-            line("use_audit", LineState::Off, false, None),
-            line("use_notify", LineState::Off, false, Some("once SCC is on")),
-            line("use_export", LineState::Off, false, None),
-            line(
-                "use_siem",
-                LineState::Off,
+    /// The SCC and archive shape: the mail needs the central alerts, which need the
+    /// archive; the SIEM needs the notifications — three levels, children leaving their
+    /// phase.
+    fn scc() -> (PacksReport, BTreeMap<u32, String>) {
+        let r = report(vec![
+            row("budget.satz", Some(10)),
+            row("archive.satz", Some(11)),
+            needs(row("alerts.satz", Some(12)), "archive.satz", false),
+            row("notify.satz", Some(20)),
+            needs(row("siem.satz", Some(30)), "notify.satz", false),
+            needs(
+                needs(row("mail.satz", Some(40)), "alerts.satz", false),
+                "notify.satz",
                 false,
-                Some("once the topic exists"),
             ),
-            line(
-                "use_mail",
-                LineState::Off,
-                false,
-                Some("once the alerts are in"),
-            ),
-            line("use_runner", LineState::Off, false, Some("once the runner")),
-        ]
-    }
-
-    fn scc_edges() -> Vec<PackEdge> {
-        vec![
-            edge("use_scc", "use_notify"),
-            edge("use_notify", "use_mail"),
-            edge("use_notify", "use_siem"),
-            edge("use_scc", "use_export"),
-        ]
+            needs(row("sentinel.satz", Some(50)), "archive.satz", false),
+        ]);
+        let p = phases(&[
+            (10, "once alone"),
+            (20, "once SCC is on"),
+            (30, "once the topic exists"),
+            (40, "once the alerts are in"),
+            (50, "once the archive"),
+        ]);
+        (r, p)
     }
 
     #[test]
-    fn a_pack_others_wait_on_is_a_tree_the_rest_stay_cells_and_children_leave_their_phase() {
-        let s = sections(&scc_rows(), &scc_edges());
+    fn a_pack_another_needs_is_a_tree_the_rest_stay_cells_and_children_leave_their_phase() {
+        let (r, p) = scc();
+        let s = sections(&r, &p);
         assert_eq!(
             shape(&s),
             owned(&[
                 (
                     "once alone",
                     &[
-                        "use_budget",
-                        "use_scc[use_notify[use_siem, use_mail], use_export]",
-                        "use_audit",
+                        "budget.satz",
+                        "archive.satz[alerts.satz[mail.satz], sentinel.satz]",
                     ]
                 ),
-                ("once the runner", &["use_runner"]),
+                ("once SCC is on", &["notify.satz[siem.satz]"]),
             ]),
-            "children in document order, not in edge order; the emptied phases are gone"
+            "the mail hangs from its first requirement; the emptied phases are gone"
         );
-    }
-
-    #[test]
-    fn a_child_carries_the_phase_it_left_and_one_in_its_parent_s_phase_carries_none() {
-        let s = sections(&scc_rows(), &scc_edges());
-        let scc = tree(&s, "use_scc");
-        let notify = &scc.children[0];
-        let export = &scc.children[1];
-        assert_eq!(notify.phase.as_deref(), Some("once SCC is on"));
-        assert_eq!(export.phase.as_deref(), Some("once SCC is on"));
+        let archive = tree(&s, "archive.satz");
         assert_eq!(
-            notify.node.children[0].phase.as_deref(),
-            Some("once the topic exists")
+            archive.children[0].phase, None,
+            "the alerts share its phase"
         );
         assert_eq!(
-            notify.node.children[1].phase.as_deref(),
+            archive.children[1].phase.as_deref(),
+            Some("once the archive")
+        );
+        assert_eq!(
+            archive.children[0].node.children[0].phase.as_deref(),
             Some("once the alerts are in")
         );
-
-        let same = vec![
-            line("use_a", LineState::Off, false, Some("once A")),
-            line("use_b", LineState::Off, false, None),
-        ];
-        let s = sections(&same, &[edge("use_a", "use_b")]);
-        assert_eq!(tree(&s, "use_a").children[0].phase, None);
-    }
-
-    #[test]
-    fn a_child_that_defaults_to_its_parent_by_reference_follows_it() {
-        let rows = vec![
-            line(
-                "use_sentinel",
-                LineState::Off,
-                false,
-                Some("once the archive"),
-            ),
-            line("use_logs", LineState::Off, false, None),
-            line("use_net", LineState::Off, false, None),
-        ];
-        let mut logs = edge("use_sentinel", "use_logs");
-        logs.follows = true;
-        let s = sections(&rows, &[logs, edge("use_sentinel", "use_net")]);
-        let links: Vec<(Link, &str)> = tree(&s, "use_sentinel")
-            .children
-            .iter()
-            .map(|b| (b.link, b.parent_gate.as_str()))
-            .collect();
         assert_eq!(
-            links,
-            [
-                (Link::Follows, "use_sentinel"),
-                (Link::AskedWhen, "use_sentinel")
-            ]
+            archive.children[0].requirement.kind,
+            RequirementKind::Data,
+            "the branch carries satz's requirement"
         );
     }
 
     #[test]
-    fn a_child_in_the_estate_under_a_parent_that_is_not_warns_and_the_trunk_leads_to_it() {
-        let rows = vec![
-            // the parent's line is on and its gate was answered off
-            line("use_scc", LineState::On, false, Some("once alone")),
-            // on, but its gate is off: nothing of it is emitted
-            line("use_notify", LineState::On, false, None),
-            // off
-            line("use_export", LineState::Off, true, None),
-            // in: line on, gate on
-            line("use_extra", LineState::On, true, None),
-        ];
-        let edges = [
-            edge("use_scc", "use_notify"),
-            edge("use_scc", "use_export"),
-            edge("use_scc", "use_extra"),
-        ];
-        let s = sections(&rows, &edges);
-        let warns: Vec<(bool, bool)> = tree(&s, "use_scc")
+    fn a_requirement_several_packs_meet_and_the_map_s_hang_a_card_nowhere() {
+        let mut billing = row("billing.satz", Some(12));
+        billing.requires.insert(
+            0,
+            need(RequirementKind::Requires, &["s1.satz", "s2.satz"], true),
+        );
+        let r = report(vec![
+            row("s1.satz", Some(10)),
+            row("s2.satz", Some(11)),
+            billing,
+        ]);
+        assert_eq!(
+            shape(&sections(&r, &BTreeMap::new())),
+            owned(&[(NO_PHASE_HEADER, &["s1.satz", "s2.satz", "billing.satz"])])
+        );
+    }
+
+    #[test]
+    fn a_child_that_deploys_while_its_requirement_is_off_warns_and_the_trunk_leads_to_it() {
+        let mut deploys = needs(row("extra.satz", Some(13)), "scc.satz", false);
+        deploys.deploys = true;
+        let mut met = needs(row("export.satz", Some(12)), "scc.satz", true);
+        met.deploys = true;
+        let r = report(vec![
+            row("scc.satz", Some(10)),
+            needs(row("notify.satz", Some(11)), "scc.satz", false),
+            met,
+            deploys,
+        ]);
+        let s = sections(&r, &BTreeMap::new());
+        let warns: Vec<(bool, bool)> = tree(&s, "scc.satz")
             .children
             .iter()
             .map(|b| (b.warn, b.trunk_warn))
             .collect();
         assert_eq!(warns, [(false, true), (false, true), (true, false)]);
-
-        // the parent in as well: nothing warns
-        let mut on = rows.clone();
-        on[0] = line("use_scc", LineState::On, true, Some("once alone"));
-        let s = sections(&on, &edges);
-        assert!(
-            tree(&s, "use_scc")
-                .children
-                .iter()
-                .all(|b| !b.warn && !b.trunk_warn)
-        );
     }
 
     #[test]
-    fn a_oneof_under_a_gate_is_one_child_and_a_group_holding_the_parent_gate_is_the_parent() {
-        let mut default = oneof("presets/role-default.satz", "access_default", "access");
-        default.state = LineState::On;
-        default.choice = Choice::OneofOption {
-            group: "access".to_string(),
-            selected: true,
-        };
-        let rows = vec![
-            line("use_plan", LineState::Off, false, Some("once Defender")),
-            default,
-            oneof("presets/role-least.satz", "access_least", "access"),
-            line("use_audit_role", LineState::Off, false, None),
-        ];
-        let mut access = edge("use_plan", "access");
-        access.gates = vec!["access_default".to_string(), "access_least".to_string()];
-        let s = sections(&rows, &[access, edge("access_least", "use_audit_role")]);
+    fn packs_that_need_each_other_stay_at_the_top_where_the_loop_closes() {
+        let r = report(vec![
+            needs(row("a.satz", Some(10)), "b.satz", false),
+            needs(row("b.satz", Some(11)), "a.satz", false),
+        ]);
         assert_eq!(
-            shape(&s),
-            owned(&[("once Defender", &["use_plan[access:2[use_audit_role]]"])])
+            shape(&sections(&r, &BTreeMap::new())),
+            owned(&[(NO_PHASE_HEADER, &["a.satz[b.satz]"])])
         );
-        let branch = &tree(&s, "use_plan").children[0];
-        assert!(branch.warn, "an option is in while the plan is not");
-    }
-
-    #[test]
-    fn a_loop_that_grouping_closes_stays_at_the_top_where_it_closes() {
-        let rows = vec![
-            line("use_a", LineState::Off, false, Some("once A")),
-            oneof("x.satz", "pick_x", "pick"),
-            oneof("y.satz", "pick_y", "pick"),
-        ];
-        let mut pick = edge("use_a", "pick");
-        pick.gates = vec!["pick_x".to_string(), "pick_y".to_string()];
-        let s = sections(&rows, &[pick, edge("pick_y", "use_a")]);
-        assert_eq!(shape(&s), owned(&[("once A", &["use_a[pick:2]"])]));
     }
 
     #[test]
     fn an_absent_child_hangs_under_its_parent_without_a_phase_caption() {
-        let rows = vec![
-            line("use_scc", LineState::Off, false, Some("once alone")),
-            row(None, "use_notify", LineState::Absent, None),
-        ];
-        let s = sections(&rows, &[edge("use_scc", "use_notify")]);
+        let r = report(vec![
+            row("scc.satz", Some(10)),
+            needs(row("notify.satz", None), "scc.satz", false),
+        ]);
+        let s = sections(&r, &phases(&[(10, "once alone")]));
         assert_eq!(
             shape(&s),
-            owned(&[("once alone", &["use_scc[use_notify]"])])
+            owned(&[("once alone", &["scc.satz[notify.satz]"])])
         );
-        assert_eq!(tree(&s, "use_scc").children[0].phase, None);
+        assert_eq!(tree(&s, "scc.satz").children[0].phase, None);
+    }
+
+    #[test]
+    fn a_card_lists_what_is_off_and_what_the_tree_does_not_draw() {
+        let mut mail = needs(row("mail.satz", Some(12)), "alerts.satz", true);
+        mail.requires
+            .push(need(RequirementKind::Data, &["notify.satz"], false));
+        mail.requires.push(need(
+            RequirementKind::Requires,
+            &["s1.satz", "s2.satz"],
+            true,
+        ));
+        let r = report(vec![row("alerts.satz", Some(10)), mail.clone()]);
+        let listed: Vec<Vec<String>> = listed_requirements(&mail, &r)
+            .into_iter()
+            .map(|q| q.any_of.clone())
+            .collect();
+        assert_eq!(
+            listed,
+            [
+                vec!["notify.satz".to_string()],
+                vec!["s1.satz".to_string(), "s2.satz".to_string()]
+            ],
+            "the map and the drawn parent are not listed while they are met"
+        );
+        let mut off = mail;
+        off.requires[0].met = false;
+        assert_eq!(
+            listed_requirements(&off, &r).len(),
+            3,
+            "the map is listed once off"
+        );
+    }
+
+    /// satz's own report for its smoke estate, recorded from the release the app is
+    /// tested against: the dependencies no `ask_when` declares are trees all the same.
+    #[test]
+    fn the_recorded_report_hangs_every_pack_under_the_one_it_needs() {
+        let r: PacksReport = serde_json::from_str(include_str!(
+            "../../../satz-studio-core/tests/fixtures/packs-smoke.json"
+        ))
+        .unwrap();
+        let s = sections(&r, &BTreeMap::new());
+        let items: Vec<String> = s.iter().flat_map(|s| s.items.iter().map(outline)).collect();
+        let hangs = |parent: &str, child: &str| {
+            let (parent, child) = (format!("presets/{parent}"), format!("presets/{child}"));
+            items
+                .iter()
+                .any(|i| i.contains(&format!("{parent}[")) && i.contains(&child))
+        };
+        assert!(
+            hangs(
+                "monitoring/organization-audit-logsink.satz",
+                "monitoring/organization-cis-log-alerts-central.satz"
+            ),
+            "{items:#?}"
+        );
+        assert!(hangs(
+            "monitoring/organization-cis-log-alerts-central.satz",
+            "scc/scc-findings-mail.satz"
+        ));
+        assert!(hangs(
+            "monitoring/organization-audit-logsink.satz",
+            "integrations/microsoft-sentinel.satz"
+        ));
+        assert!(hangs(
+            "ci/verification-runner.satz",
+            "ci/verification-runner-grant.satz"
+        ));
+        // billing needs one of three security-group spellings: a choice, not a parent
+        let billing = r.row("presets/billing-account-permissions.satz").unwrap();
+        assert!(parent_of(billing, &r.packs).is_none());
+        assert!(
+            listed_requirements(billing, &r)
+                .iter()
+                .any(|q| q.any_of.len() == 3 && !q.met)
+        );
+        assert!(
+            s.iter().all(|s| s.items.iter().all(|i| match i {
+                Item::Cell(row) => row.role != PackRole::Map,
+                Item::Tree(n) => n.row.role != PackRole::Map,
+            })),
+            "the map is the page's head"
+        );
+    }
+
+    #[test]
+    fn a_finding_carries_the_command_satz_names_for_it() {
+        let mut logsink = row(
+            "presets/monitoring/organization-audit-logsink.satz",
+            Some(9),
+        );
+        logsink.findings = vec!["needs the map".to_string(), "another".to_string()];
+        let mut r = report(vec![logsink.clone()]);
+        let finding = |subject: &str, message: &str, fix: Option<&str>| Finding {
+            severity: FindingSeverity::Warning,
+            kind: "pack-requirement".to_string(),
+            group: None,
+            file: None,
+            line: Some(9),
+            subject: Some(subject.to_string()),
+            message: message.to_string(),
+            fix: fix.map(str::to_string),
+        };
+        r.findings = vec![
+            finding(
+                &logsink.path,
+                "needs the map",
+                Some("satz add-pack C0example.satz presets/estate-map.satz"),
+            ),
+            finding("presets/gone.satz", "a pack the graph has no row for", None),
+        ];
+        assert_eq!(
+            row_findings(&r, &logsink),
+            [
+                (
+                    "needs the map".to_string(),
+                    Some("satz add-pack C0example.satz presets/estate-map.satz".to_string())
+                ),
+                ("another".to_string(), None),
+            ]
+        );
+        let loose = loose_findings(&r);
+        assert_eq!(loose.len(), 1);
+        assert_eq!(loose[0].message, "a pack the graph has no row for");
     }
 }

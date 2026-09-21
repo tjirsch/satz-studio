@@ -1,0 +1,1541 @@
+{
+  "estate": "vendor/satz/tests/smoke/yaml/smoke.satz",
+  "packs": [
+    {
+      "path": "presets/estate-core.satz",
+      "role": "core",
+      "line": "absent",
+      "deploys": false,
+      "requires": [],
+      "required_by": [],
+      "excludes": [],
+      "findings": []
+    },
+    {
+      "path": "presets/estate-map.satz",
+      "role": "map",
+      "line": "absent",
+      "deploys": false,
+      "requires": [],
+      "required_by": [
+        "presets/security-group-models/s1-security-groups.satz",
+        "presets/security-group-models/s2-security-groups.satz",
+        "presets/security-group-models/s1-group-definitions.satz",
+        "presets/security-group-models/s1-group-permissions.satz",
+        "presets/billing-account-permissions.satz",
+        "presets/organization-budget.satz",
+        "presets/security-audit/sa-security-audit.satz",
+        "presets/scc/scc-service-enablement.satz",
+        "presets/monitoring/project-cis-log-alerts.satz",
+        "presets/essential-contacts-organization.satz",
+        "presets/monitoring/organization-audit-logsink.satz",
+        "presets/monitoring/organization-cis-log-alerts-central.satz",
+        "presets/cis/CIS-GCP-Foundation-4.0.satz",
+        "presets/scc/scc-notifications.satz",
+        "presets/scc/scc-export.satz",
+        "presets/scc/scc-findings-siem.satz",
+        "presets/scc/scc-findings-mail.satz",
+        "presets/integrations/microsoft-defender-for-cloud.satz",
+        "presets/integrations/microsoft-sentinel.satz",
+        "presets/integrations/microsoft-sentinel-auditlogs.satz",
+        "presets/integrations/microsoft-sentinel-network-logs.satz",
+        "presets/ci/verification-runner.satz",
+        "presets/ci/verification-runner-grant.satz",
+        "presets/exemptions/exemption-tag.satz"
+      ],
+      "excludes": [],
+      "findings": []
+    },
+    {
+      "path": "presets/security-group-models/s1-security-groups.satz",
+      "role": "pack",
+      "gate": "security_model_s1",
+      "gate_declared_in": "presets/estate-map.satz",
+      "default": "true",
+      "line": "absent",
+      "deploys": false,
+      "requires": [
+        {
+          "kind": "gate",
+          "any_of": [
+            "presets/estate-map.satz"
+          ],
+          "params": [
+            "security_model_s1"
+          ],
+          "met": false
+        }
+      ],
+      "required_by": [
+        "presets/billing-account-permissions.satz"
+      ],
+      "excludes": [
+        "presets/security-group-models/s1-group-definitions.satz",
+        "presets/security-group-models/s1-group-permissions.satz",
+        "presets/security-group-models/s2-security-groups.satz"
+      ],
+      "findings": []
+    },
+    {
+      "path": "presets/security-group-models/s2-security-groups.satz",
+      "role": "pack",
+      "gate": "security_model_s2",
+      "gate_declared_in": "presets/estate-map.satz",
+      "default": "false",
+      "line": "absent",
+      "deploys": false,
+      "requires": [
+        {
+          "kind": "gate",
+          "any_of": [
+            "presets/estate-map.satz"
+          ],
+          "params": [
+            "security_model_s2"
+          ],
+          "met": false
+        }
+      ],
+      "required_by": [
+        "presets/billing-account-permissions.satz"
+      ],
+      "excludes": [
+        "presets/security-group-models/s1-group-definitions.satz",
+        "presets/security-group-models/s1-group-permissions.satz",
+        "presets/security-group-models/s1-security-groups.satz"
+      ],
+      "findings": []
+    },
+    {
+      "path": "presets/security-group-models/s1-group-definitions.satz",
+      "role": "pack",
+      "gate": "security_model_s1",
+      "gate_declared_in": "presets/estate-map.satz",
+      "default": "true",
+      "line": "absent",
+      "deploys": false,
+      "requires": [
+        {
+          "kind": "gate",
+          "any_of": [
+            "presets/estate-map.satz"
+          ],
+          "params": [
+            "security_model_s1"
+          ],
+          "met": false
+        }
+      ],
+      "required_by": [
+        "presets/security-group-models/s1-group-permissions.satz",
+        "presets/billing-account-permissions.satz"
+      ],
+      "excludes": [
+        "presets/security-group-models/s1-security-groups.satz",
+        "presets/security-group-models/s2-security-groups.satz"
+      ],
+      "by_hand": "the S1 model's second spelling, `use`d inside the `google_cloud_identity_group` block in place of s1-security-groups",
+      "findings": []
+    },
+    {
+      "path": "presets/security-group-models/s1-group-permissions.satz",
+      "role": "pack",
+      "gate": "security_model_s1",
+      "gate_declared_in": "presets/estate-map.satz",
+      "default": "true",
+      "line": "absent",
+      "deploys": false,
+      "requires": [
+        {
+          "kind": "gate",
+          "any_of": [
+            "presets/estate-map.satz"
+          ],
+          "params": [
+            "security_model_s1"
+          ],
+          "met": false
+        },
+        {
+          "kind": "data",
+          "any_of": [
+            "presets/security-group-models/s1-group-definitions.satz"
+          ],
+          "params": [
+            "gcp_billing_admins_name",
+            "gcp_organization_admins_name",
+            "gcp_project_admins_name",
+            "gcp_security_admins_name",
+            "gcp_security_viewers_name"
+          ],
+          "met": false
+        }
+      ],
+      "required_by": [],
+      "excludes": [
+        "presets/security-group-models/s1-security-groups.satz",
+        "presets/security-group-models/s2-security-groups.satz"
+      ],
+      "by_hand": "the S1 model's second spelling, `use`d inside the `google_organization_iam_member` block in place of s1-security-groups",
+      "findings": []
+    },
+    {
+      "path": "presets/billing-account-permissions.satz",
+      "role": "pack",
+      "gate": "use_billing_permissions",
+      "gate_declared_in": "presets/estate-map.satz",
+      "default": "true",
+      "line": "absent",
+      "deploys": false,
+      "requires": [
+        {
+          "kind": "requires",
+          "any_of": [
+            "presets/security-group-models/s1-security-groups.satz",
+            "presets/security-group-models/s2-security-groups.satz",
+            "presets/security-group-models/s1-group-definitions.satz"
+          ],
+          "met": false
+        },
+        {
+          "kind": "gate",
+          "any_of": [
+            "presets/estate-map.satz"
+          ],
+          "params": [
+            "use_billing_permissions"
+          ],
+          "met": false
+        }
+      ],
+      "required_by": [],
+      "excludes": [],
+      "findings": []
+    },
+    {
+      "path": "presets/organization-budget.satz",
+      "role": "pack",
+      "gate": "use_budget",
+      "gate_declared_in": "presets/estate-map.satz",
+      "default": "false",
+      "line": "absent",
+      "deploys": false,
+      "requires": [
+        {
+          "kind": "gate",
+          "any_of": [
+            "presets/estate-map.satz"
+          ],
+          "params": [
+            "use_budget"
+          ],
+          "met": false
+        }
+      ],
+      "required_by": [],
+      "excludes": [],
+      "findings": []
+    },
+    {
+      "path": "presets/security-audit/sa-security-audit.satz",
+      "role": "pack",
+      "gate": "use_security_audit_sa",
+      "gate_declared_in": "presets/estate-map.satz",
+      "default": "false",
+      "line": "absent",
+      "deploys": false,
+      "requires": [
+        {
+          "kind": "gate",
+          "any_of": [
+            "presets/estate-map.satz"
+          ],
+          "params": [
+            "use_security_audit_sa"
+          ],
+          "met": false
+        }
+      ],
+      "required_by": [],
+      "excludes": [],
+      "findings": []
+    },
+    {
+      "path": "presets/scc/scc-service-enablement.satz",
+      "role": "pack",
+      "gate": "use_scc_enablement",
+      "gate_declared_in": "presets/estate-map.satz",
+      "default": "false",
+      "line": "absent",
+      "deploys": false,
+      "requires": [
+        {
+          "kind": "gate",
+          "any_of": [
+            "presets/estate-map.satz"
+          ],
+          "params": [
+            "use_scc_enablement"
+          ],
+          "met": false
+        }
+      ],
+      "required_by": [],
+      "excludes": [],
+      "findings": []
+    },
+    {
+      "path": "presets/monitoring/project-cis-log-alerts.satz",
+      "role": "pack",
+      "gate": "use_project_cis_log_alerts",
+      "gate_declared_in": "presets/estate-map.satz",
+      "default": "false",
+      "line": "absent",
+      "deploys": false,
+      "requires": [
+        {
+          "kind": "gate",
+          "any_of": [
+            "presets/estate-map.satz"
+          ],
+          "params": [
+            "use_project_cis_log_alerts"
+          ],
+          "met": false
+        }
+      ],
+      "required_by": [],
+      "excludes": [],
+      "findings": []
+    },
+    {
+      "path": "presets/essential-contacts-organization.satz",
+      "role": "pack",
+      "gate": "use_essential_contacts",
+      "gate_declared_in": "presets/estate-map.satz",
+      "default": "true",
+      "line": "ungated",
+      "at": 57,
+      "deploys": true,
+      "requires": [
+        {
+          "kind": "gate",
+          "any_of": [
+            "presets/estate-map.satz"
+          ],
+          "params": [
+            "use_essential_contacts"
+          ],
+          "met": false
+        }
+      ],
+      "required_by": [],
+      "excludes": [],
+      "findings": [
+        "`presets/essential-contacts-organization.satz` needs `presets/estate-map.satz`, which is off"
+      ]
+    },
+    {
+      "path": "presets/monitoring/organization-audit-logsink.satz",
+      "role": "pack",
+      "gate": "use_audit_logsink",
+      "gate_declared_in": "presets/estate-map.satz",
+      "default": "true",
+      "line": "ungated",
+      "at": 139,
+      "deploys": true,
+      "requires": [
+        {
+          "kind": "gate",
+          "any_of": [
+            "presets/estate-map.satz"
+          ],
+          "params": [
+            "use_audit_logsink"
+          ],
+          "met": false
+        }
+      ],
+      "required_by": [
+        "presets/monitoring/organization-cis-log-alerts-central.satz",
+        "presets/integrations/microsoft-sentinel.satz"
+      ],
+      "excludes": [],
+      "findings": [
+        "`presets/monitoring/organization-audit-logsink.satz` needs `presets/estate-map.satz`, which is off"
+      ]
+    },
+    {
+      "path": "presets/monitoring/organization-cis-log-alerts-central.satz",
+      "role": "pack",
+      "gate": "use_central_alerts",
+      "gate_declared_in": "presets/estate-map.satz",
+      "default": "true",
+      "line": "ungated",
+      "at": 140,
+      "deploys": true,
+      "requires": [
+        {
+          "kind": "gate",
+          "any_of": [
+            "presets/estate-map.satz"
+          ],
+          "params": [
+            "use_central_alerts"
+          ],
+          "met": false
+        },
+        {
+          "kind": "data",
+          "any_of": [
+            "presets/monitoring/organization-audit-logsink.satz"
+          ],
+          "params": [
+            "logsink_project_id"
+          ],
+          "met": true
+        }
+      ],
+      "required_by": [
+        "presets/scc/scc-findings-mail.satz"
+      ],
+      "excludes": [],
+      "findings": [
+        "`presets/monitoring/organization-cis-log-alerts-central.satz` needs `presets/estate-map.satz`, which is off"
+      ]
+    },
+    {
+      "path": "presets/cis/CIS-GCP-Foundation-4.0.satz",
+      "role": "pack",
+      "gate": "use_cis_baseline",
+      "gate_declared_in": "presets/estate-map.satz",
+      "default": "true",
+      "line": "ungated",
+      "at": 60,
+      "deploys": true,
+      "requires": [
+        {
+          "kind": "gate",
+          "any_of": [
+            "presets/estate-map.satz"
+          ],
+          "params": [
+            "use_cis_baseline"
+          ],
+          "met": false
+        }
+      ],
+      "required_by": [
+        "presets/cis/block-project-ssh-keys.satz",
+        "presets/cis/shielded-vm.satz",
+        "presets/cis/dns-logging.satz",
+        "presets/cis/confidential-computing.satz",
+        "presets/cis/cloud-sql.satz",
+        "presets/cis/cmek.satz",
+        "presets/cis/api-key-services.satz",
+        "presets/cis/bucket-retention.satz",
+        "presets/cis/access-approval.satz",
+        "presets/cis/internet-ssh-rdp.satz",
+        "presets/cis/cloud-sql-iam-and-deletion-protection.satz",
+        "presets/cis/api-key-services-dry-run.satz",
+        "presets/cis/block-project-ssh-keys-dry-run.satz",
+        "presets/cis/bucket-retention-dry-run.satz",
+        "presets/cis/cloud-sql-dry-run.satz",
+        "presets/cis/cloud-sql-iam-and-deletion-protection-dry-run.satz",
+        "presets/cis/confidential-computing-dry-run.satz"
+      ],
+      "excludes": [],
+      "notices": [
+        {
+          "param": "cis_baseline_adopted",
+          "pack": "presets/cis/CIS-GCP-Foundation-4.0.satz",
+          "text": "Google sets some of these policies on every new organisation, and an administrator may have set others; an apply that creates a policy that exists stops on 409 POLICY_ALREADY_EXISTS. Run satz adopt once the baseline is on, so every live policy is in the state before the apply; with --import it binds this param itself when it has run.",
+          "run": "satz adopt <estate> --execute --import",
+          "severity": "error",
+          "acknowledged": true
+        }
+      ],
+      "findings": [
+        "`presets/cis/CIS-GCP-Foundation-4.0.satz` needs `presets/estate-map.satz`, which is off"
+      ]
+    },
+    {
+      "path": "presets/cis/block-project-ssh-keys.satz",
+      "role": "pack",
+      "gate": "cis_block_project_ssh_keys",
+      "gate_declared_in": "presets/cis/CIS-GCP-Foundation-4.0.satz",
+      "default": "false",
+      "value": false,
+      "line": "absent",
+      "deploys": false,
+      "requires": [
+        {
+          "kind": "gate",
+          "any_of": [
+            "presets/cis/CIS-GCP-Foundation-4.0.satz"
+          ],
+          "params": [
+            "cis_block_project_ssh_keys"
+          ],
+          "met": true
+        }
+      ],
+      "required_by": [],
+      "excludes": [
+        "presets/cis/block-project-ssh-keys-dry-run.satz"
+      ],
+      "notices": [
+        {
+          "param": "cis_block_project_ssh_keys_adopted",
+          "pack": "presets/cis/block-project-ssh-keys.satz",
+          "text": "Google may already hold a policy this pack declares on the organisation, set by an administrator or by default, and an apply that creates a policy that exists stops on 409 POLICY_ALREADY_EXISTS. Run satz adopt once the pack is on, so every live policy is in the state before the apply; with --import it binds this param itself when it has run.",
+          "run": "satz adopt <estate> --execute --import",
+          "severity": "error",
+          "acknowledged": false
+        }
+      ],
+      "findings": []
+    },
+    {
+      "path": "presets/cis/shielded-vm.satz",
+      "role": "pack",
+      "gate": "cis_require_shielded_vm",
+      "gate_declared_in": "presets/cis/CIS-GCP-Foundation-4.0.satz",
+      "default": "false",
+      "value": false,
+      "line": "absent",
+      "deploys": false,
+      "requires": [
+        {
+          "kind": "gate",
+          "any_of": [
+            "presets/cis/CIS-GCP-Foundation-4.0.satz"
+          ],
+          "params": [
+            "cis_require_shielded_vm"
+          ],
+          "met": true
+        }
+      ],
+      "required_by": [],
+      "excludes": [],
+      "notices": [
+        {
+          "param": "cis_require_shielded_vm_adopted",
+          "pack": "presets/cis/shielded-vm.satz",
+          "text": "Google may already hold a policy this pack declares on the organisation, set by an administrator or by default, and an apply that creates a policy that exists stops on 409 POLICY_ALREADY_EXISTS. Run satz adopt once the pack is on, so every live policy is in the state before the apply; with --import it binds this param itself when it has run.",
+          "run": "satz adopt <estate> --execute --import",
+          "severity": "error",
+          "acknowledged": false
+        }
+      ],
+      "findings": []
+    },
+    {
+      "path": "presets/cis/dns-logging.satz",
+      "role": "pack",
+      "gate": "cis_dns_logging",
+      "gate_declared_in": "presets/cis/CIS-GCP-Foundation-4.0.satz",
+      "default": "true",
+      "value": true,
+      "line": "absent",
+      "deploys": false,
+      "requires": [
+        {
+          "kind": "gate",
+          "any_of": [
+            "presets/cis/CIS-GCP-Foundation-4.0.satz"
+          ],
+          "params": [
+            "cis_dns_logging"
+          ],
+          "met": true
+        }
+      ],
+      "required_by": [],
+      "excludes": [],
+      "notices": [
+        {
+          "param": "cis_dns_logging_adopted",
+          "pack": "presets/cis/dns-logging.satz",
+          "text": "Google may already hold a policy this pack declares on the organisation, set by an administrator or by default, and an apply that creates a policy that exists stops on 409 POLICY_ALREADY_EXISTS. Run satz adopt once the pack is on, so every live policy is in the state before the apply; with --import it binds this param itself when it has run.",
+          "run": "satz adopt <estate> --execute --import",
+          "severity": "error",
+          "acknowledged": false
+        }
+      ],
+      "findings": []
+    },
+    {
+      "path": "presets/cis/confidential-computing.satz",
+      "role": "pack",
+      "gate": "cis_confidential_computing",
+      "gate_declared_in": "presets/cis/CIS-GCP-Foundation-4.0.satz",
+      "default": "false",
+      "value": false,
+      "line": "absent",
+      "deploys": false,
+      "requires": [
+        {
+          "kind": "gate",
+          "any_of": [
+            "presets/cis/CIS-GCP-Foundation-4.0.satz"
+          ],
+          "params": [
+            "cis_confidential_computing"
+          ],
+          "met": true
+        }
+      ],
+      "required_by": [],
+      "excludes": [
+        "presets/cis/confidential-computing-dry-run.satz"
+      ],
+      "notices": [
+        {
+          "param": "cis_confidential_computing_adopted",
+          "pack": "presets/cis/confidential-computing.satz",
+          "text": "Google may already hold a policy this pack declares on the organisation, set by an administrator or by default, and an apply that creates a policy that exists stops on 409 POLICY_ALREADY_EXISTS. Run satz adopt once the pack is on, so every live policy is in the state before the apply; with --import it binds this param itself when it has run.",
+          "run": "satz adopt <estate> --execute --import",
+          "severity": "error",
+          "acknowledged": false
+        }
+      ],
+      "findings": []
+    },
+    {
+      "path": "presets/cis/cloud-sql.satz",
+      "role": "pack",
+      "gate": "cis_cloud_sql_hardening",
+      "gate_declared_in": "presets/cis/CIS-GCP-Foundation-4.0.satz",
+      "default": "false",
+      "value": false,
+      "line": "absent",
+      "deploys": false,
+      "requires": [
+        {
+          "kind": "gate",
+          "any_of": [
+            "presets/cis/CIS-GCP-Foundation-4.0.satz"
+          ],
+          "params": [
+            "cis_cloud_sql_hardening"
+          ],
+          "met": true
+        }
+      ],
+      "required_by": [],
+      "excludes": [
+        "presets/cis/cloud-sql-dry-run.satz"
+      ],
+      "notices": [
+        {
+          "param": "cis_cloud_sql_hardening_adopted",
+          "pack": "presets/cis/cloud-sql.satz",
+          "text": "Google may already hold a policy this pack declares on the organisation, set by an administrator or by default, and an apply that creates a policy that exists stops on 409 POLICY_ALREADY_EXISTS. Run satz adopt once the pack is on, so every live policy is in the state before the apply; with --import it binds this param itself when it has run.",
+          "run": "satz adopt <estate> --execute --import",
+          "severity": "error",
+          "acknowledged": false
+        }
+      ],
+      "findings": []
+    },
+    {
+      "path": "presets/cis/cmek.satz",
+      "role": "pack",
+      "gate": "cis_cmek_required",
+      "gate_declared_in": "presets/cis/CIS-GCP-Foundation-4.0.satz",
+      "default": "false",
+      "value": false,
+      "line": "absent",
+      "deploys": false,
+      "requires": [
+        {
+          "kind": "gate",
+          "any_of": [
+            "presets/cis/CIS-GCP-Foundation-4.0.satz"
+          ],
+          "params": [
+            "cis_cmek_required"
+          ],
+          "met": true
+        }
+      ],
+      "required_by": [],
+      "excludes": [],
+      "notices": [
+        {
+          "param": "cis_cmek_required_adopted",
+          "pack": "presets/cis/cmek.satz",
+          "text": "Google may already hold a policy this pack declares on the organisation, set by an administrator or by default, and an apply that creates a policy that exists stops on 409 POLICY_ALREADY_EXISTS. Run satz adopt once the pack is on, so every live policy is in the state before the apply; with --import it binds this param itself when it has run.",
+          "run": "satz adopt <estate> --execute --import",
+          "severity": "error",
+          "acknowledged": false
+        }
+      ],
+      "findings": []
+    },
+    {
+      "path": "presets/cis/api-key-services.satz",
+      "role": "pack",
+      "gate": "cis_api_key_services",
+      "gate_declared_in": "presets/cis/CIS-GCP-Foundation-4.0.satz",
+      "default": "false",
+      "value": false,
+      "line": "absent",
+      "deploys": false,
+      "requires": [
+        {
+          "kind": "gate",
+          "any_of": [
+            "presets/cis/CIS-GCP-Foundation-4.0.satz"
+          ],
+          "params": [
+            "cis_api_key_services"
+          ],
+          "met": true
+        }
+      ],
+      "required_by": [],
+      "excludes": [
+        "presets/cis/api-key-services-dry-run.satz"
+      ],
+      "notices": [
+        {
+          "param": "cis_api_key_services_adopted",
+          "pack": "presets/cis/api-key-services.satz",
+          "text": "Google may already hold a policy this pack declares on the organisation, set by an administrator or by default, and an apply that creates a policy that exists stops on 409 POLICY_ALREADY_EXISTS. Run satz adopt once the pack is on, so every live policy is in the state before the apply; with --import it binds this param itself when it has run.",
+          "run": "satz adopt <estate> --execute --import",
+          "severity": "error",
+          "acknowledged": false
+        }
+      ],
+      "findings": []
+    },
+    {
+      "path": "presets/cis/bucket-retention.satz",
+      "role": "pack",
+      "gate": "cis_bucket_retention",
+      "gate_declared_in": "presets/cis/CIS-GCP-Foundation-4.0.satz",
+      "default": "false",
+      "value": false,
+      "line": "absent",
+      "deploys": false,
+      "requires": [
+        {
+          "kind": "gate",
+          "any_of": [
+            "presets/cis/CIS-GCP-Foundation-4.0.satz"
+          ],
+          "params": [
+            "cis_bucket_retention"
+          ],
+          "met": true
+        }
+      ],
+      "required_by": [],
+      "excludes": [
+        "presets/cis/bucket-retention-dry-run.satz"
+      ],
+      "notices": [
+        {
+          "param": "cis_bucket_retention_adopted",
+          "pack": "presets/cis/bucket-retention.satz",
+          "text": "Google may already hold a policy this pack declares on the organisation, set by an administrator or by default, and an apply that creates a policy that exists stops on 409 POLICY_ALREADY_EXISTS. Run satz adopt once the pack is on, so every live policy is in the state before the apply; with --import it binds this param itself when it has run.",
+          "run": "satz adopt <estate> --execute --import",
+          "severity": "error",
+          "acknowledged": false
+        }
+      ],
+      "findings": []
+    },
+    {
+      "path": "presets/cis/access-approval.satz",
+      "role": "pack",
+      "gate": "cis_access_approval",
+      "gate_declared_in": "presets/cis/CIS-GCP-Foundation-4.0.satz",
+      "default": "false",
+      "value": false,
+      "line": "absent",
+      "deploys": false,
+      "requires": [
+        {
+          "kind": "gate",
+          "any_of": [
+            "presets/cis/CIS-GCP-Foundation-4.0.satz"
+          ],
+          "params": [
+            "cis_access_approval"
+          ],
+          "met": true
+        }
+      ],
+      "required_by": [],
+      "excludes": [],
+      "findings": []
+    },
+    {
+      "path": "presets/cis/internet-ssh-rdp.satz",
+      "role": "pack",
+      "gate": "cis_block_internet_ssh_rdp",
+      "gate_declared_in": "presets/cis/CIS-GCP-Foundation-4.0.satz",
+      "default": "true",
+      "value": true,
+      "line": "absent",
+      "deploys": false,
+      "requires": [
+        {
+          "kind": "gate",
+          "any_of": [
+            "presets/cis/CIS-GCP-Foundation-4.0.satz"
+          ],
+          "params": [
+            "cis_block_internet_ssh_rdp"
+          ],
+          "met": true
+        }
+      ],
+      "required_by": [],
+      "excludes": [],
+      "findings": []
+    },
+    {
+      "path": "presets/cis/cloud-sql-iam-and-deletion-protection.satz",
+      "role": "pack",
+      "gate": "cis_cloud_sql_iam_and_deletion_protection",
+      "gate_declared_in": "presets/cis/CIS-GCP-Foundation-4.0.satz",
+      "default": "false",
+      "value": false,
+      "line": "absent",
+      "deploys": false,
+      "requires": [
+        {
+          "kind": "gate",
+          "any_of": [
+            "presets/cis/CIS-GCP-Foundation-4.0.satz"
+          ],
+          "params": [
+            "cis_cloud_sql_iam_and_deletion_protection"
+          ],
+          "met": true
+        }
+      ],
+      "required_by": [],
+      "excludes": [
+        "presets/cis/cloud-sql-iam-and-deletion-protection-dry-run.satz"
+      ],
+      "notices": [
+        {
+          "param": "cis_cloud_sql_iam_and_deletion_protection_adopted",
+          "pack": "presets/cis/cloud-sql-iam-and-deletion-protection.satz",
+          "text": "Google may already hold a policy this pack declares on the organisation, set by an administrator or by default, and an apply that creates a policy that exists stops on 409 POLICY_ALREADY_EXISTS. Run satz adopt once the pack is on, so every live policy is in the state before the apply; with --import it binds this param itself when it has run.",
+          "run": "satz adopt <estate> --execute --import",
+          "severity": "error",
+          "acknowledged": false
+        }
+      ],
+      "findings": []
+    },
+    {
+      "path": "presets/cis/api-key-services-dry-run.satz",
+      "role": "pack",
+      "gate": "cis_api_key_services_dry_run",
+      "gate_declared_in": "presets/cis/CIS-GCP-Foundation-4.0.satz",
+      "default": "false",
+      "value": false,
+      "line": "absent",
+      "deploys": false,
+      "requires": [
+        {
+          "kind": "gate",
+          "any_of": [
+            "presets/cis/CIS-GCP-Foundation-4.0.satz"
+          ],
+          "params": [
+            "cis_api_key_services_dry_run"
+          ],
+          "met": true
+        }
+      ],
+      "required_by": [],
+      "excludes": [
+        "presets/cis/api-key-services.satz"
+      ],
+      "notices": [
+        {
+          "param": "cis_api_key_services_dry_run_adopted",
+          "pack": "presets/cis/api-key-services-dry-run.satz",
+          "text": "Google may already hold a policy this pack declares on the organisation, set by an administrator or by default, and an apply that creates a policy that exists stops on 409 POLICY_ALREADY_EXISTS. Run satz adopt once the pack is on, so every live policy is in the state before the apply; with --import it binds this param itself when it has run.",
+          "run": "satz adopt <estate> --execute --import",
+          "severity": "error",
+          "acknowledged": false
+        }
+      ],
+      "findings": []
+    },
+    {
+      "path": "presets/cis/block-project-ssh-keys-dry-run.satz",
+      "role": "pack",
+      "gate": "cis_block_project_ssh_keys_dry_run",
+      "gate_declared_in": "presets/cis/CIS-GCP-Foundation-4.0.satz",
+      "default": "false",
+      "value": false,
+      "line": "absent",
+      "deploys": false,
+      "requires": [
+        {
+          "kind": "gate",
+          "any_of": [
+            "presets/cis/CIS-GCP-Foundation-4.0.satz"
+          ],
+          "params": [
+            "cis_block_project_ssh_keys_dry_run"
+          ],
+          "met": true
+        }
+      ],
+      "required_by": [],
+      "excludes": [
+        "presets/cis/block-project-ssh-keys.satz"
+      ],
+      "notices": [
+        {
+          "param": "cis_block_project_ssh_keys_dry_run_adopted",
+          "pack": "presets/cis/block-project-ssh-keys-dry-run.satz",
+          "text": "Google may already hold a policy this pack declares on the organisation, set by an administrator or by default, and an apply that creates a policy that exists stops on 409 POLICY_ALREADY_EXISTS. Run satz adopt once the pack is on, so every live policy is in the state before the apply; with --import it binds this param itself when it has run.",
+          "run": "satz adopt <estate> --execute --import",
+          "severity": "error",
+          "acknowledged": false
+        }
+      ],
+      "findings": []
+    },
+    {
+      "path": "presets/cis/bucket-retention-dry-run.satz",
+      "role": "pack",
+      "gate": "cis_bucket_retention_dry_run",
+      "gate_declared_in": "presets/cis/CIS-GCP-Foundation-4.0.satz",
+      "default": "false",
+      "value": false,
+      "line": "absent",
+      "deploys": false,
+      "requires": [
+        {
+          "kind": "gate",
+          "any_of": [
+            "presets/cis/CIS-GCP-Foundation-4.0.satz"
+          ],
+          "params": [
+            "cis_bucket_retention_dry_run"
+          ],
+          "met": true
+        }
+      ],
+      "required_by": [],
+      "excludes": [
+        "presets/cis/bucket-retention.satz"
+      ],
+      "notices": [
+        {
+          "param": "cis_bucket_retention_dry_run_adopted",
+          "pack": "presets/cis/bucket-retention-dry-run.satz",
+          "text": "Google may already hold a policy this pack declares on the organisation, set by an administrator or by default, and an apply that creates a policy that exists stops on 409 POLICY_ALREADY_EXISTS. Run satz adopt once the pack is on, so every live policy is in the state before the apply; with --import it binds this param itself when it has run.",
+          "run": "satz adopt <estate> --execute --import",
+          "severity": "error",
+          "acknowledged": false
+        }
+      ],
+      "findings": []
+    },
+    {
+      "path": "presets/cis/cloud-sql-dry-run.satz",
+      "role": "pack",
+      "gate": "cis_cloud_sql_hardening_dry_run",
+      "gate_declared_in": "presets/cis/CIS-GCP-Foundation-4.0.satz",
+      "default": "false",
+      "value": false,
+      "line": "absent",
+      "deploys": false,
+      "requires": [
+        {
+          "kind": "gate",
+          "any_of": [
+            "presets/cis/CIS-GCP-Foundation-4.0.satz"
+          ],
+          "params": [
+            "cis_cloud_sql_hardening_dry_run"
+          ],
+          "met": true
+        }
+      ],
+      "required_by": [],
+      "excludes": [
+        "presets/cis/cloud-sql.satz"
+      ],
+      "notices": [
+        {
+          "param": "cis_cloud_sql_hardening_dry_run_adopted",
+          "pack": "presets/cis/cloud-sql-dry-run.satz",
+          "text": "Google may already hold a policy this pack declares on the organisation, set by an administrator or by default, and an apply that creates a policy that exists stops on 409 POLICY_ALREADY_EXISTS. Run satz adopt once the pack is on, so every live policy is in the state before the apply; with --import it binds this param itself when it has run.",
+          "run": "satz adopt <estate> --execute --import",
+          "severity": "error",
+          "acknowledged": false
+        }
+      ],
+      "findings": []
+    },
+    {
+      "path": "presets/cis/cloud-sql-iam-and-deletion-protection-dry-run.satz",
+      "role": "pack",
+      "gate": "cis_cloud_sql_iam_and_deletion_protection_dry_run",
+      "gate_declared_in": "presets/cis/CIS-GCP-Foundation-4.0.satz",
+      "default": "false",
+      "value": false,
+      "line": "absent",
+      "deploys": false,
+      "requires": [
+        {
+          "kind": "gate",
+          "any_of": [
+            "presets/cis/CIS-GCP-Foundation-4.0.satz"
+          ],
+          "params": [
+            "cis_cloud_sql_iam_and_deletion_protection_dry_run"
+          ],
+          "met": true
+        }
+      ],
+      "required_by": [],
+      "excludes": [
+        "presets/cis/cloud-sql-iam-and-deletion-protection.satz"
+      ],
+      "notices": [
+        {
+          "param": "cis_cloud_sql_iam_and_deletion_protection_dry_run_adopted",
+          "pack": "presets/cis/cloud-sql-iam-and-deletion-protection-dry-run.satz",
+          "text": "Google may already hold a policy this pack declares on the organisation, set by an administrator or by default, and an apply that creates a policy that exists stops on 409 POLICY_ALREADY_EXISTS. Run satz adopt once the pack is on, so every live policy is in the state before the apply; with --import it binds this param itself when it has run.",
+          "run": "satz adopt <estate> --execute --import",
+          "severity": "error",
+          "acknowledged": false
+        }
+      ],
+      "findings": []
+    },
+    {
+      "path": "presets/cis/confidential-computing-dry-run.satz",
+      "role": "pack",
+      "gate": "cis_confidential_computing_dry_run",
+      "gate_declared_in": "presets/cis/CIS-GCP-Foundation-4.0.satz",
+      "default": "false",
+      "value": false,
+      "line": "absent",
+      "deploys": false,
+      "requires": [
+        {
+          "kind": "gate",
+          "any_of": [
+            "presets/cis/CIS-GCP-Foundation-4.0.satz"
+          ],
+          "params": [
+            "cis_confidential_computing_dry_run"
+          ],
+          "met": true
+        }
+      ],
+      "required_by": [],
+      "excludes": [
+        "presets/cis/confidential-computing.satz"
+      ],
+      "notices": [
+        {
+          "param": "cis_confidential_computing_dry_run_adopted",
+          "pack": "presets/cis/confidential-computing-dry-run.satz",
+          "text": "Google may already hold a policy this pack declares on the organisation, set by an administrator or by default, and an apply that creates a policy that exists stops on 409 POLICY_ALREADY_EXISTS. Run satz adopt once the pack is on, so every live policy is in the state before the apply; with --import it binds this param itself when it has run.",
+          "run": "satz adopt <estate> --execute --import",
+          "severity": "error",
+          "acknowledged": false
+        }
+      ],
+      "findings": []
+    },
+    {
+      "path": "presets/scc/scc-notifications.satz",
+      "role": "pack",
+      "gate": "use_scc_notifications",
+      "gate_declared_in": "presets/estate-map.satz",
+      "default": "false",
+      "line": "absent",
+      "deploys": false,
+      "requires": [
+        {
+          "kind": "gate",
+          "any_of": [
+            "presets/estate-map.satz"
+          ],
+          "params": [
+            "use_scc_notifications"
+          ],
+          "met": false
+        }
+      ],
+      "required_by": [
+        "presets/scc/scc-findings-siem.satz",
+        "presets/scc/scc-findings-mail.satz"
+      ],
+      "excludes": [],
+      "findings": []
+    },
+    {
+      "path": "presets/scc/scc-export.satz",
+      "role": "pack",
+      "gate": "use_scc_export",
+      "gate_declared_in": "presets/estate-map.satz",
+      "default": "false",
+      "line": "absent",
+      "deploys": false,
+      "requires": [
+        {
+          "kind": "gate",
+          "any_of": [
+            "presets/estate-map.satz"
+          ],
+          "params": [
+            "use_scc_export"
+          ],
+          "met": false
+        }
+      ],
+      "required_by": [],
+      "excludes": [],
+      "findings": []
+    },
+    {
+      "path": "presets/scc/scc-findings-siem.satz",
+      "role": "pack",
+      "gate": "use_scc_findings_siem",
+      "gate_declared_in": "presets/estate-map.satz",
+      "default": "false",
+      "line": "absent",
+      "deploys": false,
+      "requires": [
+        {
+          "kind": "gate",
+          "any_of": [
+            "presets/estate-map.satz"
+          ],
+          "params": [
+            "use_scc_findings_siem"
+          ],
+          "met": false
+        },
+        {
+          "kind": "data",
+          "any_of": [
+            "presets/scc/scc-notifications.satz"
+          ],
+          "params": [
+            "scc_notification_project"
+          ],
+          "met": false
+        }
+      ],
+      "required_by": [],
+      "excludes": [],
+      "findings": []
+    },
+    {
+      "path": "presets/scc/scc-findings-mail.satz",
+      "role": "pack",
+      "gate": "use_scc_findings_mail",
+      "gate_declared_in": "presets/estate-map.satz",
+      "default": "false",
+      "line": "absent",
+      "deploys": false,
+      "requires": [
+        {
+          "kind": "gate",
+          "any_of": [
+            "presets/estate-map.satz"
+          ],
+          "params": [
+            "use_scc_findings_mail"
+          ],
+          "met": false
+        },
+        {
+          "kind": "data",
+          "any_of": [
+            "presets/monitoring/organization-cis-log-alerts-central.satz"
+          ],
+          "params": [
+            "cis_central_email"
+          ],
+          "met": true
+        },
+        {
+          "kind": "data",
+          "any_of": [
+            "presets/scc/scc-notifications.satz"
+          ],
+          "params": [
+            "scc_notification_project"
+          ],
+          "met": false
+        }
+      ],
+      "required_by": [],
+      "excludes": [],
+      "findings": []
+    },
+    {
+      "path": "presets/integrations/microsoft-defender-for-cloud.satz",
+      "role": "pack",
+      "gate": "use_defender",
+      "gate_declared_in": "presets/estate-map.satz",
+      "default": "false",
+      "line": "absent",
+      "deploys": false,
+      "requires": [
+        {
+          "kind": "gate",
+          "any_of": [
+            "presets/estate-map.satz"
+          ],
+          "params": [
+            "use_defender"
+          ],
+          "met": false
+        }
+      ],
+      "required_by": [
+        "presets/integrations/microsoft-defender-for-cloud-cspm.satz",
+        "presets/integrations/microsoft-defender-for-cloud-cspm-role-default.satz",
+        "presets/integrations/microsoft-defender-for-cloud-cspm-role-least-privilege.satz"
+      ],
+      "excludes": [],
+      "findings": []
+    },
+    {
+      "path": "presets/integrations/microsoft-defender-for-cloud-cspm.satz",
+      "role": "pack",
+      "gate": "mdc_plan_cspm",
+      "gate_declared_in": "presets/integrations/microsoft-defender-for-cloud.satz",
+      "default": "false",
+      "line": "absent",
+      "deploys": false,
+      "requires": [
+        {
+          "kind": "gate",
+          "any_of": [
+            "presets/integrations/microsoft-defender-for-cloud.satz"
+          ],
+          "params": [
+            "mdc_plan_cspm"
+          ],
+          "met": false
+        },
+        {
+          "kind": "data",
+          "any_of": [
+            "presets/integrations/microsoft-defender-for-cloud.satz"
+          ],
+          "params": [
+            "mdc_mgmt_project_id",
+            "mdc_workload_pool_id"
+          ],
+          "met": false
+        }
+      ],
+      "required_by": [],
+      "excludes": [],
+      "by_hand": "a Defender plan fragment, written beside the Defender line once the plan is licensed, as that pack's header shows",
+      "findings": []
+    },
+    {
+      "path": "presets/integrations/microsoft-defender-for-cloud-cspm-role-default.satz",
+      "role": "pack",
+      "gate": "mdc_cspm_default_access",
+      "gate_declared_in": "presets/integrations/microsoft-defender-for-cloud.satz",
+      "default": "false",
+      "line": "absent",
+      "deploys": false,
+      "requires": [
+        {
+          "kind": "gate",
+          "any_of": [
+            "presets/integrations/microsoft-defender-for-cloud.satz"
+          ],
+          "params": [
+            "mdc_cspm_default_access"
+          ],
+          "met": false
+        }
+      ],
+      "required_by": [],
+      "excludes": [
+        "presets/integrations/microsoft-defender-for-cloud-cspm-role-least-privilege.satz"
+      ],
+      "by_hand": "the CSPM plan's custom role in the default access mode, written with the plan fragment",
+      "findings": []
+    },
+    {
+      "path": "presets/integrations/microsoft-defender-for-cloud-cspm-role-least-privilege.satz",
+      "role": "pack",
+      "gate": "mdc_cspm_least_privilege",
+      "gate_declared_in": "presets/integrations/microsoft-defender-for-cloud.satz",
+      "default": "false",
+      "line": "absent",
+      "deploys": false,
+      "requires": [
+        {
+          "kind": "gate",
+          "any_of": [
+            "presets/integrations/microsoft-defender-for-cloud.satz"
+          ],
+          "params": [
+            "mdc_cspm_least_privilege"
+          ],
+          "met": false
+        }
+      ],
+      "required_by": [],
+      "excludes": [
+        "presets/integrations/microsoft-defender-for-cloud-cspm-role-default.satz"
+      ],
+      "by_hand": "the CSPM plan's custom role in the least-privilege mode, written with the plan fragment",
+      "findings": []
+    },
+    {
+      "path": "presets/integrations/microsoft-sentinel.satz",
+      "role": "pack",
+      "gate": "use_sentinel",
+      "gate_declared_in": "presets/estate-map.satz",
+      "default": "false",
+      "line": "absent",
+      "deploys": false,
+      "requires": [
+        {
+          "kind": "gate",
+          "any_of": [
+            "presets/estate-map.satz"
+          ],
+          "params": [
+            "use_sentinel"
+          ],
+          "met": false
+        },
+        {
+          "kind": "data",
+          "any_of": [
+            "presets/monitoring/organization-audit-logsink.satz"
+          ],
+          "params": [
+            "logsink_project_id"
+          ],
+          "met": true
+        }
+      ],
+      "required_by": [
+        "presets/integrations/microsoft-sentinel-auditlogs.satz",
+        "presets/integrations/microsoft-sentinel-network-logs.satz"
+      ],
+      "excludes": [],
+      "findings": []
+    },
+    {
+      "path": "presets/integrations/microsoft-sentinel-auditlogs.satz",
+      "role": "pack",
+      "gate": "use_sentinel_auditlogs",
+      "gate_declared_in": "presets/estate-map.satz",
+      "default": "use_sentinel",
+      "line": "absent",
+      "deploys": false,
+      "requires": [
+        {
+          "kind": "gate",
+          "any_of": [
+            "presets/estate-map.satz"
+          ],
+          "params": [
+            "use_sentinel_auditlogs"
+          ],
+          "met": false
+        },
+        {
+          "kind": "data",
+          "any_of": [
+            "presets/integrations/microsoft-sentinel.satz"
+          ],
+          "params": [
+            "sentinel_project_id"
+          ],
+          "met": false
+        }
+      ],
+      "required_by": [],
+      "excludes": [],
+      "findings": []
+    },
+    {
+      "path": "presets/integrations/microsoft-sentinel-network-logs.satz",
+      "role": "pack",
+      "gate": "use_sentinel_network_logs",
+      "gate_declared_in": "presets/estate-map.satz",
+      "default": "use_sentinel",
+      "line": "absent",
+      "deploys": false,
+      "requires": [
+        {
+          "kind": "gate",
+          "any_of": [
+            "presets/estate-map.satz"
+          ],
+          "params": [
+            "use_sentinel_network_logs"
+          ],
+          "met": false
+        },
+        {
+          "kind": "data",
+          "any_of": [
+            "presets/integrations/microsoft-sentinel.satz"
+          ],
+          "params": [
+            "sentinel_project_id"
+          ],
+          "met": false
+        }
+      ],
+      "required_by": [],
+      "excludes": [],
+      "findings": []
+    },
+    {
+      "path": "presets/ci/verification-runner.satz",
+      "role": "pack",
+      "gate": "use_verification_runner",
+      "gate_declared_in": "presets/estate-map.satz",
+      "default": "false",
+      "line": "absent",
+      "deploys": false,
+      "requires": [
+        {
+          "kind": "gate",
+          "any_of": [
+            "presets/estate-map.satz"
+          ],
+          "params": [
+            "use_verification_runner"
+          ],
+          "met": false
+        }
+      ],
+      "required_by": [
+        "presets/ci/verification-runner-grant.satz"
+      ],
+      "excludes": [],
+      "findings": []
+    },
+    {
+      "path": "presets/ci/verification-runner-grant.satz",
+      "role": "pack",
+      "gate": "use_verification_runner_grant",
+      "gate_declared_in": "presets/estate-map.satz",
+      "default": "use_verification_runner",
+      "line": "absent",
+      "deploys": false,
+      "requires": [
+        {
+          "kind": "gate",
+          "any_of": [
+            "presets/estate-map.satz"
+          ],
+          "params": [
+            "use_verification_runner_grant"
+          ],
+          "met": false
+        },
+        {
+          "kind": "data",
+          "any_of": [
+            "presets/ci/verification-runner.satz"
+          ],
+          "params": [
+            "ci_runner_project"
+          ],
+          "met": false
+        }
+      ],
+      "required_by": [],
+      "excludes": [],
+      "findings": []
+    },
+    {
+      "path": "presets/exemptions/exemption-tag.satz",
+      "role": "pack",
+      "gate": "use_exemption_tag",
+      "gate_declared_in": "presets/estate-map.satz",
+      "default": "false",
+      "line": "absent",
+      "deploys": false,
+      "requires": [
+        {
+          "kind": "gate",
+          "any_of": [
+            "presets/estate-map.satz"
+          ],
+          "params": [
+            "use_exemption_tag"
+          ],
+          "met": false
+        }
+      ],
+      "required_by": [],
+      "excludes": [],
+      "findings": []
+    }
+  ],
+  "unmanaged": [],
+  "findings": [
+    {
+      "severity": "warning",
+      "kind": "pack-requirement",
+      "group": "packs on while a pack they need is off",
+      "file": "vendor/satz/tests/smoke/yaml/smoke.satz",
+      "line": 57,
+      "subject": "presets/essential-contacts-organization.satz",
+      "message": "`presets/essential-contacts-organization.satz` needs `presets/estate-map.satz`, which is off",
+      "fix": "satz add-pack vendor/satz/tests/smoke/yaml/smoke.satz presets/estate-map.satz"
+    },
+    {
+      "severity": "warning",
+      "kind": "pack-requirement",
+      "group": "packs on while a pack they need is off",
+      "file": "vendor/satz/tests/smoke/yaml/smoke.satz",
+      "line": 139,
+      "subject": "presets/monitoring/organization-audit-logsink.satz",
+      "message": "`presets/monitoring/organization-audit-logsink.satz` needs `presets/estate-map.satz`, which is off",
+      "fix": "satz add-pack vendor/satz/tests/smoke/yaml/smoke.satz presets/estate-map.satz"
+    },
+    {
+      "severity": "warning",
+      "kind": "pack-requirement",
+      "group": "packs on while a pack they need is off",
+      "file": "vendor/satz/tests/smoke/yaml/smoke.satz",
+      "line": 140,
+      "subject": "presets/monitoring/organization-cis-log-alerts-central.satz",
+      "message": "`presets/monitoring/organization-cis-log-alerts-central.satz` needs `presets/estate-map.satz`, which is off",
+      "fix": "satz add-pack vendor/satz/tests/smoke/yaml/smoke.satz presets/estate-map.satz"
+    },
+    {
+      "severity": "warning",
+      "kind": "pack-requirement",
+      "group": "packs on while a pack they need is off",
+      "file": "vendor/satz/tests/smoke/yaml/smoke.satz",
+      "line": 60,
+      "subject": "presets/cis/CIS-GCP-Foundation-4.0.satz",
+      "message": "`presets/cis/CIS-GCP-Foundation-4.0.satz` needs `presets/estate-map.satz`, which is off",
+      "fix": "satz add-pack vendor/satz/tests/smoke/yaml/smoke.satz presets/estate-map.satz"
+    }
+  ]
+}

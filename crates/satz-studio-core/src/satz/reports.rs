@@ -242,7 +242,209 @@ pub struct Finding {
     /// 1-based, in that file
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub line: Option<u32>,
+    /// What the finding is about, and with `kind` its identity: the pack a pack finding
+    /// judges, the param a notice is acknowledged by.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subject: Option<String>,
     pub message: String,
+    /// The command that answers the finding, as it is typed; absent where no one
+    /// command does.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fix: Option<String>,
+}
+
+/// What a pack is to the pack graph.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PackRole {
+    /// `presets/estate-core.satz`, the day-0 pack every estate starts with: never switched
+    Core,
+    /// `presets/estate-map.satz`, which declares the gates of the menu packs
+    Map,
+    Pack,
+}
+
+/// Where a pack's `use` line stands in the estate.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PackLine {
+    /// active, gated on its gate, where the graph places it
+    Active,
+    /// active without `when <gate>`: a no to the gate does not switch it off
+    Ungated,
+    Commented,
+    /// the estate has no line for it, active or commented
+    Absent,
+    /// active, naming the pack's `.local` fork
+    Forked,
+    /// active outside the block the graph places it in
+    Misplaced,
+}
+
+/// Why one pack needs another.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum RequirementKind {
+    /// the map declares it
+    Requires,
+    /// the pack reads a param the other declares
+    Data,
+    /// the other declares the param the pack is gated on
+    Gate,
+}
+
+/// One requirement of a pack: any one of `any_of` meets it. satz's `Requirement`
+/// (`vendor/satz/src/packs.rs`).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct Requirement {
+    pub kind: RequirementKind,
+    /// the packs, by path, any one of which meets it
+    pub any_of: Vec<String>,
+    /// the params that make a `data` or `gate` requirement
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub params: Vec<String>,
+    /// one of `any_of` is on — or, for `data`, the estate binds what the pack would
+    /// otherwise read from it
+    pub met: bool,
+}
+
+/// One pack the pack graph offers, as this estate has it. satz's `PackRow`
+/// (`vendor/satz/src/packs.rs`), the row the Packs view draws.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct PackRow {
+    /// as a `use` line names it: `presets/…`
+    pub path: String,
+    pub role: PackRole,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gate: Option<String>,
+    /// the file that declares the gate
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gate_declared_in: Option<String>,
+    /// the estate's own binding of the gate, as written
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub answer: Option<String>,
+    /// the gate's default in the file that declares it, as written
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default: Option<String>,
+    /// what the gate is in this estate: the answer, else the default while the declaring
+    /// file is used
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub value: Option<bool>,
+    pub line: PackLine,
+    /// the line's number, 1-based
+    #[serde(default, rename = "at", skip_serializing_if = "Option::is_none")]
+    pub at_line: Option<u32>,
+    /// the path the line names when it is not the pack's own — its fork
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub written: Option<String>,
+    /// the param an active line is gated on when it is not the pack's gate
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gated_on: Option<String>,
+    /// the pack emits: its line is active and its `when` holds
+    pub deploys: bool,
+    pub requires: Vec<Requirement>,
+    /// the packs with a requirement this one meets
+    pub required_by: Vec<String>,
+    pub excludes: Vec<String>,
+    /// the line is written by hand, never by satz; why
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub by_hand: Option<String>,
+    /// what the pack asks to be run once it is on
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub notices: Vec<NoticeRow>,
+    /// the compile's findings about this pack, as sentences
+    pub findings: Vec<String>,
+}
+
+/// A `use` of a file the pack graph does not know.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct Unmanaged {
+    pub path: String,
+    /// the line's number, 1-based
+    #[serde(rename = "at")]
+    pub at_line: u32,
+}
+
+/// What `satz_packs` returns: every pack the pack graph offers, as this estate has it.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct PacksReport {
+    pub estate: String,
+    /// why the report has no packs: the presets carry no pack graph
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+    /// every node of the graph, in the graph's order
+    pub packs: Vec<PackRow>,
+    pub unmanaged: Vec<Unmanaged>,
+    /// the compile's pack findings, each with its pack as `subject`
+    pub findings: Vec<Finding>,
+}
+
+impl PacksReport {
+    /// The map row, when the graph has one.
+    pub fn map(&self) -> Option<&PackRow> {
+        self.packs.iter().find(|p| p.role == PackRole::Map)
+    }
+
+    /// The row of the pack at `path`.
+    pub fn row(&self, path: &str) -> Option<&PackRow> {
+        self.packs.iter().find(|p| p.path == path)
+    }
+}
+
+/// The arguments of `satz_add_pack`, as the app sends them.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct AddPackArgs {
+    /// the pack's path (`presets/…`) or its gate
+    pub pack: String,
+    /// switch on what the pack needs too, where the graph names one pack for it
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub with_requirements: bool,
+}
+
+/// The arguments of `satz_remove_pack`, as the app sends them.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct RemovePackArgs {
+    /// the pack's path (`presets/…`) or its gate
+    pub pack: String,
+    /// switch off the packs that need it too
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub cascade: bool,
+}
+
+/// A gate a switch bound.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct Bound {
+    pub param: String,
+    pub value: bool,
+}
+
+/// What a switch did to one line.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct LineEdit {
+    pub path: String,
+    /// 1-based, in the file as written
+    #[serde(rename = "at")]
+    pub at_line: u32,
+    /// `uncommented` or `written`
+    pub edit: String,
+}
+
+/// What `satz_add_pack` and `satz_remove_pack` return.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct PackChange {
+    pub estate: String,
+    /// `add` or `remove`
+    pub action: String,
+    /// the packs switched, requirements and dependents included
+    pub switched: Vec<String>,
+    pub bound: Vec<Bound>,
+    pub lines: Vec<LineEdit>,
+    /// what the switch left as it is, and why
+    pub left: Vec<String>,
+    /// the questions the switch opened
+    pub opened: Vec<String>,
+    /// the notices the switch opened
+    pub notices: Vec<NoticeRow>,
 }
 
 /// What a compile produced: the emitted addresses, the files written (empty for a
@@ -405,6 +607,76 @@ mod tests {
         assert_eq!(f.kind, "a-kind-satz-grew");
         assert_eq!(f.severity, FindingSeverity::Info);
         assert_eq!((f.file, f.line, f.group), (None, None, None));
+        assert_eq!((f.subject, f.fix), (None, None));
+    }
+
+    /// `satz packs vendor/satz/tests/smoke/yaml/smoke.satz --format json`, recorded from
+    /// the release the app is tested against over `tests/fixtures/smoke/config.toml`.
+    const PACKS: &str = include_str!("../../tests/fixtures/packs-smoke.json");
+
+    #[test]
+    fn the_recorded_packs_report_round_trips() {
+        let report: PacksReport = serde_json::from_str(PACKS).unwrap();
+        assert!(report.note.is_none());
+        assert_eq!(
+            report.map().map(|m| m.path.as_str()),
+            Some("presets/estate-map.satz")
+        );
+        assert!(report.packs.iter().any(|p| p.line == PackLine::Ungated));
+        assert!(report.packs.iter().any(|p| !p.notices.is_empty()));
+        assert!(report.findings.iter().all(|f| f.subject.is_some()));
+        let again: serde_json::Value = serde_json::to_value(&report).unwrap();
+        let original: serde_json::Value = serde_json::from_str(PACKS).unwrap();
+        assert_eq!(again, original);
+    }
+
+    /// A field satz always sends and no longer does is a failed report, never a row read
+    /// with a default the app made up.
+    #[test]
+    fn a_pack_row_without_a_field_satz_always_sends_fails() {
+        let row = serde_json::json!({
+            "path": "presets/organization-budget.satz", "role": "pack", "line": "absent",
+            "deploys": false, "requires": [], "required_by": [], "excludes": [], "findings": []
+        });
+        assert!(serde_json::from_value::<PackRow>(row.clone()).is_ok());
+        for field in [
+            "line",
+            "deploys",
+            "requires",
+            "required_by",
+            "excludes",
+            "findings",
+        ] {
+            let mut without = row.clone();
+            without.as_object_mut().unwrap().remove(field);
+            assert!(
+                serde_json::from_value::<PackRow>(without).is_err(),
+                "a row without `{field}` was read"
+            );
+        }
+        let mut unknown = row;
+        unknown["line"] = serde_json::json!("sideways");
+        assert!(serde_json::from_value::<PackRow>(unknown).is_err());
+    }
+
+    #[test]
+    fn pack_switch_args_send_only_what_is_set() {
+        let add = AddPackArgs {
+            pack: "presets/organization-budget.satz".to_string(),
+            with_requirements: false,
+        };
+        assert_eq!(
+            serde_json::to_value(&add).unwrap(),
+            serde_json::json!({"pack": "presets/organization-budget.satz"})
+        );
+        let remove = RemovePackArgs {
+            pack: "use_budget".to_string(),
+            cascade: true,
+        };
+        assert_eq!(
+            serde_json::to_value(&remove).unwrap(),
+            serde_json::json!({"pack": "use_budget", "cascade": true})
+        );
     }
 
     #[test]

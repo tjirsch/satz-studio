@@ -103,7 +103,6 @@ fn location(d: &Diagnostic, base: Option<&Path>) -> String {
     };
     let source = match &d.source {
         DiagSource::Cst => "document".to_string(),
-        DiagSource::Model => "document".to_string(),
         DiagSource::Parse => "parse".to_string(),
         DiagSource::Compile => "compile".to_string(),
         DiagSource::Check => "check".to_string(),
