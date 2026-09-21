@@ -4,7 +4,8 @@
 //! the estate is written from: an answer through satz's own writer, a value through
 //! the app's, a pack switched through `satz_add_pack` and `satz_remove_pack` — each under
 //! the session's write lock, each verified by `satz transpile --check`, each followed by
-//! a reload. A running
+//! a reload. It also runs `satz review-pack` for the Packs view and places a reviewed
+//! pack in the estate's library, the estate checked with it there. A running
 //! command streams from a tokio task into a local task, so the loop stays free to take
 //! `CancelCommand`; the three git commands that put the estate in a repository run the
 //! same way, when the operator asks for them.
@@ -25,9 +26,10 @@ use satz_studio_core::estate::{EstateDir, HclState};
 use satz_studio_core::git::{self, WorkTree};
 use satz_studio_core::model::EstateModel;
 use satz_studio_core::satz::reports::{
-    AddPackArgs, InterviewArgs, InterviewReport, MergeReport, NoticeRow, PackChange, PacksReport,
-    PrerequisitesResult, QuestionsReport, RemovePackArgs,
+    AddPackArgs, FindingSeverity, InterviewArgs, InterviewReport, MergeReport, NoticeRow,
+    PackChange, PackReview, PacksReport, PrerequisitesResult, QuestionsReport, RemovePackArgs,
 };
+use satz_studio_core::satz::review::{self, PlaceError, Placed};
 use satz_studio_core::satz::{CliLine, EstateSession, ToolOutcome, export};
 use satz_studio_core::schema::{ResourceRegistry, SchemaError};
 use tokio_util::sync::CancellationToken;
@@ -35,7 +37,7 @@ use tokio_util::sync::CancellationToken;
 use super::app_actions::close_estate;
 use super::{
     AppStore, AppStoreStoreExt, CommandOutcome, Door, EstateStore, EstateStoreStoreExt, Exported,
-    ToastKind, strip_ansi, toast,
+    PackReviewState, ToastKind, strip_ansi, toast,
 };
 
 pub enum EstateAction {
@@ -80,6 +82,17 @@ pub enum EstateAction {
     RemovePack(RemovePackArgs),
     /// `satz_merge_presets`: the line for a pack the library gained
     MergePresets,
+    /// `satz --config <dir> review-pack <pack> [--against <estate>]`: the pack judged
+    /// against the library's bar, its findings into the drawer at their lines
+    ReviewPack {
+        pack: PathBuf,
+        against: bool,
+    },
+    /// the reviewed bytes into the estate's `presets_dir` as `<stem>.local.satz`, the
+    /// estate checked with it there, then the placed file reviewed where it now stands
+    PlacePrivate,
+    /// the review closed: its card and its findings leave the window
+    CloseReview,
     /// `git init -b main`, `git add -A` and one commit in the estate directory, streamed
     /// into the log: the repository `satz merge-presets` needs for its undo
     InitRepository,
@@ -151,6 +164,28 @@ pub async fn estate_coroutine(
                 }
                 reload(&session, app).await;
             }
+            EstateAction::ReviewPack { pack, against } => {
+                if app.estate().reviewing().cloned() {
+                    toast(app, ToastKind::Info, "a review is already running");
+                    continue;
+                }
+                app.estate().reviewing().set(true);
+                let session = Arc::clone(&session);
+                spawn(async move {
+                    review_pack(&session, app, pack, against).await;
+                    app.estate().reviewing().set(false);
+                });
+            }
+            EstateAction::PlacePrivate => {
+                if app.estate().reviewing().cloned() {
+                    toast(app, ToastKind::Info, "a review is already running");
+                    continue;
+                }
+                app.estate().reviewing().set(true);
+                place_private(&session, app).await;
+                app.estate().reviewing().set(false);
+            }
+            EstateAction::CloseReview => app.estate().review().set(None),
             EstateAction::InitRepository => running.started(init_repository(&session, app)),
             EstateAction::Close => close_estate(app),
             EstateAction::Switch => {
@@ -899,6 +934,121 @@ fn merge_outcome(report: &MergeReport) -> CommandOutcome {
     }
 }
 
+/// `satz review-pack` with the estate's config, through the CLI: the MCP tool is confined
+/// to the estate's root, and a pack under review usually lives outside it. The review
+/// replaces the last one; its findings join the drawer, which opens on a review that has
+/// something to say above an info, and the verdict is a toast. A review that failed —
+/// satz could not run, or answered in a shape the app does not read — keeps the pack's
+/// path and satz's reason in the view.
+async fn review_pack(
+    session: &Arc<EstateSession>,
+    app: Store<AppStore>,
+    pack: PathBuf,
+    against: bool,
+) {
+    let estate = against.then_some(session.main.as_path());
+    match review::review(&session.cli, &pack, estate).await {
+        Ok(reviewed) => {
+            toast(app, ToastKind::Info, review_verdict(&reviewed.review));
+            if reviewed
+                .review
+                .findings
+                .iter()
+                .any(|f| f.severity != FindingSeverity::Info)
+            {
+                app.drawer_open().set(true);
+            }
+            app.estate()
+                .review()
+                .set(Some(PackReviewState::Reviewed(reviewed)));
+        }
+        Err(e) => {
+            let error = e.to_string();
+            toast(app, ToastKind::Error, format!("review-pack: {error}"));
+            app.estate()
+                .review()
+                .set(Some(PackReviewState::Failed { pack, error }));
+        }
+    }
+}
+
+/// The toast after a review: satz's verdict and what it counted.
+pub fn review_verdict(review: &PackReview) -> String {
+    let count = |n: usize, one: &str, many: &str| match n {
+        1 => format!("1 {one}"),
+        n => format!("{n} {many}"),
+    };
+    let errors = review.count(FindingSeverity::Error);
+    let warnings = review.count(FindingSeverity::Warning);
+    if review.passed() {
+        match warnings {
+            0 => "the pack clears the bar".to_string(),
+            n => format!(
+                "the pack clears the bar · {}",
+                count(n, "warning", "warnings")
+            ),
+        }
+    } else {
+        format!(
+            "the pack does not clear the bar yet · {}",
+            count(errors, "error", "errors")
+        )
+    }
+}
+
+/// Destination B: the reviewed bytes into the estate's `presets_dir` as
+/// `<stem>.local.satz`, under the write lock and checked by `satz_transpile_check` with the
+/// file in the library — removed again when the check refuses. Once placed, the placed
+/// file is reviewed where it now stands, so the drawer names the file the estate reads.
+async fn place_private(session: &Arc<EstateSession>, app: Store<AppStore>) {
+    let Some(PackReviewState::Reviewed(reviewed)) = app.estate().review().cloned() else {
+        toast(app, ToastKind::Error, "no reviewed pack to place");
+        return;
+    };
+    let presets = session.dir.presets_dir();
+    let checker = McpChecker {
+        session: Arc::clone(session),
+    };
+    let placed = {
+        let _lock = session.write_lock().await;
+        review::place_private(&reviewed, &presets, &session.main, &checker).await
+    };
+    match placed {
+        Ok(Placed::Written { path, .. }) => {
+            toast(
+                app,
+                ToastKind::Info,
+                format!("placed in the library as {}", path.display()),
+            );
+            review_pack(session, app, path, reviewed.against).await;
+        }
+        Ok(Placed::AlreadyThere(path)) => toast(
+            app,
+            ToastKind::Info,
+            format!(
+                "the library already holds this pack as {}: nothing written",
+                path.display()
+            ),
+        ),
+        Err(PlaceError::Rollback(diags)) => {
+            let first = diags
+                .iter()
+                .find(|d| d.severity == Severity::Error)
+                .or(diags.first())
+                .map(|d| d.message.lines().next().unwrap_or_default().to_string())
+                .unwrap_or_default();
+            toast(
+                app,
+                ToastKind::Error,
+                format!("not placed — the estate did not compile with it: {first}"),
+            );
+            app.estate().diagnostics().write().extend(diags);
+            app.drawer_open().set(true);
+        }
+        Err(e) => toast(app, ToastKind::Error, e.to_string()),
+    }
+}
+
 fn open_in_terminal(session: &Arc<EstateSession>, app: Store<AppStore>, args: &[String]) {
     let opened = session
         .external_command(args)
@@ -1212,6 +1362,25 @@ mod tests {
         assert!(failed.text.contains("attention"), "{}", failed.text);
         report.attention = false;
         assert!(merge_outcome(&report).ok);
+    }
+
+    /// The toast says satz's verdict and counts what decides it: the errors of a pack that
+    /// does not clear the bar, the warnings of one that does.
+    #[test]
+    fn a_review_toast_says_the_verdict_and_what_it_counted() {
+        let broken: PackReview = serde_json::from_str(include_str!(
+            "../../../satz-studio-core/tests/fixtures/review/team-access.json"
+        ))
+        .unwrap();
+        assert_eq!(
+            review_verdict(&broken),
+            "the pack does not clear the bar yet · 3 errors"
+        );
+        let clean: PackReview = serde_json::from_str(include_str!(
+            "../../../satz-studio-core/tests/fixtures/review/organization-budget.json"
+        ))
+        .unwrap();
+        assert_eq!(review_verdict(&clean), "the pack clears the bar");
     }
 
     #[test]

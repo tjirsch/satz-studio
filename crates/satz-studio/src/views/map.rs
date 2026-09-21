@@ -5,7 +5,8 @@
 //! the cards of the packs that need it hung below by right-angle connectors, whatever
 //! phase their lines stand under. A switch is `satz_add_pack` or `satz_remove_pack`: what
 //! a pack needs, what it deploys and what a switch does are satz's pack graph, and the
-//! view derives none of it.
+//! view derives none of it. Above the sections stands the pack review
+//! ([`crate::views::review`]), for a pack the operator writes rather than switches.
 
 use std::collections::BTreeMap;
 
@@ -20,6 +21,7 @@ use crate::components::{
     ConnectorTree, Icon, Switch,
 };
 use crate::state::{AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt};
+use crate::views::review::PackReviewCard;
 
 /// The header of the section for packs the file has no line for.
 pub const ABSENT_HEADER: &str = "Not in this file";
@@ -293,6 +295,7 @@ pub fn PacksView() -> Element {
                     Icon { name: "map", size: 48, class: "placeholder__icon" }
                     p { "The estate model is not available — the drawer says why." }
                 }
+                PackReviewCard {}
             }
         };
     };
@@ -351,6 +354,7 @@ pub fn PacksView() -> Element {
                 }
             }
             p { class: "view__lead", "A switch is satz's add-pack or remove-pack: satz binds the gate, writes the line where the pack graph places it, and refuses a switch while a pack it needs is off or a pack that needs it is on. merge-presets reconciles this estate's library with upstream: a pack that is missing is installed, an unmodified one is upgraded, an edited one is forked rather than overwritten. Its flags are in the commands palette." }
+            PackReviewCard {}
             for (i, f) in loose.iter().enumerate() {
                 div { key: "loose-{i}", class: "pack-card__diag",
                     Icon { name: "error", size: 18 }

@@ -25,6 +25,7 @@ use satz_studio_core::github::StudioUpdate;
 use satz_studio_core::llm::CredentialSource;
 use satz_studio_core::model::EstateModel;
 use satz_studio_core::satz::reports::{InterviewReport, NoticeRow, QuestionsReport};
+use satz_studio_core::satz::review::ReviewedPack;
 use satz_studio_core::satz::self_update::SatzRelease;
 use satz_studio_core::satz::{CliLine, EstateSession, ImportReport, QuestionsFormat, SatzBinary};
 use satz_studio_core::settings::Settings;
@@ -333,6 +334,36 @@ pub struct EstateStore {
     /// the last decisions sheet or workbook this session wrote, which "Export again"
     /// writes over
     pub last_export: Option<Exported>,
+    /// the pack the Packs view reviewed last with `satz review-pack`, or why its review
+    /// failed; its findings stand in the drawer beside the estate's own until it is closed
+    pub review: Option<PackReviewState>,
+    /// a review or a placement is running
+    pub reviewing: bool,
+}
+
+/// The pack review of the Packs view.
+#[derive(Debug, Clone, PartialEq)]
+pub enum PackReviewState {
+    Reviewed(ReviewedPack),
+    Failed { pack: PathBuf, error: String },
+}
+
+impl PackReviewState {
+    pub fn pack(&self) -> &Path {
+        match self {
+            PackReviewState::Reviewed(r) => &r.path,
+            PackReviewState::Failed { pack, .. } => pack,
+        }
+    }
+
+    /// The review's findings as diagnostics, for the drawer; none for a failed review,
+    /// whose reason the view and the toast carry.
+    pub fn diagnostics(&self) -> Vec<Diagnostic> {
+        match self {
+            PackReviewState::Reviewed(r) => r.diagnostics(),
+            PackReviewState::Failed { .. } => Vec::new(),
+        }
+    }
 }
 
 /// A document an export wrote: the format and the file.

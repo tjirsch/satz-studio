@@ -1,6 +1,6 @@
 //! The JSON a reporting command writes with `--format json` and satz returns as
-//! `structuredContent` over MCP, typed. Shapes mirror satz `src/questions.rs` and
-//! `src/mcp.rs` at the pinned release: unknown fields are ignored (satz may add some),
+//! `structuredContent` over MCP, typed. Shapes mirror satz `src/questions.rs`,
+//! `src/review_pack.rs` and `src/mcp.rs` at the pinned release: unknown fields are ignored (satz may add some),
 //! missing required fields fail loudly (satz removed one, and the pin must move).
 
 use std::collections::BTreeMap;
@@ -251,6 +251,41 @@ pub struct Finding {
     /// command does.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fix: Option<String>,
+}
+
+/// What `satz review-pack <pack> --format json` writes and `satz_review_pack` returns:
+/// one pack judged against the preset library's own bar. satz's `Review`
+/// (`vendor/satz/src/review_pack.rs`).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct PackReview {
+    /// the pack, as an absolute path
+    pub pack: String,
+    /// the estate the pack was folded into: `synthetic`, the path `--against` named, or
+    /// empty when the pack does not parse and nothing was folded
+    pub folded_into: String,
+    /// the resource addresses the pack contributes to that estate
+    pub emits: Vec<String>,
+    /// in the order satz checked them; every one of them names the pack as its `file`
+    pub findings: Vec<Finding>,
+}
+
+impl PackReview {
+    /// satz's verdict: the pack clears the bar when no finding is an error. Warnings are
+    /// the author's to weigh. `satz review-pack` exits non-zero exactly when this is false.
+    pub fn passed(&self) -> bool {
+        !self
+            .findings
+            .iter()
+            .any(|f| f.severity == FindingSeverity::Error)
+    }
+
+    /// How many findings carry `severity`.
+    pub fn count(&self, severity: FindingSeverity) -> usize {
+        self.findings
+            .iter()
+            .filter(|f| f.severity == severity)
+            .count()
+    }
 }
 
 /// What a pack is to the pack graph.
@@ -947,6 +982,70 @@ mod tests {
         let mut unknown = row;
         unknown["line"] = serde_json::json!("sideways");
         assert!(serde_json::from_value::<PackRow>(unknown).is_err());
+    }
+
+    /// `satz review-pack <pack> --format json`, recorded from satz 0.73.1 over
+    /// `tests/fixtures/smoke/config.toml`: a pack of satz's own library, which clears the
+    /// bar, and `tests/fixtures/review/team-access.satz`, which does not. The absolute
+    /// paths are written as `/e/…`.
+    const REVIEW_CLEAN: &str = include_str!("../../tests/fixtures/review/organization-budget.json");
+    const REVIEW_BROKEN: &str = include_str!("../../tests/fixtures/review/team-access.json");
+
+    #[test]
+    fn the_recorded_reviews_round_trip() {
+        for recorded in [REVIEW_CLEAN, REVIEW_BROKEN] {
+            let review: PackReview = serde_json::from_str(recorded).unwrap();
+            let again: serde_json::Value = serde_json::to_value(&review).unwrap();
+            let original: serde_json::Value = serde_json::from_str(recorded).unwrap();
+            assert_eq!(again, original);
+        }
+    }
+
+    #[test]
+    fn a_review_passes_when_no_finding_is_an_error() {
+        let clean: PackReview = serde_json::from_str(REVIEW_CLEAN).unwrap();
+        assert!(clean.passed());
+        assert_eq!(clean.folded_into, "synthetic");
+        assert_eq!(clean.emits, ["google_billing_budget.global_budget"]);
+
+        let broken: PackReview = serde_json::from_str(REVIEW_BROKEN).unwrap();
+        assert!(!broken.passed());
+        assert_eq!(broken.count(FindingSeverity::Error), 3);
+        let membership = broken
+            .findings
+            .iter()
+            .find(|f| f.message.starts_with("declares the membership"))
+            .expect("the membership is a finding");
+        assert_eq!(membership.severity, FindingSeverity::Error);
+        assert_eq!(membership.kind, "pack");
+        assert!(membership.line.is_some(), "anchored at its block");
+        let unformatted = broken
+            .findings
+            .iter()
+            .find(|f| f.message.starts_with("not formatted"))
+            .expect("the layout is a finding");
+        assert!(
+            unformatted
+                .fix
+                .as_deref()
+                .is_some_and(|f| f.starts_with("satz fmt ")),
+            "{unformatted:?}"
+        );
+    }
+
+    /// A review without a field satz always sends is a failed report, never a review read
+    /// with nothing in it.
+    #[test]
+    fn a_review_without_a_field_satz_always_sends_fails() {
+        let v: serde_json::Value = serde_json::from_str(REVIEW_BROKEN).unwrap();
+        for field in ["pack", "folded_into", "emits", "findings"] {
+            let mut without = v.clone();
+            without.as_object_mut().unwrap().remove(field);
+            assert!(
+                serde_json::from_value::<PackReview>(without).is_err(),
+                "a review without `{field}` was read"
+            );
+        }
     }
 
     #[test]

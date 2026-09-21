@@ -117,6 +117,41 @@ impl SatzCli {
     /// way it returns. A non-zero exit is an error carrying stderr, never a value; so
     /// is an exit that wrote no file.
     pub async fn json_report<T: DeserializeOwned>(&self, args: &[String]) -> Result<T, SatzError> {
+        let run = self.report_run(args).await?;
+        if !run.status.success() {
+            return Err(SatzError::Exit {
+                command: run.command,
+                status: run.status,
+                stderr: run.stderr,
+            });
+        }
+        run.typed()
+    }
+
+    /// Run a reporting command whose exit status is a VERDICT on what it judged — `satz
+    /// review-pack` exits non-zero when the pack does not clear the bar, and writes its
+    /// report either way — and type the report with the status beside it. A non-zero exit
+    /// that wrote no file is an error carrying stderr: satz failed before it judged
+    /// anything. The caller holds the status to the report's own verdict.
+    pub async fn json_verdict<T: DeserializeOwned>(
+        &self,
+        args: &[String],
+    ) -> Result<(T, ExitStatus), SatzError> {
+        let run = self.report_run(args).await?;
+        if !run.status.success() && run.written.is_err() {
+            return Err(SatzError::Exit {
+                command: run.command,
+                status: run.status,
+                stderr: run.stderr,
+            });
+        }
+        let status = run.status;
+        Ok((run.typed()?, status))
+    }
+
+    /// `args` with `--format json --out <file>` appended, run to its end: the status,
+    /// stderr, and the file it wrote — read before the temporary directory goes.
+    async fn report_run(&self, args: &[String]) -> Result<ReportRun, SatzError> {
         let dir = tempfile::Builder::new()
             .prefix("satz-studio-report")
             .tempdir()
@@ -141,14 +176,34 @@ impl SatzCli {
                 context: format!("running `satz {command}`"),
                 source: e,
             })?;
-        if !output.status.success() {
-            return Err(SatzError::Exit {
-                command,
-                status: output.status,
-                stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
-            });
-        }
-        let written = tokio::fs::read(&out).await.map_err(|e| SatzError::Io {
+        let written = tokio::fs::read(&out).await;
+        Ok(ReportRun {
+            status: output.status,
+            stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+            written,
+            command,
+        })
+    }
+}
+
+/// One reporting command, run: what [`SatzCli::json_report`] and
+/// [`SatzCli::json_verdict`] each hold to their own rule.
+struct ReportRun {
+    status: ExitStatus,
+    stderr: String,
+    /// the report file's bytes, or why it could not be read
+    written: std::io::Result<Vec<u8>>,
+    /// the command line after `satz`, for the errors
+    command: String,
+}
+
+impl ReportRun {
+    /// The report, typed. A run that wrote no file is an error, never an empty report.
+    fn typed<T: DeserializeOwned>(self) -> Result<T, SatzError> {
+        let ReportRun {
+            written, command, ..
+        } = self;
+        let written = written.map_err(|e| SatzError::Io {
             context: format!("reading the report `satz {command}` wrote"),
             source: e,
         })?;

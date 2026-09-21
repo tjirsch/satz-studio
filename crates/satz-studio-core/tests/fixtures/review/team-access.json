@@ -1,0 +1,43 @@
+{
+  "pack": "/e/packs/team-access.satz",
+  "folded_into": "synthetic",
+  "emits": [
+    "google_cloud_identity_group.team",
+    "google_cloud_identity_group_membership.first"
+  ],
+  "findings": [
+    {
+      "severity": "error",
+      "kind": "pack",
+      "file": "/e/packs/team-access.satz",
+      "message": "not formatted — every Satz file in the library is in the canonical layout; the command writes it and never changes meaning",
+      "fix": "satz fmt /e/packs/team-access.satz"
+    },
+    {
+      "severity": "error",
+      "kind": "pack",
+      "file": "/e/packs/team-access.satz",
+      "line": 5,
+      "message": "version 0.1 has no row in tests/fixtures/smoke/../../../vendor/satz/presets/README.md's `## Changelog` — a version nobody can read the history of is a version nobody can adopt"
+    },
+    {
+      "severity": "error",
+      "kind": "pack",
+      "file": "/e/packs/team-access.satz",
+      "line": 17,
+      "message": "declares the membership google_cloud_identity_group_membership.first — presets define groups, humans grant membership: who is in a group is the customer's decision and never the library's"
+    },
+    {
+      "severity": "info",
+      "kind": "pack",
+      "file": "/e/packs/team-access.satz",
+      "message": "adopting it costs an estate: Groups Admin (Google Workspace admin console) and cloudidentity.googleapis.com. `satz update-prerequisites <estate>` writes both"
+    },
+    {
+      "severity": "info",
+      "kind": "pack",
+      "file": "/e/packs/team-access.satz",
+      "message": "not checked here: the privacy shapes (organisation and project ids, e-mail addresses, domains). `scripts/check-names.sh` in a satz checkout is what rejects them today, and what must become a param before a pack leaves the machine it was written on"
+    }
+  ]
+}
