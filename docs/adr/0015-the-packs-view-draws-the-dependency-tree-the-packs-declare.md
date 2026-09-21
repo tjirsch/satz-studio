@@ -1,6 +1,6 @@
 # 0015 — the Packs view draws the dependency tree the packs declare
 
-- **Status:** accepted
+- **Status:** superseded by [ADR-0018](0018-the-packs-view-shows-satzs-pack-graph.md)
 - **Date:** 2026-09-16
 - **Deciders:** the maintainer
 

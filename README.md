@@ -35,7 +35,9 @@ beside it.
 Once an estate is open the window is ordered by the job, and the rail reads in that
 order: **Overview**, which estate this is — the customer, the organisation and the
 infrastructure it names, in its own answers — and what it still has to do; **Packs**,
-which packs it runs, the packs that wait on another hung below it; **Decisions**, the
+every pack satz's pack graph offers, as the estate has it, the packs that need another
+hung below it, each switched on and off by satz's own `add-pack` and `remove-pack`;
+**Decisions**, the
 questions those packs declare and it has not answered; **Estate**, the file
 itself — its params and its resource tree; **Checks**, what judges it, from the compile
 to the compliance catalogs; **Deploy**, what hands it off. Chat and Settings sit at the
@@ -47,7 +49,8 @@ Ctrl+K on Windows and Linux, or that footer button).
 The Overview is one card, and it lists what the estate owes — no git repository, which
 `satz merge-presets` needs before it edits the estate, so an estate outside one cannot
 take preset updates (one button runs `git init`, `git add` and a first commit), day 0
-unconfirmed, questions unanswered, a pack the map asks for and the file has no line for, no provider
+unconfirmed, questions unanswered, a pack map that is off or missing, what satz's pack
+graph finds wrong with the packs the estate uses, no provider
 schema, a pack whose notice is open, prerequisites the compile found undeclared, raw HCL
 nobody has reviewed, an HCL directory nothing has planned against. Every row is derived from the estate as it is on
 the screen, so it cannot go stale, and the card is gone when there is nothing in it.
@@ -65,7 +68,7 @@ that holds them up — in front of apply and bootstrap, which satz refuses.
 
 ## What it needs
 
-- **`satz` 0.67.0 or newer.** `MIN_SATZ` in `crates/satz-studio-core/src/satz/binary.rs`
+- **`satz` 0.73.0 or newer.** `MIN_SATZ` in `crates/satz-studio-core/src/satz/binary.rs`
   names the oldest satz this build works with. It rises when a satz release breaks the
   app or the app starts using something a later satz introduced, not with every satz
   release. Install satz with its installer or bring it up to date with `satz

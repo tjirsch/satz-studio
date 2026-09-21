@@ -34,8 +34,6 @@ pub enum DiagSource {
     Command(String),
     /// a tool over MCP refused, by name
     Tool(String),
-    /// the view model's own finding (a pack line active while its gate is false)
-    Model,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -558,7 +556,9 @@ info     unadopted-pack                         use_budget
             group: None,
             file: None,
             line: None,
+            subject: None,
             message: "the provider requires location".to_string(),
+            fix: None,
         }
     }
 

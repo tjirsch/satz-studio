@@ -56,15 +56,16 @@ the rules that apply to every change, whoever or whatever makes it.
   `cargo test --workspace --locked`, `bash scripts/e2e.sh` and
   `bash scripts/check-names.sh`. CI runs all of it on Linux, macOS and Windows, on
   every push and pull request.
-- **satz owns the estate; the app edits inside a span.** An answer, a pack choice and
-  an import id are written by satz's own writer (`satz_interview`, `satz adopt`) on the
-  real file, with a `Snapshot` taken first and the bytes written back if the check
-  refuses. Every other edit is the document layer's: one value rendered in the style of
-  its node and spliced over that node's span, proved by re-parsing and comparing node
-  signatures, written to a `.studio-tmp.satz` beside the file, checked with
-  `satz transpile --check`, and only then renamed over the original. A sha256 that
-  changed on disk is a rollback, never a merge. `docs/architecture.md` §4b is the whole
-  discipline; do not add a second way to write a file.
+- **satz owns the estate; the app edits inside a span.** An answer, a pack switch and
+  an import id are written by satz's own writer (`satz_interview`, `satz_add_pack`,
+  `satz_remove_pack`, `satz adopt`) on the real file, with a `Snapshot` taken first and
+  the bytes written back if the check refuses. Every other edit is the document layer's:
+  one value rendered in the style of its node and spliced over that node's span, proved
+  by re-parsing and comparing node signatures, written to a `.studio-tmp.satz` beside
+  the file, checked with `satz transpile --check`, and only then renamed over the
+  original. A sha256 that changed on disk is a rollback, never a merge.
+  `docs/architecture.md` §4b is the whole discipline; do not add a second way to write a
+  file.
 - **Never touch the generated HCL.** `hcl_dir` is satz's output. The app reads the
   estate's `config.toml` to learn where it is and leaves it alone.
 - **Fail fast, no silent healing.** A settings file that does not parse is a full-screen

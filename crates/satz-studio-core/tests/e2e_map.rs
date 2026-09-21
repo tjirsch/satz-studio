@@ -1,9 +1,11 @@
-//! The estate map, driven as the Map view drives it, on the interviewed skeleton: the
-//! map line uncommented by the app's rule and verified; a choice answered yes leaves
-//! its pack line active, answered no leaves the line active and the gate false, which
-//! the model shows as a note; a gate bound true whose line is gone is an `Absent` row,
-//! and `satz transpile --check` names the pack — a warning at satz's default
-//! validation level, a refusal at `error`.
+//! The Packs view's switches, driven as the view drives them, on the interviewed
+//! skeleton: the map switched on through `satz_add_pack`, which uncomments its line; a
+//! pack switched on, which binds its gate and makes its line active, and off, which binds
+//! the gate false and leaves the line; a switch satz refuses, which writes nothing and
+//! names why; and a gate bound true whose line is gone, which satz's pack report shows as
+//! an absent pack with the finding and the command that answers it, and which
+//! `satz transpile --check` names — a warning at satz's default validation level, a
+//! refusal at `error`.
 
 #[path = "fixtures/e2e/support.rs"]
 mod support;
@@ -14,15 +16,14 @@ use satz_studio_core::edit::{
     CheckFailure, Checker, CliChecker, CommitError, Edit, EditSession, McpChecker, Rollback,
     sha256_hex,
 };
-use satz_studio_core::model::{Choice, LineState, PackRowKind};
-use satz_studio_core::satz::reports::QuestionState;
+use satz_studio_core::satz::reports::{AddPackArgs, PackLine, QuestionState};
 use std::sync::Arc;
 
 const BILLING: &str = "presets/billing-account-permissions.satz";
 const BUDGET: &str = "presets/organization-budget.satz";
 
 #[tokio::test]
-async fn the_map_goes_in_and_a_choice_answered_twice_leaves_its_line_active() {
+async fn the_map_and_a_pack_are_switched_by_satz_and_a_refused_switch_writes_nothing() {
     let estate = support::estate_dir(None);
     let main = estate.create_skeleton("new.satz").await;
     let session = estate.open("new.satz").await;
@@ -31,7 +32,14 @@ async fn the_map_goes_in_and_a_choice_answered_twice_leaves_its_line_active() {
     let before = support::read(&main);
     let map_line = "// use \"presets/estate-map.satz\"\n";
     assert!(before.contains(map_line), "{before}");
-    let committed = support::enable_map(&session).await;
+    let m = support::model(&session, Vec::new()).await;
+    let map = m.packs.map().expect("the graph has the map");
+    assert_eq!(map.line, PackLine::Commented);
+    assert!(!map.deploys);
+
+    let (change, committed) = support::add_pack(&session, support::MAP).await;
+    assert_eq!(change.switched, [support::MAP]);
+    assert!(change.bound.is_empty(), "the map has no gate: {change:?}");
     let text = support::read(&main);
     assert_eq!(
         text,
@@ -40,6 +48,9 @@ async fn the_map_goes_in_and_a_choice_answered_twice_leaves_its_line_active() {
     );
     assert_eq!(committed.sha256, sha256_hex(text.as_bytes()));
     assert!(!committed.summary.addresses.is_empty());
+    let m = support::model(&session, Vec::new()).await;
+    let map = m.packs.map().unwrap();
+    assert_eq!((map.line, map.deploys), (PackLine::Active, true));
 
     // with the map in, its choices are open
     let report = support::questions(&session).await;
@@ -50,104 +61,70 @@ async fn the_map_goes_in_and_a_choice_answered_twice_leaves_its_line_active() {
         .find(|q| q.subject == "use_billing_permissions")
         .expect("the map asks about the billing permissions");
     assert_eq!(billing.state, QuestionState::Unanswered);
-    assert_eq!(billing.default, Some(serde_json::json!(true)));
-    let commented = format!("\n// use \"{BILLING}\" when use_billing_permissions\n");
-    let active = format!("\nuse \"{BILLING}\" when use_billing_permissions\n");
-    assert!(text.contains(&commented));
 
-    // yes: satz binds the param and uncomments the line
-    let (report, _) = support::answer(
+    // the billing permissions need a security-group model, and none is on: refused,
+    // naming the packs that would meet it, the file as it was
+    let refused = support::switch(
         &session,
-        support::one_answer("use_billing_permissions", serde_json::json!(true)),
+        "satz_add_pack",
+        &AddPackArgs {
+            pack: BILLING.to_string(),
+            with_requirements: false,
+        },
     )
-    .await;
-    assert_eq!(report.written, 1);
+    .await
+    .expect_err("billing without a security model");
+    assert!(refused.contains("refused, nothing written"), "{refused}");
+    assert!(refused.contains("security-group"), "{refused}");
+    assert_eq!(support::read(&main), text);
+
+    // on: satz binds the gate and uncomments the line
+    let commented = format!("\n// use \"{BUDGET}\" when use_budget\n");
+    let active = format!("\nuse \"{BUDGET}\" when use_budget\n");
+    assert!(text.contains(&commented), "{text}");
+    let (change, _) = support::add_pack(&session, BUDGET).await;
+    assert_eq!(change.switched, [BUDGET]);
     let text = support::read(&main);
     assert!(text.contains(&active), "{text}");
     assert!(!text.contains(&commented));
-    // by param, not by spacing: satz's writer keeps a formatted file formatted, so the
-    // bound line carries the block's `=` column
+    // by param, not by spacing: satz's writer keeps a formatted file formatted
     let cst = Cst::parse(&text).unwrap();
     assert_eq!(
         support::params_of(&cst)
-            .get("use_billing_permissions")
+            .get("use_budget")
             .map(String::as_str),
         Some("true"),
         "{text}"
     );
-    let uses = scan_uses(&cst);
-    let line = uses.iter().find(|u| u.path == BILLING).unwrap();
-    assert_eq!(line.state, UseState::Active);
-    assert_eq!(line.gate.as_deref(), Some("use_billing_permissions"));
-    assert_eq!(
-        uses.iter().find(|u| u.path == BUDGET).unwrap().state,
-        UseState::Commented,
-        "a choice left alone keeps its commented line"
-    );
-    let m = support::model(&session, Vec::new()).await;
-    let row = m
-        .packs
-        .iter()
-        .find(|r| r.gate.as_deref() == Some("use_billing_permissions"))
+    let line = scan_uses(&cst)
+        .into_iter()
+        .find(|u| u.path == BUDGET)
         .unwrap();
-    assert_eq!(row.state, LineState::On);
-    assert_eq!(
-        row.choice,
-        Choice::Bool {
-            current: Some(true),
-            default: None
-        }
-    );
-    assert_eq!(row.line, Some(line.line));
-    assert!(m.diagnostics.is_empty(), "{:?}", m.diagnostics);
+    assert_eq!(line.state, UseState::Active);
+    let m = support::model(&session, Vec::new()).await;
+    let row = m.packs.row(BUDGET).unwrap();
+    assert_eq!((row.line, row.deploys), (PackLine::Active, true));
+    assert_eq!(row.at_line, Some(line.line));
+    assert_eq!(row.value, Some(true));
+    assert!(m.params.iter().all(|p| p.name != "use_budget"));
 
-    // no: the param reads false and the line stays active — satz never re-comments
-    // one — which the model shows as a note on that line
-    let (report, _) = support::answer(
-        &session,
-        support::one_answer("use_billing_permissions", serde_json::json!(false)),
-    )
-    .await;
-    assert_eq!(report.written, 1);
+    // off: the gate reads false and the line stays active — a gated line with a false
+    // gate deploys nothing
+    let (change, _) = support::remove_pack(&session, BUDGET).await;
+    assert_eq!(change.switched, [BUDGET]);
     let text = support::read(&main);
     assert!(text.contains(&active), "{text}");
     assert_eq!(
         support::params_of(&Cst::parse(&text).unwrap())
-            .get("use_billing_permissions")
+            .get("use_budget")
             .map(String::as_str),
         Some("false"),
         "{text}"
     );
     let m = support::model(&session, Vec::new()).await;
-    let row = m
-        .packs
-        .iter()
-        .find(|r| r.gate.as_deref() == Some("use_billing_permissions"))
-        .unwrap();
-    assert_eq!(row.state, LineState::On);
-    assert_eq!(
-        row.choice,
-        Choice::Bool {
-            current: Some(false),
-            default: None
-        }
-    );
-    assert_eq!(m.diagnostics.len(), 1, "{:?}", m.diagnostics);
-    let note = &m.diagnostics[0];
-    assert_eq!(note.severity, Severity::Info);
-    assert_eq!(note.source, DiagSource::Model);
-    assert_eq!(note.file.as_deref(), Some(main.as_path()));
-    assert_eq!(note.line, row.line);
-    assert!(
-        note.message.starts_with("line active, gate false"),
-        "{}",
-        note.message
-    );
-    assert!(
-        note.message.contains("use_billing_permissions"),
-        "{}",
-        note.message
-    );
+    let row = m.packs.row(BUDGET).unwrap();
+    assert_eq!((row.line, row.deploys), (PackLine::Active, false));
+    assert_eq!(row.value, Some(false));
     assert!(estate.temp_files().is_empty(), "{:?}", estate.temp_files());
 }
 
@@ -157,7 +134,7 @@ async fn a_gate_bound_true_without_its_line_is_absent_and_the_check_names_the_pa
     let main = estate.create_skeleton("new.satz").await;
     let session = estate.open("new.satz").await;
     support::answer_like_the_smoke_matrix(&session).await;
-    support::enable_map(&session).await;
+    support::add_pack(&session, support::MAP).await;
 
     // the budget pack goes back to how it looks in an estate written before the
     // library gained it: no line for it, active or commented, and no binding of its gate
@@ -213,13 +190,8 @@ async fn a_gate_bound_true_without_its_line_is_absent_and_the_check_names_the_pa
         .find(|d| d.message.contains("asks for but does not use"))
         .unwrap_or_else(|| panic!("no unadopted-pack warning in {diags:?}"));
     assert_eq!(warning.severity, Severity::Warning);
-    assert!(
-        warning.message.contains(&format!(
-            "`use_budget` is true and this estate has no line for `{BUDGET}`"
-        )),
-        "{}",
-        warning.message
-    );
+    let sentence = format!("`use_budget` is true and this estate has no line for `{BUDGET}`");
+    assert!(warning.message.contains(&sentence), "{}", warning.message);
     assert!(
         warning
             .message
@@ -228,31 +200,34 @@ async fn a_gate_bound_true_without_its_line_is_absent_and_the_check_names_the_pa
         warning.message
     );
 
-    // the model: one Absent row, last, not a param row, and the warning carried
+    // the pack report: the pack is absent, its gate true, the finding on its row, and
+    // the command that answers it in the report's findings; the gate is no param row
     let m = support::model(&session, diags.clone()).await;
-    let absent: Vec<_> = m
+    let row = m.packs.row(BUDGET).unwrap();
+    assert_eq!(
+        (row.line, row.at_line, row.deploys),
+        (PackLine::Absent, None, false)
+    );
+    assert_eq!(row.answer.as_deref(), Some("true"));
+    assert!(
+        row.findings.iter().any(|f| f.contains(&sentence)),
+        "{:?}",
+        row.findings
+    );
+    let finding = m
         .packs
+        .findings
         .iter()
-        .filter(|r| r.state == LineState::Absent)
-        .collect();
-    assert_eq!(absent.len(), 1, "{absent:?}");
-    let row = absent[0];
-    assert_eq!(row.kind, PackRowKind::Choice);
-    assert_eq!(row.gate.as_deref(), Some("use_budget"));
-    assert_eq!(row.path, None);
-    assert_eq!(row.line, None);
-    assert_eq!(
-        row.choice,
-        Choice::Bool {
-            current: Some(true),
-            default: None
-        }
+        .find(|f| f.subject.as_deref() == Some(BUDGET))
+        .unwrap_or_else(|| panic!("no finding about {BUDGET}: {:?}", m.packs.findings));
+    assert_eq!(finding.kind, "unadopted-pack");
+    assert!(
+        finding
+            .fix
+            .as_deref()
+            .is_some_and(|f| f.starts_with("satz add-pack ") && f.ends_with(BUDGET)),
+        "{finding:?}"
     );
-    assert_eq!(
-        row.question.as_ref().map(|q| q.state),
-        Some(QuestionState::Answered)
-    );
-    assert_eq!(m.packs.last().unwrap().gate.as_deref(), Some("use_budget"));
     assert!(m.params.iter().all(|p| p.name != "use_budget"));
     assert!(m.diagnostics.contains(warning), "{:?}", m.diagnostics);
 
@@ -284,7 +259,7 @@ async fn a_gate_bound_true_without_its_line_is_absent_and_the_check_names_the_pa
     );
     assert!(
         budget.message.contains(&format!(
-            "`use_budget` is true and this estate has no line for `{BUDGET}` — the command writes it where the pack graph places it"
+            "{sentence} — the command writes it where the pack graph places it"
         )),
         "{}",
         budget.message
@@ -324,5 +299,13 @@ async fn a_gate_bound_true_without_its_line_is_absent_and_the_check_names_the_pa
     };
     assert_eq!(diags, refused);
     assert_eq!(support::read(&main), off);
+
+    // the finding's command, as the Packs view's switch runs it, writes the line where
+    // the pack graph places it
+    support::add_pack(&session, BUDGET).await;
+    let m = support::model(&session, Vec::new()).await;
+    let row = m.packs.row(BUDGET).unwrap();
+    assert_eq!((row.line, row.deploys), (PackLine::Active, true));
+    assert!(row.findings.is_empty(), "{:?}", row.findings);
     assert!(estate.temp_files().is_empty(), "{:?}", estate.temp_files());
 }

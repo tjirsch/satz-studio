@@ -1,5 +1,6 @@
 //! The param rows of the showcase estate, joined with the questions the installed satz
-//! reports for it; the gates that are pack rows instead; the kinds an answer is read in.
+//! reports for it; the gates of satz's pack report, which are the Packs view's instead;
+//! the kinds an answer is read in.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -8,9 +9,9 @@ use std::time::Duration;
 use satz_core::pipeline::Env;
 use satz_studio_core::cst::Cst;
 use satz_studio_core::estate::EstateDir;
-use satz_studio_core::model::{EditMode, EstateModel, PackDecls, ParamKind, ParamRow, SourceValue};
+use satz_studio_core::model::{EditMode, EstateModel, ParamKind, ParamRow, SourceValue};
 use satz_studio_core::satz::reports::{
-    QuestionKind, QuestionState, QuestionsReport, QuestionsSummary,
+    PacksReport, QuestionKind, QuestionState, QuestionsReport, QuestionsSummary,
 };
 use satz_studio_core::satz::{SatzBinary, SatzCli};
 use satz_studio_core::schema::ResourceRegistry;
@@ -22,10 +23,14 @@ fn fixture() -> EstateDir {
         .unwrap()
 }
 
-async fn questions(estate: &EstateDir, name: &str) -> QuestionsReport {
+async fn json_report<T: serde::de::DeserializeOwned>(
+    estate: &EstateDir,
+    command: &str,
+    name: &str,
+) -> T {
     let bin = SatzBinary::locate(None).await.unwrap();
     let cli = SatzCli::new(bin, estate.dir.canonicalize().unwrap());
-    let args = ["questions".to_string(), name.to_string()];
+    let args = [command.to_string(), name.to_string()];
     tokio::time::timeout(TIME_BOX, cli.json_report(&args))
         .await
         .unwrap()
@@ -42,19 +47,19 @@ fn row<'a>(rows: &'a [ParamRow], name: &str) -> &'a ParamRow {
 async fn showcase_params_carry_their_questions_and_leave_the_gates_out() {
     let estate = fixture();
     let main = estate.yaml_dir().join("showcase.satz");
-    let report = questions(&estate, "showcase.satz").await;
+    let report: QuestionsReport = json_report(&estate, "questions", "showcase.satz").await;
+    let packs: PacksReport = json_report(&estate, "packs", "showcase.satz").await;
     let text = std::fs::read_to_string(&main).unwrap();
     let cst = Cst::parse(&text).unwrap();
     let env = estate.params(&main).unwrap();
     let registry = ResourceRegistry::load_all(&estate.schema_dir()).unwrap();
-    let decls = PackDecls::read(&main, &cst, &estate.loader(&main));
     let m = EstateModel::build(
         &main,
         &cst,
         Ok(&registry),
         &env,
         &report,
-        &decls,
+        &packs,
         Vec::new(),
     )
     .unwrap();
@@ -71,11 +76,12 @@ async fn showcase_params_carry_their_questions_and_leave_the_gates_out() {
             "billing_account_infra",
             "default_region",
             "audit_retention_days",
+            "want_optional",
             "pack_bucket_location",
             "pack_bucket_adopted",
             "archive_project_folder",
         ],
-        "want_optional gates a line and the group_model options are a oneof: pack rows"
+        "the group_model options are a oneof, answered as a choice"
     );
 
     let region = row(&m.params, "default_region");
@@ -126,11 +132,24 @@ async fn showcase_params_carry_their_questions_and_leave_the_gates_out() {
         );
     }
 
-    let gates: Vec<&str> = m.packs.iter().filter_map(|p| p.gate.as_deref()).collect();
-    assert_eq!(
-        gates,
-        ["want_optional"],
-        "the showcase oneof is not the map's: no Absent rows"
+    // the showcase's own switch is a file the pack graph does not know: its line is
+    // the estate's, and its gate a param like any other
+    assert!(
+        m.packs
+            .unmanaged
+            .iter()
+            .any(|u| u.path == "showcase-optional.satz"),
+        "{:?}",
+        m.packs.unmanaged
+    );
+    assert_eq!(row(&m.params, "want_optional").kind, ParamKind::Bool);
+    assert!(
+        m.packs
+            .packs
+            .iter()
+            .filter_map(|p| p.gate.as_deref())
+            .all(|g| m.params.iter().all(|r| r.name != g)),
+        "a gate of the pack graph is no param row"
     );
 }
 
@@ -153,13 +172,20 @@ fn a_reference_takes_the_shape_of_what_it_resolves_to() {
         questions: Vec::new(),
         summary: QuestionsSummary::default(),
     };
+    let packs = PacksReport {
+        estate: main.display().to_string(),
+        note: None,
+        packs: Vec::new(),
+        unmanaged: Vec::new(),
+        findings: Vec::new(),
+    };
     let m = EstateModel::build(
         main,
         &cst,
         Err(Path::new("/nowhere")),
         &env,
         &report,
-        &PackDecls::default(),
+        &packs,
         Vec::new(),
     )
     .unwrap();

@@ -1,7 +1,7 @@
 //! The outline of satz's smoke and showcase estates, classified against the schema
 //! fixture: configuration, the folder → project → bucket hierarchy, nested blocks,
-//! member grants, the decoded values, and what is locked. Offline: the questions
-//! report is empty, which the outline does not read.
+//! member grants, the decoded values, and what is locked. Offline: the questions and
+//! pack reports are empty, which the outline does not read.
 
 use std::path::{Path, PathBuf};
 
@@ -9,10 +9,9 @@ use satz_core::pipeline::Env;
 use satz_studio_core::cst::{Cst, UseState};
 use satz_studio_core::estate::EstateDir;
 use satz_studio_core::model::{
-    AttrRow, EditMode, EstateModel, PackDecls, ResourceKind, ResourceNode, SchemaStatus,
-    SourceValue, StrPart,
+    AttrRow, EditMode, EstateModel, ResourceKind, ResourceNode, SchemaStatus, SourceValue, StrPart,
 };
-use satz_studio_core::satz::reports::{QuestionsReport, QuestionsSummary};
+use satz_studio_core::satz::reports::{PacksReport, QuestionsReport, QuestionsSummary};
 use satz_studio_core::schema::{AttrType, ResourceRegistry};
 
 fn fixture() -> EstateDir {
@@ -28,6 +27,16 @@ fn no_questions(main: &Path) -> QuestionsReport {
     }
 }
 
+fn no_packs(main: &Path) -> PacksReport {
+    PacksReport {
+        estate: main.display().to_string(),
+        note: None,
+        packs: Vec::new(),
+        unmanaged: Vec::new(),
+        findings: Vec::new(),
+    }
+}
+
 fn model_of(name: &str) -> EstateModel {
     let estate = fixture();
     let main = estate.yaml_dir().join(name);
@@ -35,14 +44,13 @@ fn model_of(name: &str) -> EstateModel {
     let cst = Cst::parse(&text).unwrap();
     let env = estate.params(&main).unwrap();
     let registry = ResourceRegistry::load_all(&estate.schema_dir()).unwrap();
-    let decls = PackDecls::read(&main, &cst, &estate.loader(&main));
     EstateModel::build(
         &main,
         &cst,
         Ok(&registry),
         &env,
         &no_questions(&main),
-        &decls,
+        &no_packs(&main),
         Vec::new(),
     )
     .unwrap()
@@ -58,7 +66,7 @@ fn inline(text: &str, env: &Env) -> EstateModel {
         Ok(&registry),
         env,
         &no_questions(main),
-        &PackDecls::default(),
+        &no_packs(main),
         Vec::new(),
     )
     .unwrap()
@@ -509,7 +517,7 @@ fn without_a_registry_everything_typed_is_unknown() {
         Err(dir),
         &env,
         &no_questions(&main),
-        &PackDecls::read(&main, &cst, &estate.loader(&main)),
+        &no_packs(&main),
         Vec::new(),
     )
     .unwrap();

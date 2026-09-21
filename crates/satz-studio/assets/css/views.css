@@ -1487,10 +1487,6 @@
   gap: 16px;
 }
 
-.pack-card--group {
-  grid-column: 1 / -1;
-}
-
 .pack-card__head {
   display: flex;
   align-items: center;
@@ -1523,8 +1519,7 @@
   justify-content: space-between;
 }
 
-.pack-card__note,
-.pack-card__option-label {
+.pack-card__note {
   font: var(--md-sys-typescale-body-small);
   color: var(--md-sys-color-on-surface-variant);
 }
@@ -1572,7 +1567,7 @@
 }
 
 .pack-tree__warn,
-.pack-tree__follows {
+.pack-tree__reads {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -1584,7 +1579,7 @@
 }
 
 .pack-tree__warn code,
-.pack-tree__follows code {
+.pack-tree__reads code {
   font-size: 12px;
   user-select: text;
 }

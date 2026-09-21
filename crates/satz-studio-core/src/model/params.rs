@@ -1,7 +1,7 @@
 //! The `params { }` block as rows, each joined with the question that asks for it. A
-//! param that is a pack row's gate — it gates a `use … when` line, or the map asks it —
-//! is not a row here ([`super::packs`] has it), so one fact has one place; nor is an
-//! option of any `oneof`, which is answered as a choice and never typed.
+//! param that is a pack's gate in satz's pack report is not a row here (the Packs view
+//! switches it), so one fact has one place; nor is an option of any `oneof`, which is
+//! answered as a choice and never typed.
 //!
 //! Beside the rows, the rule that picks the shape an answer is typed in.
 
