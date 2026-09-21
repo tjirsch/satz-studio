@@ -125,15 +125,6 @@ pub struct QuestionsSummary {
     pub complete: bool,
 }
 
-/// What a notice holds up. satz's only value is `apply`: `transpile --apply` and
-/// `bootstrap` refuse while such a notice is open. A word satz adds fails the report
-/// rather than reading as "nothing is held up".
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum NoticeBefore {
-    Apply,
-}
-
 /// One notice of a pack the estate uses: what a pack asks to be run once it is
 /// switched on, and the param the estate binds `true` to say it has been. satz's own
 /// `NoticeRow` (`vendor/satz/src/notices.rs`).
@@ -147,17 +138,19 @@ pub struct NoticeRow {
     pub text: String,
     /// the command to run, with `<estate>` where the estate file goes
     pub run: String,
-    /// what stays refused while the notice is open
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub before: Option<NoticeBefore>,
+    /// what the pack declared: `error` — every command that writes to the organisation
+    /// refuses while it is open — `warning`, or `info`. Required: a notice without one
+    /// fails the report rather than reading as one that holds nothing up.
+    pub severity: FindingSeverity,
     /// the estate binds the param `true`
     pub acknowledged: bool,
 }
 
 impl NoticeRow {
-    /// Apply and bootstrap refuse while this one is open.
+    /// Every command that writes to the organisation — apply and bootstrap among them —
+    /// refuses while this one is open.
     pub fn holds_up_apply(&self) -> bool {
-        self.before == Some(NoticeBefore::Apply)
+        self.severity == FindingSeverity::Error
     }
 }
 
@@ -219,28 +212,14 @@ pub struct OpenReport {
     pub runs_as: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct EstateEntry {
-    pub config: String,
-    pub estate: String,
-    #[serde(default)]
-    pub deployment_mode: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct EstatesReport {
-    pub root: String,
-    pub estates: Vec<EstateEntry>,
-}
-
-/// How bad a finding is. `Error` refuses the compile; `Warning` and `Note` come back
+/// How bad a finding is. `Error` refuses the compile; `Warning` and `Info` come back
 /// with a summary that passed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum FindingSeverity {
     Error,
     Warning,
-    Note,
+    Info,
 }
 
 /// One thing the compile found after the front end, at the file and line it names.
@@ -336,10 +315,10 @@ mod tests {
     /// from the pinned release.
     const OPENED: &str = r#"{
         "acknowledged": false,
-        "before": "apply",
         "pack": "presets/cis/block-project-ssh-keys.satz",
         "param": "cis_block_project_ssh_keys_adopted",
         "run": "satz adopt <estate> --execute --import",
+        "severity": "error",
         "text": "Run satz adopt once the pack is on, so every live policy is in the state before the apply."
     }"#;
 
@@ -420,11 +399,11 @@ mod tests {
         .unwrap();
         assert!(s.findings.is_empty());
         let f: Finding = serde_json::from_value(serde_json::json!({
-            "severity": "note", "kind": "a-kind-satz-grew", "message": "m"
+            "severity": "info", "kind": "a-kind-satz-grew", "message": "m"
         }))
         .unwrap();
         assert_eq!(f.kind, "a-kind-satz-grew");
-        assert_eq!(f.severity, FindingSeverity::Note);
+        assert_eq!(f.severity, FindingSeverity::Info);
         assert_eq!((f.file, f.line, f.group), (None, None, None));
     }
 

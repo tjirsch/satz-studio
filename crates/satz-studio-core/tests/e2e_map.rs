@@ -134,7 +134,7 @@ async fn the_map_goes_in_and_a_choice_answered_twice_leaves_its_line_active() {
     );
     assert_eq!(m.diagnostics.len(), 1, "{:?}", m.diagnostics);
     let note = &m.diagnostics[0];
-    assert_eq!(note.severity, Severity::Note);
+    assert_eq!(note.severity, Severity::Info);
     assert_eq!(note.source, DiagSource::Model);
     assert_eq!(note.file.as_deref(), Some(main.as_path()));
     assert_eq!(note.line, row.line);
@@ -223,7 +223,7 @@ async fn a_gate_bound_true_without_its_line_is_absent_and_the_check_names_the_pa
     assert!(
         warning
             .message
-            .contains("`satz add-pack` writes it where the pack graph places it"),
+            .contains(&format!("fix: satz add-pack new.satz {BUDGET}")),
         "{}",
         warning.message
     );
@@ -278,13 +278,13 @@ async fn a_gate_bound_true_without_its_line_is_absent_and_the_check_names_the_pa
     assert!(
         budget
             .message
-            .contains("pack(s) this estate asks for but does not use"),
+            .contains("packs this estate asks for but does not use"),
         "{}",
         budget.message
     );
     assert!(
         budget.message.contains(&format!(
-            "`use_budget` is true and this estate has no line for `{BUDGET}` — `satz add-pack` writes it where the pack graph places it"
+            "`use_budget` is true and this estate has no line for `{BUDGET}` — the command writes it where the pack graph places it"
         )),
         "{}",
         budget.message

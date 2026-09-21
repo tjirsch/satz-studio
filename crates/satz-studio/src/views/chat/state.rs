@@ -567,7 +567,7 @@ fn diagnostic_line(d: &Diagnostic, base: &Path) -> String {
     let severity = match d.severity {
         Severity::Error => "error",
         Severity::Warning => "warning",
-        Severity::Note => "note",
+        Severity::Info => "info",
     };
     let message = d.message.lines().next().unwrap_or_default();
     let file = d

@@ -153,7 +153,7 @@ fn holds_to_the_files(model: &EstateModel, declared: &[Declared]) -> (usize, usi
     let edge_notes: Vec<&str> = model
         .diagnostics
         .iter()
-        .filter(|d| d.source == DiagSource::Model && d.severity == Severity::Note)
+        .filter(|d| d.source == DiagSource::Model && d.severity == Severity::Info)
         .map(|d| d.message.as_str())
         .filter(|m| {
             m.contains("was not read") || m.contains("round a cycle") || m.contains("so none of")

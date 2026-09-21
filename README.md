@@ -20,7 +20,7 @@ that estate opens.
 
 **Import** runs `satz import` over infrastructure that already exists: a
 `tofu show -json` document, a live organisation, folder or project, a Terraform HCL file
-or directory, or a file in the legacy YAML dialect. The source decides the shape and the
+or directory. The source decides the shape and the
 shape decides the flags, so the form shows the options of the chosen source and no
 others. `satz import` imports INTO a project, so a folder that is not an estate yet gets
 `satz init` first; the form says which of the two it will do and shows both command lines

@@ -63,8 +63,9 @@ async fn a_report_is_read_from_the_file_the_command_wrote() {
     .await
     .unwrap()
     .unwrap();
-    assert_eq!(report.summary.total, 27);
-    assert_eq!(report.questions.len(), 27);
+    // estate-core's questions include `compliance_frameworks` (satz v0.73.0)
+    assert_eq!(report.summary.total, 28);
+    assert_eq!(report.questions.len(), 28);
     assert!(report.estate.ends_with("smoke.satz"), "{}", report.estate);
 }
 

@@ -42,11 +42,11 @@ async fn a_no_op_edit_commits_with_the_same_hash_through_both_checkers() {
     }
     assert!(
         !summaries[0].addresses.is_empty(),
-        "the MCP summary lists what the estate emits"
+        "the summary lists what the estate emits"
     );
-    assert!(
-        summaries[1].addresses.is_empty(),
-        "the CLI prints no address list"
+    assert_eq!(
+        summaries[0].addresses, summaries[1].addresses,
+        "both checkers return the same summary"
     );
 }
 
@@ -178,7 +178,12 @@ async fn a_delegated_write_is_verified_and_a_broken_one_is_restored() {
     };
     assert_eq!(diags.len(), 1, "{diags:?}");
     assert_eq!(diags[0].file.as_deref(), Some(session.main.as_path()));
-    assert_eq!(diags[0].line, Some(24));
+    // the fixture moves lines between satz releases: the line is found, not remembered
+    let broken_line = broken
+        .lines()
+        .position(|l| l.trim_start().starts_with("default_region"))
+        .map(|i| i as u32 + 1);
+    assert_eq!(diags[0].line, broken_line);
     assert_eq!(
         support::read(&session.main),
         now,

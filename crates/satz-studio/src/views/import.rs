@@ -15,7 +15,7 @@
 use std::path::{Path, PathBuf};
 
 use dioxus::prelude::*;
-use satz_studio_core::satz::import::{ImportPlan, OnCollision, YamlKind};
+use satz_studio_core::satz::import::{ImportPlan, OnCollision};
 use satz_studio_core::satz::{
     CliLine, ImportOptions, ImportReport, ImportShape, InitOptions, SatzError,
 };
@@ -39,7 +39,6 @@ fn source_label(shape: ImportShape) -> &'static str {
         ImportShape::State => "State document",
         ImportShape::Live => "Scope",
         ImportShape::Hcl => "Terraform file or directory",
-        ImportShape::Yaml => "Legacy YAML file",
     }
 }
 
@@ -54,9 +53,6 @@ fn source_supporting(shape: ImportShape) -> &'static str {
         ImportShape::Hcl => {
             "A .tf file, or the directory holding them. What satz cannot express as Satz it carries verbatim inside `hcl trust` and says why, per block."
         }
-        ImportShape::Yaml => {
-            "A file in the legacy YAML dialect. The conversion is written BESIDE its source, not into yaml_dir, and an estate that still `use`s YAML packs is refused until those packs are converted first."
-        }
     }
 }
 
@@ -65,7 +61,6 @@ fn shape_segments() -> Vec<Segment> {
         Segment::new(ImportShape::State.as_str(), "State document"),
         Segment::new(ImportShape::Live.as_str(), "Live scope"),
         Segment::new(ImportShape::Hcl.as_str(), "Terraform HCL"),
-        Segment::new(ImportShape::Yaml.as_str(), "Legacy YAML"),
     ]
 }
 
@@ -90,12 +85,6 @@ fn pick_source(mut options: Signal<ImportOptions>, shape: ImportShape) {
             ImportShape::State => {
                 dialog
                     .add_filter("tofu show -json", &["json"])
-                    .pick_file()
-                    .await
-            }
-            ImportShape::Yaml => {
-                dialog
-                    .add_filter("legacy YAML", &["yaml", "yml"])
                     .pick_file()
                     .await
             }
@@ -424,43 +413,6 @@ fn ShapeOptions(options: Signal<ImportOptions>, running: bool) -> Element {
                 "--wrap-all is the zero-risk form: every block goes inside `hcl trust` and the estate deploys exactly as the source did. Nothing is translated, so the compliance plane cannot see into any of it. Without it satz translates what it can and wraps the rest, saying why per block."
             }
         },
-        ImportShape::Yaml => rsx! {
-            h3 { class: "import__subheading", "What the conversion declares itself to be" }
-            p { class: "import__label", "Kind" }
-            SegmentedButton {
-                options: vec![
-                    Segment::new(YamlKind::Estate.as_arg(), "an estate"),
-                    Segment::new(YamlKind::Pack.as_arg(), "a pack"),
-                ],
-                selected: current.kind.as_arg().to_string(),
-                onselect: move |v: String| {
-                    if let Some(kind) = YamlKind::parse(&v) {
-                        options.write().kind = kind;
-                    }
-                },
-            }
-            p { class: "import__note",
-                "--kind. satz's own default is pack; this door's is estate, because an estate is what it opens. A conversion declared an estate is compiled before it is kept — satz removes one that does not compile and names the line. A pack is a file, not an estate, so nothing opens after it."
-            }
-            TextField {
-                label: "Gate",
-                value: current.gate.clone(),
-                placeholder: "yaml/main.satz",
-                monospace: true,
-                disabled: running,
-                supporting: "--gate: the estate a converted pack is compiled in the context of. A pack on its own only parses.",
-                oninput: move |v: String| options.write().gate = v,
-            }
-            Switch {
-                label: "Write it as a .local fork",
-                checked: current.fork,
-                disabled: running,
-                onchange: move |on: bool| options.write().fork = on,
-            }
-            p { class: "import__note",
-                "--fork writes <stem>.local.satz instead of <stem>.satz: the user's fork, which an update never touches. satz then says to repoint the estate's `use` line at it."
-            }
-        },
     }
 }
 
@@ -614,7 +566,7 @@ mod tests {
             assert!(ImportShape::parse(&segment.value).is_some(), "{segment:?}");
         }
         let labels: Vec<&str> = ImportShape::ALL.iter().map(|s| source_label(*s)).collect();
-        assert_eq!(labels.len(), 4);
+        assert_eq!(labels.len(), 3);
         assert!(labels.iter().all(|l| !l.is_empty()));
     }
 

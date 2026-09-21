@@ -1,6 +1,6 @@
 //! The pack rows over the skeleton `satz interview --create` writes, with the map line
 //! commented and then on; an estate whose map gate has no line (`Absent`); a line that is
-//! active while its gate is false (a `Note`). The questions come from the installed satz.
+//! active while its gate is false (an `Info`). The questions come from the installed satz.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -255,11 +255,14 @@ async fn the_skeleton_is_the_map_row_then_every_gated_line_off() {
         .expect("the folder map");
     let infra = &folder.children[0];
     assert_eq!(infra.kind, ResourceKind::Resource);
-    assert_eq!(
-        infra.uses.iter().map(|u| u.line).collect::<Vec<_>>(),
-        [logsink.line.unwrap(), alerts.line.unwrap()],
-        "the two logging lines sit inside the infra folder"
-    );
+    assert!(infra.uses.is_empty(), "{:?}", infra.uses);
+    let top: Vec<u32> = m.uses.iter().map(|u| u.line).collect();
+    for line in [logsink.line.unwrap(), alerts.line.unwrap()] {
+        assert!(
+            top.contains(&line),
+            "the two logging lines stand at the top level, outside the infra folder: {top:?}"
+        );
+    }
 
     assert!(m.diagnostics.is_empty(), "{:?}", m.diagnostics);
     assert!(m.params.is_empty(), "the skeleton binds nothing yet");
@@ -436,7 +439,7 @@ async fn an_active_line_whose_gate_is_false_is_a_note() {
     );
     assert_eq!(m.diagnostics.len(), 1, "{:?}", m.diagnostics);
     let note = &m.diagnostics[0];
-    assert_eq!(note.severity, Severity::Note);
+    assert_eq!(note.severity, Severity::Info);
     assert_eq!(note.file.as_deref(), Some(noted.as_path()));
     assert_eq!(note.line, budget.line);
     assert!(note.message.contains("use_budget"), "{}", note.message);
@@ -498,6 +501,6 @@ async fn showcase_has_one_gated_line_that_is_active_while_false() {
         }
     );
     assert_eq!(m.diagnostics.len(), 1, "{:?}", m.diagnostics);
-    assert_eq!(m.diagnostics[0].severity, Severity::Note);
+    assert_eq!(m.diagnostics[0].severity, Severity::Info);
     assert_eq!(m.diagnostics[0].line, optional.line);
 }
