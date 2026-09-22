@@ -202,6 +202,29 @@ pub fn owed(f: &Facts) -> Vec<Owed> {
             });
         }
 
+        // A `use` line without its `when <gate>` deploys its pack whatever the estate
+        // answers. satz reports that as `ungated-pack` only while the file declaring the
+        // gate deploys, so with the map off the findings row above says nothing about it;
+        // a row satz does speak about is left to satz's own sentence, in Packs.
+        let ungated = model
+            .packs
+            .packs
+            .iter()
+            .filter(|p| p.line == PackLine::Ungated && p.findings.is_empty())
+            .count();
+        if ungated > 0 {
+            out.push(Owed {
+                id: "ungated-lines",
+                icon: "link_off",
+                title: match ungated {
+                    1 => "1 pack line has no gate".to_string(),
+                    n => format!("{n} pack lines have no gate"),
+                },
+                detail: "A `use` line without its `when <gate>` deploys the pack whatever this estate answers, so no question switches it off. Packs names the gate each of them needs.".to_string(),
+                remedies: vec![Remedy::Go(View::Packs)],
+            });
+        }
+
         if let SchemaStatus::Missing(dir) = &model.schema {
             out.push(Owed {
                 id: "schema",
@@ -1206,6 +1229,52 @@ mod tests {
         assert_eq!(rows[0].title, "The pack graph has 2 findings");
         assert_eq!(rows[0].detail, "finding 0");
         assert_eq!(rows[0].remedies, [Remedy::Go(View::Packs)]);
+    }
+
+    /// satz reports `ungated-pack` only while the file declaring the gate deploys, so the
+    /// findings row is silent about a line no answer switches off in an estate with the
+    /// map off. This row is not.
+    #[test]
+    fn a_line_without_its_gate_is_a_row_of_its_own_until_satz_says_it() {
+        let q = questions(0, 0);
+        let hcl = HclState {
+            transpiled: true,
+            initialised: true,
+        };
+        let mut report = packs(PackLine::Commented, 0);
+        report.packs.push(PackRow {
+            path: "presets/organization-budget.satz".to_string(),
+            role: PackRole::Pack,
+            gate: Some("use_budget".to_string()),
+            gate_declared_in: Some("presets/estate-map.satz".to_string()),
+            answer: None,
+            default: None,
+            value: None,
+            line: PackLine::Ungated,
+            at_line: Some(12),
+            written: None,
+            gated_on: None,
+            deploys: true,
+            requires: Vec::new(),
+            required_by: Vec::new(),
+            excludes: Vec::new(),
+            by_hand: None,
+            notices: Vec::new(),
+            findings: Vec::new(),
+        });
+        let m = model(report.clone(), loaded());
+        let rows = owed(&facts(None, hcl, Some(&q), Some(&m), &[]));
+        assert_eq!(ids(&rows), ["map-off", "ungated-lines"]);
+        assert_eq!(rows[1].title, "1 pack line has no gate");
+        assert_eq!(rows[1].remedies, [Remedy::Go(View::Packs)]);
+
+        // satz's own sentence on the row takes the line over
+        report.packs[1].findings = vec!["is used without `when use_budget`".to_string()];
+        let m = model(report, loaded());
+        assert_eq!(
+            ids(&owed(&facts(None, hcl, Some(&q), Some(&m), &[]))),
+            ["map-off"]
+        );
     }
 
     #[test]

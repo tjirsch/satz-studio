@@ -186,12 +186,26 @@ pub fn plain(path: &Path) -> PathBuf {
 /// it. A line that fits none of that is a diagnostic without a location, verbatim —
 /// nothing satz says is dropped, bar the title and the footer, which count what the rows
 /// already carry.
+///
+/// A title reaches the rows under it and no further. satz's CLI prints one refused
+/// compile as TWO layouts — the warnings and infos (`render`), then the errors
+/// (`report_refusal`) — and each layout lays the findings of NO group out first, its
+/// groups after; nothing in the text itself says where one layout ends and the next
+/// begins. What says it is the order: an error row opening a block PAST the first block
+/// of the title above it, with a warning or an info above that, is the errors layout's
+/// own first block and stands under no title — `emit_providers: Missing …`, an ungrouped
+/// error, otherwise reads as one more "pack line without its gate". A title is closed by
+/// the footer too, and by any line satz did not lay out.
 pub fn parse_satz_output(text: &str, source: DiagSource) -> Vec<Diagnostic> {
     let mut out: Vec<Diagnostic> = Vec::new();
     // per diagnostic: the group title it stands under, and the subject its row named
     let mut titles: Vec<Option<String>> = Vec::new();
     let mut subjects: Vec<String> = Vec::new();
     let mut title: Option<String> = None;
+    // how many blocks have stood under the current title, and whether a warning or an
+    // info stood above them: together they spot the errors layout's own first block
+    let mut blocks_under_title = 0usize;
+    let mut warnings_stood_above = false;
     // the first diagnostic an indented line belongs to — a block's rows share the text
     // under them — and whether the line before was a row, so the next row joins it
     let mut body_from = 0;
@@ -217,17 +231,29 @@ pub fn parse_satz_output(text: &str, source: DiagSource) -> Vec<Diagnostic> {
         }
         if let Some(t) = group_title(line) {
             title = Some(t.to_string());
+            blocks_under_title = 0;
             in_rows = false;
             continue;
         }
         if is_footer(line) {
+            title = None;
             continue;
         }
         if let Some(row) = finding_row(line) {
             if !in_rows {
                 body_from = out.len();
+                blocks_under_title += 1;
             }
             in_rows = true;
+            match row.severity {
+                Severity::Error if warnings_stood_above && blocks_under_title > 1 => {
+                    title = None;
+                    blocks_under_title = 1;
+                    warnings_stood_above = false;
+                }
+                Severity::Error => {}
+                Severity::Warning | Severity::Info => warnings_stood_above = true,
+            }
             let (file, line) = match row.location.map(split_at) {
                 Some((file, line)) => (Some(PathBuf::from(file)), line),
                 None => (None, None),
@@ -245,6 +271,8 @@ pub fn parse_satz_output(text: &str, source: DiagSource) -> Vec<Diagnostic> {
             continue;
         }
         in_rows = false;
+        // a line satz did not lay out: no group's rows go on under it
+        title = None;
         let (severity, rest) = strip_severity(line.trim_start());
         let rest = rest.strip_prefix("transpile --check: ").unwrap_or(rest);
         let mut d = Diagnostic {
@@ -447,7 +475,8 @@ mod tests {
     }
 
     /// satz's own layout (`lay_out`): a title, a block of two rows sharing one message
-    /// and one command, a second group, and the footer.
+    /// and one command, a second group, and the footer — and, as a refused compile
+    /// prints it, the errors layout after them, which opens with a finding of no group.
     const LAID_OUT: &str = "satz v0.73.0 (built 2026-09-21 07:30:15)
 packs on while a pack they need is off (2)
 
@@ -464,7 +493,10 @@ error    notice            yaml/new.satz:79     cis_baseline_adopted
 
 info     unadopted-pack                         use_budget
 
-1 error, 2 warnings, 1 info
+error    providers
+    emit_providers: Missing `terraform` block for the deployment mode
+
+2 errors, 2 warnings, 1 info
 ";
 
     #[test]
@@ -472,7 +504,7 @@ info     unadopted-pack                         use_budget
         let d = parse_satz_output(LAID_OUT, DiagSource::Check);
         assert_eq!(
             d.len(),
-            4,
+            5,
             "the title and the footer are no findings: {d:?}"
         );
 
@@ -506,6 +538,15 @@ info     unadopted-pack                         use_budget
         assert_eq!(d[3].severity, Severity::Info);
         assert_eq!((d[3].file.as_deref(), d[3].line), (None, None));
         assert!(d[3].message.ends_with(": use_budget"), "{}", d[3].message);
+
+        // the errors layout's first block stands under no group: its message is its own,
+        // and carries no title of the layout above it
+        assert_eq!(d[4].severity, Severity::Error);
+        assert_eq!(d[4].kind.as_deref(), Some("providers"));
+        assert_eq!(
+            d[4].message,
+            "emit_providers: Missing `terraform` block for the deployment mode"
+        );
     }
 
     #[test]

@@ -56,7 +56,8 @@ The Overview is one card, and it lists what the estate owes — no git repositor
 `satz merge-presets` needs before it edits the estate, so an estate outside one cannot
 take preset updates (one button runs `git init`, `git add` and a first commit), day 0
 unconfirmed, questions unanswered, a pack map that is off or missing, what satz's pack
-graph finds wrong with the packs the estate uses, no provider
+graph finds wrong with the packs the estate uses, a `use` line without its `when <gate>`,
+which deploys its pack whatever the estate answers, no provider
 schema, a pack whose notice is open, prerequisites the compile found undeclared, raw HCL
 nobody has reviewed, an HCL directory nothing has planned against. Every row is derived from the estate as it is on
 the screen, so it cannot go stale, and the card is gone when there is nothing in it.
