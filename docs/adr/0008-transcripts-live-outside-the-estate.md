@@ -1,6 +1,6 @@
 # 0008 — transcripts live outside the estate
 
-- **Status:** accepted
+- **Status:** superseded by [ADR 0020](0020-the-agent-is-an-external-client-that-studio-configures-and-starts.md) — the app keeps no transcript: there is no conversation of its own to keep
 - **Date:** 2026-09-13
 - **Deciders:** the maintainer
 

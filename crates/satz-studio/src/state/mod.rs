@@ -22,7 +22,6 @@ use satz_studio_core::diag::Diagnostic;
 use satz_studio_core::estate::HclState;
 use satz_studio_core::git::WorkTree;
 use satz_studio_core::github::StudioUpdate;
-use satz_studio_core::llm::CredentialSource;
 use satz_studio_core::model::EstateModel;
 use satz_studio_core::satz::reports::{InterviewReport, NoticeRow, QuestionsReport};
 use satz_studio_core::satz::review::ReviewedPack;
@@ -31,7 +30,7 @@ use satz_studio_core::satz::{CliLine, EstateSession, ImportReport, QuestionsForm
 use satz_studio_core::settings::Settings;
 
 pub use ansi::strip_ansi;
-pub use app_actions::{AppAction, app_coroutine, run_line, save_settings};
+pub use app_actions::{AppAction, app_coroutine, run_line};
 pub use estate_actions::{EstateAction, command_line, estate_coroutine, quote, reports_dir};
 pub use pace::{
     ahead_sentence, install_offer, newer_satz_sentence, satz_available, satz_notice,
@@ -43,7 +42,7 @@ pub use toast::{Toast, ToastKind, dismiss, enqueue};
 /// every settings save.
 ///
 /// `binary()` answers for [`SatzStatus::Located`] alone, and every way an estate is
-/// opened, created, imported or chatted with asks it first. A satz NEWER than the build is
+/// opened, created or imported asks it first. A satz NEWER than the build is
 /// `Located` too: the app copes with it and [`satz_notice`] tells the operator, and the one
 /// version it refuses is an older one (ADR 0014).
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -108,7 +107,8 @@ pub enum View {
     Checks,
     /// what hands it off: the HCL directory, the plan, the apply, the state migration
     Deploy,
-    Chat,
+    /// setting an external agent up on this estate, and starting it
+    Agent,
     Settings,
     /// a development route, reachable only with `SATZ_STUDIO_DEBUG` set
     Gallery,
@@ -130,9 +130,10 @@ impl View {
         View::Deploy,
     ];
 
-    /// The secondary group, bottom-aligned in the rail. Chat needs an estate; Settings
-    /// is the one destination that stands without one.
-    pub const SECONDARY: [View; 2] = [View::Chat, View::Settings];
+    /// The secondary group, bottom-aligned in the rail. Agent needs an estate — it
+    /// configures an agent for the one that is open; Settings is the one destination
+    /// that stands without one.
+    pub const SECONDARY: [View; 2] = [View::Agent, View::Settings];
 
     pub fn label(self) -> &'static str {
         match self {
@@ -143,7 +144,7 @@ impl View {
             View::Estate => "Estate",
             View::Checks => "Checks",
             View::Deploy => "Deploy",
-            View::Chat => "Chat",
+            View::Agent => "Agent",
             View::Settings => "Settings",
             View::Gallery => "Gallery",
         }
@@ -159,7 +160,7 @@ impl View {
             View::Estate => "description",
             View::Checks => "fact_check",
             View::Deploy => "rocket_launch",
-            View::Chat => "chat",
+            View::Agent => "smart_toy",
             View::Settings => "settings",
             View::Gallery => "palette",
         }
@@ -175,7 +176,7 @@ impl View {
                 | View::Estate
                 | View::Checks
                 | View::Deploy
-                | View::Chat
+                | View::Agent
         )
     }
 }
@@ -284,15 +285,6 @@ impl std::fmt::Debug for OpenEstate {
     }
 }
 
-/// What `Credential::resolve` answered, for the Settings view.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub enum CredentialStatus {
-    #[default]
-    Unknown,
-    Resolved(CredentialSource),
-    Error(String),
-}
-
 /// Everything about the open estate that the views read. Reset when an estate opens
 /// and when it closes; written by the estate coroutine only.
 #[derive(Store, Default)]
@@ -385,8 +377,8 @@ pub struct CommandOutcome {
 /// `init` derives a customer's organisation id, billing account and administrator
 /// address from the credentials and prints where each came from. Those lines are held
 /// here, in memory, for as long as the window shows them; they are written into the
-/// estate satz created and nowhere else — not into `Settings`, not into a transcript,
-/// not into a file of this app's own.
+/// estate satz created and nowhere else — not into `Settings`, not into a file of this
+/// app's own.
 #[derive(Store, Default)]
 pub struct CreateStore {
     /// the streamed output of the run, ANSI stripped
@@ -409,8 +401,8 @@ pub struct CreateStore {
 /// it matter more: the run prints the organisation id, the customer directory id, the
 /// billing account and an administrator's address it derived from the credentials. Those
 /// lines live here, in memory, for as long as the window shows them; they are written
-/// into the estate satz created and nowhere else — not into `Settings`, not into a
-/// transcript, not into a file of this app's own.
+/// into the estate satz created and nowhere else — not into `Settings`, not into a file
+/// of this app's own.
 #[derive(Store, Default)]
 pub struct ImportStore {
     /// the streamed output of the run, ANSI stripped — `satz init` too, on the two-step
@@ -491,7 +483,6 @@ pub struct AppStore {
     /// the command palette is over the window
     pub palette_open: bool,
     pub snackbar: VecDeque<Toast>,
-    pub credential: CredentialStatus,
     pub drawer_open: bool,
     pub estate: EstateStore,
     /// the `satz init` run behind the Create door
@@ -522,7 +513,6 @@ impl AppStore {
             door: Door::default(),
             palette_open: false,
             snackbar: VecDeque::new(),
-            credential: CredentialStatus::Unknown,
             drawer_open: false,
             estate: EstateStore::default(),
             create: CreateStore::default(),
@@ -602,7 +592,7 @@ mod tests {
             View::Estate,
             View::Checks,
             View::Deploy,
-            View::Chat,
+            View::Agent,
             View::Settings,
             View::Gallery,
         ];

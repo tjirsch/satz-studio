@@ -1,6 +1,6 @@
 [package]
 name = "satz-studio-core"
-description = "The headless half of satz-studio: the estate model, the lossless document layer, the satz driver, the Claude client"
+description = "The headless half of satz-studio: the estate model, the lossless document layer, the satz driver, the agent handoff"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -8,14 +8,6 @@ repository.workspace = true
 rust-version.workspace = true
 publish = false
 build = "build.rs"
-
-# The fake Claude Code CLI's Windows launcher. The app refuses a `.bat`/`.cmd`, so the
-# fake cannot be one either; integration tests find this through `CARGO_BIN_EXE_fake-claude`.
-[[bin]]
-name = "fake-claude"
-path = "tests/fixtures/claude_code/fake-claude-launcher.rs"
-test = false
-doc = false
 
 [dependencies]
 satz-core.workspace = true
@@ -35,19 +27,8 @@ tokio-util.workspace = true
 futures-util.workspace = true
 rmcp.workspace = true
 reqwest.workspace = true
-keyring.workspace = true
-keyring-core.workspace = true
 tree-sitter.workspace = true
 tempfile.workspace = true
-
-[target.'cfg(target_os = "macos")'.dependencies]
-apple-native-keyring-store.workspace = true
-
-[target.'cfg(target_os = "windows")'.dependencies]
-windows-native-keyring-store.workspace = true
-
-[target.'cfg(target_os = "linux")'.dependencies]
-zbus-secret-service-keyring-store.workspace = true
 
 [build-dependencies]
 cc.workspace = true

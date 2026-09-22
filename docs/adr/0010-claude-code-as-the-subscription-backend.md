@@ -1,6 +1,6 @@
 # 0010 — Claude Code as the subscription backend
 
-- **Status:** accepted
+- **Status:** superseded by [ADR 0020](0020-the-agent-is-an-external-client-that-studio-configures-and-starts.md) — Claude Code is the agent, started from the window rather than driven by it
 - **Date:** 2026-09-15
 - **Deciders:** the maintainer
 

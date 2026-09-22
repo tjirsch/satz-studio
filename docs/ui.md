@@ -12,7 +12,7 @@ App (src/app.rs)            the stores, the app coroutine, the stylesheets, the 
 └─ Shell (src/shell/)
    └─ EstateHost             one per open estate: owns the estate coroutine
       └─ Frame
-         ├─ NavigationRail   six primary destinations, Chat and Settings at the foot
+         ├─ NavigationRail   six primary destinations, Agent and Settings at the foot
          ├─ TopBar           estate name and directory, reload, switch, close
          ├─ SatzBanner       satz missing, too old or not running; a notice while newer than the build
          ├─ Content          the view of `AppStore.nav`
@@ -44,7 +44,6 @@ so a log line re-renders the log and not the rail:
 | `door` | the `Door` of the Start screen the pane below its door row belongs to: `Create`, `Import` or `Open` |
 | `palette_open` | the commands palette is over the window |
 | `snackbar` | the toast queue (`VecDeque<Toast>`, three visible) |
-| `credential` | what `Credential::resolve` answered |
 | `drawer_open` | the diagnostics drawer |
 | `create` | the `CreateStore`: the one `satz init` run behind the Create door — `log`, `running`, `command`, `outcome`, reset when a run starts. What `init` derives from the credentials is in these lines while the window shows them and in the estate satz wrote; it reaches no file of the app's own |
 | `estate` | the `EstateStore`: `model`, `cst` (the main file's document tree as read at the last reload — the views slice a value's source text and a line's text from it), `questions`, `interview` (what the last `satz_interview` call returned; `rename_to` is read from it), `diagnostics`, `command_log`, `running`, `last_command`, `outcome`, `loading`, `hcl` (the `HclState` of `hcl_dir`: whether `main.tf` is there and whether it has been initialised), `work_tree` (whether git holds the estate file's directory in a work tree — `None` until the first reload has asked), `export_formats` (the formats `satz questions --help` lists, read when the session opens, or why they could not be read), `last_export` (the format and the file of the last export, which "Export again" writes over), `review` (the pack the Packs view reviewed last — the bytes it judged and satz's report — or the pack and why its review failed; a reload leaves it, and the drawer shows its findings until it is closed), `reviewing` (a review or a placement is running) — reset when an estate opens or closes |
@@ -63,7 +62,7 @@ nothing blocks in an event handler.
   each estate's `deployment_mode` on a blocking thread; the folder becomes
   `Settings.last_root`), `OpenEstate { config, estate }` (`EstateSession::open` with the
   Settings ceiling), `CloseEstate`, `CreateEstate { dir, options }`, `CancelCreate`,
-  `SaveSettings` (the file, then satz again), `ResolveCredential` and `StoreKey`.
+  and `SaveSettings` (the file, then satz again).
   At startup, after locating satz, it looks for releases once ([ADR
   0014](adr/0014-a-newer-satz-is-a-notice-and-the-app-looks-for-releases.md)): the latest
   satz-studio release into `studio_look`, and `satz self-update --check-only` on the satz
@@ -91,9 +90,7 @@ nothing blocks in an event handler.
   from a task so the loop stays free for `CancelCreate`, streams the lines into
   `create.log`, and then reads what the run left with `init::created`: one estate is
   opened, none is the outcome saying `init` had no customer id to name a file after, and
-  a non-zero exit carries satz's own last line rather than a status number. `save_settings` is the one saver: the Chat view's
-  "Use Claude Code" awaits it directly rather than writing the file itself, and builds
-  its engine again only when the save returned.
+  a non-zero exit carries satz's own last line rather than a status number.
 - **The estate coroutine** (`src/state/estate_actions.rs`, `EstateAction`) is started by
   `EstateHost` with the session and lives as long as the estate is open. On start and on
   `Reload` it reads `hcl_dir` into `estate.hcl`, asks git whether the estate file's
@@ -193,7 +190,7 @@ the drawer or an outcome under the log.
 ### Views
 
 The window is ordered by the job, not by what was built when. With an estate open the
-rail reads **Overview, Packs, Decisions, Estate, Checks, Deploy**, then Chat and
+rail reads **Overview, Packs, Decisions, Estate, Checks, Deploy**, then Agent and
 Settings at its foot; with none open it carries Settings alone and the window stands on
 the Start screen. Packs stands before Decisions because a pack is what DECLARES a
 question: a pack switched on in Packs opens the questions it asks, so the questions
@@ -223,14 +220,13 @@ is a pack switch and not a value.
 | Estate · Resources | `src/views/resources.rs` | two panes: the tree of `ResourceNode`s (an icon per kind, a resource's name, `use` lines as leaves, branches collapsed below depth 2, a chip with the count of required attributes not written) and the selected node's card: kind, type, line, the missing required names, then one row per `AttrRow` — a typed field by `AttrType` (string, number, bool, a list of one of them; everything else and `Unknown` in source mode), locked rows dimmed with the reason (`import-id`, computed, not in the schema), source mode with its chips; a commit is `CommitEdit(Edit::ReplaceValue)`. Without a schema every row is locked and the header carries "Run update-schema". A row clicked in the drawer selects the node at its line |
 | Checks | `src/views/checks.rs` | what judges the estate: the `CHECKS` deck — `transpile --check`, `update-prerequisites` (`--report-only`, fixed), `require`, `report-compliance`, `bootstrap --dry-run` — with the one-click commands. When the last compile found prerequisites undeclared, a card above it carries each finding and "Write them into the estate", which is `WritePrerequisites`: satz's own writer under the write lock, checked and reloaded like an answer |
 | Deploy | `src/views/deploy.rs` | what hands the estate off: the `hcl_dir` path with two chips saying whether `main.tf` is written and whether the directory is initialised, then the `DEPLOY` deck — `transpile`, `hcl-init`, `plan` in the app; `apply`, `migrate`, `bootstrap` as command lines to copy or open in the terminal |
-| Chat | `src/views/chat/` | the agent loop over the open estate: the rail of this estate's transcripts with "New" (empty on the Claude Code engine, which keeps its conversation in its own process), the turns as they stream with one card per tool call — its name, its status, its duration and one line about the result: a refusal's first line, else the result's top-level counts (`questions: 28`) — the approval card saying in words what the call will do (the tool, the estate, the arguments as a short list, "no arguments" for a call without any), the composer with the model, the effort and the capability chips, the usage footer — the turn's figures growing with each request, the session's, and the switch for the debug panel — and, while `Settings.chat_debug_log` is on, the debug panel (`debug_panel.rs`, a standard side sheet) beside the conversation with every call's input JSON, result JSON, status, duration and satz stderr under its call id; each tool card then carries a link that scrolls to its entry. No JSON is shown in the conversation itself. A running turn's progress line names the model the server said serves it, and a finished turn served by another model than the one asked for carries an "answered by" chip. `mod.rs` holds the status card for the states the engine is not in — `Starting` a progress line, `NoCredential` and `NotSignedIn` the two empty states below, `Failed` the error with Open Settings |
-| Settings | `src/views/settings.rs` | every `Settings` field as a form: the satz path with the detected version, the MCP ceiling, auto-approve, the provider with base URL and model for the non-Claude ones, the Claude model, effort, fallbacks, transcripts, the chat's debug log, theme; Save writes the file and locates satz again; the credential card shows where the Claude credential comes from, whether that engine is the one in use, and stores a key in the keychain; the Claude Code card shows the binary, the account and which engine is in use, with "Use this engine", "Sign in" and "Sign out", and the stream log switch with "Reveal logs"; beside the satz path, "Update satz" and "Check only" run `satz self-update` (with `--no-open-readme`, so a successful update does not open a browser) and stream it into a log card, and satz is located again once it installs. While satz is newer than the build, the line under the path names both versions and whether satz calls the difference a patch or a minor. Under the buttons `SatzReleaseActions` (`src/views/satz_release.rs`): what the satz check found — a newer satz, the latest, or why the look failed — or why none ran at launch; "Look for a satz-studio update" with its sentence below it (or why it failed) and "Open satz-studio X" when a newer release exists; while no satz is found, "Install satz" with Cancel and the install's log card — on Windows, and while a satz path is set, the sentence saying why the installer is not offered |
+| Agent | `src/views/agent.rs` | setting an agent up on the open estate and starting it: a lead card saying the app runs no model, then the `satz mcp` command line the configuration carries with the capability ceiling as a chip, then two cards. **A client started here** is `.mcp.json` as it would be written — the whole file, monospace — with "Write .mcp.json" (into the estate's directory), "Copy", and "Open in <client>", which runs the configured command in that directory in the OS terminal; a `.mcp.json` already holding those bytes says so and writes nothing, one holding anything else raises an error-container row naming it, with "Keep it" and "Replace it", and no other route replaces it. A command that is not configured disables the button and says Settings names the client; one that is not installed is an error toast naming it. **A client configured once** is the `mcpServers` block for Claude Desktop, the server named after the estate, with "Copy MCP config" and where that file is opened. With no satz located there is no configuration and the card says so |
+| Settings | `src/views/settings.rs` | every `Settings` field as a form, in three cards: **satz** — the path with the detected version, "Update satz", "Check only" and the run's log, `SatzReleaseActions`, and the MCP capability ceiling, which is the ceiling of the app's own `satz mcp` child and of the one an agent is given; **Agent** — the command line of the agentic client the Agent destination starts, with where that client is on `PATH` under the field, in the error colour when it is not installed or not named; **Appearance** — the theme; and below them the actions row with the file, "Show file", Discard and Save. Save writes the file and locates satz again. There is no credential and no engine here: the app runs no model |
 | Commands | `src/views/commands.rs` | not a destination: `PALETTE` is the table of every satz command the app runs, and `CommandDeck` renders any group of them — the list, the chosen entry's argument fields (a reporting command's format as a segmented button), the command line as it will run, Run and Cancel, and `CommandLog`, the streamed log with stdout and stderr distinguished, followed by the file a reporting command wrote where the app named it. `CommandPalette` is every entry in a dialog over the window, on ⌘K / Ctrl+K or the top bar's button, with `ONE_CLICK` — `whoami`, `transpile --check` and `questions`, palette entries run at their defaults — as one click each. Every entry opens in the format a person reads: `text` where satz offers it, `markdown` where it does not (`report-compliance`); `json` stays a choice in the format picker, and no entry fixes a format in its fixed words — `update-prerequisites` runs `--report-only` in satz's text. The log shows what satz printed, and the file a reporting command wrote, as satz wrote it `CHECKS` and `DEPLOY` are the two groups the destinations gather |
 | Gallery | `src/views/gallery.rs` | every component in its variants, light and dark side by side. A development route: the rail offers it only with `SATZ_STUDIO_DEBUG` set, and nothing else navigates to it |
 
 A destination that works on an estate shows a card with a button to the Start screen
-while none is open — which the rail cannot reach with no estate, but the banner and the
-chat's empty states can.
+while none is open — which the rail cannot reach with no estate, but the banner can.
 
 ## 2. Material 3 Expressive
 
@@ -330,19 +326,19 @@ and the door card on the Start screen, and their classes live in `views.css`, so
 
 - **Navigation rail:** six primary destinations in the order the work happens —
   Overview `dashboard`, Packs `inventory_2`, Decisions `quiz`, Estate `description`,
-  Checks `fact_check`, Deploy `rocket_launch` — and a bottom-aligned group of two, Chat
-  `chat` and Settings `settings`, in the rail's footer slot. Overview carries the count
+  Checks `fact_check`, Deploy `rocket_launch` — and a bottom-aligned group of two, Agent
+  `smart_toy` and Settings `settings`, in the rail's footer slot. Overview carries the count
   of what the estate owes and Decisions the count of unanswered questions. With no
   estate open the primary group is empty and the footer carries Settings alone: there is
   nothing to work on, and the window stands on the Start screen. `SATZ_STUDIO_DEBUG`
-  adds Gallery `palette` to the footer, and Commands stands in it between Chat and
+  adds Gallery `palette` to the footer, and Commands stands in it between Agent and
   Settings. There is no FAB: opening an estate is what the Start screen does, and
   switching one is the top bar's action.
 
   **The pattern's limit, so it is not argued later.** Material 3 puts three to seven
   destinations in a navigation rail
   (<https://m3.material.io/components/navigation-rail/guidelines>). Six primary plus a
-  group of two is inside it because Chat and Settings are bottom-aligned SECONDARY
+  group of two is inside it because Agent and Settings are bottom-aligned SECONDARY
   items, not peers of the six. A seventh PRIMARY destination breaks the pattern, and
   the answer then is a navigation drawer — not a smaller font, not a denser rail, not an
   eighth icon. `crates/satz-studio/src/state/mod.rs` holds `View::PRIMARY` and a test
@@ -361,7 +357,7 @@ and the door card on the Start screen, and their classes live in `views.css`, so
   buttons, the release page and the look-again.
 - **Commands palette:** every entry of `PALETTE` in a dialog over the window, opened
   with ⌘K (Ctrl+K on Windows and Linux) or the rail footer's Commands button — which sits
-  between Chat and Settings, because the footer is where what is not a destination
+  between Agent and Settings, because the footer is where what is not a destination
   stands — and closed with
   Escape, the scrim or the same key. The listener is installed on the window in
   `src/app.rs`, which mounts once: a keydown inside a text field never reaches a handler
@@ -413,66 +409,41 @@ and the door card on the Start screen, and their classes live in `views.css`, so
 - **Snackbar host:** the toasts, three at most, a notice for five seconds and an error
   for twelve, each dismissable.
 
-### The two engines
+### The agent handoff
 
-`Settings.provider` decides which engine the chat runs on: the Messages API, or the
-installed Claude Code CLI on the user's claude.ai subscription
-([ADR 0010](adr/0010-claude-code-as-the-subscription-backend.md)). Being signed in to
-Claude Code and running on Claude Code are two different statements, so every surface
-that shows one shows the other beside it. `EngineOffer` in `src/views/settings.rs` is
-that decision — `Checking`, `InUse`, `Ready`, `SignedOut`, `Absent` — and both views
-render from it.
+satz-studio runs no model
+([ADR 0020](adr/0020-the-agent-is-an-external-client-that-studio-configures-and-starts.md)).
+The Agent destination gives an external client the estate on screen, and Settings names
+that client; there is no credential and no engine anywhere in the window.
 
-- **The Claude Code card (Settings).** The binary path with the located version as its
-  supporting text, then the state line: the account as `claude auth status` reported it
-  (`signed in as first.admin@example.com via claude.ai`) followed by `and in use` or
-  `not the selected engine`; `not signed in` and `no CLI to ask` in the error colour.
-  "Use this engine" appears only in the `Ready` state, sets the draft's provider to
-  Claude Code and saves through `AppAction::SaveSettings` — the same action the Save
-  button sends, so it saves the whole draft. The provider segmented control above stays
-  the primary selector; this button is a second door to it, not a second setting. "Sign
-  in" and "Sign out" write a one-shot script and open the user's terminal, because the
-  login opens a browser. Under the subscription sentence, one more says the output limit the session
-  starts with: `MAX_MCP_OUTPUT_TOKENS` at `session::MAX_MCP_OUTPUT_TOKENS`, above satz's largest
-  result, so no satz result reaches the model cut short. Below them, the switch "Log every line Claude Code and the app
-  exchange" edits `claude_code_log` in the draft, saved with the rest; under it one
-  sentence says what a log holds — "The log holds the estate's contents, its resource
-  names and everything you type, and never leaves this machine." — and a state line
-  (`.settings__status`, a `folder` icon) gives the bounds from `log::MAX_FILES` and
-  `log::MAX_BYTES` (one file per conversation, the ten newest kept, each up to 16 MiB,
-  applied from the next conversation) beside a text button "Reveal logs", which creates `<data dir>/satz-studio/logs/claude-code/` when it
-  is not there and opens it with `open::that`, the opener "Show file" uses; a failure is
-  an error toast naming the directory. The credential card carries the same second half
-  of the sentence: `in use` when the provider is Claude, `not the selected engine`
-  otherwise.
-- **The chat's empty states.** `NoCredential` (the Messages API resolved no credential)
-  probes Claude Code once while the card renders — `ClaudeCodeCli::locate` then
-  `auth_status`, spawned from a `use_hook` so it runs once per mount and never on the
-  render. Signed in, the card leads with a primary-container block: "Claude Code is
-  ready", the account, and a filled "Use Claude Code" that selects that provider, saves
-  the settings and rebuilds the engine, with the four API sources and what each answered
-  below under "Or use the Messages API". Not signed in or not installed, the card is the
-  four sources as before plus one line naming Claude Code, the CLI's own reason when it
-  did not answer, and `claude auth login`. `NotSignedIn` (Claude Code selected, CLI
-  signed out) is its own card with "Sign in" and "Check again".
-- **The composer.** On Claude Code one assist chip, "tools run inside Claude Code": the
-  loop, the context window and the effort are Claude Code's, so the effort control is
-  hidden and the model field is disabled with "Claude Code takes its model from
-  Settings". On the API engine the chips name what the provider lacks — no thinking, no
-  effort, no caching — and a provider without tools gets a line above the input.
-- **The footer.** The turn's and the session's tokens, the model, and where the
-  transcript is kept ("not kept" on Claude Code). A `rate_limit_event` from the
-  subscription arrives as `AgentEvent::Notice` and shows there beside a
-  `data_thresholding` icon: how much of the five-hour or seven-day plan window is used
-  and when it resets.
+- **What the cards show** is derived on every render from the open estate, the located
+  satz and the settings: the `satz mcp --root <root> --allow <ceiling>` command line as
+  one monospace row with the ceiling as an assist chip, then the two configurations as
+  they would be written. The root is the estate session's own — the boundary
+  `satz mcp` was opened with — not the estate directory, which is why the card shows the
+  line rather than asking anyone to write it.
+- **Writing `.mcp.json`.** "Write .mcp.json" puts the project file in the estate's
+  directory. A file that already holds those bytes raises a toast saying so and writes
+  nothing. A file that holds anything else raises an error-container row inside the card
+  — the path, and "Keep it" beside "Replace it" — and only "Replace it" writes over it;
+  the row goes as soon as either is pressed.
+- **Starting the client.** "Open in <client>" runs the configured command in the estate's
+  directory, in the OS terminal, the way `apply` and `bootstrap` are run. The button is
+  disabled and reads "No agent configured" while Settings name none; a command that is
+  not installed is an error toast naming it. There is no terminal in the window, nothing
+  is supervised, and the estate is re-read when the window comes back to the front.
+- **Claude Desktop.** The second card is the block for its configuration file, the server
+  named after the estate so several estates stand beside each other, with "Copy MCP
+  config" and the sentence saying where that file is opened. Nothing writes it: that file
+  holds every server on the machine.
 
 Deviations from the Material 3 specification these introduce:
 
 | surface | class | spec page | deviation |
 |---|---|---|---|
-| the empty state's lead | `.chat__lead` (in `chat.css`) | — (not a Material 3 component) | a primary-container block inside a filled card, to put the engine that is ready above the alternative; the spec has no nested-surface anatomy for this |
-| the state line | `.settings__status` (in `views.css`) | — (not a Material 3 component) | an icon, a sentence and a text button on one line inside a card; the Claude Code card has two, the account and the log's bounds |
-| the plan-utilization notice | `.chat__footer` (in `chat.css`) | — (not a Material 3 component) | a footer line, not a Material progress or badge; the plan windows arrive as text and are shown as text |
+| the lead and the command line | `.agent__lead`, `.agent__state` (in `views.css`) | <https://m3.material.io/components/cards/specs> | a filled `Card` laid out as one row — an icon, text, a chip — as `.deploy__state` is; the spec has no one-row card anatomy |
+| the configuration block | `.agent__config` (in `views.css`) | — (not a Material 3 component) | a monospace block on the highest surface container, selectable and scrolled at 260px; the spec has no code-block surface |
+| the clash row | `.agent__clash` (in `views.css`) | — (not a Material 3 component) | an error-container strip inside a card carrying the refusal and its two buttons, rather than a dialog: the question is about one file and the answer is in the card that raised it |
 
 ## The smoke walk
 
@@ -481,10 +452,9 @@ estate, read from the pinned submodule — copy the estate to a scratch director
 a step that writes, as the fixture's `config.toml` says) and over a skeleton written by
 `satz interview <dir>/yaml/new.satz --create`, which is the estate every pack line
 starts commented in. Every write is checked by `satz transpile --check` through the
-estate's `satz mcp` child. No step needs an API key; the first runs `satz init`, which
-reads the Application Default Credentials where there are any; steps 12 and 13 need the
-Claude Code CLI installed and signed in, and nothing else, and neither sends a message;
-step 16 sends one, on a Claude credential or a signed-in Claude Code. Nothing in the walk changes a live
+estate's `satz mcp` child. No step needs a credential of any kind; the first runs
+`satz init`, which reads the Application Default Credentials where there are any, and
+step 12 needs an agentic client installed. Nothing in the walk changes a live
 organisation: `bootstrap` and `apply` are read as command lines, never run.
 
 0. **Create.** Estates → Create → a folder and a customer id → Create. The window lands
@@ -571,25 +541,22 @@ organisation: `bootstrap` and `apply` are read as command lines, never run.
 11. **Leave the estate, two ways.** The top bar's "Switch estate" returns the window to
     the Start screen with the Open door showing and the estates it found listed; "Close
     estate" returns it there as it stands. Either way the rail carries Settings alone.
-12. **Switch engines from the chat.** With `provider = "claude"` in `settings.toml`, no
-    `ANTHROPIC_API_KEY` in the environment and the Claude Code CLI signed in: Chat →
-    the card leads "Claude Code is ready" with the account, the four API sources below
-    under "Or use the Messages API" → "Use Claude Code" → the toast says "Settings
-    saved", the card goes, the composer shows "tools run inside Claude Code" and a
-    disabled model field, and `settings.toml` reads `kind = "claude_code"`. Settings →
-    the Claude Code card says "and in use" and offers no "Use this engine"; the
-    credential card says "not the selected engine". Sign the CLI out
-    (`claude auth logout`), set the provider back to Claude, reopen Chat: the card is
-    "No Claude credential" with one line naming `claude auth login`.
-13. **The stream log.** With the Claude Code CLI signed in and Claude Code the selected
-    engine: Settings → the Claude Code card → switch "Log every line Claude Code and the
-    app exchange" on → Save → Chat → "New" → Settings → "Reveal logs" → the file manager
-    opens `logs/claude-code/` under the app's data directory, holding one `.log` named
-    after the instant the session started. Its first line is a `studio` record naming
-    the estate and the command line, then a `stdin` record with the initialize request
-    and a `stdout` record with its answer, each line exactly as it went over the pipe.
-    Switch the log off → Save → "New": no new file appears.
-14. **A satz newer than the build, and the release looks.** At launch the window title
+12. **Set an agent up on the estate.** Agent → the lead card says the app runs no model;
+    under it the `satz mcp --root … --allow read,write` line the configuration carries,
+    with the ceiling as a chip. "Write .mcp.json" → the toast names the file and
+    `.mcp.json` is beside the estate's `config.toml`, its `mcpServers.satz.args` holding
+    that same root and ceiling. Press it again → "already holds this configuration" and
+    the file's mtime is unchanged. Put `{}` in the file and press it again → the card
+    carries an error-container row naming the path, with "Keep it" and "Replace it";
+    "Keep it" leaves `{}` on disk, "Replace it" writes the configuration back. "Copy"
+    puts the same text on the clipboard. "Open in claude" → a terminal opens in the
+    estate's directory with Claude Code running, and `/mcp` there lists the satz server.
+    Clear the agent command in Settings → Save → the button reads "No agent configured"
+    and is disabled; set it to a name nothing installs → the field turns red under
+    Settings and the button raises an error toast naming it. The second card's
+    "Copy MCP config" puts the Claude Desktop block on the clipboard, its server named
+    after the estate.
+13. **A satz newer than the build, and the release looks.** At launch the window title
     reads `satz-studio <version>`, and Settings → the satz card says what the satz check
     and the satz-studio look found (with `self_update_frequency = "never"` in
     `~/.config/satz/satz.toml`, the card says the satz check did not run and why). Write a
@@ -603,7 +570,7 @@ organisation: `bootstrap` and `apply` are read as command lines, never run.
     reads `dismissed_satz = "0.59.8"`. A second script like it answering `satz 0.60.0`, set
     as the satz binary → Save: the notice is back and says it is a minor release. Clear the
     path → Save, and the installed satz is in use again.
-15. **Export the decisions.** Decisions → the sign-off card under the walk offers the
+14. **Export the decisions.** Decisions → the sign-off card under the walk offers the
     formats `satz questions --help` lists (`text`, `markdown`, `pdf`, `json`, `xlsx` at
     satz 0.73.1), on `markdown` with nothing under it, on `xlsx` with satz's line "a
     workbook: the catalog a customer fills in and sends back". "Export…" → the save
@@ -614,21 +581,7 @@ organisation: `bootstrap` and `apply` are read as command lines, never run.
     question, then "Export again": the same file is written over and opens with the
     answer in it. The Overview's handover card offers the same, and "Export again"
     there writes the last export's file.
-16. **The debug log.** On the fixture estate, with the debug log off: Chat → "which
-    questions are open?" → the `satz_questions` card is one line — the name, a check,
-    `questions: <n>` and the duration — and no brace appears anywhere in the
-    conversation. The footer's `data_object` button → the button
-    fills, `settings.toml` reads `chat_debug_log = true`, and the debug panel opens on
-    the right with one entry: `satz_questions`, its call id, `ok`, the milliseconds, the
-    input `{}`, the whole result JSON, and the satz stderr lines of the call (on the
-    Claude Code engine, the sentence saying its stderr does not reach the app). The
-    card now carries a `data_object` link → the panel scrolls to the entry and outlines
-    it. Ask for a write ("answer the deployment mode with cloud") → the approval card
-    reads "Run satz_interview on <estate> with:" and lists `answers: deployment_mode =
-    cloud`, no JSON. Resume the transcript from the rail (Messages API engine): the
-    panel holds the same entries, each saying a transcript does not keep satz's stderr.
-    The footer button again → the panel closes and the setting reads `false`.
-17. **Review a pack, then place it.** Copy
+15. **Review a pack, then place it.** Copy
     `crates/satz-studio-core/tests/fixtures/review/team-access.satz` to a scratch folder
     and open the estate step 0 created, whose library is its own. Packs → "Review a pack" → "Choose a pack…" →
     the copy. The toast reads "the pack does not clear the bar yet" with its errors

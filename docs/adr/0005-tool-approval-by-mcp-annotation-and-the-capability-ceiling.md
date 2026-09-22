@@ -1,6 +1,6 @@
 # 0005 — tool approval by MCP annotation, and the capability ceiling
 
-- **Status:** accepted
+- **Status:** accepted; the approval card is gone with the chat ([ADR 0020](0020-the-agent-is-an-external-client-that-studio-configures-and-starts.md)), and the capability ceiling stands — `--allow` is what satz-studio writes into an agent's own MCP configuration
 - **Date:** 2026-09-13
 - **Deciders:** the maintainer
 

@@ -23,7 +23,7 @@ pub use snackbar::SnackbarHost;
 pub use top_bar::TopBar;
 
 use crate::state::{AppStore, AppStoreStoreExt, EstateAction, OpenEstate, View, estate_coroutine};
-use crate::views::chat::ChatView;
+use crate::views::agent::AgentView;
 use crate::views::checks::ChecksView;
 use crate::views::commands::CommandPalette;
 use crate::views::deploy::DeployView;
@@ -104,7 +104,7 @@ fn Content() -> Element {
         View::Estate => rsx! { EstateView {} },
         View::Checks => rsx! { ChecksView {} },
         View::Deploy => rsx! { DeployView {} },
-        View::Chat => rsx! { ChatView {} },
+        View::Agent => rsx! { AgentView {} },
         View::Settings => rsx! { SettingsView {} },
         // a development route: the rail is its only door, and it offers it only with
         // SATZ_STUDIO_DEBUG set

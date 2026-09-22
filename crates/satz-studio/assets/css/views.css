@@ -763,28 +763,6 @@
   color: var(--md-sys-color-on-surface-variant);
 }
 
-.settings__status {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font: var(--md-sys-typescale-body-medium);
-  user-select: text;
-}
-
-.settings__status--error {
-  color: var(--md-sys-color-error);
-}
-
-.settings__key {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-}
-
-.settings__key .m-button {
-  margin-top: 8px;
-}
-
 .settings__actions {
   display: flex;
   align-items: center;
@@ -2106,4 +2084,91 @@
 
 .command-palette .commands__layout {
   flex: 1 1 auto;
+}
+
+/* ---- agent -------------------------------------------------------------------- */
+
+/* The Agent destination: the handoff cards. `.agent__lead` and `.agent__state` take the
+   anatomy `.deploy__state` uses — a filled card as one row with an icon — and the two
+   configuration cards are outlined cards with a monospace block and a row of buttons. */
+.agent {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.agent__lead,
+.agent__state {
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+}
+
+.agent__lead p {
+  margin: 0;
+  font: var(--md-sys-typescale-body-medium);
+}
+
+.agent__line {
+  font-family: var(--md-ref-typeface-mono);
+  font-size: 0.85rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  user-select: text;
+}
+
+.agent__card {
+  gap: 12px;
+}
+
+.agent__heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font: var(--md-sys-typescale-title-medium);
+}
+
+.agent__text {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  font: var(--md-sys-typescale-body-small);
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.agent__config {
+  margin: 0;
+  padding: 12px 16px;
+  border-radius: var(--md-sys-shape-corner-medium);
+  background: var(--md-sys-color-surface-container-highest);
+  color: var(--md-sys-color-on-surface);
+  font-family: var(--md-ref-typeface-mono);
+  font-size: 0.8rem;
+  line-height: 1.5;
+  overflow: auto;
+  max-height: 260px;
+  user-select: text;
+}
+
+.agent__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.agent__clash {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-radius: var(--md-sys-shape-corner-medium);
+  background: var(--md-sys-color-error-container);
+  color: var(--md-sys-color-on-error-container);
+  font: var(--md-sys-typescale-body-small);
 }

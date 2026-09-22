@@ -4,10 +4,10 @@ use crate::components::{NavRail, NavRailItem};
 use crate::state::{AppStore, AppStoreStoreExt, EstateStoreStoreExt, View, debug_routes};
 use crate::views::overview::{Facts, owed};
 
-/// The rail: the six primary destinations in the order the work happens, and Chat,
+/// The rail: the six primary destinations in the order the work happens, and Agent,
 /// Commands and Settings bottom-aligned under them. Commands is not a destination — it
 /// toggles the palette over whatever is showing — and it stands in the footer because
-/// that is where the things that are not places stand. It needs an estate, like Chat: the
+/// that is where the things that are not places stand. It needs an estate, like Agent: the
 /// palette's entries all act on one. With no estate open there is nothing to work on,
 /// so the rail carries Settings alone and the window stands on the Start screen — the
 /// doors. Overview carries the count of what the estate owes and Decisions the count of
@@ -73,7 +73,7 @@ pub fn NavigationRail() -> Element {
                         selected: view == current,
                         onclick: move |_| app.nav().set(view),
                     }
-                    if view == View::Chat {
+                    if view == View::Agent {
                         NavRailItem {
                             key: "{palette_label}",
                             icon: palette_icon.to_string(),

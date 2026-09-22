@@ -15,12 +15,12 @@ name: ci
 # `main`. A branch push alone runs nothing, because its pull request runs the same
 # jobs on the branch merged into `main` — running on both is every commit tested
 # twice. `core` is on ubuntu and `platforms` on macOS and Windows, which have their own
-# webview, their own keyring store and their own satz installer. A release tag and a manual dispatch run both as well, so release.yml bundles a tree
+# webview and their own satz installer. A release tag and a manual dispatch run both as well, so release.yml bundles a tree
 # they have passed on.
 #
 # macOS is Apple silicon alone, here and in release.yml (Thomas, 2026-09-18, ADR 0016):
-# nothing in this app is architecture-dependent — the webview, the keyring and the satz
-# binary are the platform's, not the chip's — and `macos-15-intel` is the most expensive
+# nothing in this app is architecture-dependent — the webview and the satz binary are
+# the platform's, not the chip's — and `macos-15-intel` is the most expensive
 # runner in the catalogue. An Intel Mac gets no bundle.
 
 on:
