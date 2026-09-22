@@ -9,7 +9,7 @@ members = ["crates/satz-studio-core", "crates/satz-studio"]
 exclude = ["vendor"]
 
 [workspace.package]
-version = "0.9.1"
+version = "0.9.2"
 edition = "2024"
 license = "Apache-2.0"
 repository = "https://github.com/tjirsch/satz-studio"
