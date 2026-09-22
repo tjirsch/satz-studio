@@ -141,10 +141,15 @@ pub fn written(out: &Path) -> Result<u64, String> {
 mod tests {
     use super::*;
 
-    /// satz 0.73.1's long help for `questions`, as it prints it.
+    /// The long help for `questions` of the release the app is tested against, as it
+    /// prints it.
     const HELP: &str = "\
-satz v0.73.1
-What this estate can be asked
+satz v0.77.1
+What this estate can be asked: the questions its packs declare, joined with the answers its params
+already carry
+
+Read-only. Each question is `answered`, `unanswered` or `not-applicable`, and `blocking` while no
+default is possible, with what changing the answer would cost.
 
 Usage: satz questions [OPTIONS] --format <FORMAT> --out <FILE> <INPUT>
 
@@ -165,7 +170,11 @@ Options:
           - xlsx:     a workbook: the catalog a customer fills in and sends back
 
       --out <FILE>
-          Where it goes
+          Where it goes — the one file this run writes, the format's extension added when the name
+          has none (`-` for stdout)
+
+      --unanswered
+          Only the questions the estate has not answered yet — the interview's worklist
 
   -h, --help
           Print help (see a summary with '-h')

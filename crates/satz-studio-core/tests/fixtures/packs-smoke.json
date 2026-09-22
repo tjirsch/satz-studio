@@ -20,10 +20,9 @@
       "required_by": [
         "presets/security-group-models/s1-security-groups.satz",
         "presets/security-group-models/s2-security-groups.satz",
-        "presets/security-group-models/s1-group-definitions.satz",
-        "presets/security-group-models/s1-group-permissions.satz",
         "presets/billing-account-permissions.satz",
         "presets/organization-budget.satz",
+        "presets/billing-export.satz",
         "presets/security-audit/sa-security-audit.satz",
         "presets/scc/scc-service-enablement.satz",
         "presets/monitoring/project-cis-log-alerts.satz",
@@ -70,8 +69,6 @@
         "presets/billing-account-permissions.satz"
       ],
       "excludes": [
-        "presets/security-group-models/s1-group-definitions.satz",
-        "presets/security-group-models/s1-group-permissions.satz",
         "presets/security-group-models/s2-security-groups.satz"
       ],
       "findings": []
@@ -100,83 +97,8 @@
         "presets/billing-account-permissions.satz"
       ],
       "excludes": [
-        "presets/security-group-models/s1-group-definitions.satz",
-        "presets/security-group-models/s1-group-permissions.satz",
         "presets/security-group-models/s1-security-groups.satz"
       ],
-      "findings": []
-    },
-    {
-      "path": "presets/security-group-models/s1-group-definitions.satz",
-      "role": "pack",
-      "gate": "security_model_s1",
-      "gate_declared_in": "presets/estate-map.satz",
-      "default": "true",
-      "line": "absent",
-      "deploys": false,
-      "requires": [
-        {
-          "kind": "gate",
-          "any_of": [
-            "presets/estate-map.satz"
-          ],
-          "params": [
-            "security_model_s1"
-          ],
-          "met": false
-        }
-      ],
-      "required_by": [
-        "presets/security-group-models/s1-group-permissions.satz",
-        "presets/billing-account-permissions.satz"
-      ],
-      "excludes": [
-        "presets/security-group-models/s1-security-groups.satz",
-        "presets/security-group-models/s2-security-groups.satz"
-      ],
-      "by_hand": "the S1 model's second spelling, `use`d inside the `google_cloud_identity_group` block in place of s1-security-groups",
-      "findings": []
-    },
-    {
-      "path": "presets/security-group-models/s1-group-permissions.satz",
-      "role": "pack",
-      "gate": "security_model_s1",
-      "gate_declared_in": "presets/estate-map.satz",
-      "default": "true",
-      "line": "absent",
-      "deploys": false,
-      "requires": [
-        {
-          "kind": "gate",
-          "any_of": [
-            "presets/estate-map.satz"
-          ],
-          "params": [
-            "security_model_s1"
-          ],
-          "met": false
-        },
-        {
-          "kind": "data",
-          "any_of": [
-            "presets/security-group-models/s1-group-definitions.satz"
-          ],
-          "params": [
-            "gcp_billing_admins_name",
-            "gcp_organization_admins_name",
-            "gcp_project_admins_name",
-            "gcp_security_admins_name",
-            "gcp_security_viewers_name"
-          ],
-          "met": false
-        }
-      ],
-      "required_by": [],
-      "excludes": [
-        "presets/security-group-models/s1-security-groups.satz",
-        "presets/security-group-models/s2-security-groups.satz"
-      ],
-      "by_hand": "the S1 model's second spelling, `use`d inside the `google_organization_iam_member` block in place of s1-security-groups",
       "findings": []
     },
     {
@@ -192,8 +114,7 @@
           "kind": "requires",
           "any_of": [
             "presets/security-group-models/s1-security-groups.satz",
-            "presets/security-group-models/s2-security-groups.satz",
-            "presets/security-group-models/s1-group-definitions.satz"
+            "presets/security-group-models/s2-security-groups.satz"
           ],
           "met": false
         },
@@ -234,6 +155,58 @@
       ],
       "required_by": [],
       "excludes": [],
+      "findings": []
+    },
+    {
+      "path": "presets/billing-export.satz",
+      "role": "pack",
+      "gate": "use_billing_export",
+      "gate_declared_in": "presets/estate-map.satz",
+      "default": "false",
+      "line": "absent",
+      "deploys": false,
+      "requires": [
+        {
+          "kind": "gate",
+          "any_of": [
+            "presets/estate-map.satz"
+          ],
+          "params": [
+            "use_billing_export"
+          ],
+          "met": false
+        },
+        {
+          "kind": "data",
+          "any_of": [
+            "presets/cis/CIS-GCP-Foundation-4.0.satz"
+          ],
+          "params": [
+            "allowed_policy_member_subjects"
+          ],
+          "met": true
+        }
+      ],
+      "required_by": [],
+      "excludes": [],
+      "notices": [
+        {
+          "param": "billing_export_enabled",
+          "pack": "presets/billing-export.satz",
+          "text": "Cloud Billing has no API, no gcloud command and no Terraform resource for switching the export on. Apply this pack first, then in the Cloud console open Billing, pick the billing account, go to Billing export, BigQuery export, and point Standard usage cost at the project `billing_export_project_id` names and the dataset `billing_export_dataset_id` names. The dataset stays empty until that is done. Bind this param true once it is.",
+          "run": "https://console.cloud.google.com/billing — the billing account, Billing export, BigQuery export, Edit settings",
+          "severity": "warning",
+          "acknowledged": false
+        }
+      ],
+      "contributes": [
+        {
+          "param": "allowed_policy_member_subjects",
+          "values": [
+            "serviceAccount:billing-export-bigquery@system.gserviceaccount.com"
+          ]
+        }
+      ],
       "findings": []
     },
     {
@@ -426,6 +399,7 @@
         }
       ],
       "required_by": [
+        "presets/billing-export.satz",
         "presets/cis/block-project-ssh-keys.satz",
         "presets/cis/shielded-vm.satz",
         "presets/cis/dns-logging.satz",
@@ -442,7 +416,8 @@
         "presets/cis/bucket-retention-dry-run.satz",
         "presets/cis/cloud-sql-dry-run.satz",
         "presets/cis/cloud-sql-iam-and-deletion-protection-dry-run.satz",
-        "presets/cis/confidential-computing-dry-run.satz"
+        "presets/cis/confidential-computing-dry-run.satz",
+        "presets/integrations/microsoft-defender-for-cloud.satz"
       ],
       "excludes": [],
       "notices": [
@@ -1205,6 +1180,16 @@
             "use_defender"
           ],
           "met": false
+        },
+        {
+          "kind": "data",
+          "any_of": [
+            "presets/cis/CIS-GCP-Foundation-4.0.satz"
+          ],
+          "params": [
+            "allowed_policy_member_subjects"
+          ],
+          "met": true
         }
       ],
       "required_by": [
@@ -1213,6 +1198,14 @@
         "presets/integrations/microsoft-defender-for-cloud-cspm-role-least-privilege.satz"
       ],
       "excludes": [],
+      "contributes": [
+        {
+          "param": "allowed_policy_member_subjects",
+          "values": [
+            "serviceAccount:mdc-agentless-scanning@guardians-prod-diskscanning.iam.gserviceaccount.com"
+          ]
+        }
+      ],
       "findings": []
     },
     {

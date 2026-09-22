@@ -80,6 +80,7 @@ async fn showcase_params_carry_their_questions_and_leave_the_gates_out() {
             "pack_bucket_location",
             "pack_bucket_adopted",
             "archive_project_folder",
+            "infra_project_services",
         ],
         "the group_model options are a oneof, answered as a choice"
     );

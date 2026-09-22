@@ -1071,6 +1071,7 @@ mod tests {
                 excludes: Vec::new(),
                 by_hand: None,
                 notices: Vec::new(),
+                contributes: Vec::new(),
                 findings: Vec::new(),
             }],
             unmanaged: Vec::new(),
@@ -1260,6 +1261,7 @@ mod tests {
             excludes: Vec::new(),
             by_hand: None,
             notices: Vec::new(),
+            contributes: Vec::new(),
             findings: Vec::new(),
         });
         let m = model(report.clone(), loaded());

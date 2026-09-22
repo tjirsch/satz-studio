@@ -387,8 +387,21 @@ pub struct PackRow {
     /// what the pack asks to be run once it is on
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub notices: Vec<NoticeRow>,
+    /// what the pack adds to another pack's list params while it deploys, beside the
+    /// estate's own entries
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub contributes: Vec<Contributed>,
     /// the compile's findings about this pack, as sentences
     pub findings: Vec<String>,
+}
+
+/// One pack's entries in another pack's list param.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct Contributed {
+    /// the list param the entries are added to
+    pub param: String,
+    /// the entries, as the pack wrote them
+    pub values: Vec<String>,
 }
 
 /// A `use` of a file the pack graph does not know.
@@ -725,7 +738,7 @@ mod tests {
     #[test]
     fn the_recorded_merge_report_round_trips() {
         let report: MergeReport = serde_json::from_str(MERGE).unwrap();
-        assert_eq!(report.counts.current, 100);
+        assert_eq!(report.counts.current, 98);
         let again: serde_json::Value = serde_json::to_value(&report).unwrap();
         let original: serde_json::Value = serde_json::from_str(MERGE).unwrap();
         assert_eq!(again, original);
@@ -754,7 +767,7 @@ mod tests {
         );
         assert_eq!(
             lines.last().unwrap(),
-            "Report only, nothing written: 1 installed, 1 comments and layout only, 1 forked and repointed, 100 current. Something above needs you."
+            "Report only, nothing written: 1 installed, 1 comments and layout only, 1 forked and repointed, 98 current. Something above needs you."
         );
         // a pack that is current says nothing: the counts carry it
         assert_eq!(lines.len(), 4, "{lines:#?}");
@@ -984,7 +997,8 @@ mod tests {
         assert!(serde_json::from_value::<PackRow>(unknown).is_err());
     }
 
-    /// `satz review-pack <pack> --format json`, recorded from satz 0.73.1 over
+    /// `satz review-pack <pack> --format json`, recorded from the release the app is tested
+    /// against, over
     /// `tests/fixtures/smoke/config.toml`: a pack of satz's own library, which clears the
     /// bar, and `tests/fixtures/review/team-access.satz`, which does not. The absolute
     /// paths are written as `/e/…`.

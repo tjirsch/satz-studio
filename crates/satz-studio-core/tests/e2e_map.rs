@@ -333,7 +333,7 @@ async fn a_refused_answer_leaves_the_file_as_it_was_and_says_so_when_satz_had_ch
     assert_eq!(change.switched, [support::MAP]);
 
     // the central alerts read the audit logsink's project, and the logsink is off: the
-    // answer does not compile. satz 0.73.1 binds the gate and uncomments the line before
+    // answer does not compile. the pinned satz binds the gate and uncomments the line before
     // it refuses; a satz that refuses first writes nothing. Either way the file is what it
     // was, and the refusal names a restore exactly when there was one.
     let before = support::read(&main);
