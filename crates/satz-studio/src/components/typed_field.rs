@@ -278,9 +278,9 @@ pub fn commits(cause: Commit, changed: bool, commit_unchanged: bool, commit_on_b
 
 /// The field: a switch, a number field, a chip list or a text field by `kind`, over
 /// `draft`. `onchange` gets every keystroke's draft; `oncommit` gets the draft on
-/// Enter, on a switch flip, on a chip change and — unless `commit_on_blur` is off — on
-/// blur, under the rule [`commits`] states. A problem is shown under the field with
-/// satz's sentence.
+/// Enter, on a switch flip and a chip change unless `commit_on_change` is off, and on
+/// blur unless `commit_on_blur` is off, under the rule [`commits`] states. A problem is
+/// shown under the field with satz's sentence.
 #[component]
 pub fn TypedField(
     kind: FieldKind,
@@ -294,6 +294,10 @@ pub fn TypedField(
     /// interview answer switches it off
     #[props(default = true)]
     commit_on_blur: bool,
+    /// a switch flip and a chip change commit, which is the contract of a param and an
+    /// attribute field; an interview answer switches it off, and only Enter commits there
+    #[props(default = true)]
+    commit_on_change: bool,
     #[props(default)] onchange: Option<EventHandler<Draft>>,
     #[props(default)] oncommit: Option<EventHandler<Draft>>,
 ) -> Element {
@@ -325,7 +329,7 @@ pub fn TypedField(
                 disabled,
                 onchange: move |v: bool| {
                     update.call(Draft::Bool(v));
-                    if let Some(h) = &oncommit {
+                    if commit_on_change && let Some(h) = &oncommit {
                         h.call(Draft::Bool(v));
                     }
                 },
@@ -353,7 +357,9 @@ pub fn TypedField(
                 error: problem.is_some(),
                 onchange: move |next: Vec<String>| {
                     update.call(Draft::List(next));
-                    commit.call(Commit::Pressed);
+                    if commit_on_change {
+                        commit.call(Commit::Pressed);
+                    }
                 },
             }
         },

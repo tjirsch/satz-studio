@@ -1,19 +1,26 @@
 //! The Decisions destination: the questions the estate's packs declare, one at a time, the
 //! unanswered ones first. Every answer is one `satz_interview` call through the estate
-//! coroutine, and the view re-renders from the reloaded report. The card moves when the
-//! operator moves it and at no other time: an answer is written and the card stays on the
-//! question it answered — now reading answered, its forward button reading Next — until
-//! Next, Back or a click in the list moves it. The walk remembers the questions it moved
-//! away from, so Back returns to one whether it is answered by then or not; with "Show
-//! answered" on, every question is listed beside the card. A typed answer's field has the
-//! shape `answer_kind` reads off the report — the shape the pack declares the param with,
-//! else the offered value's — so a list that offers nothing is still a list.
+//! coroutine, and the view re-renders from the reloaded report.
+//!
+//! The card has one filled button, and it reads Accept or Next. Accept writes the value
+//! the card holds and moves the walk to the next question; Next moves it and writes
+//! nothing. An unanswered question reads Accept whether or not its value was changed —
+//! accepting the offered default writes it — and carries a text Skip, which moves on
+//! without writing. An answered question reads Next while its field holds the written
+//! value, or its chips the bound option, and Accept as soon as the value differs from it;
+//! it has no Skip. Editing the field or picking a chip writes nothing, and neither does
+//! the field losing focus; Enter in a text or number field is the keyboard form of the
+//! filled button. The walk follows its question by subject and remembers the questions
+//! it moved away from, so Back returns to one whether it is answered by then or not; with
+//! "Show answered" on, every question is listed beside the card. Back, Skip and the filled
+//! button stand in a bar below the question, which scrolls above it. A typed answer's
+//! field has the shape `answer_kind` reads off the report — the shape the pack declares
+//! the param with, else the offered value's — so a list that offers nothing is still a
+//! list.
 
 use dioxus::prelude::*;
 use satz_studio_core::model::answer_kind;
-use satz_studio_core::satz::reports::{
-    Blast, OptionRow, QuestionKind, QuestionRow, QuestionState, Reversal,
-};
+use satz_studio_core::satz::reports::{Blast, QuestionKind, QuestionRow, QuestionState, Reversal};
 
 use crate::components::{
     Button, ButtonVariant, Card, CardVariant, Chip, ChipKind, Draft, FieldKind, Icon,
@@ -23,32 +30,24 @@ use crate::state::{AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt
 use crate::views::export::{ExportCard, Moment};
 
 /// The questions in the order the view walks them: the unanswered ones as the report
-/// lists them, then — when asked for — the answered ones and the ones not asked. `held`
-/// is the subject of the question the card holds open, the one it has just answered: it
-/// keeps the place it had among the unanswered ones whatever its state now says, so
-/// answering moves neither the card nor a row under the operator.
-pub fn ordered(
-    questions: &[QuestionRow],
-    show_answered: bool,
-    held: Option<&str>,
-) -> Vec<QuestionRow> {
-    let is_held = |q: &QuestionRow| held.is_some_and(|h| h == q.subject);
+/// lists them, then — when asked for — the answered ones and the ones not asked.
+pub fn ordered(questions: &[QuestionRow], show_answered: bool) -> Vec<QuestionRow> {
     let mut out: Vec<QuestionRow> = questions
         .iter()
-        .filter(|q| q.state == QuestionState::Unanswered || is_held(q))
+        .filter(|q| q.state == QuestionState::Unanswered)
         .cloned()
         .collect();
     if show_answered {
         out.extend(
             questions
                 .iter()
-                .filter(|q| q.state == QuestionState::Answered && !is_held(q))
+                .filter(|q| q.state == QuestionState::Answered)
                 .cloned(),
         );
         out.extend(
             questions
                 .iter()
-                .filter(|q| q.state == QuestionState::NotApplicable && !is_held(q))
+                .filter(|q| q.state == QuestionState::NotApplicable)
                 .cloned(),
         );
     }
@@ -59,24 +58,15 @@ pub fn ordered(
 /// reorders the list: an answer moves a question into the answered block, or out of the
 /// walk while answered questions are hidden. `index` is where the card was, for when its
 /// question has left the list — the question that took its place is shown. `left` holds
-/// the questions the walk moved away from, the latest last, for Back. `held` is the
-/// question answered on the card: the walk keeps it where it was until the operator
-/// moves off it, so an answer alone never carries the card to the next question.
+/// the questions the walk moved away from, the latest last, for Back.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Walk {
     subject: Option<String>,
     index: usize,
     left: Vec<String>,
-    held: Option<String>,
 }
 
 impl Walk {
-    /// The questions the walk carries: `ordered`, with the question the card holds open
-    /// kept in its place.
-    pub fn list(&self, questions: &[QuestionRow], show_answered: bool) -> Vec<QuestionRow> {
-        ordered(questions, show_answered, self.held.as_deref())
-    }
-
     /// The position of the card's question in `list`.
     pub fn position(&self, list: &[QuestionRow]) -> usize {
         self.subject
@@ -96,7 +86,7 @@ impl Walk {
 
     /// Open the question at `to` in the walk's list, remembering the one on the card.
     pub fn open(&mut self, questions: &[QuestionRow], show_answered: bool, to: usize) {
-        let list = self.list(questions, show_answered);
+        let list = ordered(questions, show_answered);
         let Some(q) = list.get(to) else { return };
         if to == self.position(&list) {
             return;
@@ -104,14 +94,26 @@ impl Walk {
         self.leave(&list);
         self.subject = Some(q.subject.clone());
         self.index = to;
-        // the card has left the question it held open; the list stops carrying it
-        self.held = None;
     }
 
-    /// Skip, or Next: the question after the card's, the first one after the last. This
-    /// and Back are what move the card — writing an answer does not.
+    /// Skip, or Next: the question after the card's, the first one after the last. The
+    /// only question in the walk stays on the card: there is nowhere to go.
     pub fn next(&mut self, questions: &[QuestionRow], show_answered: bool) {
-        let list = self.list(questions, show_answered);
+        self.step(questions, show_answered, false);
+    }
+
+    /// Accept: the card's question is being written, and the walk moves on as Next does.
+    /// It is called with the report as it stands BEFORE the write, and the card follows
+    /// the question it moves to by subject, so the reload that takes the answered
+    /// question out of the unanswered block neither skips the next one nor carries the
+    /// card back. The only question in the walk is let go when answered questions are
+    /// hidden — the write takes it out of the walk — and Back returns to it.
+    pub fn accept(&mut self, questions: &[QuestionRow], show_answered: bool) {
+        self.step(questions, show_answered, true);
+    }
+
+    fn step(&mut self, questions: &[QuestionRow], show_answered: bool, answering: bool) {
+        let list = ordered(questions, show_answered);
         if list.is_empty() {
             return;
         }
@@ -119,32 +121,10 @@ impl Walk {
         let to = (from + 1) % list.len();
         if to != from {
             self.open(questions, show_answered, to);
-            return;
-        }
-        // One question in the walk, and it is there only because the card holds it open:
-        // moving on lets it go, and leaves the walk with no question at all.
-        let plain = ordered(questions, show_answered, None);
-        let releases = self.held.is_some()
-            && list
-                .get(from)
-                .is_some_and(|q| !plain.iter().any(|p| p.subject == q.subject));
-        if releases {
+        } else if answering && !show_answered {
             self.leave(&list);
             self.subject = None;
             self.index = 0;
-            self.held = None;
-        }
-    }
-
-    /// The card's question has just been answered: the walk holds on to it, so the
-    /// reload leaves the card on the question it answered and only Next moves it off.
-    pub fn hold(&mut self, questions: &[QuestionRow], show_answered: bool) {
-        let list = self.list(questions, show_answered);
-        let i = self.position(&list);
-        if let Some(q) = list.get(i) {
-            self.subject = Some(q.subject.clone());
-            self.index = i;
-            self.held = Some(q.subject.clone());
         }
     }
 
@@ -162,9 +142,7 @@ impl Walk {
                 continue;
             };
             let show = show_answered || q.state != QuestionState::Unanswered;
-            // the card leaves the question it held open, as it does going forward
-            self.held = None;
-            self.index = ordered(questions, show, None)
+            self.index = ordered(questions, show)
                 .iter()
                 .position(|r| r.subject == subject)
                 .unwrap_or(0);
@@ -175,14 +153,13 @@ impl Walk {
     }
 
     /// "Show answered" switched from `from` to `to`: the card keeps its question when
-    /// the new list holds it, and starts from the first question when it does not. The
-    /// switch is not a move, so a question the card holds open stays on the card.
+    /// the new list holds it, and starts from the first question when it does not.
     pub fn switched(&mut self, questions: &[QuestionRow], from: bool, to: bool) {
-        let before = self.list(questions, from);
+        let before = ordered(questions, from);
         self.subject = before
             .get(self.position(&before))
             .map(|q| q.subject.clone());
-        let after = self.list(questions, to);
+        let after = ordered(questions, to);
         match self
             .subject
             .as_ref()
@@ -192,7 +169,6 @@ impl Walk {
             None => {
                 self.subject = None;
                 self.index = 0;
-                self.held = None;
             }
         }
     }
@@ -212,6 +188,101 @@ pub fn initial_option(q: &QuestionRow) -> Option<String> {
                 .find(|o| o.param == default)
                 .map(|o| o.param.clone())
         })
+}
+
+/// What the card's filled button does: write the card's value and move on, or move on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PrimaryAction {
+    Accept,
+    Next,
+}
+
+/// The card's filled button: its words, its icon, what a click does and whether it can be
+/// clicked.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Primary {
+    pub label: &'static str,
+    pub icon: &'static str,
+    pub action: PrimaryAction,
+    pub enabled: bool,
+}
+
+/// The filled button of a card with a field or chips. `changed` is the card's value
+/// differing from the one the estate binds — for a question that is not answered it
+/// does not matter; `valid` is the value being one that can be written: no problem in
+/// the field, and not empty where the question offers nothing, or a chip chosen.
+///
+/// A question not answered reads Accept, which writes what the card holds, the offered
+/// default included. An answered one — or one not asked — reads Next while its value is
+/// the bound one, and Accept once it differs. Accept is disabled on a value that cannot
+/// be written and while a write is in flight; Next writes nothing and is never disabled.
+pub fn primary(state: QuestionState, changed: bool, valid: bool, loading: bool) -> Primary {
+    if state != QuestionState::Unanswered && !changed {
+        Primary {
+            label: "Next",
+            icon: "arrow_forward",
+            action: PrimaryAction::Next,
+            enabled: true,
+        }
+    } else {
+        Primary {
+            label: "Accept",
+            icon: "check",
+            action: PrimaryAction::Accept,
+            enabled: valid && !loading,
+        }
+    }
+}
+
+/// The text button that moves on beside the filled one: Skip on a question not answered;
+/// on any other only where the card has no filled button — a param with no field — and
+/// there it reads Next. An answered question with a filled button has no Skip: its filled
+/// button reads Next.
+pub fn text_forward(state: QuestionState, has_primary: bool) -> Option<&'static str> {
+    if state == QuestionState::Unanswered {
+        Some("Skip")
+    } else if has_primary {
+        None
+    } else {
+        Some("Next")
+    }
+}
+
+/// What the card holds, ready for its filled button: whether it differs from the bound
+/// value, whether it can be written, and the value `satz_interview` is sent.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Held {
+    pub changed: bool,
+    pub valid: bool,
+    pub value: serde_json::Value,
+}
+
+/// A typed answer's field. `offered` is the report's value — the estate's own for an
+/// answered question, else the pack's default — which is where the field starts.
+pub fn held_param(
+    kind: FieldKind,
+    subject: &str,
+    offered: Option<&serde_json::Value>,
+    draft: &Draft,
+) -> Held {
+    Held {
+        changed: *draft != Draft::of_json(offered, kind),
+        // nothing typed is no answer to a question that offers nothing
+        valid: draft.problem(kind, subject).is_none() && (offered.is_some() || !draft.is_empty()),
+        value: draft.to_json(),
+    }
+}
+
+/// A `oneof`'s chips. `chosen` is the chip picked on the card, `bound` the option the
+/// estate binds.
+pub fn held_oneof(chosen: Option<&str>, bound: Option<&str>) -> Held {
+    Held {
+        changed: chosen != bound,
+        valid: chosen.is_some(),
+        value: chosen.map_or(serde_json::Value::Null, |c| {
+            serde_json::Value::String(c.to_string())
+        }),
+    }
 }
 
 /// A JSON value as the interview prints it beside the recommendation.
@@ -250,6 +321,17 @@ pub fn state_of(q: &QuestionRow) -> (&'static str, String) {
 /// The list's supporting line for a question: its subject, then its state.
 pub fn listed(q: &QuestionRow) -> String {
     format!("{} · {}", q.subject, state_of(q).1)
+}
+
+/// The card's identity: its question, its field's shape and the value it starts on. A
+/// reload that changes the value a card starts on — a default derived from the answer
+/// just written, reaching the card the walk moved to while the write was in flight —
+/// starts that card afresh, so it never holds a value the report no longer offers.
+/// The field is disabled while a write is in flight, so nothing typed is lost.
+fn card_key(q: &QuestionRow, field: Option<FieldKind>) -> String {
+    let offered = q.offered().map(shown).unwrap_or_default();
+    let option = initial_option(q).unwrap_or_default();
+    format!("{}|{field:?}|{offered}|{option}", q.subject)
 }
 
 #[component]
@@ -291,7 +373,7 @@ pub fn DecisionsView() -> Element {
     };
 
     let s = report.summary.clone();
-    let list = walk.read().list(&report.questions, show_answered());
+    let list = ordered(&report.questions, show_answered());
     let offered_defaults = report
         .questions
         .iter()
@@ -361,20 +443,22 @@ pub fn DecisionsView() -> Element {
                 match current {
                     Some(q) => rsx! {
                         QuestionCard {
-                            key: "{q.subject}",
+                            key: "{card_key(&q, field)}",
                             question: q,
                             field,
                             previous_pack,
                             loading,
                             can_back,
                             onback: move |_| go_back(),
-                            onskip: move |_| {
+                            onnext: move |_| {
                                 walk.write().next(&questions_now(), show_answered());
                             },
-                            // an answer does not move the card: it holds the question it
-                            // answered until the operator presses Next
-                            onanswer: move |_| {
-                                walk.write().hold(&questions_now(), show_answered());
+                            onaccept: move |(subject, value): (String, serde_json::Value)| {
+                                // the walk moves first, over the report as it stands before
+                                // the write; the reload the write triggers finds the card on
+                                // the question it moved to by subject
+                                walk.write().accept(&questions_now(), show_answered());
+                                handle.send(EstateAction::Answer { subject, value });
                             },
                         }
                     },
@@ -448,27 +532,23 @@ fn blast_label(b: Blast) -> &'static str {
     }
 }
 
-/// The walk's controls beside an answer: Back, and Skip — Next on a question that is
-/// already answered or not asked, where there is nothing to skip.
-#[component]
-fn WalkButtons(
-    state: QuestionState,
-    can_back: bool,
-    onback: EventHandler<()>,
-    onskip: EventHandler<()>,
-) -> Element {
-    let forward = if state == QuestionState::Unanswered {
-        "Skip"
-    } else {
-        "Next"
-    };
-    rsx! {
-        Button { variant: ButtonVariant::Text, icon: "arrow_back", disabled: !can_back, onclick: move |_| onback.call(()), "Back" }
-        span { class: "grow" }
-        Button { variant: ButtonVariant::Text, onclick: move |_| onskip.call(()), "{forward}" }
-    }
-}
+/// An answer is written by the filled button and by Enter in a text or number field, and
+/// by nothing else: not when the field loses focus — the button's own click blurs the
+/// field first, so a blur that wrote would send a second answer — and not on a switch
+/// flip or a chip added to or removed from a list, which change what the card holds and
+/// turn its button into Accept. Params and Resources keep both, where saving what is
+/// typed into the file being edited IS the contract.
+const ON_BLUR: bool = false;
+const ON_CHANGE: bool = false;
+const _: () = assert!(
+    !ON_BLUR && !ON_CHANGE,
+    "only the filled button and Enter write an answer"
+);
 
+/// One question: the pack header and the card, which scroll, and below them the bar with
+/// Back, Skip and the filled button, which does not. The card owns what it holds — the
+/// field's draft or the chosen chip — so the bar can read it; a card of another question,
+/// shape or starting value is a new card (`card_key`).
 #[component]
 fn QuestionCard(
     question: QuestionRow,
@@ -477,8 +557,8 @@ fn QuestionCard(
     loading: bool,
     can_back: bool,
     onback: EventHandler<()>,
-    onskip: EventHandler<()>,
-    onanswer: EventHandler<()>,
+    onnext: EventHandler<()>,
+    onaccept: EventHandler<(String, serde_json::Value)>,
 ) -> Element {
     let q = question;
     let new_pack = previous_pack.as_deref() != Some(q.pack.as_str());
@@ -486,237 +566,183 @@ fn QuestionCard(
     let recommend = recommends_otherwise(&q).map(str::to_string);
     let (state_icon, state_text) = state_of(&q);
     let subject = q.subject.clone();
-
-    rsx! {
-        div { class: "interview__question",
-            if new_pack {
-                div { class: "interview__pack",
-                    Icon { name: "inventory_2", size: 20 }
-                    div {
-                        span { class: "interview__pack-name", "{q.pack}" }
-                        p { class: "interview__pack-description", "{q.pack_description}" }
-                    }
-                }
-            }
-            Card { variant: CardVariant::Outlined, class: "interview__card",
-                div { class: "interview__card-head",
-                    code { class: "interview__subject", "{q.subject}" }
-                    span { class: "grow" }
-                    Chip { kind: ChipKind::Assist, icon: state_icon, label: state_text, error: q.blocking && q.state == QuestionState::Unanswered }
-                }
-                h2 { class: "interview__prompt", "{q.prompt}" }
-                if let Some(why) = &q.why {
-                    p { class: "interview__why", "{why}" }
-                }
-                div { class: "interview__chips",
-                    Chip { kind: ChipKind::Assist, icon: "history", label: reversal_label(q.reversal) }
-                    Chip { kind: ChipKind::Assist, icon: "flare", label: blast_label(q.blast), error: q.blast == Blast::High }
-                    if one_way {
-                        Chip { kind: ChipKind::Assist, icon: "door_front", label: "one-way door", error: true }
-                    }
-                    span { class: "grow" }
-                    span { class: "interview__from", "{q.from}" }
-                }
-                if one_way {
-                    div { class: "interview__banner", role: "alert",
-                        Icon { name: "warning", filled: true }
-                        span { "A one-way door: changing this answer later is a recreate or hits a high blast radius. Decide it with the reason above in view." }
-                    }
-                }
-                if let Some(r) = recommend {
-                    div { class: "interview__recommend",
-                        Icon { name: "lightbulb", size: 20 }
-                        span { "The pack recommends: " code { "{r}" } ". The offered value still applies unless you change it." }
-                    }
-                }
-                match (q.kind, field) {
-                    (QuestionKind::Param, Some(kind)) => rsx! {
-                        ParamAnswer {
-                            // a question of another shape starts the field afresh
-                            key: "{kind:?}",
-                            question: q.clone(),
-                            kind,
-                            loading,
-                            can_back,
-                            onback: move |_| onback.call(()),
-                            onskip: move |_| onskip.call(()),
-                            onanswer: move |_| onanswer.call(()),
-                        }
-                    },
-                    (QuestionKind::Param, None) => rsx! {
-                        div { class: "interview__answer",
-                            p { class: "interview__hint",
-                                "There is no field for this answer: its param is declared as a map, or with no shape satz names. Write the value into the estate's params block."
-                            }
-                            div { class: "interview__actions",
-                                WalkButtons { state: q.state, can_back, onback: move |_| onback.call(()), onskip: move |_| onskip.call(()) }
-                            }
-                        }
-                    },
-                    (QuestionKind::Oneof, _) => rsx! {
-                        OneofAnswer {
-                            question: q.clone(),
-                            loading,
-                            can_back,
-                            onback: move |_| onback.call(()),
-                            onskip: move |_| onskip.call(()),
-                            onanswer: move |_| onanswer.call(()),
-                        }
-                    },
-                }
-                if q.kind == QuestionKind::Param {
-                    p { class: "interview__hint",
-                        "Answering here writes " code { "{subject} = …" } " into the estate's params through satz's own writer; a pack line the answer switches on is uncommented by satz."
-                    }
-                }
-            }
-        }
-    }
-}
-
-/// An answer is written when the operator presses Enter or the forward button, and not
-/// when the field merely loses focus. The asymmetry with Params and Resources, where
-/// blur-to-save IS the contract, is deliberate: there a blur saves a value into the file
-/// the operator is editing, here it would send the SAME answer a second time — the
-/// button's own click blurs the field first — and each send is a write to the estate
-/// through satz. An unchanged answer still writes when it is pressed: that press is what
-/// re-activates a pack line whose gate is already true while its line stands commented.
-const ON_BLUR: bool = false;
-
-#[component]
-fn ParamAnswer(
-    question: QuestionRow,
-    kind: FieldKind,
-    loading: bool,
-    can_back: bool,
-    onback: EventHandler<()>,
-    onskip: EventHandler<()>,
-    onanswer: EventHandler<()>,
-) -> Element {
-    let handle = use_coroutine_handle::<EstateAction>();
-    let q = question;
-    let offers = q.offered().is_some();
-    let initial = Draft::of_json(q.offered(), kind);
+    let kind = match q.kind {
+        QuestionKind::Param => field,
+        QuestionKind::Oneof => None,
+    };
+    let initial = kind.map(|k| Draft::of_json(q.offered(), k));
     let mut draft = use_signal(|| initial.clone());
-    let problem = draft().problem(kind, &q.subject);
-    let unchanged = draft() == initial;
-    let accept = unchanged && offers;
-    // nothing typed is no answer to a question that offers nothing
-    let can_send = problem.is_none() && !loading && (offers || !draft().is_empty());
-    let subject = q.subject.clone();
-    let send = move || {
-        let d = draft();
-        if d.problem(kind, &subject).is_none() && (offers || !d.is_empty()) {
-            onanswer.call(());
-            handle.send(EstateAction::Answer {
-                subject: subject.clone(),
-                value: d.to_json(),
-            });
-        }
-    };
-    let field_subject = q.subject.clone();
-    let field_hint = match (q.offered(), q.blocking) {
-        (None, true) if matches!(kind, FieldKind::List(_)) => {
-            "no default — at least one value is needed".to_string()
-        }
-        (None, true) => "no default — a value is needed".to_string(),
-        (None, false) => String::new(),
-        (Some(v), _) if q.state == QuestionState::Answered => {
-            format!("the estate's own value: {}", shown(v))
-        }
-        (Some(v), _) => format!("the pack's default: {}", shown(v)),
-    };
-    rsx! {
-        div { class: "interview__answer",
-            TypedField {
-                kind,
-                draft: initial.clone(),
-                label: q.subject.clone(),
-                subject: field_subject,
-                disabled: loading,
-                supporting: field_hint,
-                commit_unchanged: offers,
-                commit_on_blur: ON_BLUR,
-                onchange: move |d: Draft| draft.set(d),
-                oncommit: {
-                    let send = send.clone();
-                    move |_| send()
-                },
-            }
-            div { class: "interview__actions",
-                WalkButtons { state: q.state, can_back, onback: move |_| onback.call(()), onskip: move |_| onskip.call(()) }
-                Button {
-                    variant: ButtonVariant::Filled,
-                    icon: if accept { "check" } else { "send" },
-                    disabled: !can_send,
-                    onclick: move |_| send(),
-                    if accept { "Accept" } else { "Answer" }
-                }
-            }
-        }
-    }
-}
-
-#[component]
-fn OneofAnswer(
-    question: QuestionRow,
-    loading: bool,
-    can_back: bool,
-    onback: EventHandler<()>,
-    onskip: EventHandler<()>,
-    onanswer: EventHandler<()>,
-) -> Element {
-    let handle = use_coroutine_handle::<EstateAction>();
-    let q = question;
     let mut chosen = use_signal(|| initial_option(&q));
-    let picked: Option<OptionRow> =
-        chosen().and_then(|c| q.options.iter().find(|o| o.param == c).cloned());
     let bound = q
         .options
         .iter()
         .find(|o| o.selected)
         .map(|o| o.param.clone());
-    let subject = q.subject.clone();
+
+    // What the card holds, read when it is asked for — a press can arrive before the
+    // render that follows the keystroke before it — so the button and Enter agree.
+    let held = {
+        let offered = q.offered().cloned();
+        let subject = q.subject.clone();
+        let bound = bound.clone();
+        let oneof = q.kind == QuestionKind::Oneof;
+        move || -> Option<Held> {
+            if oneof {
+                Some(held_oneof(chosen().as_deref(), bound.as_deref()))
+            } else {
+                match (kind, draft()) {
+                    (Some(k), Some(d)) => Some(held_param(k, &subject, offered.as_ref(), &d)),
+                    _ => None,
+                }
+            }
+        }
+    };
+    let now = held.clone()().map(|h| primary(q.state, h.changed, h.valid, loading));
+    let press = {
+        let held = held.clone();
+        let state = q.state;
+        let subject = q.subject.clone();
+        move || {
+            let Some(h) = held() else { return };
+            let p = primary(state, h.changed, h.valid, loading);
+            match p.action {
+                _ if !p.enabled => {}
+                PrimaryAction::Next => onnext.call(()),
+                PrimaryAction::Accept => onaccept.call((subject.clone(), h.value)),
+            }
+        }
+    };
+    let enter = press.clone();
+    let field_hint = match (q.offered(), q.blocking, kind) {
+        (None, true, Some(FieldKind::List(_))) => {
+            "no default — at least one value is needed".to_string()
+        }
+        (None, true, _) => "no default — a value is needed".to_string(),
+        (None, false, _) => String::new(),
+        (Some(v), _, _) if q.state == QuestionState::Answered => {
+            format!("the estate's own value: {}", shown(v))
+        }
+        (Some(v), _, _) => format!("the pack's default: {}", shown(v)),
+    };
+    let forward = text_forward(q.state, now.is_some());
+    let picked = chosen().and_then(|c| q.options.iter().find(|o| o.param == c).cloned());
+
     rsx! {
-        div { class: "interview__answer",
-            div { class: "interview__options",
-                for o in q.options.iter().cloned() {
-                    {
-                        let param = o.param.clone();
-                        let is_chosen = chosen().as_deref() == Some(o.param.as_str());
-                        rsx! {
-                            Chip {
-                                key: "{o.param}",
-                                kind: ChipKind::Filter,
-                                label: o.label.clone(),
-                                selected: is_chosen,
-                                onclick: move |_| chosen.set(Some(param.clone())),
-                            }
+        div { class: "interview__question",
+            div { class: "interview__scroll",
+                if new_pack {
+                    div { class: "interview__pack",
+                        Icon { name: "inventory_2", size: 20 }
+                        div {
+                            span { class: "interview__pack-name", "{q.pack}" }
+                            p { class: "interview__pack-description", "{q.pack_description}" }
                         }
                     }
                 }
-            }
-            if let Some(o) = &picked {
-                p { class: "interview__option-why",
-                    code { "{o.param}" }
-                    if let Some(why) = &o.why {
-                        " — {why}"
+                Card { variant: CardVariant::Outlined, class: "interview__card",
+                    div { class: "interview__card-head",
+                        code { class: "interview__subject", "{q.subject}" }
+                        span { class: "grow" }
+                        Chip { kind: ChipKind::Assist, icon: state_icon, label: state_text, error: q.blocking && q.state == QuestionState::Unanswered }
+                    }
+                    h2 { class: "interview__prompt", "{q.prompt}" }
+                    if let Some(why) = &q.why {
+                        p { class: "interview__why", "{why}" }
+                    }
+                    div { class: "interview__chips",
+                        Chip { kind: ChipKind::Assist, icon: "history", label: reversal_label(q.reversal) }
+                        Chip { kind: ChipKind::Assist, icon: "flare", label: blast_label(q.blast), error: q.blast == Blast::High }
+                        if one_way {
+                            Chip { kind: ChipKind::Assist, icon: "door_front", label: "one-way door", error: true }
+                        }
+                        span { class: "grow" }
+                        span { class: "interview__from", "{q.from}" }
+                    }
+                    if one_way {
+                        div { class: "interview__banner", role: "alert",
+                            Icon { name: "warning", filled: true }
+                            span { "A one-way door: changing this answer later is a recreate or hits a high blast radius. Decide it with the reason above in view." }
+                        }
+                    }
+                    if let Some(r) = recommend {
+                        div { class: "interview__recommend",
+                            Icon { name: "lightbulb", size: 20 }
+                            span { "The pack recommends: " code { "{r}" } ". The offered value still applies unless you change it." }
+                        }
+                    }
+                    div { class: "interview__answer",
+                        match (q.kind, kind, initial) {
+                            (QuestionKind::Param, Some(kind), Some(initial)) => rsx! {
+                                    TypedField {
+                                        kind,
+                                        draft: initial,
+                                        label: q.subject.clone(),
+                                        subject: q.subject.clone(),
+                                        disabled: loading,
+                                        supporting: field_hint,
+                                        // Enter always reaches the card, which decides what it does
+                                        commit_unchanged: true,
+                                        commit_on_blur: ON_BLUR,
+                                        commit_on_change: ON_CHANGE,
+                                        onchange: move |d: Draft| draft.set(Some(d)),
+                                        oncommit: move |_| enter(),
+                                    }
+                            },
+                            (QuestionKind::Param, _, _) => rsx! {
+                                p { class: "interview__hint",
+                                    "There is no field for this answer: its param is declared as a map, or with no shape satz names. Write the value into the estate's params block."
+                                }
+                            },
+                            (QuestionKind::Oneof, _, _) => rsx! {
+                                div { class: "interview__options",
+                                    for o in q.options.iter().cloned() {
+                                        {
+                                            let param = o.param.clone();
+                                            let is_chosen = chosen().as_deref() == Some(o.param.as_str());
+                                            rsx! {
+                                                Chip {
+                                                    key: "{o.param}",
+                                                    kind: ChipKind::Filter,
+                                                    label: o.label.clone(),
+                                                    selected: is_chosen,
+                                                    onclick: move |_| chosen.set(Some(param.clone())),
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                if let Some(o) = &picked {
+                                    p { class: "interview__option-why",
+                                        code { "{o.param}" }
+                                        if let Some(why) = &o.why {
+                                            " — {why}"
+                                        }
+                                    }
+                                }
+                            },
+                        }
+                    }
+                    if q.kind == QuestionKind::Param {
+                        p { class: "interview__hint",
+                            "Accept writes " code { "{subject} = …" } " into the estate's params through satz's own writer; a pack line the answer switches on is uncommented by satz."
+                        }
                     }
                 }
             }
             div { class: "interview__actions",
-                WalkButtons { state: q.state, can_back, onback: move |_| onback.call(()), onskip: move |_| onskip.call(()) }
-                Button {
-                    variant: ButtonVariant::Filled,
-                    icon: "send",
-                    disabled: loading || picked.is_none(),
-                    onclick: move |_| {
-                        if let Some(c) = chosen() {
-                            onanswer.call(());
-                            handle.send(EstateAction::Answer { subject: subject.clone(), value: serde_json::Value::String(c) });
-                        }
-                    },
-                    if chosen().is_some() && chosen() == bound { "Keep" } else { "Choose" }
+                Button { variant: ButtonVariant::Text, icon: "arrow_back", disabled: !can_back, onclick: move |_| onback.call(()), "Back" }
+                span { class: "grow" }
+                if let Some(label) = forward {
+                    Button { variant: ButtonVariant::Text, onclick: move |_| onnext.call(()), "{label}" }
+                }
+                if let Some(p) = now {
+                    Button {
+                        variant: ButtonVariant::Filled,
+                        icon: p.icon,
+                        disabled: !p.enabled,
+                        onclick: move |_| press(),
+                        "{p.label}"
+                    }
                 }
             }
         }
@@ -738,39 +764,143 @@ mod tests {
         .unwrap()
     }
 
-    /// An answered question whose field carries the estate's own value: the field is
-    /// unchanged and it offers something, which is `commit_unchanged` in `ParamAnswer`.
-    fn answered_field() -> (bool, bool) {
-        let mut row = q("customer_shortname", QuestionState::Answered);
-        row.current = Some(json!("acme"));
-        let offers = row.offered().is_some();
-        (false, offers)
-    }
-
-    /// Enter on an answer the operator has not changed still writes: that press is what
-    /// re-activates a pack line whose gate is true while its line is commented.
-    #[test]
-    fn enter_on_an_unchanged_answered_field_writes() {
-        let (changed, offers) = answered_field();
-        assert!(offers);
-        assert!(commits(Commit::Pressed, changed, offers, ON_BLUR));
-    }
-
-    /// And the same field losing focus writes nothing: the press already sent the
-    /// answer, and the blur would send the identical one a second time.
-    #[test]
-    fn blurring_an_unchanged_answered_field_writes_nothing() {
-        let (changed, offers) = answered_field();
-        assert!(!commits(Commit::Blur, changed, offers, ON_BLUR));
-        // a value the operator typed is not written by the blur either — the button or
-        // Enter sends it
-        assert!(!commits(Commit::Blur, true, offers, ON_BLUR));
-        // and a param field, where blur-to-save is the contract, still saves on blur
-        assert!(commits(Commit::Blur, true, false, true));
+    fn names(v: &[QuestionRow]) -> Vec<&str> {
+        v.iter().map(|q| q.subject.as_str()).collect()
     }
 
     fn subject_at(walk: &Walk, list: &[QuestionRow]) -> String {
         list[walk.position(list)].subject.clone()
+    }
+
+    fn button(p: Primary) -> (&'static str, &'static str, PrimaryAction, bool) {
+        (p.label, p.icon, p.action, p.enabled)
+    }
+
+    const ACCEPT: (&str, &str, PrimaryAction) = ("Accept", "check", PrimaryAction::Accept);
+    const NEXT: (&str, &str, PrimaryAction, bool) =
+        ("Next", "arrow_forward", PrimaryAction::Next, true);
+
+    fn accept(enabled: bool) -> (&'static str, &'static str, PrimaryAction, bool) {
+        (ACCEPT.0, ACCEPT.1, ACCEPT.2, enabled)
+    }
+
+    /// Nothing the field does on its own writes: not losing focus, and not a switch flip
+    /// or a chip change either (`ON_CHANGE`), where Params and Resources save.
+    #[test]
+    fn only_enter_reaches_the_card_from_its_field() {
+        assert!(!commits(Commit::Blur, true, true, ON_BLUR));
+        assert!(commits(Commit::Pressed, false, true, ON_BLUR));
+        // a param field, where blur-to-save is the contract, still saves on blur
+        assert!(commits(Commit::Blur, true, false, true));
+    }
+
+    #[test]
+    fn an_unanswered_question_reads_accept_changed_or_not() {
+        let u = QuestionState::Unanswered;
+        // the offered default, untouched: Accept writes it
+        assert_eq!(button(primary(u, false, true, false)), accept(true));
+        // a value typed over it
+        assert_eq!(button(primary(u, true, true, false)), accept(true));
+        // an empty field on a question that offers nothing
+        assert_eq!(button(primary(u, false, false, false)), accept(false));
+        // a value with a problem
+        assert_eq!(button(primary(u, true, false, false)), accept(false));
+        // a write in flight
+        assert_eq!(button(primary(u, false, true, true)), accept(false));
+    }
+
+    #[test]
+    fn an_answered_question_reads_next_until_its_value_differs() {
+        let a = QuestionState::Answered;
+        assert_eq!(button(primary(a, false, true, false)), NEXT);
+        // Next writes nothing, so a write in flight does not disable it
+        assert_eq!(button(primary(a, false, true, true)), NEXT);
+        assert_eq!(button(primary(a, true, true, false)), accept(true));
+        assert_eq!(button(primary(a, true, false, false)), accept(false));
+        assert_eq!(button(primary(a, true, true, true)), accept(false));
+        // a question not asked is not one to skip either
+        assert_eq!(
+            button(primary(QuestionState::NotApplicable, false, true, false)),
+            NEXT
+        );
+    }
+
+    /// The field put back to the written value is unchanged again, so the button returns
+    /// to Next.
+    #[test]
+    fn an_answered_field_changed_and_changed_back_reads_next_again() {
+        let kind = FieldKind::Text;
+        let written = json!("europe-west3");
+        let held = |d: Draft| held_param(kind, "region", Some(&written), &d);
+        let open = held(Draft::of_json(Some(&written), kind));
+        assert!(!open.changed && open.valid);
+        let typed = held(Draft::Text("europe-west4".into()));
+        assert!(typed.changed);
+        assert_eq!(typed.value, json!("europe-west4"));
+        let a = QuestionState::Answered;
+        assert_eq!(
+            button(primary(a, typed.changed, typed.valid, false)),
+            accept(true)
+        );
+        let back = held(Draft::Text("europe-west3".into()));
+        assert_eq!(button(primary(a, back.changed, back.valid, false)), NEXT);
+    }
+
+    #[test]
+    fn an_empty_field_on_a_question_that_offers_nothing_cannot_be_accepted() {
+        let kind = FieldKind::List(crate::components::typed_field::ListElem::Text);
+        let h = held_param(kind, "emails", None, &Draft::of_json(None, kind));
+        assert!(!h.valid);
+        assert_eq!(
+            button(primary(
+                QuestionState::Unanswered,
+                h.changed,
+                h.valid,
+                false
+            )),
+            accept(false)
+        );
+        let one = held_param(
+            kind,
+            "emails",
+            None,
+            &Draft::List(vec!["a@example.com".into()]),
+        );
+        assert!(one.valid);
+        assert_eq!(one.value, json!(["a@example.com"]));
+    }
+
+    #[test]
+    fn a_oneof_reads_next_on_its_bound_option_and_accept_on_another() {
+        let s1 = Some("security_model_s1");
+        let s2 = Some("security_model_s2");
+        let on = |state, chosen, bound| {
+            let h = held_oneof(chosen, bound);
+            button(primary(state, h.changed, h.valid, false))
+        };
+        let a = QuestionState::Answered;
+        let u = QuestionState::Unanswered;
+        assert_eq!(on(a, s1, s1), NEXT);
+        assert_eq!(on(a, s2, s1), accept(true));
+        // the default chip on an unanswered question: Accept writes it
+        assert_eq!(on(u, s1, None), accept(true));
+        assert_eq!(on(u, None, None), accept(false));
+        assert_eq!(held_oneof(s2, s1).value, json!("security_model_s2"));
+    }
+
+    #[test]
+    fn skip_shows_only_on_a_question_not_answered() {
+        assert_eq!(text_forward(QuestionState::Unanswered, true), Some("Skip"));
+        assert_eq!(text_forward(QuestionState::Unanswered, false), Some("Skip"));
+        // an answered question's filled button is its Next
+        assert_eq!(text_forward(QuestionState::Answered, true), None);
+        assert_eq!(text_forward(QuestionState::NotApplicable, true), None);
+        // a param with no field has no filled button: the text button reads Next
+        assert_eq!(text_forward(QuestionState::Answered, false), Some("Next"));
+        assert_eq!(
+            text_forward(QuestionState::NotApplicable, false),
+            Some("Next")
+        );
     }
 
     #[test]
@@ -781,91 +911,115 @@ mod tests {
             q("c", QuestionState::NotApplicable),
             q("d", QuestionState::Unanswered),
         ];
-        let names = |v: Vec<QuestionRow>| v.into_iter().map(|q| q.subject).collect::<Vec<_>>();
-        assert_eq!(names(ordered(&all, false, None)), ["b", "d"]);
-        assert_eq!(names(ordered(&all, true, None)), ["b", "d", "a", "c"]);
-        // the question the card holds open keeps its place among the unanswered ones,
-        // and is not listed a second time in the answered block
-        assert_eq!(names(ordered(&all, false, Some("a"))), ["a", "b", "d"]);
-        assert_eq!(names(ordered(&all, true, Some("a"))), ["a", "b", "d", "c"]);
+        assert_eq!(names(&ordered(&all, false)), ["b", "d"]);
+        assert_eq!(names(&ordered(&all, true)), ["b", "d", "a", "c"]);
     }
 
-    /// The rule Thomas asked for: an answer writes a value and nothing else. The card
-    /// stays on the question it answered — which now reads answered, so its forward
-    /// button reads Next — and the list under it does not move either.
+    /// Accept moves the card before the write lands; the reload takes the answered
+    /// question out of the walk and the card is on the question after it, not one further
+    /// and not back at the top.
     #[test]
-    fn an_answer_leaves_the_card_on_the_question_it_answered() {
+    fn accept_advances_and_the_reload_keeps_the_card_on_the_next_question() {
         let mut questions = vec![
             q("region", QuestionState::Unanswered),
             q("billing", QuestionState::Unanswered),
             q("domain", QuestionState::Unanswered),
         ];
         let mut walk = Walk::default();
-        walk.hold(&questions, false);
-        // the reload: region is answered and would leave the walk, but the card holds it
+        walk.accept(&questions, false);
+        // while the write is in flight, the report is the one before it
+        assert_eq!(subject_at(&walk, &ordered(&questions, false)), "billing");
+        // the reload: region is answered and leaves the walk
         questions[0].state = QuestionState::Answered;
-        let list = walk.list(&questions, false);
-        assert_eq!(
-            list.iter().map(|q| &q.subject).collect::<Vec<_>>(),
-            ["region", "billing", "domain"]
-        );
-        assert_eq!(walk.position(&list), 0);
-        assert_eq!(list[0].state, QuestionState::Answered);
-        // nothing was left behind, so there is nothing to go back to yet
-        assert!(!walk.can_go_back());
-    }
-
-    /// Next is what moves the card, and only then does the answered question leave the
-    /// walk; Back returns to it, switching "Show answered" on to hold it.
-    #[test]
-    fn next_moves_the_card_off_the_answered_question_and_back_returns_to_it() {
-        let mut questions = vec![
-            q("region", QuestionState::Unanswered),
-            q("billing", QuestionState::Unanswered),
-            q("domain", QuestionState::Unanswered),
-        ];
-        let mut walk = Walk::default();
-        walk.hold(&questions, false);
-        questions[0].state = QuestionState::Answered;
-        walk.next(&questions, false);
-        let list = walk.list(&questions, false);
-        assert_eq!(
-            list.iter().map(|q| &q.subject).collect::<Vec<_>>(),
-            ["billing", "domain"]
-        );
+        let list = ordered(&questions, false);
+        assert_eq!(names(&list), ["billing", "domain"]);
         assert_eq!(subject_at(&walk, &list), "billing");
-        assert!(walk.can_go_back());
+        // the next Accept goes on from there
+        walk.accept(&questions, false);
+        questions[1].state = QuestionState::Answered;
+        assert_eq!(subject_at(&walk, &ordered(&questions, false)), "domain");
+        // and Back retraces: billing, then region, answered questions shown for both
         assert_eq!(walk.back(&questions, false), Some(true));
-        assert_eq!(
-            subject_at(&walk, &walk.list(&questions, true)),
-            "region",
-            "Back returns to the answered question, with answered questions shown"
-        );
+        assert_eq!(subject_at(&walk, &ordered(&questions, true)), "billing");
+        assert_eq!(walk.back(&questions, true), Some(true));
+        assert_eq!(subject_at(&walk, &ordered(&questions, true)), "region");
         assert_eq!(walk.back(&questions, true), None);
     }
 
-    /// The last open question: answering it leaves the card on it, and Next then empties
-    /// the walk rather than showing that question again.
+    /// With answered questions shown, the answered one moves to the answered block and
+    /// the card is still on the question that followed it.
     #[test]
-    fn next_off_the_last_answered_question_empties_the_walk() {
-        let mut questions = vec![q("region", QuestionState::Unanswered)];
+    fn accept_with_answered_shown_lands_on_the_question_that_followed() {
+        let mut questions = vec![
+            q("region", QuestionState::Unanswered),
+            q("billing", QuestionState::Unanswered),
+            q("domain", QuestionState::Answered),
+        ];
         let mut walk = Walk::default();
-        walk.hold(&questions, false);
+        walk.accept(&questions, true);
         questions[0].state = QuestionState::Answered;
-        assert_eq!(subject_at(&walk, &walk.list(&questions, false)), "region");
-        walk.next(&questions, false);
-        assert!(walk.list(&questions, false).is_empty());
-        assert_eq!(walk.back(&questions, false), Some(true));
-        assert_eq!(subject_at(&walk, &walk.list(&questions, true)), "region");
+        let list = ordered(&questions, true);
+        assert_eq!(names(&list), ["billing", "region", "domain"]);
+        assert_eq!(subject_at(&walk, &list), "billing");
     }
 
+    /// A write that also takes the question the card moved to out of the walk (its
+    /// ask_when turns false) leaves the card on the one that took its place.
+    #[test]
+    fn accept_whose_write_also_drops_the_next_question_shows_the_one_after() {
+        let mut questions = vec![
+            q("region", QuestionState::Unanswered),
+            q("billing", QuestionState::Unanswered),
+            q("domain", QuestionState::Unanswered),
+        ];
+        let mut walk = Walk::default();
+        walk.accept(&questions, false);
+        questions[0].state = QuestionState::Answered;
+        questions[1].state = QuestionState::NotApplicable;
+        assert_eq!(subject_at(&walk, &ordered(&questions, false)), "domain");
+    }
+
+    /// The last open question: Accept lets it go, the walk is empty, and Back returns to
+    /// it with answered questions shown.
+    #[test]
+    fn accept_on_the_last_open_question_empties_the_walk() {
+        let mut questions = vec![q("region", QuestionState::Unanswered)];
+        let mut walk = Walk::default();
+        walk.accept(&questions, false);
+        questions[0].state = QuestionState::Answered;
+        assert!(ordered(&questions, false).is_empty());
+        assert!(walk.can_go_back());
+        assert_eq!(walk.back(&questions, false), Some(true));
+        assert_eq!(subject_at(&walk, &ordered(&questions, true)), "region");
+    }
+
+    /// Next on an answered question moves on; the question stays answered and in the
+    /// list, and Back returns to it.
+    #[test]
+    fn next_on_an_answered_question_advances() {
+        let questions = vec![
+            q("region", QuestionState::Unanswered),
+            q("billing", QuestionState::Answered),
+            q("domain", QuestionState::Answered),
+        ];
+        let list = ordered(&questions, true);
+        let mut walk = Walk::default();
+        walk.open(&questions, true, 1);
+        walk.next(&questions, true);
+        assert_eq!(subject_at(&walk, &list), "domain");
+        assert_eq!(walk.back(&questions, true), Some(true));
+        assert_eq!(subject_at(&walk, &list), "billing");
+    }
+
+    /// Skip moves on and writes nothing: the question stays open and in the walk, and
+    /// the walk wraps; Back retraces.
     #[test]
     fn skip_wraps_and_back_retraces_the_questions_left() {
         let questions = vec![
             q("region", QuestionState::Unanswered),
             q("billing", QuestionState::Unanswered),
         ];
-        let list = ordered(&questions, false, None);
+        let list = ordered(&questions, false);
         let mut walk = Walk::default();
         walk.next(&questions, false);
         assert_eq!(subject_at(&walk, &list), "billing");
@@ -879,35 +1033,14 @@ mod tests {
     }
 
     /// Skipping the only open question keeps it on the card and remembers nothing: there
-    /// is nowhere to go, and the card was not holding it in the walk.
+    /// is nowhere to go.
     #[test]
     fn skipping_the_only_open_question_stays_on_it() {
         let questions = vec![q("region", QuestionState::Unanswered)];
         let mut walk = Walk::default();
         walk.next(&questions, false);
-        assert_eq!(subject_at(&walk, &walk.list(&questions, false)), "region");
+        assert_eq!(subject_at(&walk, &ordered(&questions, false)), "region");
         assert!(!walk.can_go_back());
-    }
-
-    /// With answered questions shown, an answer leaves the card and its row where they
-    /// were rather than carrying the question into the answered block under the operator.
-    #[test]
-    fn an_answer_with_answered_shown_moves_neither_the_card_nor_its_row() {
-        let mut questions = vec![
-            q("region", QuestionState::Unanswered),
-            q("billing", QuestionState::Unanswered),
-            q("domain", QuestionState::Answered),
-        ];
-        let mut walk = Walk::default();
-        walk.hold(&questions, true);
-        questions[0].state = QuestionState::Answered;
-        let list = walk.list(&questions, true);
-        assert_eq!(
-            list.iter().map(|q| &q.subject).collect::<Vec<_>>(),
-            ["region", "billing", "domain"]
-        );
-        assert_eq!(subject_at(&walk, &list), "region");
-        assert_eq!(walk.position(&list), 0);
     }
 
     #[test]
@@ -917,34 +1050,13 @@ mod tests {
             q("billing", QuestionState::Answered),
             q("domain", QuestionState::Answered),
         ];
-        let list = ordered(&questions, true, None);
+        let list = ordered(&questions, true);
         let mut walk = Walk::default();
         walk.open(&questions, true, 2);
         assert_eq!(subject_at(&walk, &list), "domain");
         // opening the question already on the card leaves nothing behind
         walk.open(&questions, true, 2);
         assert_eq!(walk.back(&questions, true), Some(true));
-        assert_eq!(subject_at(&walk, &list), "region");
-        assert!(!walk.can_go_back());
-    }
-
-    /// The row the card holds open is the row a click on it opens: clicking it is not a
-    /// move, so the question stays in the list.
-    #[test]
-    fn clicking_the_held_question_s_own_row_keeps_it_in_the_list() {
-        let mut questions = vec![
-            q("region", QuestionState::Unanswered),
-            q("billing", QuestionState::Unanswered),
-        ];
-        let mut walk = Walk::default();
-        walk.hold(&questions, false);
-        questions[0].state = QuestionState::Answered;
-        walk.open(&questions, false, 0);
-        let list = walk.list(&questions, false);
-        assert_eq!(
-            list.iter().map(|q| &q.subject).collect::<Vec<_>>(),
-            ["region", "billing"]
-        );
         assert_eq!(subject_at(&walk, &list), "region");
         assert!(!walk.can_go_back());
     }
@@ -959,39 +1071,13 @@ mod tests {
         let mut walk = Walk::default();
         walk.next(&questions, false);
         walk.switched(&questions, false, true);
-        assert_eq!(
-            subject_at(&walk, &ordered(&questions, true, None)),
-            "domain"
-        );
+        assert_eq!(subject_at(&walk, &ordered(&questions, true)), "domain");
         walk.switched(&questions, true, false);
-        assert_eq!(
-            subject_at(&walk, &ordered(&questions, false, None)),
-            "domain"
-        );
+        assert_eq!(subject_at(&walk, &ordered(&questions, false)), "domain");
         // on an answered question, hiding answered ones starts from the first open one
         walk.open(&questions, true, 2);
         walk.switched(&questions, true, false);
-        assert_eq!(
-            subject_at(&walk, &ordered(&questions, false, None)),
-            "billing"
-        );
-    }
-
-    /// The switch is not a press of the forward button: a question answered on the card
-    /// stays on it through "Show answered" going on and off again.
-    #[test]
-    fn the_show_answered_switch_does_not_take_the_just_answered_card_away() {
-        let mut questions = vec![
-            q("region", QuestionState::Unanswered),
-            q("billing", QuestionState::Unanswered),
-        ];
-        let mut walk = Walk::default();
-        walk.hold(&questions, false);
-        questions[0].state = QuestionState::Answered;
-        walk.switched(&questions, false, true);
-        assert_eq!(subject_at(&walk, &walk.list(&questions, true)), "region");
-        walk.switched(&questions, true, false);
-        assert_eq!(subject_at(&walk, &walk.list(&questions, false)), "region");
+        assert_eq!(subject_at(&walk, &ordered(&questions, false)), "billing");
     }
 
     #[test]
@@ -1027,6 +1113,18 @@ mod tests {
         o.options[1].selected = false;
         o.default = None;
         assert_eq!(initial_option(&o), None);
+    }
+
+    /// A reload that changes the value a card starts on starts a new card; one that
+    /// changes nothing on it keeps the card and what is typed into it.
+    #[test]
+    fn a_card_is_new_when_the_value_it_starts_on_changes() {
+        let mut region = q("region", QuestionState::Unanswered);
+        region.default = Some(json!("europe-west3"));
+        let before = card_key(&region, Some(FieldKind::Text));
+        assert_eq!(before, card_key(&region.clone(), Some(FieldKind::Text)));
+        region.default = Some(json!("europe-west4"));
+        assert_ne!(before, card_key(&region, Some(FieldKind::Text)));
     }
 
     #[test]

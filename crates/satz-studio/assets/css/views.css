@@ -1229,14 +1229,23 @@
 .interview__walk {
   display: grid;
   grid-template-columns: minmax(360px, 880px) minmax(280px, 420px);
+  /* one row exactly the walk's height, so each column can scroll inside it */
+  grid-template-rows: minmax(0, 1fr);
   gap: 16px;
   align-items: stretch;
   flex: 1 1 auto;
   min-height: 0;
 }
 
-/* the walk's own column: the question, or the card that stands where none is */
-.interview__walk > .interview__question,
+/* the walk's own column: the question, or the card that stands where none is. The
+   question fills the column so its action bar stands at the same place on every
+   question; what scrolls is the part above the bar. */
+.interview__walk > .interview__question {
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
 .interview__walk > .interview__empty {
   min-height: 0;
   overflow-y: auto;
@@ -1270,6 +1279,7 @@
 
   .interview__walk > .interview__question,
   .interview__walk > .interview__empty,
+  .interview__question > .interview__scroll,
   .interview__list {
     max-height: none;
     height: auto;
@@ -1278,8 +1288,15 @@
 
   .interview__walk {
     grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: none;
   }
 
+  /* the view scrolls: the bar sticks to the bottom of it while the question is in view */
+  .interview__question > .interview__actions {
+    position: sticky;
+    bottom: 0;
+    z-index: 1;
+  }
 }
 
 .interview__question {
@@ -1287,6 +1304,20 @@
   flex-direction: column;
   gap: 12px;
   max-width: 880px;
+}
+
+/* the pack header and the card: the part of the question that scrolls */
+.interview__scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.interview__scroll > .interview__card {
+  flex: none;
 }
 
 .interview__pack {
@@ -1384,10 +1415,18 @@
   color: var(--md-sys-color-on-surface-variant);
 }
 
+/* The action bar below the question, outside its scroll: Back leading, Skip and the
+   filled button trailing — the bottom app bar's arrangement, on its surface container. */
 .interview__actions {
+  flex: none;
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
+  min-height: 64px;
+  padding: 12px 16px;
+  border-radius: var(--md-sys-shape-corner-large);
+  background: var(--md-sys-color-surface-container);
 }
 
 .interview__hint {
