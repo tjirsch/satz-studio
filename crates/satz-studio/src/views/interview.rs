@@ -2,8 +2,12 @@
 //! unanswered ones first. Every answer is one `satz_interview` call through the estate
 //! coroutine, and the view re-renders from the reloaded report. The card moves when the
 //! operator moves it and at no other time: an answer is written and the card stays on the
-//! question it answered — now reading answered, its forward button reading Next — until
-//! Next, Back or a click in the list moves it. The walk remembers the questions it moved
+//! question it answered — now reading answered, its filled button reading Next — until
+//! Next, Back or a click in the list moves it. The filled button is the card's one forward
+//! control once its question is answered and the field or the chosen chip still holds the
+//! written value: it reads Next and moves the walk, and the text Skip/Next button is not
+//! shown. An edit to the field or another chip turns it back into Answer or Choose, which
+//! writes. Enter in the field on an unchanged answered value still writes. The walk remembers the questions it moved
 //! away from, so Back returns to one whether it is answered by then or not; with "Show
 //! answered" on, every question is listed beside the card. A typed answer's field has the
 //! shape `answer_kind` reads off the report — the shape the pack declares the param with,
@@ -212,6 +216,81 @@ pub fn initial_option(q: &QuestionRow) -> Option<String> {
                 .find(|o| o.param == default)
                 .map(|o| o.param.clone())
         })
+}
+
+/// What the card's filled button does: write the answer on the card, or move the walk
+/// on, as the text Next button would.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PrimaryAction {
+    Write,
+    Next,
+}
+
+/// The card's filled button: its words, its icon, what a click does and whether it can be
+/// clicked.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Primary {
+    pub label: &'static str,
+    pub icon: &'static str,
+    pub action: PrimaryAction,
+    pub enabled: bool,
+}
+
+impl Primary {
+    fn next(loading: bool) -> Self {
+        Primary {
+            label: "Next",
+            icon: "arrow_forward",
+            action: PrimaryAction::Next,
+            enabled: !loading,
+        }
+    }
+
+    fn write(label: &'static str, icon: &'static str, enabled: bool) -> Self {
+        Primary {
+            label,
+            icon,
+            action: PrimaryAction::Write,
+            enabled,
+        }
+    }
+}
+
+/// A typed answer's filled button. `unchanged` is the field still holding the value the
+/// card opened on — for an answered question, the estate's own; `sendable` is the field
+/// holding something that can be written. An answered question whose field is unchanged
+/// has nothing to write from the button: it reads Next.
+pub fn param_primary(
+    state: QuestionState,
+    unchanged: bool,
+    offers: bool,
+    sendable: bool,
+    loading: bool,
+) -> Primary {
+    if state == QuestionState::Answered && unchanged {
+        Primary::next(loading)
+    } else if unchanged && offers {
+        Primary::write("Accept", "check", sendable && !loading)
+    } else {
+        Primary::write("Answer", "send", sendable && !loading)
+    }
+}
+
+/// A `oneof`'s filled button. `chosen` is the chip picked on the card, `bound` the option
+/// the estate binds. An answered question on its bound option reads Next.
+pub fn oneof_primary(
+    state: QuestionState,
+    chosen: Option<&str>,
+    bound: Option<&str>,
+    loading: bool,
+) -> Primary {
+    let kept = chosen.is_some() && chosen == bound;
+    if state == QuestionState::Answered && kept {
+        Primary::next(loading)
+    } else {
+        let label = if kept { "Keep" } else { "Choose" };
+        Primary::write(label, "send", chosen.is_some() && !loading)
+    }
 }
 
 /// A JSON value as the interview prints it beside the recommendation.
@@ -449,15 +528,17 @@ fn blast_label(b: Blast) -> &'static str {
 }
 
 /// The walk's controls beside an answer: Back, and Skip — Next on a question that is
-/// already answered or not asked, where there is nothing to skip.
+/// already answered or not asked, where there is nothing to skip. `forward` is false when
+/// the card's filled button reads Next itself, so the card carries one forward control.
 #[component]
 fn WalkButtons(
     state: QuestionState,
     can_back: bool,
+    forward: bool,
     onback: EventHandler<()>,
     onskip: EventHandler<()>,
 ) -> Element {
-    let forward = if state == QuestionState::Unanswered {
+    let label = if state == QuestionState::Unanswered {
         "Skip"
     } else {
         "Next"
@@ -465,7 +546,9 @@ fn WalkButtons(
     rsx! {
         Button { variant: ButtonVariant::Text, icon: "arrow_back", disabled: !can_back, onclick: move |_| onback.call(()), "Back" }
         span { class: "grow" }
-        Button { variant: ButtonVariant::Text, onclick: move |_| onskip.call(()), "{forward}" }
+        if forward {
+            Button { variant: ButtonVariant::Text, onclick: move |_| onskip.call(()), "{label}" }
+        }
     }
 }
 
@@ -549,7 +632,7 @@ fn QuestionCard(
                                 "There is no field for this answer: its param is declared as a map, or with no shape satz names. Write the value into the estate's params block."
                             }
                             div { class: "interview__actions",
-                                WalkButtons { state: q.state, can_back, onback: move |_| onback.call(()), onskip: move |_| onskip.call(()) }
+                                WalkButtons { state: q.state, can_back, forward: true, onback: move |_| onback.call(()), onskip: move |_| onskip.call(()) }
                             }
                         }
                     },
@@ -600,9 +683,9 @@ fn ParamAnswer(
     let mut draft = use_signal(|| initial.clone());
     let problem = draft().problem(kind, &q.subject);
     let unchanged = draft() == initial;
-    let accept = unchanged && offers;
     // nothing typed is no answer to a question that offers nothing
-    let can_send = problem.is_none() && !loading && (offers || !draft().is_empty());
+    let sendable = problem.is_none() && (offers || !draft().is_empty());
+    let primary = param_primary(q.state, unchanged, offers, sendable, loading);
     let subject = q.subject.clone();
     let send = move || {
         let d = draft();
@@ -644,13 +727,22 @@ fn ParamAnswer(
                 },
             }
             div { class: "interview__actions",
-                WalkButtons { state: q.state, can_back, onback: move |_| onback.call(()), onskip: move |_| onskip.call(()) }
+                WalkButtons {
+                    state: q.state,
+                    can_back,
+                    forward: primary.action != PrimaryAction::Next,
+                    onback: move |_| onback.call(()),
+                    onskip: move |_| onskip.call(()),
+                }
                 Button {
                     variant: ButtonVariant::Filled,
-                    icon: if accept { "check" } else { "send" },
-                    disabled: !can_send,
-                    onclick: move |_| send(),
-                    if accept { "Accept" } else { "Answer" }
+                    icon: primary.icon,
+                    disabled: !primary.enabled,
+                    onclick: move |_| match primary.action {
+                        PrimaryAction::Write => send(),
+                        PrimaryAction::Next => onskip.call(()),
+                    },
+                    "{primary.label}"
                 }
             }
         }
@@ -676,6 +768,7 @@ fn OneofAnswer(
         .iter()
         .find(|o| o.selected)
         .map(|o| o.param.clone());
+    let primary = oneof_primary(q.state, chosen().as_deref(), bound.as_deref(), loading);
     let subject = q.subject.clone();
     rsx! {
         div { class: "interview__answer",
@@ -705,18 +798,27 @@ fn OneofAnswer(
                 }
             }
             div { class: "interview__actions",
-                WalkButtons { state: q.state, can_back, onback: move |_| onback.call(()), onskip: move |_| onskip.call(()) }
+                WalkButtons {
+                    state: q.state,
+                    can_back,
+                    forward: primary.action != PrimaryAction::Next,
+                    onback: move |_| onback.call(()),
+                    onskip: move |_| onskip.call(()),
+                }
                 Button {
                     variant: ButtonVariant::Filled,
-                    icon: "send",
-                    disabled: loading || picked.is_none(),
-                    onclick: move |_| {
-                        if let Some(c) = chosen() {
-                            onanswer.call(());
-                            handle.send(EstateAction::Answer { subject: subject.clone(), value: serde_json::Value::String(c) });
+                    icon: primary.icon,
+                    disabled: !primary.enabled,
+                    onclick: move |_| match primary.action {
+                        PrimaryAction::Next => onskip.call(()),
+                        PrimaryAction::Write => {
+                            if let Some(c) = chosen() {
+                                onanswer.call(());
+                                handle.send(EstateAction::Answer { subject: subject.clone(), value: serde_json::Value::String(c) });
+                            }
                         }
                     },
-                    if chosen().is_some() && chosen() == bound { "Keep" } else { "Choose" }
+                    "{primary.label}"
                 }
             }
         }
@@ -767,6 +869,55 @@ mod tests {
         assert!(!commits(Commit::Blur, true, offers, ON_BLUR));
         // and a param field, where blur-to-save is the contract, still saves on blur
         assert!(commits(Commit::Blur, true, false, true));
+    }
+
+    fn primary(p: Primary) -> (&'static str, &'static str, PrimaryAction) {
+        (p.label, p.icon, p.action)
+    }
+
+    #[test]
+    fn an_unanswered_param_accepts_what_is_offered_and_answers_what_is_typed() {
+        let offered = param_primary(QuestionState::Unanswered, true, true, true, false);
+        assert_eq!(primary(offered), ("Accept", "check", PrimaryAction::Write));
+        assert!(offered.enabled);
+        let typed = param_primary(QuestionState::Unanswered, false, false, true, false);
+        assert_eq!(primary(typed), ("Answer", "send", PrimaryAction::Write));
+        // nothing typed on a question that offers nothing is not sendable
+        assert!(!param_primary(QuestionState::Unanswered, true, false, false, false).enabled);
+        // a write in flight disables the button
+        assert!(!param_primary(QuestionState::Unanswered, true, true, true, true).enabled);
+    }
+
+    #[test]
+    fn an_answered_param_reads_next_until_its_field_is_edited() {
+        let kept = param_primary(QuestionState::Answered, true, true, true, false);
+        assert_eq!(
+            primary(kept),
+            ("Next", "arrow_forward", PrimaryAction::Next)
+        );
+        assert!(kept.enabled);
+        assert!(!param_primary(QuestionState::Answered, true, true, true, true).enabled);
+        let edited = param_primary(QuestionState::Answered, false, true, true, false);
+        assert_eq!(primary(edited), ("Answer", "send", PrimaryAction::Write));
+    }
+
+    #[test]
+    fn an_answered_oneof_reads_next_on_its_bound_option_and_choose_on_another() {
+        let s1 = Some("security_model_s1");
+        let s2 = Some("security_model_s2");
+        assert_eq!(
+            primary(oneof_primary(QuestionState::Answered, s1, s1, false)),
+            ("Next", "arrow_forward", PrimaryAction::Next)
+        );
+        assert_eq!(
+            primary(oneof_primary(QuestionState::Answered, s2, s1, false)),
+            ("Choose", "send", PrimaryAction::Write)
+        );
+        assert_eq!(
+            primary(oneof_primary(QuestionState::Unanswered, s1, None, false)),
+            ("Choose", "send", PrimaryAction::Write)
+        );
+        assert!(!oneof_primary(QuestionState::Unanswered, None, None, false).enabled);
     }
 
     fn subject_at(walk: &Walk, list: &[QuestionRow]) -> String {
