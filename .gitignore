@@ -9,5 +9,8 @@ CLAUDE.local.md
 .claude/
 # a value edit in flight: the file satz checks before it replaces the real one
 *.studio-tmp.satz
+# an agent's MCP configuration, written by the Agent destination into an estate's
+# directory — absolute paths of this machine, and the gate rejects it if it is staged
+.mcp.json
 # the bundle output of `dx bundle`
 /dist/

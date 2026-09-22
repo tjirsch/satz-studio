@@ -16,8 +16,8 @@
 //!   estate.
 //! - [`github`] — the latest release of a repository: the look for a newer satz-studio,
 //!   and the release satz's installer is taken from.
-//! - [`llm`] — the Claude client (Messages API over HTTPS), the agent loop, the
-//!   provider adapters, credentials; [`transcript`] keeps the conversations.
+//! - [`handoff`] — the MCP configuration that points an external agent at the open
+//!   estate, and the command that starts it. satz-studio runs no model (ADR 0020).
 //! - [`settings`] and [`diag`] — the settings file and the one diagnostic type.
 //!
 //! The public surface of every module is the contract between the crates and the
@@ -29,9 +29,8 @@ pub mod edit;
 pub mod estate;
 pub mod git;
 pub mod github;
-pub mod llm;
+pub mod handoff;
 pub mod model;
 pub mod satz;
 pub mod schema;
 pub mod settings;
-pub mod transcript;

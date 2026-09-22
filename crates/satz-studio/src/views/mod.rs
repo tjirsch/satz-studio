@@ -2,7 +2,7 @@
 //! The two helpers below are what the estate views share: a value's source text and a
 //! line's text, sliced from the document tree the reload keeps in the store.
 
-pub mod chat;
+pub mod agent;
 pub mod checks;
 pub mod commands;
 pub mod create;

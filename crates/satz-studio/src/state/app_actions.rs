@@ -1,6 +1,5 @@
-//! The app coroutine: satz, the estate folder, sessions, settings and the credential.
-//! It runs for the life of the window; the views send [`AppAction`]s and read the
-//! store.
+//! The app coroutine: satz, the estate folder, sessions and settings. It runs for the
+//! life of the window; the views send [`AppAction`]s and read the store.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -9,7 +8,6 @@ use dioxus::prelude::*;
 use futures_util::StreamExt;
 use satz_studio_core::estate::EstateDir;
 use satz_studio_core::github;
-use satz_studio_core::llm::Credential;
 use satz_studio_core::satz::import::{ImportPlan, satz_files, written_since};
 use satz_studio_core::satz::self_update::{read_check, unprompted_checks_allowed};
 use satz_studio_core::satz::{
@@ -21,10 +19,9 @@ use tokio_util::sync::CancellationToken;
 
 use super::install;
 use super::{
-    AppStore, AppStoreStoreExt, CommandOutcome, CreateStoreStoreExt, CredentialStatus, EstateFile,
-    EstateStore, EstateSummary, ImportStoreStoreExt, OpenEstate, SatzStatus,
-    StudioLookStoreStoreExt, ToastKind, UpdateStoreStoreExt, View, quote, satz_release_sentence,
-    strip_ansi, toast,
+    AppStore, AppStoreStoreExt, CommandOutcome, CreateStoreStoreExt, EstateFile, EstateStore,
+    EstateSummary, ImportStoreStoreExt, OpenEstate, SatzStatus, StudioLookStoreStoreExt, ToastKind,
+    UpdateStoreStoreExt, View, quote, satz_release_sentence, strip_ansi, toast,
 };
 
 pub enum AppAction {
@@ -80,9 +77,6 @@ pub enum AppAction {
     CancelInstall,
     /// write the settings file, then locate satz again
     SaveSettings(Settings),
-    ResolveCredential,
-    /// put a key in the OS keychain, then resolve again
-    StoreKey(String),
 }
 
 pub async fn app_coroutine(mut rx: UnboundedReceiver<AppAction>, app: Store<AppStore>) {
@@ -143,8 +137,6 @@ pub async fn app_coroutine(mut rx: UnboundedReceiver<AppAction>, app: Store<AppS
             AppAction::SaveSettings(settings) => {
                 let _ = save_settings(app, settings).await;
             }
-            AppAction::ResolveCredential => resolve_credential(app).await,
-            AppAction::StoreKey(key) => store_key(app, key).await,
         }
     }
 }
@@ -984,10 +976,9 @@ async fn stream_into_import_log(
 }
 
 /// Write the settings file, put them in the store and locate satz again. The one
-/// saver: the Settings view sends [`AppAction::SaveSettings`], and the Chat view's
-/// "Use Claude Code" button awaits this directly, because it must not rebuild the
-/// engine on settings that were not saved. A file that did not write is a toast and
-/// the sentence, so the caller can refuse to go on.
+/// saver: the Settings view sends [`AppAction::SaveSettings`] and this writes the file,
+/// then locates satz again. A file that did not write is a toast and the sentence, so
+/// the caller can refuse to go on.
 pub async fn save_settings(app: Store<AppStore>, settings: Settings) -> Result<(), String> {
     match settings.save() {
         Ok(()) => {
@@ -1001,28 +992,5 @@ pub async fn save_settings(app: Store<AppStore>, settings: Settings) -> Result<(
             toast(app, ToastKind::Error, message.clone());
             Err(message)
         }
-    }
-}
-
-async fn resolve_credential(app: Store<AppStore>) {
-    let status = match Credential::resolve().await {
-        Ok((_, source)) => CredentialStatus::Resolved(source),
-        Err(e) => CredentialStatus::Error(e.to_string()),
-    };
-    app.credential().set(status);
-}
-
-async fn store_key(app: Store<AppStore>, key: String) {
-    let stored = tokio::task::spawn_blocking(move || {
-        Credential::store_in_keychain(&key).map_err(|e| e.to_string())
-    })
-    .await;
-    match stored {
-        Ok(Ok(())) => {
-            toast(app, ToastKind::Info, "Key stored in the keychain");
-            resolve_credential(app).await;
-        }
-        Ok(Err(e)) => toast(app, ToastKind::Error, format!("key not stored: {e}")),
-        Err(e) => toast(app, ToastKind::Error, format!("key not stored: {e}")),
     }
 }

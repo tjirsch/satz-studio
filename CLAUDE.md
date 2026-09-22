@@ -2,10 +2,9 @@
 
 satz-studio is a desktop app over [satz](https://github.com/tjirsch/satz): it runs the
 interview the packs declare, edits the estate map and the values in the estate files
-through typed fields, runs satz commands, and drives satz through Claude with the satz
-MCP tools as the model's tools. Two crates — `satz-studio-core`, the headless half, and
-`satz-studio`, the Dioxus 0.7 window over it — with satz pinned once as the submodule
-`vendor/satz`.
+through typed fields, runs satz commands, and sets an external agent up on the estate.
+Two crates — `satz-studio-core`, the headless half, and `satz-studio`, the Dioxus 0.7
+window over it — with satz pinned once as the submodule `vendor/satz`.
 
 Read [`docs/architecture.md`](docs/architecture.md) before changing anything, and the
 record under [`docs/adr/`](docs/adr/README.md) for the part you are changing. These are
@@ -76,9 +75,14 @@ the rules that apply to every change, whoever or whatever makes it.
   refusal; a schema directory without a schema is `Missing`; a JSON field satz removed
   fails the deserialisation; a structured payload of a shape the app does not read is a
   failure, never a guess. No defaults invented for broken state.
-- **Credentials and transcripts stay out of the estate.** A key lives in the OS
-  keychain, a Claude Code login belongs to Claude Code, and transcripts live under the
-  app's data directory (ADR 0008).
+- **The app runs no model (ADR 0020).** There is no chat, no engine, no credential and
+  no conversation kept. The agent's half of the work belongs to a client that speaks
+  satz's MCP server already, and what the app does is point one at the open estate: the
+  Agent destination renders that estate's `satz mcp` invocation as `.mcp.json` or as a
+  Claude Desktop block (`crates/satz-studio-core/src/handoff.rs`) and starts the
+  configured client in the estate's directory. A view that genuinely needs a model calls
+  one from that view, with no loop, no tools and no window, and gets its own ADR;
+  nothing does today.
 - **Docs ship with the change.** A change to what the app does updates `README.md` and
   the page under `docs/` that describes it, in the same pull request. Docs say what is,
   in the present tense: no history, no "used to", no rhetoric. Where the code and a doc

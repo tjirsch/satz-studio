@@ -79,12 +79,9 @@ below).
    (Ubuntu 22.04 ships only the 4.0 API and does not run the app). macOS needs
    nothing.
 
-`cargo test -p satz-studio-core` runs the headless tests: no window and no
-credential. The one live Claude request runs only with `SATZ_STUDIO_LIVE=1` and a
-credential, and the one live Claude Code turn only with
-`SATZ_STUDIO_LIVE_CLAUDE_CODE=1` and a signed-in `claude`; without those the two
-print a note and pass. The Claude Code tests otherwise run against a fake CLI and
-need Python 3.
+`cargo test -p satz-studio-core` runs the headless tests: no window, no network and
+no credential. Everything is checked against `tests/fixtures` and the pinned
+`vendor/satz`; the tests that drive the `satz` binary need it installed.
 
 ## The checks
 

@@ -1,6 +1,6 @@
 # 0013 — the Claude Code stream log is verbatim, off by default, and bounded
 
-- **Status:** accepted
+- **Status:** superseded by [ADR 0020](0020-the-agent-is-an-external-client-that-studio-configures-and-starts.md) — there is no Claude Code session of the app's to log
 - **Date:** 2026-09-16
 - **Deciders:** the maintainer
 

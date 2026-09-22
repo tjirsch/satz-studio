@@ -295,7 +295,7 @@ fn Sheet(theme: String) -> Element {
                     Badge { count: 3, Icon { name: "quiz" } }
                     Badge { count: 120, Icon { name: "account_tree" } }
                     Badge { dot: true, Icon { name: "notifications" } }
-                    Badge { count: 0, Icon { name: "chat" } }
+                    Badge { count: 0, Icon { name: "notifications" } }
                     Tooltip { text: "A plain tooltip", IconButton { icon: "help", label: "Help", onclick: |_| {} } }
                     CircularProgress { value: 0.65 }
                     CircularProgress {}

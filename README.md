@@ -44,7 +44,7 @@ library as a `.local.satz` or handed upstream by a pull request;
 **Decisions**, the
 questions those packs declare and it has not answered; **Estate**, the file
 itself — its params and its resource tree; **Checks**, what judges it, from the compile
-to the compliance catalogs; **Deploy**, what hands it off. Chat and Settings sit at the
+to the compliance catalogs; **Deploy**, what hands it off. Agent and Settings sit at the
 foot of the rail, with Commands between them. Beside the estate the top bar names sit
 reload, "Switch estate" — the Start screen with your estates listed — and "Close estate";
 every satz command the app runs is one keystroke away in the commands palette (⌘K,
@@ -114,28 +114,23 @@ that holds them up — in front of apply and bootstrap, which satz refuses.
   `webkit2gtk-4.1` (Debian and Ubuntu: `libwebkit2gtk-4.1-0`; Ubuntu 22.04 ships only
   the 4.0 API and does not run it). macOS needs nothing, and is Apple silicon: there is
   no Intel build (ADR 0016).
-- **A Claude credential *or* a Claude Code login, for the Chat view only.** Either
-  serves it; Settings chooses which engine runs.
-  - *A credential:* `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, an `ant auth login`
-    profile, or a key entered in Settings and kept in the OS keychain. The app writes no
-    key to disk.
-  - *A Claude Code login:* the `claude` CLI installed and signed in to a claude.ai
-    account (`claude auth login`), which runs the chat on that subscription with no API
-    key. The app reads no credential of Claude Code's — only whether it is signed in —
-    and gives it the open estate's own satz tools, with the same approval card every
-    write passes. Settings shows the account and signs in and out for you. A switch
-    there keeps a log of every line a Claude Code session exchanges, for diagnosing a
-    failed turn: off by default, one file per conversation under the app's data
-    directory, the ten newest kept at up to 16 MiB each. It holds the estate's contents
-    and what you type, and stays on your machine.
+- **An agentic client, for the Agent destination.** Anything that speaks the Model
+  Context Protocol: Claude Code (`claude`, the default), cowork, Claude Desktop.
+  satz-studio calls no model and holds no credential — the client brings its own, and
+  what the app gives it is this estate's satz server.
 
-  On either engine the chat shows each tool call as one line — its name, its status,
-  its duration and what the result amounts to — and asks for a write in words. The
-  JSON goes to a debug log beside the conversation, switched on from the chat's footer
-  or in Settings: every call's input, its result, how long it took, and what satz wrote
-  to stderr meanwhile.
+  The Agent destination writes that configuration in the two shapes a client reads.
+  **Write .mcp.json** puts the project file Claude Code reads in the estate's directory;
+  a file of that name holding anything else is refused until you say to replace it.
+  **Copy MCP config** puts the block for Claude Desktop's configuration file on the
+  clipboard, the server named after the estate so several estates stand beside each
+  other. Both carry the satz the app located, the root that estate's server is confined
+  to, and the capability ceiling from Settings.
 
-  Every other view works without either.
+  **Open in <client>** starts the command Settings names, in the estate's directory, in
+  your terminal. A client that is not installed is said so, by name.
+
+  Every other destination works without a client.
 
 ## Build and run from source
 
@@ -148,16 +143,13 @@ cd satz-studio
 cargo install dioxus-cli@0.7.10       # or: cargo binstall dioxus-cli@0.7.10
 dx serve --package satz-studio        # the app, with hot reload
 cargo run -p satz-studio              # the app, plain cargo
-cargo test -p satz-studio-core        # the headless tests: no window, no credential
+cargo test -p satz-studio-core        # the headless tests: no window, no network
 ```
 
 A clone without `--recurse-submodules` has an empty `vendor/satz` and does not build;
 `git submodule update --init` fills it. The tests read the pinned satz checkout and
-`tests/fixtures`; the tests that drive the `satz` binary need it installed. The one live
-Claude request runs only with `SATZ_STUDIO_LIVE=1` and a credential, and the one live
-Claude Code turn only with `SATZ_STUDIO_LIVE_CLAUDE_CODE=1` and a signed-in `claude`;
-without those the two print a note and pass. The Claude Code tests otherwise run against
-a fake CLI and need Python 3.
+`tests/fixtures`; the tests that drive the `satz` binary need it installed. Nothing in
+the suite needs a network or a credential.
 
 ## Repository layout
 
@@ -165,7 +157,7 @@ a fake CLI and need Python 3.
 |---|---|
 | `Cargo.toml` | the workspace: two crates, `vendor` excluded, every dependency pinned once under `[workspace.dependencies]` |
 | `release.toml` | cargo-release: the version bump, the commit, the tag `vX.Y.Z` and the push, in one step on `main` |
-| `crates/satz-studio-core/` | the headless half: the estate directory, the document layer, the edit primitives and the write discipline, the provider schema and the view model, the satz driver (binary, CLI, `satz mcp` session), the Claude client and agent loop, transcripts, settings, diagnostics. No GUI dependency; tested on every runner |
+| `crates/satz-studio-core/` | the headless half: the estate directory, the document layer, the edit primitives and the write discipline, the provider schema and the view model, the satz driver (binary, CLI, `satz mcp` session), the agent handoff, settings, diagnostics. No GUI dependency; tested on every runner |
 | `crates/satz-studio/` | the Dioxus 0.7 desktop binary `satz-studio`: the window, the views, the Material 3 Expressive stylesheet |
 | `vendor/satz/` | git submodule, pinned to a satz release tag. **The one pin:** satz-core as a path dependency, the presets, the smoke estates and the provider-schema fixture all come from this checkout |
 | `vendor/satz-tree-sitter/` | the generated tree-sitter parser for Satz (`src/`), copied from the grammar repository at the commit named in `COMMIT`; `scripts/sync-grammar.sh` refreshes it and `crates/satz-studio-core/build.rs` compiles it |
@@ -237,8 +229,8 @@ pull request and on the push to `main` that merges it. Enable the hooks once per
 git config core.hooksPath .githooks
 ```
 
-Transcripts of the Chat view name projects and ids, so they live under the app's data
-directory and never inside an estate.
+The app keeps no conversation and holds no credential, so nothing of that kind is in an
+estate or anywhere else it writes.
 
 ## Planning
 

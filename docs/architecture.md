@@ -8,10 +8,11 @@ the section names the unit that builds it.
 
 satz-studio is a desktop app over [satz](https://github.com/tjirsch/satz). It runs the
 interview satz's packs declare, edits the pack choices (the estate map) and the values
-in the estate files through typed fields, runs satz commands, and drives satz through
-Claude with the satz MCP tools as the model's tools. Version one edits what exists: an
-answer, a pack choice, an attribute value. Adding and removing resources and blocks is
-not in it.
+in the estate files through typed fields, runs satz commands, and sets an external agent
+up on the estate and starts it. It runs no model itself
+([ADR 0020](adr/0020-the-agent-is-an-external-client-that-studio-configures-and-starts.md)).
+Version one edits what exists: an answer, a pack choice, an attribute value. Adding and
+removing resources and blocks is not in it.
 
 ## 2. Constraints
 
@@ -76,11 +77,12 @@ not in it.
   acted on — the release page for satz-studio, `satz self-update` for satz — and the
   banner offers the satz-studio release while it names a newer satz. A look that fails says why in Settings and raises no toast.
 - **Privacy.** The repository is public with its history: example values only, satz's
-  gate on every commit. Transcripts live under the app's data directory, credentials in
-  the OS keychain, nothing of either inside an estate.
+  gate on every commit. The app holds no credential and keeps no conversation: what it
+  writes outside an estate is the settings file and the one-shot scripts it opens in the
+  terminal.
 - **Offline tests.** Every unit tests against `tests/fixtures` and the pinned
-  `vendor/satz`; the tests that drive the `satz` binary need it installed; the live
-  Claude check runs only with `SATZ_STUDIO_LIVE=1` and a credential.
+  `vendor/satz`; the tests that drive the `satz` binary need it installed. Nothing needs
+  a network or a credential.
 
 ## 3. Building blocks
 
@@ -108,14 +110,9 @@ Two crates in one workspace, satz pinned once as the submodule `vendor/satz`
 | `src/satz/reports.rs` | serde mirrors of what a reporting command writes with `--format json` and satz returns as `structuredContent`: unknown fields ignored, missing required fields fail; the questions report round-trips a recorded output of the pinned satz. `Finding` is satz's own list of what the compile found after the front end — a `CompileSummary` carries the warnings and infos it did not refuse on, a `Refusal` the ones it did; `kind` is the kebab-case word satz writes, kept as a `String` so a kind satz adds is carried instead of failing the result. `NoticeRow` is what a pack asks to be run once it is on, with the param that acknowledges it; `severity` is required and typed — `error` is the one that holds up every command writing to the organisation — so a notice without one, or with a word satz adds, fails the report rather than reading as one that holds nothing up, and an interview report without `notices` fails too. `PacksReport` is `satz_packs`: one `PackRow` per node of satz's pack graph — its role, gate, answer, default and value, where its `use` line stands (`PackLine`, at its line number), whether it deploys, what it `requires` (each a `Requirement` with `met`), what it is `required_by` and `excludes`, its notices and the compile's findings about it — the `use` lines the graph does not know, and the findings with the pack as `subject` and the command that answers each as `fix`. Every field satz always sends is required, and a line state satz adds fails the report; it round-trips a recorded `satz packs --format json` of the smoke estate. `AddPackArgs`, `RemovePackArgs` and `PackChange` are the arguments and the result of `satz_add_pack` and `satz_remove_pack`. `MergeReport` is `satz_merge_presets`: its events (`MergeEvent`, tagged by `kind`; an event kind satz adds fails the report, an outcome word satz adds is carried), its `MergeCounts`, `attention` and the notices it opened; `lines()` is the report as the command log shows it, in sentences; it round-trips a recorded merge of the smoke estate. `PackReview` is `satz review-pack --format json`: the pack, the estate it was folded into, what it emits and its findings, every field required; `passed()` is satz's verdict — no finding is an error; it round-trips two recorded reviews of satz 0.73.1, one clean and one broken | `QuestionsReport`, `QuestionRow`, `InterviewArgs`, `InterviewReport`, `NoticeRow`, `PrerequisitesResult`, `OpenReport`, `CompileSummary`, `Finding`, `FindingSeverity`, `Refusal`, `PacksReport`, `PackRow`, `PackRole`, `PackLine`, `Requirement`, `RequirementKind`, `Unmanaged`, `AddPackArgs`, `RemovePackArgs`, `PackChange`, `MergeReport`, `MergeEvent`, `MergeCounts`, `PackReview` |
 | `src/satz/review.rs` | `satz review-pack` and the two places a reviewed pack goes ([ADR 0019](adr/0019-the-pack-review-runs-the-cli-and-places-a-private-pack-as-a-local-fork.md)): `review` runs `satz --config <estate dir> review-pack <pack> [--against <estate>] --format json` through `json_verdict`, holds the exit status to the report's own verdict (`SatzError::Verdict` when they disagree) and keeps the bytes it judged, refusing a pack that changed while satz read it; `diagnostics` is each finding at its `file:line` from `satz review-pack`. `local_name` is `<stem>.local.satz` — a `.local.satz` keeps its name, a `.diff.satz` is refused — and `upstream_name` is `presets/<stem>.satz`. `place_private` writes the reviewed bytes into `presets_dir` under that name: refused when the pack changed since its review or the library is missing, nothing written when the file holds these bytes already, refused when it holds anything else; the file is created with `create_new`, the estate is checked with it in the library, and a refusal or a checker that could not run removes it again | `ReviewedPack`, `review`, `review_args`, `diagnostics`, `local_name`, `local_target`, `upstream_name`, `place_private`, `Placed`, `PlaceError` |
 | `src/satz/mod.rs` | the capability ceiling and the one error type of the driver | `Allow`, `SatzError` |
-| `src/llm/claude/` | Claude natively ([ADR 0004](adr/0004-claude-natively-other-providers-adapt-into-its-message-model.md)): `types.rs` the Messages API wire types as the app's only message model and `body()`, `sse.rs` the event-stream decoder and the assembler, `client.rs` the HTTPS client, `error.rs` the one error type | `Request`, `Response`, `Message`, `ContentBlock`, `SystemBlock`, `ToolDef`, `StopReason`, `StopDetails`, `Usage`, `Effort`, `ClaudeClient`, `ClaudeError` |
-| `src/llm/agent/` | the agent loop over a `ToolHost`, the approval gate, and `bridge.rs`: MCP tools as Claude tool definitions and outcomes back as `tool_result` blocks | `Agent`, `AgentEvent`, `Approval`, `ToolHost`, `EstateContext`, `tool_defs`, `tool_result` |
-| `src/llm/auth.rs` | where a credential comes from; the keychain entry `satz-studio` / `anthropic-api-key` | `Credential`, `CredentialSource` |
-| `src/llm/provider/` | the providers that are not Claude, mapping the Claude-shaped request into their wire format and their stream back; `Capabilities` says what each drops | `ChatProvider`, `StreamEvent`, `Capabilities`, `OpenAiCompat`, `Ollama` |
-| `src/llm/claude_code/` | the Claude Code engine ([ADR 0010](adr/0010-claude-code-as-the-subscription-backend.md)): `cli.rs` where the binary is, its version and `claude auth status`; `events.rs` the lines the CLI writes, typed; `session.rs` one process per estate, its command line, the turn, the approval round trip and the interrupt; `log.rs` the stream log ([ADR 0013](adr/0013-the-claude-code-stream-log-is-verbatim-off-by-default-and-bounded.md)) | `ClaudeCodeCli`, `AuthStatus`, `ClaudeCodeError`, `CcLine`, `Session`, `SessionOptions`, `StreamLog`, `StreamLogConfig`, `Channel` |
-| `src/transcript.rs` | conversations as JSONL under the app's data directory, outside the estate ([ADR 0008](adr/0008-transcripts-live-outside-the-estate.md)) | `TranscriptStore`, `Transcript`, `TranscriptHeader` |
+| `src/handoff.rs` | the agent handoff ([ADR 0020](adr/0020-the-agent-is-an-external-client-that-studio-configures-and-starts.md)): the estate's `satz mcp` invocation rendered in the two shapes a client reads — `.mcp.json`, the project file Claude Code reads in the directory it starts in, and the `mcpServers` block for Claude Desktop's configuration file, keyed `satz-<estate>` — both carrying `--allow` explicitly, because `satz mcp` defaults to `read`; `write_project_file` refuses a `.mcp.json` holding anything else until it is asked to replace it; `locate` is the configured client on `PATH` and `start` runs it in the estate's directory through the one-shot script the terminal hand-off uses | `Handoff`, `Written`, `HandoffError`, `PROJECT_FILE`, `PROJECT_SERVER`, `DEFAULT_AGENT_COMMAND`, `locate`, `program`, `start` |
 | `src/github.rs` | the latest release of a repository through GitHub's unauthenticated REST API, always `releases/latest` and never a tag; `look_for_studio_update` compares satz-studio's with the running version and downloads nothing; a 403 or 429 from the API is `RateLimited` with the reset, a connection that fails is `Unreachable`, a 404 is `NoRelease` | `Release`, `Asset`, `GithubError`, `StudioUpdate`, `latest_release`, `download`, `look_for_studio_update` |
-| `src/settings.rs` | `<config dir>/satz-studio/settings.toml`: a missing file is the first run, a broken one is an error; no credential in it; `dismissed_satz` is the satz release newer than the build whose notice the operator dismissed, and it permits and refuses nothing; `data_dir` is where transcripts, the Claude Code stream logs and the one-shot scripts go | `Settings`, `ProviderChoice`, `Theme`, `settings_path`, `data_dir` |
+| `src/settings.rs` | `<config dir>/satz-studio/settings.toml`: a missing file is the first run, a broken one is an error; six fields and no credential among them — the satz path, `dismissed_satz` (the satz release newer than the build whose notice the operator dismissed, which permits and refuses nothing), the MCP ceiling, `agent_command`, the theme and the folder the Start screen opened last; `data_dir` is where the one-shot scripts go | `Settings`, `Theme`, `settings_path`, `data_dir` |
 | `src/diag.rs` | the one diagnostic type: `Diagnostic::from_finding` turns one of satz's findings into it — the severity mapped, the `kind` carried, a relative file resolved against the estate's directory, the group's header in front of the message — and `parse_satz_output` reads what satz prints: its findings in the layout it gives a reader (a group's title, per finding a row of severity, kind, `file:line` and subject with the message and `fix:` indented under it, a block of rows sharing one message, the footer of counts) as one diagnostic per row with the same message `from_finding` builds, and around them `file:line: msg`, `satz: line N: msg`, the severity prefixes, the banner dropped, an indented line continuing the one above | `Diagnostic`, `Severity`, `DiagSource`, `parse_satz_output` |
 
 `build.rs` compiles `vendor/satz-tree-sitter/src/parser.c` (and `scanner.c` when the
@@ -147,9 +144,8 @@ the stores are written from there only:
 - **the app coroutine** (`src/state/app_actions.rs`, `AppAction`): `LocateSatz`,
   `Discover`, `OpenEstate`, `CloseEstate`, `CreateEstate`, `CancelCreate`,
   `ImportEstate`, `CancelImport`, `UpdateSatz`, `CancelUpdate`, `DismissSatzNotice`,
-  `LookForStudioUpdate`, `InstallSatz`, `CancelInstall`, `SaveSettings`,
-  `ResolveCredential`, `StoreKey`; at startup it locates satz, makes the two release looks
-  and walks `last_root`;
+  `LookForStudioUpdate`, `InstallSatz`, `CancelInstall`, `SaveSettings`; at startup it
+  locates satz, makes the two release looks and walks `last_root`;
 - **one coroutine per open estate** (`src/state/estate_actions.rs`, `EstateAction`),
   started by `EstateHost` in `src/shell/mod.rs` with the `Arc<EstateSession>` and
   living as long as the estate is open: `Reload`, `RunCommand`, `RunNoticeCommand`,
@@ -199,7 +195,7 @@ estate cards. A door is one `Door` variant, one card in the row and one arm of t
 view's `match`, so another way in joins by being added in those three places.
 
 With an estate open the window is ordered by the job: **Overview**, **Packs**,
-**Decisions**, **Estate**, **Checks**, **Deploy**, then Chat and Settings at the foot of
+**Decisions**, **Estate**, **Checks**, **Deploy**, then Agent and Settings at the foot of
 the rail — Packs before Decisions, because a pack is what declares a question. Overview
 (`src/views/overview.rs`) says which estate this is — the short name, the customer, the
 customer id and the organisation id from the file's own `params { }` block (the model's
@@ -248,7 +244,7 @@ ADC identity, the directory id and organisation id from an `organizations:search
 billing account from `billingAccounts.list` — and prints where each value came from.
 Those values are the customer's. They are written into the estate satz creates, shown in
 the run log while the window holds it, and put nowhere else: not in `Settings`, not in a
-transcript, not in a file of the app's own.
+file of the app's own.
 
 When the run ends, `init::created(dir)` READS what it left — `EstateDir::open` plus
 `estates()` over the folder. The estate's name is never predicted: `init` names the file
@@ -327,9 +323,9 @@ nowhere else.
    `vendor/satz`. Directories that share no component have no common prefix, and the
    empty path is not an answer: `session_root` returns `SatzError::NoCommonRoot` naming
    them, because the root is the boundary `satz mcp` enforces. The session keeps the root
-   it opened with, so the `--mcp-config` payload the Claude Code engine writes carries
-   that same root rather than deriving a second one. `allow` is `Settings.mcp_allow`,
-   `read,write` by default.
+   it opened with, so the configuration the Agent destination writes for an external
+   client carries that same root rather than deriving a second one. `allow` is
+   `Settings.mcp_allow`, `read,write` by default.
 4. `McpSession::open` initializes and keeps the server's `instructions`, lists the
    tools as `ToolInfo` with their `ToolAnnotations`, reads `satz://guide`, and calls
    `satz_open {config, estate}` for the `OpenReport` with `runs_as` and
@@ -400,8 +396,9 @@ holds other text.
 ### 4b. The write discipline
 
 Every writer takes `EstateSession::write_lock` first and holds it across the check and
-the rename: a view edit, an interview answer, an agent's write tool. The views that
-call this are U8; the mechanism is complete and tested.
+the rename: a view edit, an interview answer, a pack switched. An agent that writes the
+estate does it through its own `satz mcp`, outside this window and outside this lock, and
+the estate is re-read when the window comes back to the front.
 
 A value edit, `Edit::ReplaceValue { node, value }` or `Edit::ReplaceParam { name,
 value }`:
@@ -475,153 +472,36 @@ it over a repointed fork would point the estate at the changed upstream pack —
 satz runs it only inside a git work tree, whose history is its undo.
 `EstateDir::estates` never lists a checked temp file; `.gitignore` carries the suffix.
 
-### 4c. An agent turn
+### 4c. The agent handoff
 
-Two engines serve the Chat view and raise the same `AgentEvent`s, so the transcript
-list, the tool cards and the approval card are one implementation. `Settings.provider`
-chooses: **the API engine** is `Agent::run_turn(user_text, events, cancel)` over a
-`ToolHost` — `EstateSession` implements the trait, and its `call` takes the write lock
-for a tool that is not read-only — and **the Claude Code engine** is the installed CLI
-driven over stdio on the user's claude.ai subscription
-([ADR 0010](adr/0010-claude-code-as-the-subscription-backend.md), below). The rest of
-this section is the API engine.
+satz-studio runs no model
+([ADR 0020](adr/0020-the-agent-is-an-external-client-that-studio-configures-and-starts.md)).
+The Agent destination (`src/views/agent.rs`) sets an external client up on the open
+estate and starts it; everything it shows is derived from that estate, the located satz
+and the settings, and nothing is remembered between sessions.
 
-- **Request.** `Agent::request` builds `system[0]` from `PREAMBLE`, the session's
-  `instructions` and the text of `satz://guide`, with the cache breakpoint, and
-  `system[1]` from `EstateContext::render()`, the volatile estate context (path,
-  `runs_as`, `deployment_mode`, the questions summary, up to `MAX_DIAGNOSTICS`
-  diagnostics, the outline) with no breakpoint; `tool_defs` turns every `ToolInfo` into
-  a `ToolDef`, `input_schema` verbatim; a tool whose output schema names properties gets
-  `Returns JSON with the keys {…}. A refusal is prose instead, marked as an error.`
-  appended to its description, because a satz refusal is a sentence with `isError`
-  whatever the schema says. `body()` in `types.rs` owns the four breakpoints (the last tool, tools
-  sorted by name; `system[0]`; the last block of the last user message; a marker set
-  anywhere else is dropped) and sends adaptive thinking with a summarised display,
-  `output_config.effort`, and `fallbacks: "default"` when asked
-  ([ADR 0009](adr/0009-refusal-fallbacks-are-on-by-default.md)).
-- **Stream.** `ClaudeClient` posts to `{base_url}/v1/messages` with `x-api-key` or a
-  bearer token and the betas a request needs in one `anthropic-beta` header.
-  `SseDecoder` and `Assembler` fold the events into a `Response`, and every complete
-  block arrives as `StreamEvent::BlockStop { index, block }`. A tool's input arrives as
-  `input_json_delta` fragments that are concatenated as they come — each forwarded as
-  `StreamEvent::ToolInputDelta` for display, none parsed — and parsed once, at
-  `content_block_stop` (`sse::tool_input`). A buffer with nothing in it, which is what a
-  tool called without arguments leaves (no fragment, or one empty `partial_json`), is the
-  input the block opened with, `{}`. A buffer with something in it that is not JSON is
-  `ClaudeError::Stream` naming the tool and showing the buffer, quoted, whole up to 240
-  characters and otherwise its first 160 and last 80, with its length in bytes.
-  `OpenAiCompat` and `Ollama` close their tool calls by the same function. A request is retried at most twice, on a
-  rate limit, an overload, a server error or a connection failure, and only before the
-  first byte of its stream. `ContentBlock` types the five block kinds the code reads;
-  every other block is `ContentBlock::Other`, carried and replayed verbatim.
-- **Tool calls.** On `StopReason::ToolUse` every `ToolUse` block runs in order. The
-  gate is `runs_without_asking`
-  ([ADR 0005](adr/0005-tool-approval-by-mcp-annotation-and-the-capability-ceiling.md)):
-  a read-only tool runs; a non-destructive tool runs when `auto_approve_writes` is set
-  or the operator allowed it for the session; a destructive tool asks every time.
-  Anything else raises `AgentEvent::ToolCallPending` and waits for `Approval::Once`,
-  `ForSession` or `Deny`. `Deny`, a tool the host does not list, an input that is not a
-  JSON object, and a call whose parameters satz refuses as a JSON-RPC `invalid_params`
-  error (`SatzError::InvalidParams`, satz's message as the text) are each a
-  `tool_result` with `is_error`, and the turn goes on; any other failure below the tool
-  is `ClaudeError::Tool` and fails the turn. `result_text` (`bridge.rs`) makes the
-  block's content: a result's structured payload pretty-printed, else its text; a
-  refusal leads with satz's sentence, then the structured part it carries, if any — a
-  refused `satz_transpile_check` hands over its `CompileSummary` — after a blank line.
-  All results of one assistant message go back in one user message.
-- **Events of a request.** Every request opens with `AgentEvent::Started { model }`,
-  the model the server names in `message_start` — another than the one asked for when
-  the server fell back — and ends with `AgentEvent::RequestDone { usage }`, that
-  request's usage alone.
-- **Ends.** `EndTurn`, `MaxTokens` and `StopSequence` are `AgentEvent::TurnDone`, whose
-  usage is every request of the turn summed (`Usage::plus`);
-  `PauseTurn` loops again, ten times at most; `Refusal` is `ClaudeError::Refused` with
-  the category, the explanation and the recommended model from `stop_details`. A turn
-  that is refused, cancelled or fails is rolled back whole: `messages` is truncated to
-  where it began. A tool call in flight completes on its own task; its result is dropped.
-- **Credential.** `Credential::resolve` tries `ANTHROPIC_API_KEY`, then
-  `ANTHROPIC_AUTH_TOKEN`, then `ant auth print-credentials --access-token` when `ant`
-  is on `PATH`, then the keychain entry Settings writes; `ClaudeError::NoCredential {
-  tried }` says what every source answered. Settings shows which one won.
-- **Other providers** implement `ChatProvider`: `OpenAiCompat`
-  (`{base_url}/chat/completions`) and `Ollama` (`{base_url}/api/chat`, NDJSON) drop
-  thinking, effort and cache breakpoints and say so through `Capabilities`.
-- **The chat's debug log.** `ChatStore.debug` holds one `DebugEvent` per tool call of
-  the conversation, under its call id, whatever the panel shows: opened by
-  `ToolUseStarted`, given the input by `ToolCallPending` or, for a call that asked
-  nobody, by the input the stream carried, and closed by `ToolResult` with the text
-  `result_text` made, `is_error` and the milliseconds. The chat coroutine follows the
-  estate session's `mcp_stderr()` and gives each line to the running turn's first call
-  still without its result; the API engine runs a response's calls in order, so that
-  is the call running. A replayed transcript fills the log from its `tool_use` and
-  `tool_result` blocks. On the Claude Code engine the calls run on Claude Code's own
-  `satz mcp`, whose stderr does not reach the app, and the entry says so.
-- **Transcripts.** `TranscriptStore` writes `<data dir>/satz-studio/transcripts/<sha256
-  of the estate path>/<created>.jsonl`: line one the `TranscriptHeader` (estate path,
-  model, instant), then one `Message` per line, appended and flushed; an existing file
-  is never overwritten, and a line that is neither fails the load.
-
-### 4d. A Claude Code turn
-
-`llm::claude_code::Session` is one `claude -p --input-format stream-json
---output-format stream-json` per open estate, spawned in the estate directory. It runs
-on the claude.ai account the CLI is signed in to; the app reads no credential of Claude
-Code's and asks it nothing but `claude auth status --json`.
-
-- **The command line** (`command_args`) is `--setting-sources ""` and
-  `--strict-mcp-config` so the user's own Claude Code settings and MCP servers stay out,
-  `--tools ""` so no built-in tool is available, `--mcp-config` naming one server —
-  this estate's `satz mcp --root <session root> --allow <ceiling>` — `--permission-mode
-  default`, `--permission-prompt-tool stdio`, `--allowedTools` from the annotations satz
-  declares ([ADR 0005](adr/0005-tool-approval-by-mcp-annotation-and-the-capability-ceiling.md)),
-  and `--append-system-prompt` with `PREAMBLE`, the MCP server's instructions, the text
-  of `satz://guide` and which estate this session is about. `--bare` is never passed:
-  bare mode does not read the subscription login.
-- **The environment** sets `MAX_MCP_OUTPUT_TOKENS` to `session::MAX_MCP_OUTPUT_TOKENS`
-  (100,000). Above its limit Claude Code cuts a tool result into text that is no longer JSON
-  or saves it to a file, which a session without built-in tools cannot read; satz's largest
-  result, `satz_report_compliance` for every framework the estate is held to, is about
-  19,000 tokens per framework.
-- **The protocol.** The client writes one JSON object per line on stdin: an initialize
-  control request at spawn, then `{"type":"user",…}` per turn, a `control_response` per
-  approval, and an `interrupt` control request to cancel. The CLI writes one per line
-  on stdout: `system/init` (the session id, the model, the MCP servers' status — read
-  at the first turn, not at spawn), `stream_event` carrying the Messages API's own
-  events, `user` messages holding the results of the tools it ran, `rate_limit_event`,
-  `can_use_tool` control requests, and a `result` line ending the turn.
-- **The translation.** `stream_event` payloads go through the same `Assembler` the API
-  engine uses — a new one per `message_start`, since one turn is many assistant
-  messages, and the tool input rule of section 4c with it — and its `StreamEvent`s become `Started { model }`,
-  `TextDelta`, `ThinkingDelta`, `ToolUseStarted` and `ToolInputDelta` under the name satz
-  gives the tool, with the `mcp__satz__` prefix stripped, and `RequestDone { usage }` at
-  each message's end. A `tool_result` block becomes `ToolResult`, its `millis` measured
-  from the call's input being complete, or from the operator's answer when the call
-  raised a card, to the result; a `can_use_tool` request becomes `ToolCallPending` whose
-  answer is the control response (`ForSession` remembers the tool, so the next call needs
-  no card), `rate_limit_event` becomes `AgentEvent::Notice` for the footer, and `result`
-  becomes `TurnDone` — `EndTurn`, or `MaxTokens` for `error_max_turns` — with the
-  `result` line's usage, Claude Code's total over the turn.
-- **The estate's write lock is held for the whole turn**, not per call: Claude Code's
-  satz server writes the estate, and the app cannot see the calls it pre-approved. The
-  app keeps no transcript for this engine — Claude Code holds the conversation, "New"
-  starts a fresh process, and the model comes from Settings because it is an argument of
-  that process.
-- **A failure** is the session's `ClaudeCodeError`, returned from `run_turn` and sent as
-  `AgentEvent::Failed` through the one conversion into `ClaudeError::ClaudeCode`, which
-  carries the error's own message: a stream the assembler refused reads `claude code:
-  stream: …`, with the prefix once.
-- **The stream log** ([ADR 0013](adr/0013-the-claude-code-stream-log-is-verbatim-off-by-default-and-bounded.md)).
-  With `Settings.claude_code_log` on, `SessionOptions.log` names
-  `<data dir>/satz-studio/logs/claude-code/` and the session writes one file per process,
-  `<created>.log`; with it off, which is the default, nothing is written. A record is one
-  line, `<RFC 3339 instant>\t<channel>\t<line>`: `stdout` every line the CLI writes,
-  recorded before it is parsed; `stdin` every line the app writes; `stderr` every line
-  of the CLI's standard error, read on its own task; `studio` the app's own — the header
-  (the app and CLI versions, the binary, the estate, the command line) and, when a spawn
-  or a turn ends in an error, that error. Nothing is redacted. A file stops recording at
-  16 MiB with a last line saying so, and opening a log deletes the oldest so that ten
-  remain. A write that fails fails the turn, naming the file. `awk -F'\t' '$2 ==
-  "stdout"' <file> | cut -f3-` gives the stream back as the CLI wrote it.
+- **The configuration** is `handoff::Handoff`, built from the satz the app located, the
+  open session's `root` — the boundary `session_root` computed when the estate opened,
+  which is not always the estate directory — the estate file's name and
+  `Settings.mcp_allow`. `project_file()` is `.mcp.json`, with the server named `satz`;
+  `desktop_block()` is the `mcpServers` block for Claude Desktop, with the server named
+  `satz-<estate>`, because that file holds every server on the machine. Both are pure
+  and both write `--allow` out: `satz mcp` defaults to `read`, so a configuration
+  without it would hand the agent a server that cannot write and say nothing about it.
+- **Writing `.mcp.json`** goes into the estate's directory. A file already holding those
+  bytes is `Written::Unchanged` and nothing is written; a file holding anything else is
+  `HandoffError::Exists` and the card offers "Replace it" beside "Keep it". It is not an
+  estate file and not Satz text, so the write discipline of section 4b does not reach
+  it — nothing under `yaml_dir` is touched.
+- **Starting the client** is `handoff::start`: the command line's first word is looked
+  up on `PATH` (`handoff::locate`), so a client that is not installed is named rather
+  than failing out of sight, and the line is then run from a one-shot script in the OS
+  terminal, the way `apply` and `bootstrap` are
+  ([ADR 0006](adr/0006-apply-and-bootstrap-run-in-the-users-terminal.md)) — the default
+  client is a terminal program. Nothing is supervised and nothing is read back.
+- **What the agent writes** reaches the window the way an `apply` does: `EstateHost`
+  reloads the estate when the window regains focus, and the top bar's reload is there
+  for the rest.
 
 ## 5. Deployment and CI
 
@@ -655,8 +535,8 @@ events; on Windows a PowerShell step does what `scripts/install-satz.sh` does, t
 satz's `satz-installer.ps1`: the sidecar check, the run the app makes (`powershell -File`,
 `SATZ_INSTALL_DIR`, `SATZ_NO_MODIFY_PATH=1`), the `MIN_SATZ` floor and the satz config. macOS is Apple silicon alone: `macos-15-intel` is the most expensive
 runner in the catalogue and ran the same code on the same OS beside `macos-15` — the
-difference is the architecture, and nothing here is architecture-dependent, the webview,
-the keyring and the satz binary being the platform's rather than the chip's.
+difference is the architecture, and nothing here is architecture-dependent, the webview
+and the satz binary being the platform's rather than the chip's.
 `release.yml` does not build it either: macOS is Apple silicon in both, and an Intel Mac
 gets no bundle. Linux and Windows are unchanged and x86_64 — this is about the Mac. `.github/workflows/names-gate.yml` runs `scripts/check-names.sh` over
 the tree and over the commits a pull request adds, or the push to `main` that merges it.
@@ -668,22 +548,23 @@ the tree and over the commits a pull request adds, or the push to `main` that me
 | [0001](adr/0001-dioxus-desktop-on-the-webview-renderer.md) | Dioxus 0.7 desktop on the webview renderer |
 | [0002](adr/0002-a-separate-repository-with-satz-pinned-once.md) | a separate repository; satz pinned once, as the submodule; the binary required at `MIN_SATZ` |
 | [0003](adr/0003-the-document-layer-is-the-tree-sitter-grammar.md) | the document layer is the tree-sitter grammar, vendored and compiled in; satz-core stays the authority on meaning |
-| [0004](adr/0004-claude-natively-other-providers-adapt-into-its-message-model.md) | Claude natively: the Messages API wire types are the app's message model; other providers adapt into it |
+| [0004](adr/0004-claude-natively-other-providers-adapt-into-its-message-model.md) | Claude natively: the Messages API wire types are the app's message model; other providers adapt into it — superseded by 0020 |
 | [0005](adr/0005-tool-approval-by-mcp-annotation-and-the-capability-ceiling.md) | tool approval by the MCP annotations satz declares; the capability ceiling stays satz's |
 | [0006](adr/0006-apply-and-bootstrap-run-in-the-users-terminal.md) | `apply` and `bootstrap` run in the user's terminal, never with `-auto-approve` |
 | [0007](adr/0007-pack-rows-are-derived-from-the-estate-file.md) | superseded by 0018 — pack rows derived from the estate file, the questions report and the resolved params |
-| [0008](adr/0008-transcripts-live-outside-the-estate.md) | transcripts live under the app's data directory, never inside an estate |
-| [0009](adr/0009-refusal-fallbacks-are-on-by-default.md) | refusal fallbacks are on by default, off by a Settings switch |
-| [0010](adr/0010-claude-code-as-the-subscription-backend.md) | Claude Code as the subscription backend: the installed CLI driven over stdio, the estate's satz MCP server, the app's own approval card |
+| [0008](adr/0008-transcripts-live-outside-the-estate.md) | transcripts live under the app's data directory, never inside an estate — superseded by 0020 |
+| [0009](adr/0009-refusal-fallbacks-are-on-by-default.md) | refusal fallbacks are on by default, off by a Settings switch — superseded by 0020 |
+| [0010](adr/0010-claude-code-as-the-subscription-backend.md) | Claude Code as the subscription backend: the installed CLI driven over stdio, the estate's satz MCP server, the app's own approval card — superseded by 0020 |
 | [0011](adr/0011-the-licence-is-apache-2-0.md) | the licence is Apache 2.0, with `NOTICE` for the material bundled under other terms |
 | [0012](adr/0012-migrate-hands-off-to-the-terminal.md) | `migrate` hands off to the terminal with `apply` and `bootstrap`; `bootstrap --dry-run` is a check that runs in the app |
-| [0013](adr/0013-the-claude-code-stream-log-is-verbatim-off-by-default-and-bounded.md) | the Claude Code stream log is verbatim, off by default, one file per conversation, and bounded to ten files of 16 MiB |
+| [0013](adr/0013-the-claude-code-stream-log-is-verbatim-off-by-default-and-bounded.md) | the Claude Code stream log is verbatim, off by default, one file per conversation, and bounded to ten files of 16 MiB — superseded by 0020 |
 | [0014](adr/0014-a-newer-satz-is-a-notice-and-the-app-looks-for-releases.md) | a satz newer than the build runs and is a notice, not a gate; the app looks for releases of itself and of satz once per launch and says so in the title and the top bar |
 | [0015](adr/0015-the-packs-view-draws-the-dependency-tree-the-packs-declare.md) | superseded by 0018 — the dependency tree the packs declare with `ask_when`, drawn as tree blocks in the grid with connectors in CSS |
 | [0016](adr/0016-macos-is-apple-silicon-alone.md) | macOS is Apple silicon alone, in CI and in the release; Linux and Windows stay x86_64 |
 | [0017](adr/0017-a-release-is-cargo-release-on-main.md) | a release is `cargo release` on `main`: the version bump is the one commit that lands without a pull request |
 | [0018](adr/0018-the-packs-view-shows-satzs-pack-graph.md) | the Packs view shows satz's pack graph (`satz_packs`) and switches a pack with `satz_add_pack` and `satz_remove_pack`; the app derives no pack row and no dependency |
 | [0019](adr/0019-the-pack-review-runs-the-cli-and-places-a-private-pack-as-a-local-fork.md) | the pack review runs `satz review-pack` through the CLI with the estate's config; a private pack is placed as `<stem>.local.satz`, never over other text; upstream is a pull request by hand |
+| [0020](adr/0020-the-agent-is-an-external-client-that-studio-configures-and-starts.md) | the app runs no model: the Agent destination writes the estate's `satz mcp` configuration for an external client and starts it — superseding 0004, 0008, 0009, 0010 and 0013, and amending 0005 |
 
 ## 7. Not built, and why
 
@@ -698,6 +579,8 @@ the tree and over the commits a pull request adds, or the push to `main` that me
   no pack file for its dependencies, and writes no pack line itself.
 - **No second parser.** The document layer is the tree-sitter grammar and meaning is
   `satz_core::satz::parse`. A grammar gap is fixed in the grammar repository.
-- **No markdown renderer in the chat.** The model's text is shown as text; the tool
-  calls, their results and the approval cards are the structure.
+- **No agent of the app's own.** satz serves the tools over MCP and the operator's own
+  client drives them; the app writes that client's configuration and starts it. No
+  model is called, no credential is held, no conversation is kept
+  ([ADR 0020](adr/0020-the-agent-is-an-external-client-that-studio-configures-and-starts.md)).
 - **No merge.** A file that changed on disk under an edit is refused and reloaded.

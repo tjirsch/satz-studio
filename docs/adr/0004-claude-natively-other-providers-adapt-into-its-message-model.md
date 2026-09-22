@@ -1,6 +1,6 @@
 # 0004 — Claude natively, other providers adapt into its message model
 
-- **Status:** accepted
+- **Status:** superseded by [ADR 0020](0020-the-agent-is-an-external-client-that-studio-configures-and-starts.md) — the app runs no model: the message model, the client and the provider adapters are gone with the chat
 - **Date:** 2026-09-13
 - **Deciders:** the maintainer
 

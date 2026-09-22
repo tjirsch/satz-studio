@@ -1,6 +1,6 @@
 # 0009 — refusal fallbacks are on by default
 
-- **Status:** accepted
+- **Status:** superseded by [ADR 0020](0020-the-agent-is-an-external-client-that-studio-configures-and-starts.md) — no request is the app's to build, so there is no fallback to switch
 - **Date:** 2026-09-13
 - **Deciders:** the maintainer
 

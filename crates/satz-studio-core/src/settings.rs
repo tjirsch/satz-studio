@@ -1,11 +1,10 @@
 //! The settings file: `<config dir>/satz-studio/settings.toml`. A missing file means
 //! first run and yields the defaults; a file that does not parse is an error, never
-//! silently replaced. No credential is ever stored here — the key lives in the OS
-//! keychain (see `llm::auth`).
+//! silently replaced. Nothing here is a credential: the app holds none (ADR 0020).
 
 use std::path::{Path, PathBuf};
 
-use crate::llm::Effort;
+use crate::handoff::DEFAULT_AGENT_COMMAND;
 use crate::satz::Allow;
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -17,26 +16,12 @@ pub struct Settings {
     /// operator dismissed, as `satz --version` names it; the notice comes back for any other
     /// newer release. It permits and refuses nothing: a newer satz runs either way
     pub dismissed_satz: Option<String>,
-    /// an explicit path to the Claude Code binary; otherwise `PATH`, then
-    /// `~/.local/bin/claude`. Read only when the provider is Claude Code.
-    pub claude_code_binary: Option<PathBuf>,
-    /// write every line a Claude Code session exchanges to a log under the app's data
-    /// directory (`llm::claude_code::log`); read when a session starts
-    pub claude_code_log: bool,
-    /// the capability ceiling every `satz mcp` this app starts is given
+    /// the capability ceiling every `satz mcp` this app starts is given, and the one it
+    /// writes into an agent's configuration (`handoff`)
     pub mcp_allow: Allow,
-    /// run non-destructive write tools the agent asks for without an approval card
-    pub auto_approve_writes: bool,
-    pub provider: ProviderChoice,
-    /// the Claude model when the provider is Claude
-    pub model: String,
-    pub effort: Effort,
-    /// server-side refusal fallbacks (`fallbacks: "default"`)
-    pub fallbacks: bool,
-    pub persist_transcripts: bool,
-    /// show the chat's debug log beside the conversation: every tool call's input, result,
-    /// duration and the satz stderr lines that arrived during it
-    pub chat_debug_log: bool,
+    /// the agentic client the Agent view starts in the estate's directory, as a command
+    /// line; its first word is looked up on `PATH`. Empty means none is configured
+    pub agent_command: String,
     pub theme: Theme,
     /// the folder the Start screen opened last
     pub last_root: Option<PathBuf>,
@@ -47,41 +32,12 @@ impl Default for Settings {
         Self {
             satz_binary: None,
             dismissed_satz: None,
-            claude_code_binary: None,
-            claude_code_log: false,
             mcp_allow: Allow::ReadWrite,
-            auto_approve_writes: false,
-            provider: ProviderChoice::Claude,
-            model: "claude-opus-5".to_string(),
-            effort: Effort::High,
-            fallbacks: true,
-            persist_transcripts: true,
-            chat_debug_log: false,
+            agent_command: DEFAULT_AGENT_COMMAND.to_string(),
             theme: Theme::System,
             last_root: None,
         }
     }
-}
-
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-#[serde(tag = "kind", rename_all = "snake_case")]
-pub enum ProviderChoice {
-    Claude,
-    /// any endpoint speaking OpenAI's chat-completions API: Ollama, LM Studio, OpenRouter, Gemini's compatible endpoint
-    OpenAiCompat {
-        base_url: String,
-        model: String,
-    },
-    Ollama {
-        base_url: String,
-        model: String,
-    },
-    /// the installed Claude Code CLI, on the user's claude.ai subscription: no API
-    /// key, the loop and the tools Claude Code's own (ADR 0010). `model` is what
-    /// `--model` is given; `None` leaves Claude Code its own default.
-    ClaudeCode {
-        model: Option<String>,
-    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -120,8 +76,8 @@ pub fn settings_path() -> Result<PathBuf, SettingsError> {
     Ok(dir.join("satz-studio").join("settings.toml"))
 }
 
-/// `<data dir>/satz-studio` — transcripts, the Claude Code stream logs and one-shot
-/// command scripts live here, never inside an estate.
+/// `<data dir>/satz-studio` — the one-shot scripts the app opens in the OS terminal
+/// live here, never inside an estate.
 pub fn data_dir() -> Result<PathBuf, SettingsError> {
     let dir = dirs::data_dir().ok_or(SettingsError::NoConfigDir)?;
     Ok(dir.join("satz-studio"))
@@ -183,24 +139,15 @@ mod tests {
     }
 
     #[test]
-    fn the_claude_code_log_is_off_until_it_is_switched_on() {
-        assert!(!Settings::default().claude_code_log);
+    fn a_fresh_settings_file_names_the_default_agent_and_a_written_one_is_read_back() {
+        assert_eq!(Settings::default().agent_command, DEFAULT_AGENT_COMMAND);
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("settings.toml");
-        std::fs::write(&path, "claude_code_log = true\n").unwrap();
-        assert!(Settings::load_from(&path).unwrap().claude_code_log);
-    }
-
-    #[test]
-    fn a_settings_file_without_the_debug_log_field_loads_with_the_log_off() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("settings.toml");
-        std::fs::write(&path, "persist_transcripts = false\n").unwrap();
-        let loaded = Settings::load_from(&path).unwrap();
-        assert!(!loaded.chat_debug_log);
-        assert!(!loaded.persist_transcripts);
-        std::fs::write(&path, "chat_debug_log = true\n").unwrap();
-        assert!(Settings::load_from(&path).unwrap().chat_debug_log);
+        std::fs::write(&path, "agent_command = \"code --wait\"\n").unwrap();
+        assert_eq!(
+            Settings::load_from(&path).unwrap().agent_command,
+            "code --wait"
+        );
     }
 
     #[test]
@@ -227,10 +174,10 @@ mod tests {
     fn a_partial_file_takes_defaults_for_the_rest() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("settings.toml");
-        std::fs::write(&path, "fallbacks = false\n[provider]\nkind = \"ollama\"\nbase_url = \"http://localhost:11434\"\nmodel = \"llama3\"\n").unwrap();
+        std::fs::write(&path, "mcp_allow = \"read\"\n").unwrap();
         let s = Settings::load_from(&path).unwrap();
-        assert!(!s.fallbacks);
-        assert_eq!(s.model, "claude-opus-5");
-        assert!(matches!(s.provider, ProviderChoice::Ollama { .. }));
+        assert_eq!(s.mcp_allow, Allow::Read);
+        assert_eq!(s.agent_command, DEFAULT_AGENT_COMMAND);
+        assert_eq!(s.theme, Theme::System);
     }
 }
