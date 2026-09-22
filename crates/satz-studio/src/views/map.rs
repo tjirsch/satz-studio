@@ -512,6 +512,41 @@ fn line_chip(row: &PackRow) -> Element {
     rsx! { Chip { kind: ChipKind::Assist, icon, label, error } }
 }
 
+/// What a line state the chip marks in the error colour means, and the edit that answers
+/// it: a sentence for `ungated` and for `misplaced`, `None` for every other state, which
+/// the chip says in full.
+///
+/// satz says this itself where it can — the `ungated-pack` finding, which the card shows
+/// with satz's own `fix:` — and it can only where the file declaring the gate deploys, so
+/// an estate with the map off hears nothing about a line no answer switches off. This is
+/// what the card says then: a row that carries a finding of its own has none, because
+/// satz's wording wins wherever satz speaks.
+fn line_note(row: &PackRow) -> Option<String> {
+    if !row.findings.is_empty() {
+        return None;
+    }
+    match (row.line, row.gate.as_deref()) {
+        (PackLine::Ungated, Some(gate)) => Some(format!(
+            "No gate: this line carries no `when {gate}`, so a no to `{gate}` does not switch \
+             the pack off. Write `when {gate}` on it so the choice decides the pack, or comment \
+             the line out to take the pack off."
+        )),
+        (PackLine::Ungated, None) => Some(
+            "No gate: this line carries no `when`, so the file decides the pack and no question \
+             does. Write a `when <param>` on it to make it a choice, or comment the line out to \
+             take the pack off."
+                .to_string(),
+        ),
+        (PackLine::Misplaced, _) => Some(
+            "Out of place: this line stands outside the block the pack graph places the pack in. \
+             Move it into that block, or take the line out and switch the pack on here — satz \
+             then writes it where the graph places it."
+                .to_string(),
+        ),
+        _ => None,
+    }
+}
+
 /// What the gate is in this estate, as satz reports it: the value, and whether the estate
 /// answered it or the library's default gives it.
 fn gate_text(row: &PackRow, gate: &str) -> String {
@@ -562,6 +597,7 @@ fn PackCard(
     let required_by = row.required_by.join(", ");
     let excludes = row.excludes.join(", ");
     let findings = row_findings(&report, &row);
+    let note = line_note(&row);
     let switchable = row.role == PackRole::Pack && row.by_hand.is_none();
     let path = row.path.clone();
     rsx! {
@@ -655,6 +691,9 @@ fn PackCard(
                         code { "{n.run}" } ", then bind " code { "{n.param} = true" } "."
                     }
                 }
+            }
+            if let Some(note) = &note {
+                p { class: "pack-card__why", "{note}" }
             }
             for (i, (message, fix)) in findings.iter().enumerate() {
                 div { key: "{i}", class: "pack-card__diag",
@@ -1035,6 +1074,39 @@ mod tests {
             })),
             "the map is the page's head"
         );
+    }
+
+    /// satz reports `ungated-pack` only where the file declaring the gate deploys, so an
+    /// estate with the map off hears it from the card alone.
+    #[test]
+    fn an_ungated_line_says_what_it_means_and_names_its_gate() {
+        let mut budget = row("presets/organization-budget.satz", Some(12));
+        budget.line = PackLine::Ungated;
+        let gate = budget.gate.clone().unwrap();
+        let note = line_note(&budget).expect("an ungated line carries a note");
+        assert!(note.contains(&format!("when {gate}")), "{note}");
+        assert!(note.contains("comment the line out"), "{note}");
+
+        let misplaced = PackRow {
+            line: PackLine::Misplaced,
+            ..budget.clone()
+        };
+        assert!(
+            line_note(&misplaced)
+                .is_some_and(|n| n.contains("outside the block the pack graph places")),
+            "a misplaced line carries a note"
+        );
+
+        // every other state is what the chip says
+        budget.line = PackLine::Active;
+        assert_eq!(line_note(&budget), None);
+
+        // and satz's own sentence wins wherever satz speaks
+        budget.line = PackLine::Ungated;
+        budget.findings = vec![
+            "`presets/organization-budget.satz` is used without `when use_budget`".to_string(),
+        ];
+        assert_eq!(line_note(&budget), None);
     }
 
     #[test]

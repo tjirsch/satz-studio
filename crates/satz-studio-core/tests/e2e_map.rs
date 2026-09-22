@@ -7,7 +7,9 @@
 //! `satz transpile --check` names — a warning at satz's default validation level, a
 //! refusal at `error`. And a gate answered through `satz_interview` that satz refuses
 //! after it has written the file: the file is back as it was either way, and the refusal
-//! says it was put back exactly when it was.
+//! says it was put back exactly when it was. A pack's line stripped of its ` when <gate>`
+//! is the satz→studio contract the Packs view's chip and sentence stand on: the row reads
+//! `ungated`, the report carries the `ungated-pack` finding, and the check names it.
 
 #[path = "fixtures/e2e/support.rs"]
 mod support;
@@ -381,5 +383,77 @@ async fn a_refused_answer_leaves_the_file_as_it_was_and_says_so_when_satz_had_ch
     assert_eq!(refused.message("satz_add_pack"), outcome.text);
     assert!(!outcome.text.contains("had changed"), "{}", outcome.text);
     assert_eq!(support::read(&main), before);
+    assert!(estate.temp_files().is_empty(), "{:?}", estate.temp_files());
+}
+
+/// A `use` line stripped of its ` when <gate>`: nothing the estate answers switches that
+/// pack off. satz says so with the `ungated-pack` finding while the file declaring the
+/// gate deploys — here the map — and the Packs view's chip and sentence stand on the row
+/// state and that finding.
+#[tokio::test]
+async fn a_line_without_its_when_is_ungated_and_satz_names_the_gate() {
+    let estate = support::estate_dir(None);
+    let main = estate.create_skeleton("new.satz").await;
+    let session = estate.open("new.satz").await;
+    support::answer_like_the_smoke_matrix(&session).await;
+    support::add_pack(&session, support::MAP).await;
+    support::add_pack(&session, BUDGET).await;
+
+    // the gate comes off the line by hand, as an estate written without it has it; the
+    // binding `use_budget = true` stays where satz wrote it
+    let gated = format!("use \"{BUDGET}\" when use_budget");
+    let text = support::read(&main);
+    assert!(text.contains(&gated), "{text}");
+    let ungated = text.replacen(&gated, &format!("use \"{BUDGET}\""), 1);
+    std::fs::write(&main, &ungated).unwrap();
+
+    // the row: the line is ungated and the pack deploys all the same
+    let m = support::model(&session, Vec::new()).await;
+    let row = m.packs.row(BUDGET).unwrap();
+    assert_eq!((row.line, row.deploys), (PackLine::Ungated, true));
+    assert_eq!(row.gate.as_deref(), Some("use_budget"));
+    assert!(row.at_line.is_some(), "{row:?}");
+
+    // the report: the finding on the pack, with satz's own sentence on the row
+    let finding = m
+        .packs
+        .findings
+        .iter()
+        .find(|f| f.kind == "ungated-pack")
+        .unwrap_or_else(|| panic!("no ungated-pack finding: {:?}", m.packs.findings));
+    assert_eq!(finding.subject.as_deref(), Some(BUDGET));
+    assert!(
+        finding.message.contains("when use_budget"),
+        "{}",
+        finding.message
+    );
+    assert!(
+        row.findings.iter().any(|f| f.contains("when use_budget")),
+        "{:?}",
+        row.findings
+    );
+
+    // and the check: at validation level `error` the same finding refuses the estate,
+    // as the diagnostic the drawer shows
+    let strict_dir = support::config_over(&estate.yaml, "error");
+    let strict = CliChecker {
+        cli: strict_dir.cli().await,
+    };
+    let err = support::within(strict.check(&main)).await.unwrap_err();
+    let CheckFailure::Refused(refused) = err else {
+        panic!("{err:?}")
+    };
+    let diagnostic = refused
+        .iter()
+        .find(|d| d.kind.as_deref() == Some("ungated-pack"))
+        .unwrap_or_else(|| panic!("no ungated-pack diagnostic: {refused:?}"));
+    assert_eq!(diagnostic.severity, Severity::Error);
+    assert_eq!(diagnostic.source, DiagSource::Check);
+    assert!(
+        diagnostic.message.contains("when use_budget"),
+        "{}",
+        diagnostic.message
+    );
+    assert_eq!(support::read(&main), ungated, "the check writes nothing");
     assert!(estate.temp_files().is_empty(), "{:?}", estate.temp_files());
 }
