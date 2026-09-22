@@ -743,6 +743,7 @@ mod tests {
             excludes: Vec::new(),
             by_hand: None,
             notices: Vec::new(),
+            contributes: Vec::new(),
             findings: Vec::new(),
         }
     }
@@ -1059,13 +1060,13 @@ mod tests {
             "ci/verification-runner.satz",
             "ci/verification-runner-grant.satz"
         ));
-        // billing needs one of three security-group spellings: a choice, not a parent
+        // billing needs one of the two security-group models: a choice, not a parent
         let billing = r.row("presets/billing-account-permissions.satz").unwrap();
         assert!(parent_of(billing, &r.packs).is_none());
         assert!(
             listed_requirements(billing, &r)
                 .iter()
-                .any(|q| q.any_of.len() == 3 && !q.met)
+                .any(|q| q.any_of.len() == 2 && !q.met)
         );
         assert!(
             s.iter().all(|s| s.items.iter().all(|i| match i {

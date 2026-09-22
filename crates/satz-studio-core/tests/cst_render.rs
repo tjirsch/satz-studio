@@ -177,13 +177,17 @@ fn style_of_the_showcase_params() {
         .expect("the # comment on the same line");
     assert!(cst.slice(cst.node(comment).span).starts_with("# a number"));
 
+    // `=` alignment acts on a run of entries whose value finishes on its own line; a
+    // value spanning lines ends the run, so those entries are left out here
     let columns: Vec<usize> = cst
         .node(cst.params().unwrap())
         .children
         .iter()
         .filter_map(|&c| match cst.node(c).kind {
-            NodeKind::ParamEntry { eq, .. } => {
-                Some(eq.start - text[..eq.start].rfind('\n').unwrap() - 1)
+            NodeKind::ParamEntry { eq, value, .. } => {
+                let v = cst.node(value).span;
+                (!text[v.start..v.end].contains('\n'))
+                    .then(|| eq.start - text[..eq.start].rfind('\n').unwrap() - 1)
             }
             _ => None,
         })
@@ -204,11 +208,13 @@ fn style_of_the_showcase_params() {
 fn style_of_lists() {
     let text = showcase();
     let cst = Cst::parse(&text).unwrap();
-    let services = attr_by_key(&cst, "project_service");
+    let services = cst
+        .param("infra_project_services")
+        .expect("infra_project_services");
     assert_eq!(
         style_of(&cst, services),
         StyleCtx {
-            indent: "        ".into(),
+            indent: "  ".into(),
             list_multiline: true,
             trailing_comma: true
         }

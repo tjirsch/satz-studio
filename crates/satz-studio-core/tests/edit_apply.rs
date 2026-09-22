@@ -92,13 +92,14 @@ fn replace_param_rewrites_in_place_and_appends_when_absent() {
         }])
         .unwrap();
     // an append lays the block out as `satz fmt` does; the fixture is formatted, so the
-    // one change is the new line before the block's `}`, in the block's `=` column
+    // one change is the new line before the block's `}`, in its run's `=` column. The
+    // block's last entry is a list spanning lines, and a value that does not finish on
+    // its line ends the run it stands in — so the appended line is a run of its own and
+    // its `=` sits one space past its own name
     let close = s.text().find("\n}\n").unwrap() + 1;
-    let eq = at(s.text(), "group_model_split", '=').unwrap();
     let expected = format!(
-        "{}{:<eq$}= 400\n{}",
+        "{}  logsink_retention_days = 400\n{}",
         &s.text()[..close],
-        "  logsink_retention_days",
         &s.text()[close..]
     );
     assert_eq!(p.text(), expected);
@@ -136,9 +137,8 @@ fn several_edits_land_in_one_apply() {
         ])
         .unwrap();
     let text = p.text();
-    // the appends lay the block out: every `=` in one column, and the trailing
-    // comments in theirs, the shortened value's included
-    let eq = at(text, "customer_shortname", '=');
+    // the appends lay the block out: the `=` of every run in one column, and the
+    // trailing comments in theirs, the shortened value's included
     assert!(text.contains("  audit_retention_days     = 30 "), "{text}");
     assert_eq!(
         at(text, "audit_retention_days", '#'),
@@ -149,8 +149,14 @@ fn several_edits_land_in_one_apply() {
         text.contains("  customer_shortname       = \"acme\"\n"),
         "{text}"
     );
-    assert_eq!(at(text, "new_flag", '='), eq, "{text}");
-    assert_eq!(at(text, "new_list", '='), eq, "{text}");
+    // the two appends are a run of their own: the list that ends the block spans lines
+    // and closes the run above it, so they align with each other and with nothing else
+    assert_eq!(
+        at(text, "new_flag", '='),
+        at(text, "new_list", '='),
+        "{text}"
+    );
+    assert_eq!(at(text, "new_flag", '='), Some(11), "{text}");
     assert!(text.contains(" = true\n  new_list"), "{text}");
     assert!(text.contains(" = [\"a\", \"b\"]\n}\n"), "{text}");
     assert!(

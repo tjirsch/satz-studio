@@ -3,7 +3,7 @@
   "counts": {
     "adopted_in_place": 0,
     "artifacts_updated": 0,
-    "current": 100,
+    "current": 98,
     "deferred": 0,
     "doc_only": 1,
     "fork_diffs_refreshed": 0,
@@ -22,6 +22,11 @@
     {
       "action": "current",
       "file": "billing-account-permissions.satz",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "billing-export.satz",
       "kind": "pack"
     },
     {
@@ -176,6 +181,11 @@
     },
     {
       "action": "current",
+      "file": "docs/billing-export.md",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
       "file": "docs/block-project-ssh-keys-dry-run.md",
       "kind": "pack"
     },
@@ -312,16 +322,6 @@
     {
       "action": "current",
       "file": "docs/project-cis-log-alerts.md",
-      "kind": "pack"
-    },
-    {
-      "action": "current",
-      "file": "docs/s1-group-definitions.md",
-      "kind": "pack"
-    },
-    {
-      "action": "current",
-      "file": "docs/s1-group-permissions.md",
       "kind": "pack"
     },
     {
@@ -510,16 +510,6 @@
     {
       "action": "current",
       "file": "security-audit/sa-security-audit.satz",
-      "kind": "pack"
-    },
-    {
-      "action": "current",
-      "file": "security-group-models/s1-group-definitions.satz",
-      "kind": "pack"
-    },
-    {
-      "action": "current",
-      "file": "security-group-models/s1-group-permissions.satz",
       "kind": "pack"
     },
     {

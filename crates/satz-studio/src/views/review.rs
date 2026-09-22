@@ -291,7 +291,7 @@ fn Upstream(reviewed: ReviewedPack) -> Element {
                 }
                 li {
                     Icon { name: "shield", size: 18 }
-                    span { "the privacy shapes, which this review does not check: the satz repository's gate, " code { "scripts/check-names.sh" } ", refuses organisation and project ids, e-mail addresses and domains that are not documented example values. Each one in the pack becomes a param first." }
+                    span { "no organisation in the file: the review reads every organisation and project id, e-mail address and domain that is not a documented example value as an error above, and each one becomes a param before the pack goes upstream." }
                 }
             }
             div { class: "review__actions",
