@@ -220,7 +220,7 @@ is a pack switch and not a value.
 | Estate · Resources | `src/views/resources.rs` | two panes: the tree of `ResourceNode`s (an icon per kind, a resource's name, `use` lines as leaves, branches collapsed below depth 2, a chip with the count of required attributes not written) and the selected node's card: kind, type, line, the missing required names, then one row per `AttrRow` — a typed field by `AttrType` (string, number, bool, a list of one of them; everything else and `Unknown` in source mode), locked rows dimmed with the reason (`import-id`, computed, not in the schema), source mode with its chips; a commit is `CommitEdit(Edit::ReplaceValue)`. Without a schema every row is locked and the header carries "Run update-schema". A row clicked in the drawer selects the node at its line |
 | Checks | `src/views/checks.rs` | what judges the estate: the `CHECKS` deck — `transpile --check`, `update-prerequisites` (`--report-only`, fixed), `require`, `report-compliance`, `bootstrap --dry-run` — with the one-click commands. When the last compile found prerequisites undeclared, a card above it carries each finding and "Write them into the estate", which is `WritePrerequisites`: satz's own writer under the write lock, checked and reloaded like an answer |
 | Deploy | `src/views/deploy.rs` | what hands the estate off: the `hcl_dir` path with two chips saying whether `main.tf` is written and whether the directory is initialised, then the `DEPLOY` deck — `transpile`, `hcl-init`, `plan` in the app; `apply`, `migrate`, `bootstrap` as command lines to copy or open in the terminal |
-| Agent | `src/views/agent.rs` | setting an agent up on the open estate and starting it: a lead card saying the app runs no model, then the `satz mcp` command line the configuration carries with the capability ceiling as a chip, then two cards. **A client started here** is `.mcp.json` as it would be written — the whole file, monospace — with "Write .mcp.json" (into the estate's directory), "Copy", and "Open in <client>", which runs the configured command in that directory in the OS terminal; a `.mcp.json` already holding those bytes says so and writes nothing, one holding anything else raises an error-container row naming it, with "Keep it" and "Replace it", and no other route replaces it. A command that is not configured disables the button and says Settings names the client; one that is not installed is an error toast naming it. **A client configured once** is the `mcpServers` block for Claude Desktop, the server named after the estate, with "Copy MCP config" and where that file is opened. With no satz located there is no configuration and the card says so |
+| Agent | `src/views/agent.rs` | configuring an agentic client on the open estate and starting it: a lead card saying the app runs no model, with the capability ceiling as an assist chip, then one outlined card per client — **Claude Code** and **Claude Desktop**. Each card holds the block `satz mcp-config <estate> --client <client> --allow <ceiling>` printed, satz's notes under it in the secondary colour, and the row "Configure <client>" and "Copy"; the Claude Code card also carries "Open in <client>", which runs the configured command in the estate's directory in the OS terminal. "Configure <client>" runs the same command with `--write`: the line satz ends on is the toast and all of satz's words stand in the card. A refusal stands in an error container in that card, as satz wrote it, and only the one refusal satz answers with `--force` — its own key already there with other arguments — offers "Replace it". A command that is not configured disables "Open in <client>" and says Settings names the client; one that is not installed is an error toast naming it |
 | Settings | `src/views/settings.rs` | every `Settings` field as a form, in three cards: **satz** — the path with the detected version, "Update satz", "Check only" and the run's log, `SatzReleaseActions`, and the MCP capability ceiling, which is the ceiling of the app's own `satz mcp` child and of the one an agent is given; **Agent** — the command line of the agentic client the Agent destination starts, with where that client is on `PATH` under the field, in the error colour when it is not installed or not named; **Appearance** — the theme; and below them the actions row with the file, "Show file", Discard and Save. Save writes the file and locates satz again. There is no credential and no engine here: the app runs no model |
 | Commands | `src/views/commands.rs` | not a destination: `PALETTE` is the table of every satz command the app runs, and `CommandDeck` renders any group of them — the list, the chosen entry's argument fields (a reporting command's format as a segmented button), the command line as it will run, Run and Cancel, and `CommandLog`, the streamed log with stdout and stderr distinguished, followed by the file a reporting command wrote where the app named it. `CommandPalette` is every entry in a dialog over the window, on ⌘K / Ctrl+K or the top bar's button, with `ONE_CLICK` — `whoami`, `transpile --check` and `questions`, palette entries run at their defaults — as one click each. Every entry opens in the format a person reads: `text` where satz offers it, `markdown` where it does not (`report-compliance`); `json` stays a choice in the format picker, and no entry fixes a format in its fixed words — `update-prerequisites` runs `--report-only` in satz's text. The log shows what satz printed, and the file a reporting command wrote, as satz wrote it `CHECKS` and `DEPLOY` are the two groups the destinations gather |
 | Gallery | `src/views/gallery.rs` | every component in its variants, light and dark side by side. A development route: the rail offers it only with `SATZ_STUDIO_DEBUG` set, and nothing else navigates to it |
@@ -416,34 +416,33 @@ satz-studio runs no model
 The Agent destination gives an external client the estate on screen, and Settings names
 that client; there is no credential and no engine anywhere in the window.
 
-- **What the cards show** is derived on every render from the open estate, the located
-  satz and the settings: the `satz mcp --root <root> --allow <ceiling>` command line as
-  one monospace row with the ceiling as an assist chip, then the two configurations as
-  they would be written. The root is the estate session's own — the boundary
-  `satz mcp` was opened with — not the estate directory, which is why the card shows the
-  line rather than asking anyone to write it.
-- **Writing `.mcp.json`.** "Write .mcp.json" puts the project file in the estate's
-  directory. A file that already holds those bytes raises a toast saying so and writes
-  nothing. A file that holds anything else raises an error-container row inside the card
-  — the path, and "Keep it" beside "Replace it" — and only "Replace it" writes over it;
-  the row goes as soon as either is pressed.
+- **What the cards show** is what satz printed. Each card runs `satz mcp-config
+  <estate> --client <client> --allow <ceiling>` when the view opens and again when the
+  estate or the ceiling changes, and renders its stdout as the block and its stderr as
+  the notes under it. The binary and the root in that block are satz's own; the window
+  states neither.
+- **Configuring a client.** "Configure Claude Code" and "Configure Claude Desktop" run
+  the same command with `--write`, which merges satz's key into the file that client
+  reads and leaves every other server in it alone. The toast is the line satz ended on —
+  written, added, replaced or unchanged — and the card holds all of it. A refusal stands
+  in the card in the error container, word for word as satz wrote it; where satz's own
+  refusal names `--force`, "Replace it" under it runs `--write --force`, and nothing
+  else in the window passes that flag.
+- **Copying.** "Copy" puts the block satz printed on the clipboard, for a client
+  configured by hand.
 - **Starting the client.** "Open in <client>" runs the configured command in the estate's
   directory, in the OS terminal, the way `apply` and `bootstrap` are run. The button is
   disabled and reads "No agent configured" while Settings name none; a command that is
   not installed is an error toast naming it. There is no terminal in the window, nothing
   is supervised, and the estate is re-read when the window comes back to the front.
-- **Claude Desktop.** The second card is the block for its configuration file, the server
-  named after the estate so several estates stand beside each other, with "Copy MCP
-  config" and the sentence saying where that file is opened. Nothing writes it: that file
-  holds every server on the machine.
 
 Deviations from the Material 3 specification these introduce:
 
 | surface | class | spec page | deviation |
 |---|---|---|---|
-| the lead and the command line | `.agent__lead`, `.agent__state` (in `views.css`) | <https://m3.material.io/components/cards/specs> | a filled `Card` laid out as one row — an icon, text, a chip — as `.deploy__state` is; the spec has no one-row card anatomy |
-| the configuration block | `.agent__config` (in `views.css`) | — (not a Material 3 component) | a monospace block on the highest surface container, selectable and scrolled at 260px; the spec has no code-block surface |
-| the clash row | `.agent__clash` (in `views.css`) | — (not a Material 3 component) | an error-container strip inside a card carrying the refusal and its two buttons, rather than a dialog: the question is about one file and the answer is in the card that raised it |
+| the lead | `.agent__lead` (in `views.css`) | <https://m3.material.io/components/cards/specs> | a filled `Card` laid out as one row — an icon, text, a chip — as `.deploy__state` is; the spec has no one-row card anatomy |
+| the configuration block | `.agent__config`, `.agent__notes` (in `views.css`) | — (not a Material 3 component) | a monospace block on the highest surface container, selectable and scrolled at 260px, with satz's notes under it in the same face at the secondary colour; the spec has no code-block surface |
+| the refusal | `.agent__refusal` (in `views.css`) | — (not a Material 3 component) | an error-container block inside a card carrying satz's words and the run that answers them, rather than a dialog: the question is about one file and the answer is in the card that raised it |
 
 ## The smoke walk
 
@@ -541,21 +540,22 @@ organisation: `bootstrap` and `apply` are read as command lines, never run.
 11. **Leave the estate, two ways.** The top bar's "Switch estate" returns the window to
     the Start screen with the Open door showing and the estates it found listed; "Close
     estate" returns it there as it stands. Either way the rail carries Settings alone.
-12. **Set an agent up on the estate.** Agent → the lead card says the app runs no model;
-    under it the `satz mcp --root … --allow read,write` line the configuration carries,
-    with the ceiling as a chip. "Write .mcp.json" → the toast names the file and
-    `.mcp.json` is beside the estate's `config.toml`, its `mcpServers.satz.args` holding
-    that same root and ceiling. Press it again → "already holds this configuration" and
-    the file's mtime is unchanged. Put `{}` in the file and press it again → the card
-    carries an error-container row naming the path, with "Keep it" and "Replace it";
-    "Keep it" leaves `{}` on disk, "Replace it" writes the configuration back. "Copy"
-    puts the same text on the clipboard. "Open in claude" → a terminal opens in the
-    estate's directory with Claude Code running, and `/mcp` there lists the satz server.
-    Clear the agent command in Settings → Save → the button reads "No agent configured"
-    and is disabled; set it to a name nothing installs → the field turns red under
-    Settings and the button raises an error toast naming it. The second card's
-    "Copy MCP config" puts the Claude Desktop block on the clipboard, its server named
-    after the estate.
+12. **Set an agent up on the estate.** Agent → the lead card says the app runs no model,
+    with the ceiling as a chip, and each client card shows the block satz printed with its
+    notes under it. "Configure Claude Code" → the toast is satz's line and `.mcp.json` is
+    beside the estate's `config.toml`, its `mcpServers.satz.args` holding the estate's
+    directory and that ceiling. Press it again → "unchanged" and the file's mtime does not
+    move. Lower the ceiling in Settings → Save → Agent → "Configure Claude Code" → the card
+    carries satz's refusal naming the key that is there, with "Replace it" under it;
+    "Replace it" writes the new ceiling into the file. Put `{` in the file and press
+    "Configure Claude Code" → satz's refusal says it is not valid JSON, no run is offered,
+    and the file is untouched. "Copy" puts the block on the clipboard. "Open in claude" → a
+    terminal opens in the estate's directory with Claude Code running, and `/mcp` there
+    lists the satz server. Clear the agent command in Settings → Save → the button reads
+    "No agent configured" and is disabled; set it to a name nothing installs → the field
+    turns red under Settings and the button raises an error toast naming it.
+    **Do not press "Configure Claude Desktop"** on a machine whose Claude Desktop
+    configuration you are not prepared to have satz's key merged into.
 13. **A satz newer than the build, and the release looks.** At launch the window title
     reads `satz-studio <version>`, and Settings → the satz card says what the satz check
     and the satz-studio look found (with `self_update_frequency = "never"` in

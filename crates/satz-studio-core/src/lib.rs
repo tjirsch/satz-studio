@@ -16,20 +16,21 @@
 //!   estate.
 //! - [`github`] — the latest release of a repository: the look for a newer satz-studio,
 //!   and the release satz's installer is taken from.
-//! - [`handoff`] — the MCP configuration that points an external agent at the open
-//!   estate, and the command that starts it. satz-studio runs no model (ADR 0020).
+//! - [`agent`] — the agentic client the window starts on the open estate; the
+//!   configuration that points it there is satz's, printed by `satz mcp-config`
+//!   ([`satz::mcp_config`]). satz-studio runs no model (ADR 0020).
 //! - [`settings`] and [`diag`] — the settings file and the one diagnostic type.
 //!
 //! The public surface of every module is the contract between the crates and the
 //! views (see `docs/architecture.md`).
 
+pub mod agent;
 pub mod cst;
 pub mod diag;
 pub mod edit;
 pub mod estate;
 pub mod git;
 pub mod github;
-pub mod handoff;
 pub mod model;
 pub mod satz;
 pub mod schema;

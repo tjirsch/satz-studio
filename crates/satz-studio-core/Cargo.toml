@@ -1,6 +1,6 @@
 [package]
 name = "satz-studio-core"
-description = "The headless half of satz-studio: the estate model, the lossless document layer, the satz driver, the agent handoff"
+description = "The headless half of satz-studio: the estate model, the lossless document layer, the satz driver, the agentic client it starts"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

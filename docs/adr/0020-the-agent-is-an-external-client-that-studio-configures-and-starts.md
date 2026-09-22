@@ -1,6 +1,7 @@
 # 0020 — the agent is an external client that satz-studio configures and starts
 
-- **Status:** accepted
+- **Status:** accepted; amended 2026-09-23 — the configuration is satz's to render, and
+  the app calls `satz mcp-config` for it (see the amendment below)
 - **Date:** 2026-09-22
 - **Deciders:** the maintainer
 
@@ -57,17 +58,15 @@ of that exists anywhere else.
 credential handling and the engine settings are deleted. In the rail's second secondary
 slot stands **Agent**, which sets an external agent up on the open estate and starts it:
 
-- `crates/satz-studio-core/src/handoff.rs` renders the `satz mcp` invocation for the
-  open estate in the two shapes a client reads — `.mcp.json`, the project file Claude
-  Code reads in the directory it starts in, and the `mcpServers` block for Claude
-  Desktop's configuration file, keyed `satz-<estate>` because one file there holds every
-  server. Both carry the satz binary the app located, the session root
-  `satz::session::session_root` computed for this estate, and `--allow` with the ceiling
-  from Settings; satz's own default is `read`, so a configuration that left it out would
-  hand the agent a read-only server without saying so.
-- The view writes `.mcp.json` into the estate's directory, refusing a file of that name
-  that holds anything else until the operator asks for it to be replaced; copies either
-  shape; and starts the configured agent command in the estate's directory.
+- The app renders the `satz mcp` invocation for the open estate in the two shapes a
+  client reads — `.mcp.json`, the project file Claude Code reads in the directory it
+  starts in, and the `mcpServers` block for Claude Desktop's configuration file, keyed
+  `satz-<estate>` because one file there holds every server. Both carry the satz binary,
+  the estate's root and `--allow` with the ceiling from Settings; satz's own default is
+  `read`, so a configuration that left it out would hand the agent a read-only server
+  without saying so. (Amended: satz renders both — see below.)
+- The view writes the configuration where the client reads it, copies either shape, and
+  starts the configured agent command in the estate's directory.
 - Settings carries one new field, `agent_command`, defaulting to `claude`. The engine
   fields — the provider, the model, the effort, the fallbacks, the transcripts switch,
   the chat debug log, the Claude Code binary and its stream log, and the auto-approval of
@@ -163,3 +162,30 @@ approval card is gone, and its other half stands — the capability ceiling is s
   hand gets a server confined to the wrong place or unable to write, and blames satz.
 - **Bad:** the app already knows every value in it, and it is the app that knows which
   estate is open.
+
+## Amendment — 2026-09-23: the configuration is satz's to render
+
+satz renders the configuration itself: `satz mcp-config <estate> --client
+<claude-code|claude-desktop> --allow <ceiling>` prints the block a client reads, and
+`--write` merges satz's one key into that client's file, leaving every other server in
+it alone ([satz ADR 0055](https://github.com/tjirsch/satz/blob/main/docs/adr/0055-satz-writes-the-mcp-client-configuration.md),
+which is where the reasoning for the three values lives). All three are satz's own
+knowledge — the binary is `current_exe()`, the root is the estate's config directory,
+the ceiling is a grant `satz mcp` parses — so the app held a second implementation of
+each, which drifts the day one of them moves.
+
+What changes here:
+
+- `crates/satz-studio-core/src/handoff.rs` is `src/agent.rs` and renders nothing: it
+  locates the configured client and starts it, which is the app's own half. The
+  configuration is `src/satz/mcp_config.rs`, which builds the argument vector and runs
+  satz through the same CLI runner as every other command.
+- The Agent destination is two cards, one per client, each showing what satz printed:
+  **Configure Claude Code**, **Configure Claude Desktop**, **Copy** and **Open in
+  <client>**, and nothing else. A refusal is satz's, shown word for word; where satz's
+  own refusal names `--force`, the card offers that run, and nothing in the window
+  passes `--force` on its own.
+
+The decision above stands: the app runs no model, and the Agent destination points an
+external client at the open estate and starts it. What it no longer does is compose the
+block — a front end that assembles it is a second implementation of satz's own answer.

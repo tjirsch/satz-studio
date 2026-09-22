@@ -119,13 +119,14 @@ that holds them up — in front of apply and bootstrap, which satz refuses.
   satz-studio calls no model and holds no credential — the client brings its own, and
   what the app gives it is this estate's satz server.
 
-  The Agent destination writes that configuration in the two shapes a client reads.
-  **Write .mcp.json** puts the project file Claude Code reads in the estate's directory;
-  a file of that name holding anything else is refused until you say to replace it.
-  **Copy MCP config** puts the block for Claude Desktop's configuration file on the
-  clipboard, the server named after the estate so several estates stand beside each
-  other. Both carry the satz the app located, the root that estate's server is confined
-  to, and the capability ceiling from Settings.
+  The configuration is satz's own: the Agent destination runs `satz mcp-config
+  <estate> --client <client> --allow <ceiling>` and shows what it printed.
+  **Configure Claude Code** and **Configure Claude Desktop** run it again with
+  `--write`, which merges satz's one key into the file that client reads — `.mcp.json`
+  beside the estate, or Claude Desktop's own configuration file — and leaves every other
+  server in it as it is. satz refuses its own key already there with other arguments, and
+  the card shows that refusal with the run that replaces it. **Copy** puts the block on
+  the clipboard.
 
   **Open in <client>** starts the command Settings names, in the estate's directory, in
   your terminal. A client that is not installed is said so, by name.
@@ -157,7 +158,7 @@ the suite needs a network or a credential.
 |---|---|
 | `Cargo.toml` | the workspace: two crates, `vendor` excluded, every dependency pinned once under `[workspace.dependencies]` |
 | `release.toml` | cargo-release: the version bump, the commit, the tag `vX.Y.Z` and the push, in one step on `main` |
-| `crates/satz-studio-core/` | the headless half: the estate directory, the document layer, the edit primitives and the write discipline, the provider schema and the view model, the satz driver (binary, CLI, `satz mcp` session), the agent handoff, settings, diagnostics. No GUI dependency; tested on every runner |
+| `crates/satz-studio-core/` | the headless half: the estate directory, the document layer, the edit primitives and the write discipline, the provider schema and the view model, the satz driver (binary, CLI, `satz mcp` session, the configuration `satz mcp-config` prints), the agentic client it starts, settings, diagnostics. No GUI dependency; tested on every runner |
 | `crates/satz-studio/` | the Dioxus 0.7 desktop binary `satz-studio`: the window, the views, the Material 3 Expressive stylesheet |
 | `vendor/satz/` | git submodule, pinned to a satz release tag. **The one pin:** satz-core as a path dependency, the presets, the smoke estates and the provider-schema fixture all come from this checkout |
 | `vendor/satz-tree-sitter/` | the generated tree-sitter parser for Satz (`src/`), copied from the grammar repository at the commit named in `COMMIT`; `scripts/sync-grammar.sh` refreshes it and `crates/satz-studio-core/build.rs` compiles it |
