@@ -7,7 +7,7 @@
 use std::path::PathBuf;
 
 use dioxus::prelude::*;
-use satz_studio_core::handoff::{self, DEFAULT_AGENT_COMMAND};
+use satz_studio_core::agent::{self, AgentError, DEFAULT_AGENT_COMMAND};
 use satz_studio_core::satz::Allow;
 use satz_studio_core::settings::{Theme, settings_path};
 
@@ -223,9 +223,9 @@ pub fn SettingsView() -> Element {
 /// The line under the agent command: where that client is, or why there is none. A
 /// command that is not installed is a fault — "Open in …" would have nothing to run.
 fn agent_status(command: &str) -> (String, bool) {
-    match handoff::locate(command) {
+    match agent::locate(command) {
         Ok(path) => (path.display().to_string(), false),
-        Err(handoff::HandoffError::NoCommand) => (
+        Err(AgentError::NoCommand) => (
             "no client named; the Agent destination has nothing to start".to_string(),
             true,
         ),

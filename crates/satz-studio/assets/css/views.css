@@ -2088,17 +2088,17 @@
 
 /* ---- agent -------------------------------------------------------------------- */
 
-/* The Agent destination: the handoff cards. `.agent__lead` and `.agent__state` take the
-   anatomy `.deploy__state` uses — a filled card as one row with an icon — and the two
-   configuration cards are outlined cards with a monospace block and a row of buttons. */
+/* The Agent destination: one card per client. `.agent__lead` takes the anatomy
+   `.deploy__state` uses — a filled card as one row with an icon — and each client card is
+   an outlined card with the block satz printed, the notes under it and a row of
+   buttons. */
 .agent {
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
 
-.agent__lead,
-.agent__state {
+.agent__lead {
   flex-direction: row;
   align-items: center;
   gap: 12px;
@@ -2108,15 +2108,6 @@
 .agent__lead p {
   margin: 0;
   font: var(--md-sys-typescale-body-medium);
-}
-
-.agent__line {
-  font-family: var(--md-ref-typeface-mono);
-  font-size: 0.85rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  user-select: text;
 }
 
 .agent__card {
@@ -2161,14 +2152,36 @@
   gap: 8px;
 }
 
-.agent__clash {
+/* satz's own notes under the block it printed: the same monospace column, in the
+   secondary colour, because they explain the block rather than being part of it. */
+.agent__notes {
+  margin: 0;
+  white-space: pre-wrap;
+  color: var(--md-sys-color-on-surface-variant);
+  font-family: var(--md-ref-typeface-mono);
+  font-size: 0.75rem;
+  line-height: 1.5;
+  user-select: text;
+}
+
+/* A refusal, as satz wrote it, in the error container — with the run that answers it
+   under the words, where satz says one does. */
+.agent__refusal {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
+  flex-direction: column;
   gap: 8px;
   padding: 12px 16px;
   border-radius: var(--md-sys-shape-corner-medium);
   background: var(--md-sys-color-error-container);
   color: var(--md-sys-color-on-error-container);
   font: var(--md-sys-typescale-body-small);
+}
+
+.agent__refusal pre {
+  margin: 0;
+  white-space: pre-wrap;
+  font-family: var(--md-ref-typeface-mono);
+  font-size: 0.75rem;
+  line-height: 1.5;
+  user-select: text;
 }

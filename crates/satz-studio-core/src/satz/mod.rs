@@ -3,7 +3,8 @@
 //! satz's own installer verified before it runs ([`install`]), `satz init` and
 //! what it leaves behind ([`init`]), `satz import` and what it wrote and found
 //! ([`import`]), `satz review-pack` and the two places a reviewed pack goes ([`review`]),
-//! what `satz self-update --check-only` found ([`self_update`]), the MCP
+//! what `satz self-update --check-only` found ([`self_update`]), the configuration a
+//! client needs to reach this estate as `satz mcp-config` prints it ([`mcp_config`]), the MCP
 //! session over `satz mcp` ([`mcp`]), and one session per open estate that the command
 //! decks and the agent share ([`session`]). [`reports`] are the JSON payloads a reporting command
 //! writes with `--format json` and the server returns as `structuredContent`.
@@ -15,13 +16,14 @@ pub mod import;
 pub mod init;
 pub mod install;
 pub mod mcp;
+pub mod mcp_config;
 pub mod reports;
 pub mod review;
 pub mod self_update;
 pub mod session;
 
 pub use binary::{Ahead, MIN_SATZ, SatzBinary};
-pub use cli::{CliLine, SatzCli};
+pub use cli::{CliLine, Output, SatzCli};
 pub use export::QuestionsFormat;
 pub use import::{ImportOptions, ImportPlan, ImportReport, ImportShape};
 pub use init::InitOptions;

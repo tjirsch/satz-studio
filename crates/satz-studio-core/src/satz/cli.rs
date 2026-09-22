@@ -22,6 +22,13 @@ pub enum CliLine {
     Stderr(String),
 }
 
+/// Both pipes of a command that ran to its end, whole.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Output {
+    pub stdout: String,
+    pub stderr: String,
+}
+
 #[derive(Debug, Clone)]
 pub struct SatzCli {
     pub bin: SatzBinary,
@@ -86,28 +93,39 @@ impl SatzCli {
         stream(cmd, format!("satz {}", args.join(" ")), out, cancel).await
     }
 
-    /// `satz --config <dir> <command…> --help`: the long help, as satz prints it on
-    /// stdout. A non-zero exit is an error carrying stderr.
-    pub async fn help(&self, command: &[&str]) -> Result<String, SatzError> {
-        let mut argv: Vec<String> = command.iter().map(|w| (*w).to_string()).collect();
-        argv.push("--help".to_string());
-        let line = argv.join(" ");
+    /// `satz --config <dir> <args…>`, run to its end with both pipes held rather than
+    /// streamed: for a command whose whole output is the answer — a block to render, a
+    /// help to read. A non-zero exit is an error carrying stderr as satz wrote it.
+    pub async fn output(&self, args: &[String]) -> Result<Output, SatzError> {
+        let line = args.join(" ");
         let output = self
-            .command(&argv)
+            .command(args)
             .output()
             .await
             .map_err(|e| SatzError::Io {
                 context: format!("running `satz {line}`"),
                 source: e,
             })?;
+        let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
         if !output.status.success() {
             return Err(SatzError::Exit {
                 command: line,
                 status: output.status,
-                stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+                stderr,
             });
         }
-        Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+        Ok(Output {
+            stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+            stderr,
+        })
+    }
+
+    /// `satz --config <dir> <command…> --help`: the long help, as satz prints it on
+    /// stdout. A non-zero exit is an error carrying stderr.
+    pub async fn help(&self, command: &[&str]) -> Result<String, SatzError> {
+        let mut argv: Vec<String> = command.iter().map(|w| (*w).to_string()).collect();
+        argv.push("--help".to_string());
+        Ok(self.output(&argv).await?.stdout)
     }
 
     /// Run a reporting command and type the report it wrote. A reporting command takes

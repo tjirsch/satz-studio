@@ -78,9 +78,11 @@ the rules that apply to every change, whoever or whatever makes it.
 - **The app runs no model (ADR 0020).** There is no chat, no engine, no credential and
   no conversation kept. The agent's half of the work belongs to a client that speaks
   satz's MCP server already, and what the app does is point one at the open estate: the
-  Agent destination renders that estate's `satz mcp` invocation as `.mcp.json` or as a
-  Claude Desktop block (`crates/satz-studio-core/src/handoff.rs`) and starts the
-  configured client in the estate's directory. A view that genuinely needs a model calls
+  Agent destination configures that client on the estate and starts it in the estate's
+  directory (`crates/satz-studio-core/src/agent.rs`). The configuration itself is satz's:
+  `satz mcp-config <estate> --client <client> --allow <ceiling>` prints it and `--write`
+  puts it where the client reads it (`crates/satz-studio-core/src/satz/mcp_config.rs`);
+  the app composes no MCP block of its own. A view that genuinely needs a model calls
   one from that view, with no loop, no tools and no window, and gets its own ADR;
   nothing does today.
 - **Docs ship with the change.** A change to what the app does updates `README.md` and
