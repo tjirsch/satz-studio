@@ -188,7 +188,7 @@ fn opaque_statements_span_whole_and_keep_their_comments() {
 
 #[test]
 fn the_pack_header_and_a_version_string() {
-    let cst = Cst::parse("pack showcase_pack version \"2.11\" content\n\"key\" = 1\n").unwrap();
+    let cst = Cst::parse("pack showcase_pack version \"2.11\"\n\"key\" = 1\n").unwrap();
     let header = child(&cst, cst.root(), 0);
     assert_eq!(
         cst.node(header).kind,

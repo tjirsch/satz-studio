@@ -1,7 +1,6 @@
 //! `McpSession` over the installed satz, rooted at the repository so the fixture's
 //! paths into `vendor/satz` are inside the boundary.
 
-use std::collections::BTreeSet;
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -9,34 +8,6 @@ use satz_studio_core::satz::reports::CompileSummary;
 use satz_studio_core::satz::{Allow, McpSession, SatzBinary, SatzError};
 
 const TIME_BOX: Duration = Duration::from_secs(60);
-
-const TOOLS: [&str; 25] = [
-    "satz_add_pack",
-    "satz_adopt",
-    "satz_check_presets",
-    "satz_estates",
-    "satz_fmt",
-    "satz_get_presets",
-    "satz_interview",
-    "satz_merge_presets",
-    "satz_open",
-    "satz_packs",
-    "satz_prowler",
-    "satz_questions",
-    "satz_remediation_annotate",
-    "satz_remediation_items",
-    "satz_remove_pack",
-    "satz_report_compliance",
-    "satz_require",
-    "satz_restrict",
-    "satz_review_pack",
-    "satz_scan_checkov",
-    "satz_transpile",
-    "satz_transpile_check",
-    "satz_triage",
-    "satz_update_prerequisites",
-    "satz_whoami",
-];
 
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -77,32 +48,8 @@ async fn open(allow: Allow) -> McpSession {
 }
 
 #[tokio::test]
-async fn the_session_lists_the_tools_reads_the_guide_and_opens_the_estate() {
+async fn the_session_opens_the_estate_and_holds_to_its_ceiling() {
     let session = open(Allow::Read).await;
-
-    let names: BTreeSet<&str> = session.tools().iter().map(|t| t.name.as_str()).collect();
-    assert_eq!(names, TOOLS.iter().copied().collect::<BTreeSet<_>>());
-    assert!(!session.instructions().is_empty());
-    assert!(!session.guide().is_empty());
-    assert!(
-        session.instructions().contains("satz_open"),
-        "{}",
-        session.instructions()
-    );
-
-    let questions = session.tool("satz_questions").unwrap();
-    assert_eq!(questions.annotations.read_only, Some(true));
-    assert!(questions.annotations.is_read_only());
-    assert!(questions.input_schema.is_object());
-    assert!(
-        questions
-            .output_schema
-            .as_ref()
-            .is_some_and(|s| s.is_object())
-    );
-    let transpile = session.tool("satz_transpile").unwrap();
-    assert_eq!(transpile.annotations.read_only, Some(false));
-    assert_eq!(transpile.annotations.destructive, Some(false));
 
     assert!(
         session.open_report().estate.ends_with("smoke.satz"),
@@ -145,26 +92,15 @@ async fn the_session_lists_the_tools_reads_the_guide_and_opens_the_estate() {
         Err(SatzError::Refused { .. })
     ));
 
-    let backlog = session.stderr_backlog();
-    assert!(
-        !backlog.is_empty(),
-        "the banner and the level line go to stderr"
-    );
-    assert!(
-        backlog.iter().any(|l| l.contains("satz mcp: serving")),
-        "{backlog:?}"
-    );
-    let _live = session.stderr();
-
     tokio::time::timeout(TIME_BOX, session.close())
         .await
         .unwrap()
         .unwrap();
 }
 
-/// What the agent bridge relies on: an argument satz cannot read is a refusal the tool
-/// returns, and a name it does not serve is a JSON-RPC `invalid_params` error, which the
-/// session names as such — neither is a transport failure.
+/// An argument satz cannot read is a refusal the tool returns, and a name it does not
+/// serve is a JSON-RPC `invalid_params` error, which the session names as such —
+/// neither is a transport failure.
 #[tokio::test]
 async fn a_bad_argument_is_a_refusal_and_an_unknown_tool_is_invalid_params() {
     let session = open(Allow::Read).await;

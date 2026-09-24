@@ -29,8 +29,6 @@ pub enum AgentError {
         #[source]
         source: which::Error,
     },
-    #[error("{}: a directory whose path holds a double quote cannot be started in", dir.display())]
-    UnquotableDir { dir: PathBuf },
 }
 
 /// Start the agent in `dir`.
@@ -47,11 +45,6 @@ pub enum AgentError {
 /// Returns the script that was opened.
 pub fn start(command: &str, dir: &Path) -> Result<PathBuf, AgentError> {
     locate(command)?;
-    if dir.display().to_string().contains('"') {
-        return Err(AgentError::UnquotableDir {
-            dir: dir.to_path_buf(),
-        });
-    }
     let script = script_path()?;
     write(&script, &script_text(command.trim(), dir))?;
     #[cfg(unix)]
@@ -71,17 +64,19 @@ pub fn start(command: &str, dir: &Path) -> Result<PathBuf, AgentError> {
     Ok(script)
 }
 
-/// `cd "<dir>" && <command>` as a script for the platform's shell.
+/// `cd <dir> && <command>` as a script for the platform's shell. The directory is quoted
+/// so the shell reads it as written; the command line is the operator's own and is run
+/// as they wrote it.
 pub fn script_text(command: &str, dir: &Path) -> String {
     if cfg!(windows) {
         format!(
-            "@echo off\r\ncd /d \"{}\" || exit /b 1\r\n{command}\r\n",
-            dir.display()
+            "@echo off\r\ncd /d {} || exit /b 1\r\n{command}\r\n",
+            crate::satz::session::cmd_path(dir)
         )
     } else {
         format!(
-            "#!/bin/sh\ncd \"{}\" || exit 1\nexec {command}\n",
-            dir.display()
+            "#!/bin/sh\ncd {} || exit 1\nexec {command}\n",
+            crate::satz::session::sh_path(dir)
         )
     }
 }
@@ -177,5 +172,30 @@ mod tests {
         let text = script_text("claude", Path::new("/estates/acme"));
         assert!(text.contains("/estates/acme"));
         assert!(text.contains("claude"));
+    }
+
+    /// The directory reaches `cd` as written, whatever the shell would otherwise expand
+    /// in it: the script is run, and the directory it lands in is the one named.
+    #[cfg(unix)]
+    #[test]
+    fn a_directory_the_shell_would_expand_is_the_one_the_agent_starts_in() {
+        let root = tempfile::tempdir().unwrap();
+        let dir = root.path().join("a $HOME `id` \\ \"q\" it's");
+        std::fs::create_dir(&dir).unwrap();
+        let script = root.path().join("agent.sh");
+        std::fs::write(&script, script_text("pwd -P", &dir)).unwrap();
+        let out = std::process::Command::new("sh")
+            .arg(&script)
+            .output()
+            .unwrap();
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(
+            String::from_utf8(out.stdout).unwrap().trim_end(),
+            dir.canonicalize().unwrap().display().to_string()
+        );
     }
 }

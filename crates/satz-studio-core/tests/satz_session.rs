@@ -1,33 +1,28 @@
-//! `EstateSession` over the fixture estate: the identity read from `satz_open`, a
-//! tool call typed, and the one-shot script for the terminal.
+//! `EstateSession` over a copy of the smoke estate: the root `satz mcp-config` renders
+//! for it, the identity read from `satz_open`, a tool call typed, a write the window
+//! makes at a ceiling the operator's setting does not reach, and the one-shot script for
+//! the terminal.
 
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
 use satz_studio_core::estate::EstateDir;
-use satz_studio_core::satz::reports::QuestionsReport;
+use satz_studio_core::satz::mcp_config::{self, Client, Run};
+use satz_studio_core::satz::reports::{PrerequisitesResult, QuestionsReport};
 use satz_studio_core::satz::{Allow, EstateSession, SatzBinary};
+
+#[path = "fixtures/edit/support.rs"]
+mod support;
 
 const TIME_BOX: Duration = Duration::from_secs(60);
 
-fn fixture() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("..")
-        .join("..")
-        .join("tests")
-        .join("fixtures")
-        .join("smoke")
-        .canonicalize()
-        .unwrap()
-}
-
-async fn open() -> Arc<EstateSession> {
+async fn open(copy: &support::SmokeCopy) -> Arc<EstateSession> {
     let bin = SatzBinary::locate(None).await.unwrap();
-    let dir = EstateDir::open(&fixture()).unwrap();
+    let dir = EstateDir::open(&copy.root).unwrap();
     tokio::time::timeout(
         TIME_BOX,
-        EstateSession::open(&bin, dir, PathBuf::from("smoke.satz"), Allow::ReadWrite),
+        EstateSession::open(&bin, dir, PathBuf::from("smoke.satz")),
     )
     .await
     .unwrap()
@@ -36,7 +31,8 @@ async fn open() -> Arc<EstateSession> {
 
 #[tokio::test]
 async fn the_session_reads_the_identity_and_answers_a_tool_call() {
-    let session = open().await;
+    let copy = support::copy_smoke();
+    let session = open(&copy).await;
     assert!(session.main.is_absolute());
     assert!(
         session.main.ends_with("smoke.satz"),
@@ -49,15 +45,6 @@ async fn the_session_reads_the_identity_and_answers_a_tool_call() {
         None,
         "the smoke estate impersonates nothing"
     );
-    assert_eq!(session.tools().len(), 25);
-    assert!(session.tool_info("satz_questions").is_some());
-    assert!(!session.instructions().is_empty());
-    assert!(!session.guide().is_empty());
-    assert!(
-        !session.mcp_stderr_backlog().is_empty(),
-        "the banner goes to stderr"
-    );
-    let _follow = session.mcp_stderr();
 
     let outcome = tokio::time::timeout(
         TIME_BOX,
@@ -72,9 +59,53 @@ async fn the_session_reads_the_identity_and_answers_a_tool_call() {
     let _guard = session.write_lock().await;
 }
 
+/// The root the window's own `satz mcp` is confined to is the one `satz mcp-config`
+/// writes into an agent's configuration for the same estate: the estate's directory,
+/// whatever the directories its config names reach into.
+#[tokio::test]
+async fn the_session_is_rooted_where_mcp_config_roots_an_agent() {
+    let copy = support::copy_smoke();
+    let session = open(&copy).await;
+    assert_eq!(session.root, copy.root);
+    let printed = tokio::time::timeout(
+        TIME_BOX,
+        mcp_config::run(
+            &session.cli,
+            "smoke.satz",
+            Client::ClaudeDesktop,
+            Allow::Read,
+            Run::Show,
+        ),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    assert_eq!(mcp_config::root(&printed).unwrap(), session.root);
+}
+
+/// The window's own writes need `write` whatever ceiling Settings holds for the agent:
+/// the session is started at `Allow::STUDIO`, and a writing tool runs on it.
+#[tokio::test]
+async fn the_window_writes_whatever_ceiling_the_agent_is_given() {
+    assert_eq!(Allow::STUDIO, Allow::ReadWrite);
+    let copy = support::copy_smoke();
+    let session = open(&copy).await;
+    let mut args = serde_json::Map::new();
+    args.insert("report_only".to_string(), serde_json::Value::Bool(false));
+    let outcome = tokio::time::timeout(TIME_BOX, session.tool("satz_update_prerequisites", args))
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(!outcome.is_error, "{}", outcome.text);
+    outcome
+        .typed::<PrerequisitesResult>("satz_update_prerequisites")
+        .unwrap();
+}
+
 #[tokio::test]
 async fn external_command_writes_an_executable_script_into_the_estate() {
-    let session = open().await;
+    let copy = support::copy_smoke();
+    let session = open(&copy).await;
     let script = session
         .external_command(&[
             "apply".to_string(),
@@ -94,7 +125,7 @@ async fn external_command_writes_an_executable_script_into_the_estate() {
     );
     assert!(text.contains("--config . apply --target \"a b\""), "{text}");
     assert!(
-        text.contains(&format!("cd \"{}\"", session.dir.dir.display()))
+        text.contains(&format!("cd '{}'", session.dir.dir.display()))
             || text.contains(&format!("cd /d \"{}\"", session.dir.dir.display())),
         "{text}"
     );

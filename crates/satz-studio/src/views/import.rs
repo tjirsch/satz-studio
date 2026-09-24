@@ -383,6 +383,17 @@ fn ShapeOptions(options: Signal<ImportOptions>, running: bool) -> Element {
                 supporting: "--customer-shortname, which no platform fact carries. Left blank, satz infers it from the leading token of the project and bucket names and reports it as not derivable when nothing repeats.",
                 oninput: move |v: String| options.write().customer_shortname = v,
             }
+            if current.shape == ImportShape::State {
+                TextField {
+                    label: "Organization",
+                    value: current.organization.clone(),
+                    placeholder: "123456789012",
+                    monospace: true,
+                    disabled: running,
+                    supporting: "--organization, the organisation this state belongs to. satz writes no estate from a state that names no organisation unless it is given here; a state that names one is held to it.",
+                    oninput: move |v: String| options.write().organization = v,
+                }
+            }
             TextField {
                 label: "Output file",
                 value: current.output.clone(),

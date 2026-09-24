@@ -24,7 +24,6 @@ dirs.workspace = true
 which.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
-futures-util.workspace = true
 rmcp.workspace = true
 reqwest.workspace = true
 tree-sitter.workspace = true

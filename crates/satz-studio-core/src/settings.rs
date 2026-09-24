@@ -16,8 +16,9 @@ pub struct Settings {
     /// operator dismissed, as `satz --version` names it; the notice comes back for any other
     /// newer release. It permits and refuses nothing: a newer satz runs either way
     pub dismissed_satz: Option<String>,
-    /// the capability ceiling every `satz mcp` this app starts is given, and the one
-    /// `satz mcp-config` writes into an agent's configuration
+    /// the capability ceiling `satz mcp-config` writes into an agent's configuration
+    /// when the Agent view writes it; the app's own `satz mcp` runs at
+    /// [`Allow::STUDIO`] whatever this holds (ADR 0021)
     pub mcp_allow: Allow,
     /// the agentic client the Agent view starts in the estate's directory, as a command
     /// line; its first word is looked up on `PATH`. Empty means none is configured

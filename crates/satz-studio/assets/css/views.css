@@ -24,14 +24,6 @@
   border-top-left-radius: var(--md-sys-shape-corner-large);
 }
 
-.rail-fab .m-icon {
-  transition: transform var(--md-sys-motion-duration-spatial-fast) var(--md-sys-motion-easing-expressive-spatial-fast);
-}
-
-.rail-fab:hover .m-icon {
-  transform: scale(1.1);
-}
-
 .view {
   padding: 24px 32px 32px;
   display: flex;
@@ -2162,6 +2154,32 @@
   font-size: 0.75rem;
   line-height: 1.5;
   user-select: text;
+}
+
+/* What the client's file holds for the estate: a chip with the ceiling on disk and
+   the sentence naming the file. */
+.agent__state {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+/* An entry on disk that is not the block above: the tertiary container, with the run
+   that writes the block over it. It is not an error — the agent runs — but the ceiling
+   it runs at is not the one Settings holds. */
+.agent__differs {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 16px;
+  border-radius: var(--md-sys-shape-corner-medium);
+  background: var(--md-sys-color-tertiary-container);
+  color: var(--md-sys-color-on-tertiary-container);
+}
+
+.agent__differs .agent__text {
+  color: inherit;
 }
 
 /* A refusal, as satz wrote it, in the error container — with the run that answers it

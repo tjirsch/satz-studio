@@ -1,14 +1,15 @@
 //! One session per open estate: the CLI runner and the MCP child, the write lock every
 //! writer takes, and the identity the estate's live tools run as — read from
-//! `satz_open`, displayed, configured nowhere. The command decks and the agent's tool
-//! bridge both go through [`EstateSession::tool`], so one identity per estate holds.
+//! `satz_open`, displayed, configured nowhere. Every tool call the window makes goes
+//! through [`EstateSession::tool`], so one identity per estate holds.
 
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use tokio::sync::{Mutex, MutexGuard};
 
-use super::{Allow, McpSession, SatzBinary, SatzCli, SatzError, ToolInfo, ToolOutcome};
+use super::mcp_config::{self, Client, Run};
+use super::{Allow, McpSession, SatzBinary, SatzCli, SatzError, ToolOutcome};
 use crate::estate::EstateDir;
 
 pub struct EstateSession {
@@ -16,7 +17,8 @@ pub struct EstateSession {
     /// the main `.satz` file, absolute
     pub main: PathBuf,
     pub cli: SatzCli,
-    /// the boundary `satz mcp` is confined to, computed once by [`session_root`]
+    /// the boundary `satz mcp` is confined to: the `--root` `satz mcp-config` renders for
+    /// this estate, the same one every client's configuration carries
     pub root: PathBuf,
     mcp: McpSession,
     write_lock: Mutex<()>,
@@ -33,14 +35,14 @@ impl std::fmt::Debug for EstateSession {
 
 impl EstateSession {
     /// Open the estate: `main` resolves as satz resolves a name on the command line and
-    /// is made absolute; `satz mcp` is rooted at [`session_root`] so every path the
-    /// estate's config names is inside the boundary satz confines to; `satz_open` gets
-    /// the absolute `config.toml` and the absolute main file.
+    /// is made absolute; `satz mcp` is rooted where `satz mcp-config` says a client's
+    /// server is rooted — one rule for the root, satz's — and started at
+    /// [`Allow::STUDIO`], the ceiling the window's own writes need; `satz_open` gets the
+    /// absolute `config.toml` and the absolute main file.
     pub async fn open(
         bin: &SatzBinary,
         dir: EstateDir,
         main: PathBuf,
-        allow: Allow,
     ) -> Result<Arc<EstateSession>, SatzError> {
         let dir = if dir.config_path.is_absolute() {
             dir
@@ -52,10 +54,24 @@ impl EstateSession {
             })?
         };
         let main = absolute(&dir.estate_path(&main))?;
-        let root = session_root(&dir, &main)?;
-        let mcp =
-            McpSession::open(bin, &root, allow, utf8(&dir.config_path)?, utf8(&main)?).await?;
         let cli = SatzCli::new(bin.clone(), dir.dir.clone());
+        let printed = mcp_config::run(
+            &cli,
+            utf8(&main)?,
+            Client::ClaudeCode,
+            Allow::STUDIO,
+            Run::Show,
+        )
+        .await?;
+        let root = mcp_config::root(&printed)?;
+        let mcp = McpSession::open(
+            bin,
+            &root,
+            Allow::STUDIO,
+            utf8(&dir.config_path)?,
+            utf8(&main)?,
+        )
+        .await?;
         Ok(Arc::new(EstateSession {
             dir,
             main,
@@ -73,28 +89,6 @@ impl EstateSession {
     pub fn deployment_mode(&self) -> Option<&str> {
         self.mcp.open_report().deployment_mode.as_deref()
     }
-    pub fn tools(&self) -> &[ToolInfo] {
-        self.mcp.tools()
-    }
-    pub fn tool_info(&self, name: &str) -> Option<&ToolInfo> {
-        self.mcp.tool(name)
-    }
-    pub fn instructions(&self) -> &str {
-        self.mcp.instructions()
-    }
-    pub fn guide(&self) -> &str {
-        self.mcp.guide()
-    }
-    /// The `satz mcp` child's stderr, line by line, from now on.
-    pub fn mcp_stderr(&self) -> tokio::sync::broadcast::Receiver<String> {
-        self.mcp.stderr()
-    }
-    /// The last lines the `satz mcp` child wrote to stderr — what a view shows before
-    /// it follows [`Self::mcp_stderr`].
-    pub fn mcp_stderr_backlog(&self) -> Vec<String> {
-        self.mcp.stderr_backlog()
-    }
-
     /// Call a tool on this estate's session.
     pub async fn tool(
         &self,
@@ -104,15 +98,15 @@ impl EstateSession {
         self.mcp.call(name, args).await
     }
 
-    /// Every writer takes this first: a view edit, an interview answer, an agent's
-    /// write tool. Held across the check and the rename.
+    /// Every writer in the window takes this first: a view edit, an interview answer, a
+    /// pack switched. Held across the check and the rename.
     pub async fn write_lock(&self) -> MutexGuard<'_, ()> {
         self.write_lock.lock().await
     }
 
     /// `apply` and `bootstrap` run in the user's own terminal: a one-shot script under
     /// the app's data directory (`<data dir>/run/<unix millis>.sh`, `.cmd` on Windows)
-    /// holding `cd "<estate>" && "<satz>" --config . <args…>`, opened with the OS
+    /// holding `cd '<estate>' && '<satz>' --config . <args…>`, opened with the OS
     /// terminal. Returns the script's path.
     pub fn external_command(&self, args: &[String]) -> Result<PathBuf, SatzError> {
         let run_dir = crate::settings::data_dir()
@@ -162,65 +156,6 @@ impl EstateSession {
     }
 }
 
-/// The root `satz mcp` is confined to: the longest common directory prefix of the
-/// estate's directory, every directory its resolved config names (`yaml_dir`,
-/// `hcl_dir`, `schema_dir`, `presets_dir`, each `include_dirs` entry) and the main
-/// file's directory. For an estate whose config stays inside its directory this is the
-/// directory itself. `.` and `..` components are folded lexically, so a directory that
-/// does not exist yet (an `hcl_dir` before the first transpile) still counts.
-///
-/// Directories that share no component at all have no root to be confined to, and an
-/// empty path is not one: satz would be handed `--root ""`. That is
-/// [`SatzError::NoCommonRoot`], because the root is the boundary `satz mcp` enforces and
-/// a boundary nobody can compute is not a boundary to guess at.
-pub fn session_root(dir: &EstateDir, main: &Path) -> Result<PathBuf, SatzError> {
-    let runtime = &dir.runtime;
-    let mut dirs: Vec<&Path> = vec![&dir.dir];
-    dirs.extend(
-        [
-            &runtime.yaml_dir,
-            &runtime.hcl_dir,
-            &runtime.schema_dir,
-            &runtime.presets_dir,
-        ]
-        .into_iter()
-        .chain(&runtime.include_dirs)
-        .map(Path::new),
-    );
-    dirs.extend(main.parent());
-    let normalized: Vec<PathBuf> = dirs.iter().map(|p| normalize(p)).collect();
-    let mut prefix: Vec<Component<'_>> = normalized[0].components().collect();
-    for p in &normalized[1..] {
-        let common = prefix
-            .iter()
-            .zip(p.components())
-            .take_while(|(a, b)| *a == b)
-            .count();
-        prefix.truncate(common);
-    }
-    if prefix.is_empty() {
-        return Err(SatzError::NoCommonRoot { dirs: normalized });
-    }
-    Ok(prefix.iter().collect())
-}
-
-/// Fold `.` and `..` without touching the filesystem.
-fn normalize(p: &Path) -> PathBuf {
-    let mut out = PathBuf::new();
-    for c in p.components() {
-        match c {
-            Component::CurDir => {}
-            Component::ParentDir => {
-                if !out.pop() {
-                    out.push(c);
-                }
-            }
-            other => out.push(other),
-        }
-    }
-    out
-}
-
 fn absolute(p: &Path) -> Result<PathBuf, SatzError> {
     std::path::absolute(p).map_err(|e| SatzError::Io {
         context: format!("resolving {}", p.display()),
@@ -237,7 +172,8 @@ fn utf8(p: &Path) -> Result<&str, SatzError> {
     })
 }
 
-/// `cd "<dir>" && "<satz>" --config . <args…>` as a script for the platform's shell.
+/// `cd <dir> && <satz> --config . <args…>` as a script for the platform's shell, the two
+/// paths quoted so the shell reads them as written.
 fn script_text(dir: &Path, satz: &Path, args: &[String]) -> String {
     if cfg!(windows) {
         let args = args
@@ -246,9 +182,9 @@ fn script_text(dir: &Path, satz: &Path, args: &[String]) -> String {
             .collect::<Vec<_>>()
             .join(" ");
         format!(
-            "@echo off\r\ncd /d \"{}\" && \"{}\" --config . {args}\r\n",
-            dir.display(),
-            satz.display()
+            "@echo off\r\ncd /d {} && {} --config . {args}\r\n",
+            cmd_path(dir),
+            cmd_path(satz)
         )
     } else {
         let args = args
@@ -257,11 +193,25 @@ fn script_text(dir: &Path, satz: &Path, args: &[String]) -> String {
             .collect::<Vec<_>>()
             .join(" ");
         format!(
-            "#!/bin/sh\nset -e\ncd \"{}\" && \"{}\" --config . {args}\n",
-            dir.display(),
-            satz.display()
+            "#!/bin/sh\nset -e\ncd {} && {} --config . {args}\n",
+            sh_path(dir),
+            sh_path(satz)
         )
     }
+}
+
+/// A path for `sh`, single-quoted: nothing inside single quotes is expanded — not `$`,
+/// not a backtick, not a backslash — and a single quote in the path is closed, escaped
+/// and reopened (`'\''`).
+pub(crate) fn sh_path(path: &Path) -> String {
+    format!("'{}'", path.display().to_string().replace('\'', "'\\''"))
+}
+
+/// A path for `cmd.exe` in a script: double-quoted, and `%` doubled, which is how a
+/// batch file reads a literal percent sign rather than a variable. A Windows path holds
+/// no double quote.
+pub(crate) fn cmd_path(path: &Path) -> String {
+    format!("\"{}\"", path.display().to_string().replace('%', "%%"))
 }
 
 /// A word that needs no quoting is left bare; anything else is double-quoted with
@@ -391,53 +341,6 @@ fn open_in_terminal(script: &Path) -> Result<(), SatzError> {
 mod tests {
     use super::*;
 
-    fn estate_in(dir: &Path, config: &str) -> EstateDir {
-        std::fs::write(dir.join("config.toml"), config).unwrap();
-        EstateDir::open(dir).unwrap()
-    }
-
-    #[test]
-    fn a_normal_estate_is_rooted_at_its_own_directory() {
-        let tmp = tempfile::tempdir().unwrap();
-        let dir = estate_in(tmp.path(), "yaml_dir = \"yaml\"\n");
-        let main = tmp.path().join("yaml").join("C0example.satz");
-        assert_eq!(session_root(&dir, &main).unwrap(), tmp.path());
-    }
-
-    #[test]
-    fn the_fixture_is_rooted_at_the_repository() {
-        let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join("..");
-        let dir = EstateDir::open(&repo.join("tests").join("fixtures").join("smoke")).unwrap();
-        let main = PathBuf::from(&dir.runtime.yaml_dir).join("smoke.satz");
-        assert_eq!(session_root(&dir, &main).unwrap(), normalize(&repo));
-    }
-
-    #[test]
-    fn a_config_that_reaches_up_widens_the_root() {
-        let tmp = tempfile::tempdir().unwrap();
-        let estate = tmp.path().join("fleet").join("one");
-        std::fs::create_dir_all(&estate).unwrap();
-        let dir = estate_in(&estate, "presets_dir = \"../../presets\"\n");
-        let main = estate.join("yaml").join("C0example.satz");
-        assert_eq!(session_root(&dir, &main).unwrap(), tmp.path());
-    }
-
-    #[test]
-    fn directories_that_share_no_root_are_refused_rather_than_rooted_at_nothing() {
-        // Two relative directories with nothing in common stand in for the drives of a
-        // Windows estate; the lexical fold never reaches the filesystem, so this is the
-        // same computation a `C:` estate with a `D:` presets directory performs.
-        let tmp = tempfile::tempdir().unwrap();
-        let dir = estate_in(
-            tmp.path(),
-            "presets_dir = \"../../../../../../elsewhere\"\n",
-        );
-        let main = Path::new("somewhere").join("C0example.satz");
-        let e = session_root(&dir, &main).unwrap_err();
-        assert!(matches!(e, SatzError::NoCommonRoot { .. }), "{e:?}");
-        assert!(e.to_string().contains("share no common root"), "{e}");
-    }
-
     #[test]
     fn the_script_changes_into_the_estate_and_quotes_what_needs_it() {
         let text = script_text(
@@ -449,7 +352,30 @@ mod tests {
             assert!(text.contains("cd /d \"/estates/acme\" && \"/usr/local/bin/satz\" --config . apply \"a b\" \"x\"\"y\""), "{text}");
         } else {
             assert!(text.starts_with("#!/bin/sh\nset -e\n"), "{text}");
-            assert!(text.contains("cd \"/estates/acme\" && \"/usr/local/bin/satz\" --config . apply \"a b\" \"x\\\"y\"\n"), "{text}");
+            assert!(text.contains("cd '/estates/acme' && '/usr/local/bin/satz' --config . apply \"a b\" \"x\\\"y\"\n"), "{text}");
         }
+    }
+
+    /// A directory the shell would otherwise read — a `$`, a backtick, a backslash, a
+    /// quote of either kind — reaches `cd` as written.
+    #[cfg(unix)]
+    #[test]
+    fn a_path_the_shell_would_expand_is_passed_as_written() {
+        let dir = Path::new("/estates/$HOME `id` \\ \"q\" it's");
+        let quoted = sh_path(dir);
+        let out = std::process::Command::new("sh")
+            .arg("-c")
+            .arg(format!("printf '%s' {quoted}"))
+            .output()
+            .unwrap();
+        assert_eq!(
+            String::from_utf8(out.stdout).unwrap(),
+            dir.display().to_string()
+        );
+    }
+
+    #[test]
+    fn a_percent_sign_is_doubled_for_a_batch_file() {
+        assert_eq!(cmd_path(Path::new("C:\\a%PATH%b")), "\"C:\\a%%PATH%%b\"");
     }
 }

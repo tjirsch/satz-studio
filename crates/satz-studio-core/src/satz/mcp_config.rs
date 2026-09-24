@@ -11,6 +11,7 @@
 //! that came to. Every refusal is satz's, and reaches the operator as satz wrote it.
 
 use std::fmt;
+use std::path::PathBuf;
 
 use super::{Allow, SatzCli, SatzError};
 
@@ -138,6 +139,193 @@ pub fn refusal(e: &SatzError) -> String {
 /// and nothing is offered, because `--force` would not change it.
 pub fn force_would_answer(refusal: &str) -> bool {
     refusal.contains("--force replaces it")
+}
+
+/// One server entry as satz renders it: the program the client starts and its
+/// arguments, with the entry itself kept whole for comparing it with a file's.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Server {
+    /// the key satz writes the entry under
+    pub key: String,
+    pub command: String,
+    pub args: Vec<String>,
+    /// the entry as JSON, every field satz wrote in it
+    pub entry: serde_json::Value,
+}
+
+impl Server {
+    /// Read the entry `key` holds from a JSON object of servers. `None` when the key is
+    /// not there; an entry without a string `command` or a list of string `args` is not
+    /// one satz writes, and is an error naming what is missing.
+    fn read(
+        key: &str,
+        servers: &serde_json::Map<String, serde_json::Value>,
+    ) -> Result<Option<Server>, String> {
+        let Some(entry) = servers.get(key) else {
+            return Ok(None);
+        };
+        let command = entry["command"]
+            .as_str()
+            .ok_or_else(|| format!("the server `{key}` has no string `command`"))?
+            .to_string();
+        let args = serde_json::from_value::<Vec<String>>(entry["args"].clone())
+            .map_err(|_| format!("the server `{key}` has no list of string `args`"))?;
+        Ok(Some(Server {
+            key: key.to_string(),
+            command,
+            args,
+            entry: entry.clone(),
+        }))
+    }
+
+    /// The value after `flag` in the arguments, when the flag is there.
+    fn flag(&self, flag: &str) -> Option<&str> {
+        let at = self.args.iter().position(|a| a == flag)?;
+        self.args.get(at + 1).map(String::as_str)
+    }
+
+    /// The directory `satz mcp` is confined to: the value of `--root`.
+    pub fn root(&self) -> Option<&str> {
+        self.flag("--root")
+    }
+
+    /// The capability ceiling the server is started with: the value of `--allow`.
+    pub fn allow(&self) -> Option<&str> {
+        self.flag("--allow")
+    }
+}
+
+/// The one server the block satz printed holds. satz prints exactly one key under
+/// `mcpServers`; anything else is output this app does not read, and an error quoting
+/// it.
+pub fn server(block: &str) -> Result<Server, SatzError> {
+    let unreadable = |reason: String| SatzError::Printed {
+        command: "mcp-config".to_string(),
+        reason: format!("{reason}:\n{block}"),
+    };
+    let doc: serde_json::Value = serde_json::from_str(block)
+        .map_err(|e| unreadable(format!("the block is not JSON ({e})")))?;
+    let servers = doc["mcpServers"]
+        .as_object()
+        .ok_or_else(|| unreadable("the block has no `mcpServers` object".to_string()))?;
+    let mut keys = servers.keys();
+    let (Some(key), None) = (keys.next(), keys.next()) else {
+        return Err(unreadable(format!(
+            "the block holds {} servers, not one",
+            servers.len()
+        )));
+    };
+    Server::read(key, servers)
+        .map_err(unreadable)?
+        .ok_or_else(|| unreadable(format!("the server `{key}` is not in the block")))
+}
+
+/// The directory `satz mcp` is confined to for this estate, as satz renders it: the
+/// `--root` of the server it prints. This is the one rule for the root — satz's — used
+/// for the app's own `satz mcp` and written into every client's configuration.
+pub fn root(printed: &Printed) -> Result<PathBuf, SatzError> {
+    let server = server(&printed.stdout)?;
+    server
+        .root()
+        .map(PathBuf::from)
+        .ok_or_else(|| SatzError::Printed {
+            command: "mcp-config".to_string(),
+            reason: format!("the server has no `--root`: {:?}", server.args),
+        })
+}
+
+/// The file a `--write` puts the configuration in, as satz names it in the last of its
+/// notes: `then: satz mcp-config … --write   # writes <file>` for Claude Code, `# merges
+/// the key into <file>` for Claude Desktop. The path is satz's to derive — the estate's
+/// directory for one client, the platform's own place for the other — so it is read,
+/// never rebuilt; notes that name no file are an error quoting them.
+pub fn target_file(notes: &str) -> Result<PathBuf, SatzError> {
+    notes
+        .lines()
+        .filter(|l| l.trim_start().starts_with("then:"))
+        .find_map(|l| {
+            let (_, comment) = l.split_once(" --write   # ")?;
+            let comment = comment.trim();
+            comment
+                .strip_prefix("writes ")
+                .or_else(|| comment.strip_prefix("merges the key into "))
+                .map(|p| PathBuf::from(p.trim()))
+        })
+        .ok_or_else(|| SatzError::Printed {
+            command: "mcp-config".to_string(),
+            reason: format!("the notes name no file a write goes to:\n{notes}"),
+        })
+}
+
+/// What the client's file holds for this estate, against what satz printed.
+#[derive(Debug, Clone, PartialEq)]
+pub enum OnDisk {
+    /// no file, or a file without satz's key: nothing is configured yet
+    Absent,
+    /// satz's key holds exactly the entry satz printed
+    Same { allow: Option<String> },
+    /// satz's key holds another entry — another ceiling, another binary, another root.
+    /// `--write` refuses it and `--write --force` replaces it.
+    Differs { allow: Option<String> },
+    /// the file is there and satz's key cannot be read from it; the reason says why
+    Unreadable(String),
+}
+
+/// The configuration a client reads for this estate: the file, satz's key in it, and
+/// what that key holds against the entry satz printed for the ceiling in hand.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Written {
+    pub file: PathBuf,
+    pub key: String,
+    pub on_disk: OnDisk,
+}
+
+/// Read the client's file for the entry satz printed. The file and the key are satz's
+/// (its notes and its block); what is compared is the entry as a whole, which is what
+/// satz compares before it refuses a `--write`.
+pub fn written(printed: &Printed) -> Result<Written, SatzError> {
+    let server = server(&printed.stdout)?;
+    let file = target_file(&printed.stderr)?;
+    let on_disk = on_disk(&file, &server);
+    Ok(Written {
+        file,
+        key: server.key,
+        on_disk,
+    })
+}
+
+fn on_disk(file: &std::path::Path, printed: &Server) -> OnDisk {
+    let text = match std::fs::read_to_string(file) {
+        Ok(text) => text,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return OnDisk::Absent,
+        Err(e) => return OnDisk::Unreadable(format!("{}: {e}", file.display())),
+    };
+    let doc: serde_json::Value = match serde_json::from_str(&text) {
+        Ok(doc) => doc,
+        Err(e) => return OnDisk::Unreadable(format!("{}: not valid JSON ({e})", file.display())),
+    };
+    let servers = match doc.get("mcpServers") {
+        None => return OnDisk::Absent,
+        Some(serde_json::Value::Object(servers)) => servers,
+        Some(_) => {
+            return OnDisk::Unreadable(format!(
+                "{}: `mcpServers` is not a JSON object",
+                file.display()
+            ));
+        }
+    };
+    match Server::read(&printed.key, servers) {
+        Ok(None) => OnDisk::Absent,
+        Ok(Some(there)) => {
+            let allow = there.allow().map(str::to_string);
+            if there.entry == printed.entry {
+                OnDisk::Same { allow }
+            } else {
+                OnDisk::Differs { allow }
+            }
+        }
+        Err(e) => OnDisk::Unreadable(format!("{}: {e}", file.display())),
+    }
 }
 
 #[cfg(test)]
@@ -310,6 +498,138 @@ Fix the file, or move it aside and run this again.\n";
             "unchanged satz in /estates/acme/.mcp.json: it already runs satz mcp --allow read"
         );
         assert_eq!(outcome(""), "");
+    }
+
+    /// What `satz mcp-config` prints for Claude Code without `--write`, as satz v0.81.0
+    /// prints it: the block on stdout, the banner and the notes on stderr.
+    const BLOCK: &str = r#"{
+  "mcpServers": {
+    "satz": {
+      "type": "stdio",
+      "command": "/opt/bin/satz",
+      "args": [
+        "mcp",
+        "--root",
+        "/estates/acme",
+        "--allow",
+        "read,write"
+      ]
+    }
+  }
+}
+"#;
+    const NOTES: &str = "\
+satz v0.81.0 (built 2026-09-23 08:20:04)
+note: the client starts this binary by absolute path, so it needs no PATH of its own: /opt/bin/satz
+note: the server may work under /estates/acme and holds no estate until a call opens one — `satz_open` with C0example.satz
+note: Claude Code reads .mcp.json from the directory it starts in, and asks before it starts a server it has not seen
+then: satz mcp-config C0example.satz --client claude-code --write   # writes /estates/acme/.mcp.json
+";
+
+    fn printed() -> Printed {
+        Printed {
+            stdout: BLOCK.to_string(),
+            stderr: NOTES.to_string(),
+        }
+    }
+
+    #[test]
+    fn the_block_is_read_as_one_server_with_its_root_and_ceiling() {
+        let server = server(BLOCK).unwrap();
+        assert_eq!(server.key, "satz");
+        assert_eq!(server.command, "/opt/bin/satz");
+        assert_eq!(server.root(), Some("/estates/acme"));
+        assert_eq!(server.allow(), Some("read,write"));
+        assert_eq!(root(&printed()).unwrap(), PathBuf::from("/estates/acme"));
+    }
+
+    /// A block of a shape satz does not print is an error quoting it, never a root
+    /// guessed at.
+    #[test]
+    fn a_block_satz_does_not_print_is_refused() {
+        for block in [
+            "not json",
+            "{}",
+            r#"{"mcpServers": {}}"#,
+            r#"{"mcpServers": {"a": {"command": "x", "args": []}, "b": {"command": "x", "args": []}}}"#,
+            r#"{"mcpServers": {"satz": {"args": ["mcp"]}}}"#,
+        ] {
+            let e = server(block).unwrap_err();
+            assert!(matches!(e, SatzError::Printed { .. }), "{block}: {e:?}");
+        }
+        let rootless = Printed {
+            stdout: r#"{"mcpServers": {"satz": {"command": "x", "args": ["mcp"]}}}"#.to_string(),
+            stderr: String::new(),
+        };
+        assert!(root(&rootless).unwrap_err().to_string().contains("--root"));
+    }
+
+    #[test]
+    fn the_file_a_write_goes_to_is_the_one_satz_names() {
+        assert_eq!(
+            target_file(NOTES).unwrap(),
+            PathBuf::from("/estates/acme/.mcp.json")
+        );
+        assert_eq!(
+            target_file(
+                "then: satz mcp-config C0example.satz --client claude-desktop --write   # merges the key into /home/example/.config/Claude/claude_desktop_config.json\n"
+            )
+            .unwrap(),
+            PathBuf::from("/home/example/.config/Claude/claude_desktop_config.json")
+        );
+        assert!(matches!(
+            target_file("note: nothing else\n").unwrap_err(),
+            SatzError::Printed { .. }
+        ));
+    }
+
+    /// The ceiling the agent runs at is the one in the client's file, compared entry by
+    /// entry with the block satz printed for the setting.
+    #[test]
+    fn the_file_on_disk_is_compared_with_the_block() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join(".mcp.json");
+        let mut p = printed();
+        p.stderr = format!(
+            "then: satz mcp-config C0example.satz --client claude-code --write   # writes {}\n",
+            file.display()
+        );
+        let on = |p: &Printed| written(p).unwrap().on_disk;
+
+        assert_eq!(on(&p), OnDisk::Absent);
+        std::fs::write(
+            &file,
+            r#"{"mcpServers": {"other": {"command": "x", "args": []}}}"#,
+        )
+        .unwrap();
+        assert_eq!(on(&p), OnDisk::Absent);
+
+        std::fs::write(&file, BLOCK).unwrap();
+        assert_eq!(
+            on(&p),
+            OnDisk::Same {
+                allow: Some("read,write".to_string())
+            }
+        );
+        let written_at_read = BLOCK.replace("\"read,write\"", "\"read\"");
+        std::fs::write(&file, &written_at_read).unwrap();
+        assert_eq!(
+            on(&p),
+            OnDisk::Differs {
+                allow: Some("read".to_string())
+            }
+        );
+        let written_without = BLOCK.replace(",\n        \"--allow\",\n        \"read,write\"", "");
+        assert_ne!(written_without, BLOCK);
+        std::fs::write(&file, &written_without).unwrap();
+        assert_eq!(on(&p), OnDisk::Differs { allow: None });
+
+        std::fs::write(&file, "{").unwrap();
+        assert!(matches!(on(&p), OnDisk::Unreadable(r) if r.contains("not valid JSON")));
+        std::fs::write(&file, r#"{"mcpServers": []}"#).unwrap();
+        assert!(matches!(on(&p), OnDisk::Unreadable(_)));
+        assert_eq!(written(&p).unwrap().key, "satz");
+        assert_eq!(written(&p).unwrap().file, file);
     }
 
     #[cfg(unix)]

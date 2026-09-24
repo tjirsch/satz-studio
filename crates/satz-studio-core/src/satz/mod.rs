@@ -5,8 +5,8 @@
 //! ([`import`]), `satz review-pack` and the two places a reviewed pack goes ([`review`]),
 //! what `satz self-update --check-only` found ([`self_update`]), the configuration a
 //! client needs to reach this estate as `satz mcp-config` prints it ([`mcp_config`]), the MCP
-//! session over `satz mcp` ([`mcp`]), and one session per open estate that the command
-//! decks and the agent share ([`session`]). [`reports`] are the JSON payloads a reporting command
+//! session over `satz mcp` ([`mcp`]), and one session per open estate that every view
+//! shares ([`session`]). [`reports`] are the JSON payloads a reporting command
 //! writes with `--format json` and the server returns as `structuredContent`.
 
 pub mod binary;
@@ -27,7 +27,7 @@ pub use cli::{CliLine, Output, SatzCli};
 pub use export::QuestionsFormat;
 pub use import::{ImportOptions, ImportPlan, ImportReport, ImportShape};
 pub use init::InitOptions;
-pub use mcp::{McpSession, ToolAnnotations, ToolInfo, ToolOutcome};
+pub use mcp::{McpSession, ToolOutcome};
 pub use session::EstateSession;
 
 use std::path::PathBuf;
@@ -44,6 +44,12 @@ pub enum Allow {
 }
 
 impl Allow {
+    /// The ceiling of satz-studio's own `satz mcp`: what its own buttons call — an
+    /// answer, a pack switched, `satz_merge_presets`, `satz_update_prerequisites` —
+    /// needs `write`, and none of them runs an external program, so nothing needs
+    /// `exec`. The ceiling Settings holds is the external agent's alone (ADR 0021).
+    pub const STUDIO: Allow = Allow::ReadWrite;
+
     /// The value satz takes after `--allow`.
     pub fn as_arg(self) -> &'static str {
         match self {
@@ -51,9 +57,6 @@ impl Allow {
             Allow::ReadWrite => "read,write",
             Allow::ReadWriteExec => "read,write,exec",
         }
-    }
-    pub fn writes(self) -> bool {
-        !matches!(self, Allow::Read)
     }
 }
 
@@ -103,17 +106,14 @@ pub enum SatzError {
     },
     #[error("`satz {command}` printed a help this app cannot read: {reason}")]
     Help { command: String, reason: String },
+    #[error("`satz {command}` printed what this app cannot read: {reason}")]
+    Printed { command: String, reason: String },
     #[error("`satz {command}` answered with JSON this app does not understand: {source}")]
     Json {
         command: String,
         #[source]
         source: serde_json::Error,
     },
-    #[error(
-        "the estate's directories share no common root, so `satz mcp` cannot be confined to one: {}. On Windows this is an estate and a directory its config names — presets, schemas, an include — sitting on different drives; they have to be on one.",
-        dirs.iter().map(|p| p.display().to_string()).collect::<Vec<_>>().join(", ")
-    )]
-    NoCommonRoot { dirs: Vec<PathBuf> },
     #[error("{0}: no such directory — a new estate is created in a directory that exists")]
     TargetMissing(PathBuf),
     #[error("{0}: already holds a config.toml — open that estate instead of creating one over it")]
