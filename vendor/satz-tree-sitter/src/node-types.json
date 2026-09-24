@@ -301,7 +301,7 @@
         ]
       },
       "version": {
-        "multiple": true,
+        "multiple": false,
         "required": false,
         "types": [
           {
@@ -720,10 +720,6 @@
     "type": "comment",
     "named": true,
     "extra": true
-  },
-  {
-    "type": "content",
-    "named": false
   },
   {
     "type": "contributes",

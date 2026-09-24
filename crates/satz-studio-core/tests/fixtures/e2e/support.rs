@@ -23,7 +23,7 @@ use satz_studio_core::satz::reports::{
     AddPackArgs, InterviewArgs, InterviewReport, PackChange, PacksReport, QuestionsReport,
     RemovePackArgs,
 };
-use satz_studio_core::satz::{Allow, CliLine, EstateSession, SatzBinary, SatzCli};
+use satz_studio_core::satz::{CliLine, EstateSession, SatzBinary, SatzCli};
 use satz_studio_core::schema::ResourceRegistry;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::mpsc;
@@ -74,11 +74,7 @@ pub fn repo_root() -> PathBuf {
         .unwrap()
 }
 
-/// A temporary directory on the REPOSITORY's drive rather than the system one. A
-/// session's root is the longest common prefix of the estate's directory and every
-/// directory its config names, and those reach into `vendor/satz`; on Windows the
-/// system temporary directory is often on another drive, where a temporary estate and
-/// the submodule share no prefix at all and there is no root to confine `satz mcp` to.
+/// A temporary estate directory under the repository's `target/test-scratch`.
 pub fn scratch() -> tempfile::TempDir {
     let dir = repo_root().join("target").join("test-scratch");
     std::fs::create_dir_all(&dir).unwrap();
@@ -168,14 +164,9 @@ impl Estate {
     pub async fn open(&self, main: &str) -> Arc<EstateSession> {
         let bin = satz().await;
         let dir = EstateDir::open(&self.root).unwrap();
-        within(EstateSession::open(
-            &bin,
-            dir,
-            PathBuf::from(main),
-            Allow::ReadWrite,
-        ))
-        .await
-        .unwrap()
+        within(EstateSession::open(&bin, dir, PathBuf::from(main)))
+            .await
+            .unwrap()
     }
 
     /// The CLI runner with this directory as `--config`.

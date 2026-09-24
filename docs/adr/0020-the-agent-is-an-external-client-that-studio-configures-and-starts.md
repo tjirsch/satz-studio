@@ -1,7 +1,8 @@
 # 0020 — the agent is an external client that satz-studio configures and starts
 
 - **Status:** accepted; amended 2026-09-23 — the configuration is satz's to render, and
-  the app calls `satz mcp-config` for it (see the amendment below)
+  the app calls `satz mcp-config` for it (see the amendment below); the consequence "one
+  MCP ceiling, stated in two places" superseded by [0021](0021-the-settings-ceiling-is-the-agents-and-studio-writes-at-its-own.md)
 - **Date:** 2026-09-22
 - **Deciders:** the maintainer
 

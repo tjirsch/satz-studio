@@ -13,7 +13,7 @@ use satz_studio_core::diag::plain;
 use satz_studio_core::edit::{CliChecker, McpChecker};
 use satz_studio_core::estate::EstateDir;
 use satz_studio_core::satz::reports::InterviewReport;
-use satz_studio_core::satz::{Allow, EstateSession, SatzBinary};
+use satz_studio_core::satz::{EstateSession, SatzBinary};
 
 pub const TIME_BOX: Duration = Duration::from_secs(60);
 
@@ -34,11 +34,7 @@ pub fn repo_root() -> PathBuf {
         .unwrap()
 }
 
-/// A temporary directory on the REPOSITORY's drive rather than the system one. A
-/// session's root is the longest common prefix of the estate's directory and every
-/// directory its config names, and those reach into `vendor/satz`; on Windows the
-/// system temporary directory is often on another drive, where a temporary estate and
-/// the submodule share no prefix at all and there is no root to confine `satz mcp` to.
+/// A temporary estate directory under the repository's `target/test-scratch`.
 pub fn scratch() -> tempfile::TempDir {
     let dir = repo_root().join("target").join("test-scratch");
     std::fs::create_dir_all(&dir).unwrap();
@@ -122,14 +118,9 @@ impl SmokeCopy {
     pub async fn open(&self, main: &str) -> Arc<EstateSession> {
         let bin = SatzBinary::locate(None).await.unwrap();
         let dir = EstateDir::open(&self.root).unwrap();
-        within(EstateSession::open(
-            &bin,
-            dir,
-            PathBuf::from(main),
-            Allow::ReadWrite,
-        ))
-        .await
-        .unwrap()
+        within(EstateSession::open(&bin, dir, PathBuf::from(main)))
+            .await
+            .unwrap()
     }
 }
 

@@ -10,11 +10,14 @@
 //! The configuration is satz's: `satz mcp-config <estate> --client <client> --allow
 //! <ceiling>` prints the block on stdout and what it cannot say on stderr, and the same
 //! command with `--write` merges satz's own key into the file that client reads. The
-//! window renders what satz printed and nothing of its own — a refusal included.
+//! window renders what satz printed and nothing of its own — a refusal included — and
+//! beside it what the client's file holds for the estate, because that, not the
+//! setting, is the ceiling the agent runs at
+//! ([ADR 0021](../../../../docs/adr/0021-the-settings-ceiling-is-the-agents-and-studio-writes-at-its-own.md)).
 
 use dioxus::prelude::*;
 use satz_studio_core::agent;
-use satz_studio_core::satz::mcp_config::{self, Client, Printed, Run};
+use satz_studio_core::satz::mcp_config::{self, Client, OnDisk, Printed, Run, Written};
 
 use crate::components::{Button, ButtonVariant, Card, CardVariant, Chip, ChipKind, Icon};
 use crate::state::{AppStore, AppStoreStoreExt, ToastKind, toast};
@@ -45,10 +48,10 @@ pub fn AgentView() -> Element {
             Card { variant: CardVariant::Filled, class: "agent__lead",
                 Icon { name: "smart_toy", size: 22 }
                 p {
-                    "satz-studio runs no model. It configures an agentic client on this estate and starts it: satz prints the block the client reads and writes it into the client's own file, with the capability ceiling Settings holds. The estate is re-read when this window comes back to the front."
+                    "satz-studio runs no model. It configures an agentic client on this estate and starts it: satz prints the block the client reads and writes it into the client's own file, with the capability ceiling Settings holds. The ceiling bounds the satz server only: an agent with a shell can run satz commands directly. The estate is re-read when this window comes back to the front."
                 }
                 span { class: "grow" }
-                Chip { kind: ChipKind::Assist, icon: "shield", label: "ceiling: {settings.mcp_allow}" }
+                Chip { kind: ChipKind::Assist, icon: "shield", label: "Settings: {settings.mcp_allow}" }
             }
             for client in Client::ALL {
                 ClientCard { key: "{client.as_arg()}", client }
@@ -64,6 +67,8 @@ fn ClientCard(client: Client) -> Element {
     let app = use_context::<Store<AppStore>>();
     let mut shown = use_signal(|| None::<Result<Printed, String>>);
     let mut said = use_signal(|| None::<Said>);
+    // what the client's file holds for this estate, read after every run
+    let mut disk = use_signal(|| None::<Result<Written, String>>);
 
     // satz renders the configuration when the card opens, and again whenever the estate
     // or the ceiling it is derived from changes.
@@ -74,10 +79,12 @@ fn ClientCard(client: Client) -> Element {
         let allow = app.settings().read().mcp_allow;
         shown.set(None);
         said.set(None);
+        disk.set(None);
         spawn(async move {
             let printed = mcp_config::run(&open.session.cli, &open.name, client, allow, Run::Show)
                 .await
                 .map_err(|e| mcp_config::refusal(&e));
+            disk.set(printed.as_ref().ok().map(read_disk));
             shown.set(Some(printed));
         });
     });
@@ -89,7 +96,11 @@ fn ClientCard(client: Client) -> Element {
         let allow = app.settings().read().mcp_allow;
         said.set(None);
         spawn(async move {
-            match mcp_config::run(&open.session.cli, &open.name, client, allow, run).await {
+            let result = mcp_config::run(&open.session.cli, &open.name, client, allow, run).await;
+            if let Some(Ok(printed)) = shown.peek().as_ref() {
+                disk.set(Some(read_disk(printed)));
+            }
+            match result {
                 Ok(printed) => {
                     let line = mcp_config::outcome(&printed.stderr);
                     if !line.is_empty() {
@@ -113,6 +124,14 @@ fn ClientCard(client: Client) -> Element {
         });
     });
 
+    // the entry on disk that is not satz's for the setting carries its own "Replace it"
+    let differs = matches!(
+        disk(),
+        Some(Ok(Written {
+            on_disk: OnDisk::Differs { .. },
+            ..
+        }))
+    );
     let block = match shown() {
         Some(Ok(printed)) => Some(printed.stdout.clone()),
         _ => None,
@@ -125,6 +144,7 @@ fn ClientCard(client: Client) -> Element {
                 "{client.label()}"
             }
             p { class: "agent__text", {blurb(client)} }
+            DiskState { disk: disk(), setting: app.settings().read().mcp_allow.as_arg().to_string(), onreplace: move |_| write.call(Run::Replace) }
             match shown() {
                 None => rsx! { p { class: "agent__text", "satz is rendering the configuration…" } },
                 Some(Ok(printed)) => rsx! {
@@ -172,7 +192,7 @@ fn ClientCard(client: Client) -> Element {
                 } else {
                     div { class: "agent__refusal",
                         pre { "{said.text}" }
-                        if said.offer_force {
+                        if said.offer_force && !differs {
                             div { class: "agent__actions",
                                 Button {
                                     variant: ButtonVariant::Filled,
@@ -186,6 +206,75 @@ fn ClientCard(client: Client) -> Element {
                 }
             }
         }
+    }
+}
+
+/// What the client's file holds for the estate, read with the block satz printed: the
+/// file and satz's key in it, or the reason it cannot be read.
+fn read_disk(printed: &Printed) -> Result<Written, String> {
+    mcp_config::written(printed).map_err(|e| e.to_string())
+}
+
+/// The configuration on disk beside the setting: the ceiling the client's file holds
+/// for this estate — the one the agent runs at — and, where that entry is not the one
+/// satz printed for the setting, the run that writes the setting over it.
+#[component]
+fn DiskState(
+    disk: Option<Result<Written, String>>,
+    setting: String,
+    onreplace: EventHandler<MouseEvent>,
+) -> Element {
+    let Some(disk) = disk else {
+        return rsx! {};
+    };
+    let written = match disk {
+        Ok(written) => written,
+        Err(e) => {
+            return rsx! {
+                div { class: "agent__refusal", pre { "{e}" } }
+            };
+        }
+    };
+    let file = written.file.display().to_string();
+    let key = written.key.clone();
+    match written.on_disk {
+        OnDisk::Absent => rsx! {
+            div { class: "agent__state",
+                Chip { kind: ChipKind::Assist, icon: "draft", label: "not configured" }
+                p { class: "agent__text", "{file} holds no server {key} yet." }
+            }
+        },
+        OnDisk::Same { allow } => rsx! {
+            div { class: "agent__state",
+                Chip { kind: ChipKind::Assist, icon: "shield", label: "configured: {ceiling(&allow)}" }
+                p { class: "agent__text", "{file} holds this block under {key}." }
+            }
+        },
+        OnDisk::Differs { allow } => rsx! {
+            div { class: "agent__differs",
+                div { class: "agent__state",
+                    Chip { kind: ChipKind::Assist, icon: "shield", label: "configured: {ceiling(&allow)}" }
+                    p { class: "agent__text",
+                        "{file} holds another entry under {key}: the agent runs at {ceiling(&allow)}, and Settings holds {setting}. Replace writes the block above over it."
+                    }
+                }
+                div { class: "agent__actions",
+                    Button { variant: ButtonVariant::Filled, icon: "save_as", onclick: move |e| onreplace.call(e), "Replace it" }
+                }
+            }
+        },
+        OnDisk::Unreadable(reason) => rsx! {
+            div { class: "agent__refusal", pre { "{reason}" } }
+        },
+    }
+}
+
+/// The ceiling an entry on disk carries, or that it carries none — which `satz mcp`
+/// reads as its own default, `read`.
+fn ceiling(allow: &Option<String>) -> String {
+    match allow {
+        Some(a) => a.clone(),
+        None => "no --allow (satz's default, read)".to_string(),
     }
 }
 

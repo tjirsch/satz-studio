@@ -5,7 +5,8 @@ estate written in Satz to OpenTofu HCL and asks, through the `question` statemen
 its packs, what a customer decides. satz-studio creates an estate with `satz init` or
 opens one that exists, runs that interview, edits the estate map and the estate files
 through a typed interface that keeps every comment and every line where it was, runs
-satz commands, and drives satz through Claude. An answer, a pack choice or an import id
+satz commands, and configures and starts an agentic client on the estate with satz's own
+`satz mcp-config` — it runs no model itself. An answer, a pack choice or an import id
 is written by satz's own writer; every other edit is checked by `satz transpile --check`
 before it replaces the file. macOS on Apple silicon, Linux and Windows on x86_64.
 
@@ -27,7 +28,10 @@ others. `satz import` imports INTO a project, so a folder that is not an estate 
 before it runs. What satz wrote is read back out of the directory rather than guessed at,
 and the estate it wrote opens. Beside the log the result carries satz's own report split
 into what it wrote, what it skipped and why, the params it could not derive with its
-reason for each, and its warnings.
+reason for each, and its warnings — among them the attributes an apply would reset and
+the asset types Cloud Asset Inventory does not serve. A state that names no organisation
+takes it in the form's Organization field (`--organization`), which satz needs before it
+writes an estate from it.
 
 **Open** walks a folder for every `config.toml` under it and opens one of the estates
 beside it.
@@ -52,7 +56,10 @@ Ctrl+K on Windows and Linux, or that footer button). What a command prints lands
 log in the form satz writes for a person — text, or markdown for the evidence report;
 `json` is a format you pick when you want the file.
 
-The Overview is one card, and it lists what the estate owes — no git repository, which
+The Overview is three cards. The identity card says which estate this is — its short
+name, the customer, the customer id and the organisation id, the estate's other answers,
+whom the live calls run as, and the file, state, schema and HCL it has. "Still to do"
+lists what the estate owes — no git repository, which
 `satz merge-presets` needs before it edits the estate, so an estate outside one cannot
 take preset updates (one button runs `git init`, `git add` and a first commit), day 0
 unconfirmed, questions unanswered, a pack map that is off or missing, what satz's pack
@@ -60,7 +67,8 @@ graph finds wrong with the packs the estate uses, a `use` line without its `when
 which deploys its pack whatever the estate answers, no provider
 schema, a pack whose notice is open, prerequisites the compile found undeclared, raw HCL
 nobody has reviewed, an HCL directory nothing has planned against. Every row is derived from the estate as it is on
-the screen, so it cannot go stale, and the card is gone when there is nothing in it.
+the screen, so it cannot go stale, and the card reads "Nothing left to do" when there is
+nothing in it. The handover card exports the decisions sheet or the workbook, below.
 Nothing about how an estate reached the app is remembered: created, imported and opened
 estates show the same list, because the same facts are true of them.
 
@@ -87,7 +95,7 @@ that holds them up — in front of apply and bootstrap, which satz refuses.
 
 ## What it needs
 
-- **`satz` 0.77.1 or newer.** `MIN_SATZ` in `crates/satz-studio-core/src/satz/binary.rs`
+- **`satz` 0.81.0 or newer.** `MIN_SATZ` in `crates/satz-studio-core/src/satz/binary.rs`
   names the oldest satz this build works with. It rises when a satz release breaks the
   app or the app starts using something a later satz introduced, not with every satz
   release. Install satz with its installer or bring it up to date with `satz
@@ -120,12 +128,16 @@ that holds them up — in front of apply and bootstrap, which satz refuses.
   what the app gives it is this estate's satz server.
 
   The configuration is satz's own: the Agent destination runs `satz mcp-config
-  <estate> --client <client> --allow <ceiling>` and shows what it printed.
+  <estate> --client <client> --allow <ceiling>` and shows what it printed, and beside it
+  the ceiling the client's file holds for the estate — the one the agent runs at. The
+  ceiling is the one Settings holds for the agent; it bounds the satz server only, since
+  an agent with a shell can run satz commands directly, and satz-studio's own session
+  runs at `read,write` whatever it is. Saving Settings rewrites no client file.
   **Configure Claude Code** and **Configure Claude Desktop** run it again with
   `--write`, which merges satz's one key into the file that client reads — `.mcp.json`
   beside the estate, or Claude Desktop's own configuration file — and leaves every other
   server in it as it is. satz refuses its own key already there with other arguments, and
-  the card shows that refusal with the run that replaces it. **Copy** puts the block on
+  the card shows that entry with **Replace it**, the run that writes the block over it. **Copy** puts the block on
   the clipboard.
 
   **Open in <client>** starts the command Settings names, in the estate's directory, in

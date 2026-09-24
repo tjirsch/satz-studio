@@ -143,7 +143,7 @@ pub fn SettingsView() -> Element {
                         }
                     }
                     SatzReleaseActions {}
-                    p { class: "settings__label", "Capability ceiling of every satz mcp this app starts" }
+                    p { class: "settings__label", "Capability ceiling of the agent's satz MCP server" }
                     SegmentedButton {
                         options: vec![
                             Segment::new("read", "read").with_icon("visibility"),
@@ -159,7 +159,7 @@ pub fn SettingsView() -> Element {
                             };
                         },
                     }
-                    p { class: "settings__label", "It is the ceiling of the app's own satz mcp child AND of the one the Agent destination writes into an agent's configuration: lowering it here lowers both." }
+                    p { class: "settings__label", "The ceiling of the satz MCP server an agent is configured with, written into the client's configuration when you press Configure on the Agent page. It bounds the satz server only: an agent with a shell can run satz commands directly." }
                 }
                 Card { variant: CardVariant::Outlined, class: "settings__card",
                     h2 { class: "settings__heading", Icon { name: "smart_toy", size: 20 } "Agent" }

@@ -1,6 +1,8 @@
 # The app's fixture estate: satz's own smoke estate, read straight from the pinned
 # submodule so the files can never drift from the satz release the app targets. Tests
-# that WRITE copy the estate to a temporary directory first; nothing writes here.
+# that WRITE, and tests that open a session, copy the estate to a temporary directory
+# first: `satz mcp` opens only an estate file inside the directory holding its
+# config.toml, and this one's files are in the submodule. Nothing writes here.
 yaml_dir = "../../../vendor/satz/tests/smoke/yaml"
 hcl_dir = "hcl"
 include_dirs = [".", "../../../vendor/satz/tests/smoke/yaml", "../../../vendor/satz"]

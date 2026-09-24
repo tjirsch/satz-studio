@@ -488,9 +488,8 @@ async fn open_estate(app: Store<AppStore>, config: PathBuf, estate: PathBuf) {
         return;
     }
     app.opening().set(Some(estate.clone()));
-    let allow = app.settings().read().mcp_allow;
     let opened = match EstateDir::open(&config) {
-        Ok(dir) => EstateSession::open(&bin, dir, estate.clone(), allow)
+        Ok(dir) => EstateSession::open(&bin, dir, estate.clone())
             .await
             .map_err(|e| e.to_string()),
         Err(e) => Err(e.to_string()),

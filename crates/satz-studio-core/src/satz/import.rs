@@ -9,7 +9,8 @@
 //!
 //! The SOURCE decides the shape ([`ImportShape`]) and the shape decides the flags:
 //! `--on-collision`, `--only`, `--exclude`, `--all`, `--customer-shortname` and
-//! `--output` belong to a state file or a live scope, `--wrap-all` to Terraform HCL.
+//! `--output` belong to a state file or a live scope, `--organization` to a state file
+//! alone, `--wrap-all` to Terraform HCL.
 //! [`ImportOptions::argv`]
 //! renders exactly the flags of the chosen shape, so no form can send satz a flag it
 //! would ignore.
@@ -123,6 +124,10 @@ pub struct ImportOptions {
     pub on_collision: OnCollision,
     /// `--customer-shortname`: the one value no platform fact carries (state, live)
     pub customer_shortname: String,
+    /// `--organization`: the organisation a state belongs to, for a state that names
+    /// none — satz writes no estate from such a state without it (state; a live sweep
+    /// reads it from its own root, and satz refuses the flag there)
+    pub organization: String,
     /// `--output`: the file inside `yaml_dir`; empty is satz's `discovered.satz`
     /// (state, live)
     pub output: String,
@@ -156,6 +161,9 @@ impl ImportOptions {
                 argv.push("--on-collision".to_string());
                 argv.push(self.on_collision.as_arg().to_string());
                 push_value(&mut argv, "--customer-shortname", &self.customer_shortname);
+                if self.shape == ImportShape::State {
+                    push_value(&mut argv, "--organization", &self.organization);
+                }
                 push_value(&mut argv, "--output", &self.output);
                 if self.verbose {
                     argv.push("--verbose".to_string());
@@ -314,14 +322,21 @@ pub fn written_since(
 ///
 /// Two rules, in this order. The stream: everything satz wrote on stdout is the report,
 /// and from stderr only a line it marks `warning:`, `error:` or `import:` joins it, the
-/// rest being the version banner and what it loaded. Then the prefix: the two sections
-/// an operator acts on — `import: params not derivable:` and `import: skipped` with the
-/// lines under it — are lifted out by the prefix satz gives them. A line no prefix
-/// claims lands in [`Self::rest`], so a satz that words one differently moves it between
-/// sections; nothing is ever dropped, which [`Self::len`] is held to.
+/// rest being the version banner and what it loaded. Then the prefix: the sections an
+/// operator acts on are lifted out by the words satz opens them with — `warning:` and
+/// `error:`, and the two losses satz states as `import:` blocks (attributes the provider
+/// schema names that the estate does not carry, asset types Cloud Asset Inventory does
+/// not serve), each with the indented lines under it; `import: params not derivable:`;
+/// and `import: skipped` with the lines under it. A line no prefix claims lands in
+/// [`Self::rest`], so a satz that words one differently moves it between sections;
+/// nothing is ever dropped, which [`Self::len`] is held to.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ImportReport {
-    /// `warning:` and `error:` lines: what the estate needs written by hand
+    /// `warning:` and `error:` lines, and the two losses satz reports with the lines
+    /// under them — `import: N attribute(s) the provider schema names are NOT in the
+    /// estate` (an apply would reset them) and `import: N asset type(s) Cloud Asset
+    /// Inventory does not serve` (nothing of them is in the estate): what the estate
+    /// needs written by hand
     pub warnings: Vec<String>,
     /// `import: params not derivable: <name> — <reason>`: the worklist, with satz's own
     /// reason per param. One of them is `customer_shortname`, which the form's
@@ -342,8 +357,10 @@ impl ImportReport {
     pub fn of(lines: &[CliLine]) -> Self {
         let mut report = ImportReport::default();
         // `import: skipped N resource(s):` heads a block: the indented lines under it
-        // are its counts, its reasons and (with `--verbose`) one line per resource
-        let mut in_skipped = false;
+        // are its counts, its reasons and (with `--verbose`) one line per resource. A
+        // loss satz reports heads one the same way: the indented lines are what was lost
+        // and the levers satz names.
+        let mut block: Option<Block> = None;
         for line in lines {
             let text = match line {
                 CliLine::Stdout(text) if !text.trim().is_empty() => text,
@@ -352,17 +369,23 @@ impl ImportReport {
             };
             let trimmed = text.trim_start();
             let indented = text.len() != trimmed.len();
-            if in_skipped && indented {
-                report.skipped.push(text.clone());
+            if indented && let Some(block) = block {
+                match block {
+                    Block::Skipped => report.skipped.push(text.clone()),
+                    Block::Loss => report.warnings.push(text.clone()),
+                }
                 continue;
             }
-            in_skipped = false;
+            block = None;
             if trimmed.starts_with("warning:") || trimmed.starts_with("error:") {
+                report.warnings.push(text.clone());
+            } else if is_loss(trimmed) {
+                block = Some(Block::Loss);
                 report.warnings.push(text.clone());
             } else if trimmed.starts_with("import: params not derivable:") {
                 report.not_derivable.push(text.clone());
             } else if trimmed.starts_with("import: skipped") {
-                in_skipped = true;
+                block = Some(Block::Skipped);
                 report.skipped.push(text.clone());
             } else if !indented && trimmed.starts_with("Wrote ") {
                 report.wrote.push(text.clone());
@@ -386,6 +409,24 @@ impl ImportReport {
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
+}
+
+/// The block a heading line opens: what the indented lines under it belong to.
+#[derive(Debug, Clone, Copy)]
+enum Block {
+    Skipped,
+    Loss,
+}
+
+/// A heading satz prints for something the estate lost, in satz's own words: the
+/// attributes the provider schema names that the estate does not carry — an apply would
+/// reset them on the live resource — and the asset types Cloud Asset Inventory does not
+/// serve, of which nothing is in the estate (`report_skipped` in satz's
+/// `src/discovery.rs`).
+fn is_loss(trimmed: &str) -> bool {
+    trimmed.starts_with("import: ")
+        && (trimmed.contains(" attribute(s) the provider schema names are NOT in the estate")
+            || trimmed.contains(" asset type(s) Cloud Asset Inventory does not serve"))
 }
 
 /// A stderr line satz marks as its own: a finding, or a part of the report it printed
@@ -553,6 +594,7 @@ mod tests {
             all: true,
             on_collision: OnCollision::Counter,
             customer_shortname: "acme".to_string(),
+            organization: "123456789012".to_string(),
             output: "discovery.satz".to_string(),
             verbose: true,
             ..Default::default()
@@ -573,6 +615,8 @@ mod tests {
                 "counter",
                 "--customer-shortname",
                 "acme",
+                "--organization",
+                "123456789012",
                 "--output",
                 "discovery.satz",
                 "--verbose",
@@ -580,12 +624,15 @@ mod tests {
         );
     }
 
+    /// A live sweep reads the organisation from its own root, and satz refuses
+    /// `--organization` there: the field the state shape carries never reaches it.
     #[test]
     fn a_live_scope_is_the_source_and_takes_the_same_flags() {
         let options = ImportOptions {
             shape: ImportShape::Live,
             source: ORGANIZATION.to_string(),
             customer_shortname: "acme".to_string(),
+            organization: "123456789012".to_string(),
             ..Default::default()
         };
         assert_eq!(
@@ -615,12 +662,13 @@ mod tests {
             all: true,
             on_collision: OnCollision::Counter,
             customer_shortname: "acme".to_string(),
+            organization: "123456789012".to_string(),
             output: "discovery.satz".to_string(),
             verbose: true,
             wrap_all: true,
             shape: ImportShape::State,
         };
-        let state_only = [
+        let state_and_live = [
             "--only",
             "--exclude",
             "--all",
@@ -629,12 +677,15 @@ mod tests {
             "--output",
             "--verbose",
         ];
+        let state = [state_and_live.as_slice(), &["--organization"]].concat();
         let hcl_only = ["--wrap-all"];
+        let not_live = [hcl_only.as_slice(), &["--organization"]].concat();
+        let not_hcl = state.clone();
 
         for (shape, mine, others) in [
-            (ImportShape::State, state_only.as_slice(), hcl_only.to_vec()),
-            (ImportShape::Live, state_only.as_slice(), hcl_only.to_vec()),
-            (ImportShape::Hcl, hcl_only.as_slice(), state_only.to_vec()),
+            (ImportShape::State, state.as_slice(), hcl_only.to_vec()),
+            (ImportShape::Live, state_and_live.as_slice(), not_live),
+            (ImportShape::Hcl, hcl_only.as_slice(), not_hcl),
         ] {
             let argv = ImportOptions {
                 shape,
@@ -662,6 +713,7 @@ mod tests {
             shape: ImportShape::State,
             source: "  state.json  ".to_string(),
             customer_shortname: "   ".to_string(),
+            organization: " ".to_string(),
             output: String::new(),
             only: vec![String::new(), "  ".to_string()],
             ..Default::default()
@@ -943,6 +995,43 @@ mod tests {
                 "import: params derived: customer_shortname, deployment_engine",
             ]
         );
+    }
+
+    /// The two losses satz reports on a live import, as satz v0.81.0 words them
+    /// (`report_skipped` and `unserved_report` in its `src/discovery.rs`), are warnings
+    /// with every line under them: what an apply would reset, and the asset types of
+    /// which nothing reached the estate with the two levers satz names. The dropped API
+    /// vocabulary, which would not plan either way, stays in the rest.
+    #[test]
+    fn the_losses_satz_reports_are_warnings_with_the_lines_under_them() {
+        let lines = vec![
+            CliLine::Stderr("satz v0.81.0 (built 2026-09-23 08:20:04)".to_string()),
+            CliLine::Stdout("import: 1 asset type(s) Cloud Asset Inventory does not serve — nothing of them is in the estate:".to_string()),
+            CliLine::Stdout("  - bigquery.googleapis.com/Table (google_bigquery_table): INVALID_ARGUMENT: asset type is not supported".to_string()),
+            CliLine::Stdout("  Refresh the table with `uv run scripts/update_import_config.py --cai-types presets/cai-asset-types.txt`, or leave the row(s) out of the run with --exclude.".to_string()),
+            CliLine::Stdout("import: 2 attribute(s) the provider schema names are NOT in the estate — an apply would reset them on the live resource:".to_string()),
+            CliLine::Stdout("  - google_storage_bucket acme-logs .iamConfiguration.uniformBucketLevelAccess.enabled — `uniform_bucket_level_access` is set at this level and the asset data says otherwise here".to_string()),
+            CliLine::Stdout("  - google_storage_bucket acme-logs .iamConfiguration.bucketPolicyOnly.enabled — `uniform_bucket_level_access` is set at this level and the asset data says otherwise here".to_string()),
+            CliLine::Stdout("import: 3 attribute(s) dropped — not in the provider schema (API vocabulary; would not plan):".to_string()),
+            CliLine::Stdout("      3 google_project".to_string()),
+            CliLine::Stdout("import: skipped 1 resource(s):".to_string()),
+            CliLine::Stdout("      1 parent not imported".to_string()),
+        ];
+        let report = ImportReport::of(&lines);
+        assert_eq!(report.warnings.len(), 6, "{:?}", report.warnings);
+        assert!(report.warnings[0].contains("Cloud Asset Inventory does not serve"));
+        assert!(report.warnings[2].contains("--exclude"));
+        assert!(report.warnings[3].contains("an apply would reset them"));
+        assert!(report.warnings[5].contains("bucketPolicyOnly"));
+        assert_eq!(
+            report.rest,
+            [
+                "import: 3 attribute(s) dropped — not in the provider schema (API vocabulary; would not plan):",
+                "      3 google_project",
+            ]
+        );
+        assert_eq!(report.skipped.len(), 2);
+        assert_eq!(report.len(), lines.len() - 1);
     }
 
     /// The split never loses a line: every line satz printed on stdout, and every one it

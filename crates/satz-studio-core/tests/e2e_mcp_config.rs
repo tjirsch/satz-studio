@@ -1,13 +1,14 @@
 //! `satz mcp-config`, end to end with the installed satz over a copy of the smoke
 //! estate: the run each button makes is one satz accepts, the block it prints is this
 //! estate's own server, a write lands where the client reads it and says what it came
-//! to, and the refusal for satz's key already there with other arguments reaches the app
-//! as satz wrote it — with the run that answers it.
+//! to, the file satz names is read back for the ceiling it holds, and the refusal for
+//! satz's key already there with other arguments reaches the app as satz wrote it — with
+//! the run that answers it.
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use satz_studio_core::satz::mcp_config::{self, Client, Run};
+use satz_studio_core::satz::mcp_config::{self, Client, OnDisk, Run};
 use satz_studio_core::satz::{Allow, SatzBinary, SatzCli};
 
 #[path = "fixtures/edit/support.rs"]
@@ -120,6 +121,28 @@ async fn a_write_lands_then_is_unchanged_then_refuses_a_differing_ceiling() {
     let said = mcp_config::outcome(&again.stderr);
     assert!(said.starts_with("unchanged "), "{said}");
 
+    // what the Agent view shows beside the setting: the file satz names and what it
+    // holds, the same entry at the ceiling that wrote it and another at a lower one
+    let shown = write(Allow::ReadWrite, Run::Show).await.unwrap();
+    let on_disk = mcp_config::written(&shown).unwrap();
+    assert!(
+        same_path(&on_disk.file.display().to_string(), &file),
+        "{on_disk:?}"
+    );
+    assert_eq!(
+        on_disk.on_disk,
+        OnDisk::Same {
+            allow: Some("read,write".to_string())
+        }
+    );
+    let lower = write(Allow::Read, Run::Show).await.unwrap();
+    assert_eq!(
+        mcp_config::written(&lower).unwrap().on_disk,
+        OnDisk::Differs {
+            allow: Some("read,write".to_string())
+        }
+    );
+
     // a lower ceiling is satz's own key with other arguments: refused, the file untouched
     let before = std::fs::read_to_string(&file).unwrap();
     let refusal = mcp_config::refusal(&write(Allow::Read, Run::Write).await.unwrap_err());
@@ -136,4 +159,10 @@ async fn a_write_lands_then_is_unchanged_then_refuses_a_differing_ceiling() {
     assert!(said.starts_with("replaced "), "{said}");
     let servers = servers(&std::fs::read_to_string(&file).unwrap());
     assert_eq!(after(&args_of(&servers["satz"]), "--allow"), "read");
+    assert_eq!(
+        mcp_config::written(&lower).unwrap().on_disk,
+        OnDisk::Same {
+            allow: Some("read".to_string())
+        }
+    );
 }

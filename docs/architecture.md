@@ -53,7 +53,7 @@ removing resources and blocks is not in it.
   after which an estate may need edits, be refused, or plan differently. A newer satz is
   `SatzStatus::Located` and every estate opens; the banner states the gap until the
   operator dismisses it for that version (`Settings.dismissed_satz`). Nothing refuses a
-  newer satz, because CI installs the NEWEST satz release on purpose: on the day after a
+  newer satz, because CI installs the NEWEST satz release: on the day after a
   satz release every test that locates the real binary sees a newer satz, and a red run
   then is the alarm answered with a satz-studio patch release.
 - **`MIN_SATZ` rises for a reason, not with the pin.** It may sit below the submodule's
@@ -104,16 +104,17 @@ Two crates in one workspace, satz pinned once as the submodule `vendor/satz`
 | `src/satz/install.rs` | satz's own cargo-dist installer, for an operator with no satz and, on Windows, for an update: `Installer` names the two — `satz-installer.sh` under `sh`, `satz-installer.ps1` under `powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File` — with their `.sha256` sidecars, and `for_this_system` picks one. The installer and its sidecar are the assets of ONE `releases/latest` object, so a release published between two downloads cannot pair them; `VerifiedInstaller::verify` is the only way to hold the script, and only on a matching SHA-256; `run` writes it under its asset name into a private temporary directory and runs it with `SATZ_INSTALL_DIR` naming the folder the caller gives, `SATZ_NO_MODIFY_PATH=1` (the installer otherwise adds its folder to `PATH` in the shell profiles or the Windows user `PATH`, and `locate` searches `~/.local/bin` without it) and stdin closed, streamed and cancellable | `Installer`, `VerifiedInstaller`, `InstallError`, `fetch_verified` |
 | `src/satz/export.rs` | the decisions sheet and the workbook: `formats` reads the values of `--format` from the installed satz's `satz questions --help` — the `Possible values:` block, each with satz's own line — and a help without one is an error, never an empty list; `args` is `questions <estate> --format <format> --out <file>` and nothing else; `destination` gives a chosen path the format's extension when it has none, so the file the app opens is the file satz wrote; `written` refuses a file that is missing or empty after a clean exit | `QuestionsFormat`, `formats`, `parse_formats`, `args`, `destination`, `written` |
 | `src/satz/cli.rs` | `satz --config <dir> <args…>` in the estate's directory, stdout and stderr streamed line by line and cancellable, by the one streaming helper the installer's run shares; `help` reads a command's long help; `json_report` runs a reporting command with `--format json` and an `--out` of its own and types the file it wrote; `json_verdict` does the same for a command whose exit status is a verdict on what it judged (`review-pack`), returning the report with the status, and a non-zero exit that wrote no file is an error; `run_in` is the same streaming without a `--config`, in a working directory of its own, for the one command that runs before a `config.toml` exists; `output` runs a command to its end with both pipes held whole, for one whose whole output is the answer, and `help` is that call with `--help` | `SatzCli`, `CliLine`, `Output` |
+| `src/satz/import.rs` | `satz import` as a typed thing: `plan` decides from the directory alone whether `satz init` runs first; `ImportShape` picks the flags and `ImportOptions::argv` renders only the chosen shape's; `satz_files` / `written_since` read back what the run wrote; `ImportReport` splits satz's report into sections | `ImportShape`, `OnCollision`, `ImportOptions`, `ImportPlan`, `Written`, `ImportReport` |
 | `src/satz/init.rs` | `satz init` as a typed thing: `InitOptions` renders the flags it was given to argv and passes nothing for a field left blank, so a blank field is the instruction to derive; `check_target` refuses a directory that is not there or already holds a `config.toml`; `created` reads what a finished run left, because `init` names the estate file after a customer id it may have derived and the name is not knowable in advance | `InitOptions`, `check_target`, `created` |
-| `src/satz/mcp.rs` | one `satz mcp` child per estate, spoken to with rmcp over stdio; every rmcp type stays inside this file. A tool's refusal is a `ToolOutcome` with `is_error`; a JSON-RPC `invalid_params` error in place of a result — a tool name satz does not serve — is `SatzError::InvalidParams` naming the tool | `McpSession`, `ToolInfo`, `ToolAnnotations`, `ToolOutcome` |
-| `src/satz/session.rs` | one session per open estate: the CLI runner, the MCP child, the write lock every writer takes, the identity from `satz_open`; `apply` and `bootstrap` as a one-shot script in the OS terminal | `EstateSession`, `session_root` |
+| `src/satz/mcp.rs` | one `satz mcp` child per estate, spoken to with rmcp over stdio; every rmcp type stays inside this file. A tool's refusal is a `ToolOutcome` with `is_error`; a JSON-RPC `invalid_params` error in place of a result — a tool name satz does not serve — is `SatzError::InvalidParams` naming the tool | `McpSession`, `ToolOutcome` |
+| `src/satz/session.rs` | one session per open estate: the CLI runner, the MCP child rooted where `satz mcp-config` roots a client's server and started at `Allow::STUDIO`, the write lock every writer takes, the identity from `satz_open`; `apply` and `bootstrap` as a one-shot script in the OS terminal, its paths single-quoted for `sh` (`sh_path`) and double-quoted with `%` doubled for `cmd.exe` (`cmd_path`) | `EstateSession` |
 | `src/satz/reports.rs` | serde mirrors of what a reporting command writes with `--format json` and satz returns as `structuredContent`: unknown fields ignored, missing required fields fail; the questions report round-trips a recorded output of the pinned satz. `Finding` is satz's own list of what the compile found after the front end — a `CompileSummary` carries the warnings and infos it did not refuse on, a `Refusal` the ones it did; `kind` is the kebab-case word satz writes, kept as a `String` so a kind satz adds is carried instead of failing the result. `NoticeRow` is what a pack asks to be run once it is on, with the param that acknowledges it; `severity` is required and typed — `error` is the one that holds up every command writing to the organisation — so a notice without one, or with a word satz adds, fails the report rather than reading as one that holds nothing up, and an interview report without `notices` fails too. `PacksReport` is `satz_packs`: one `PackRow` per node of satz's pack graph — its role, gate, answer, default and value, where its `use` line stands (`PackLine`, at its line number), whether it deploys, what it `requires` (each a `Requirement` with `met`), what it is `required_by` and `excludes`, its notices, what it `contributes` to another pack's list params and the compile's findings about it — the `use` lines the graph does not know, and the findings with the pack as `subject` and the command that answers each as `fix`. Every field satz always sends is required, and a line state satz adds fails the report; it round-trips a recorded `satz packs --format json` of the smoke estate. `AddPackArgs`, `RemovePackArgs` and `PackChange` are the arguments and the result of `satz_add_pack` and `satz_remove_pack`. `MergeReport` is `satz_merge_presets`: its events (`MergeEvent`, tagged by `kind`; an event kind satz adds fails the report, an outcome word satz adds is carried), its `MergeCounts`, `attention` and the notices it opened; `lines()` is the report as the command log shows it, in sentences; it round-trips a recorded merge of the smoke estate. `PackReview` is `satz review-pack --format json`: the pack, the estate it was folded into, what it emits and its findings, every field required; `passed()` is satz's verdict — no finding is an error; it round-trips two recorded reviews of the pinned satz, one clean and one broken | `QuestionsReport`, `QuestionRow`, `InterviewArgs`, `InterviewReport`, `NoticeRow`, `PrerequisitesResult`, `OpenReport`, `CompileSummary`, `Finding`, `FindingSeverity`, `Refusal`, `PacksReport`, `PackRow`, `PackRole`, `PackLine`, `Requirement`, `RequirementKind`, `Unmanaged`, `AddPackArgs`, `RemovePackArgs`, `PackChange`, `MergeReport`, `MergeEvent`, `MergeCounts`, `PackReview` |
 | `src/satz/review.rs` | `satz review-pack` and the two places a reviewed pack goes ([ADR 0019](adr/0019-the-pack-review-runs-the-cli-and-places-a-private-pack-as-a-local-fork.md)): `review` runs `satz --config <estate dir> review-pack <pack> [--against <estate>] --format json` through `json_verdict`, holds the exit status to the report's own verdict (`SatzError::Verdict` when they disagree) and keeps the bytes it judged, refusing a pack that changed while satz read it; `diagnostics` is each finding at its `file:line` from `satz review-pack`. `local_name` is `<stem>.local.satz` — a `.local.satz` keeps its name, a `.diff.satz` is refused — and `upstream_name` is `presets/<stem>.satz`. `place_private` writes the reviewed bytes into `presets_dir` under that name: refused when the pack changed since its review or the library is missing, nothing written when the file holds these bytes already, refused when it holds anything else; the file is created with `create_new`, the estate is checked with it in the library, and a refusal or a checker that could not run removes it again | `ReviewedPack`, `review`, `review_args`, `diagnostics`, `local_name`, `local_target`, `upstream_name`, `place_private`, `Placed`, `PlaceError` |
-| `src/satz/mcp_config.rs` | `satz mcp-config <estate> --client <client> --allow <ceiling>`, which is where the configuration an agentic client reads comes from: `args` is that argument vector, with `--write` for a write and `--write --force` for the one refusal that asks for it; `run` hands back what satz printed, the block on stdout and its notes on stderr; `outcome` is the line a write ended on, for the toast; `refusal` is satz's own stderr where satz refused, unreworded; `force_would_answer` is whether satz's refusal is the one `--force` answers, by the sentence satz prints | `Client`, `Run`, `Printed`, `args`, `run`, `outcome`, `refusal`, `force_would_answer` |
-| `src/satz/mod.rs` | the capability ceiling and the one error type of the driver | `Allow`, `SatzError` |
-| `src/agent.rs` | starting the agentic client on the open estate ([ADR 0020](adr/0020-the-agent-is-an-external-client-that-studio-configures-and-starts.md)): `locate` is the configured client's first word on `PATH`, told apart from a line naming none, and `start` runs it in the estate's directory through the one-shot script the terminal hand-off uses. The configuration that points it at the estate is satz's, `src/satz/mcp_config.rs` | `AgentError`, `DEFAULT_AGENT_COMMAND`, `locate`, `program`, `script_text`, `start` |
+| `src/satz/mcp_config.rs` | `satz mcp-config <estate> --client <client> --allow <ceiling>`, which is where the configuration an agentic client reads comes from: `args` is that argument vector, with `--write` for a write and `--write --force` for the one refusal that asks for it; `run` hands back what satz printed, the block on stdout and its notes on stderr; `outcome` is the line a write ended on, for the toast; `refusal` is satz's own stderr where satz refused, unreworded; `force_would_answer` is whether satz's refusal is the one `--force` answers, by the sentence satz prints; `server` reads the one server of the printed block and `root` its `--root`, the root the app's own session takes ([ADR 0022](adr/0022-the-mcp-root-is-the-one-satz-mcp-config-renders.md)); `target_file` is the file satz's notes say a write goes to, and `written` reads satz's key there against the printed entry — absent, the same, another entry, or unreadable ([ADR 0021](adr/0021-the-settings-ceiling-is-the-agents-and-studio-writes-at-its-own.md)) | `Client`, `Run`, `Printed`, `Server`, `OnDisk`, `Written`, `args`, `run`, `outcome`, `refusal`, `force_would_answer`, `server`, `root`, `target_file`, `written` |
+| `src/satz/mod.rs` | the capability ceiling — `Allow::STUDIO`, `read,write`, is the app's own session's — and the one error type of the driver; `SatzError::Printed` is satz output the app does not read, quoted | `Allow`, `SatzError` |
+| `src/agent.rs` | starting the agentic client on the open estate ([ADR 0020](adr/0020-the-agent-is-an-external-client-that-studio-configures-and-starts.md)): `locate` is the configured client's first word on `PATH`, told apart from a line naming none, and `start` runs it in the estate's directory through the one-shot script the terminal hand-off uses, the directory quoted as that script quotes it. The configuration that points it at the estate is satz's, `src/satz/mcp_config.rs` | `AgentError`, `DEFAULT_AGENT_COMMAND`, `locate`, `program`, `script_text`, `start` |
 | `src/github.rs` | the latest release of a repository through GitHub's unauthenticated REST API, always `releases/latest` and never a tag; `look_for_studio_update` compares satz-studio's with the running version and downloads nothing; a 403 or 429 from the API is `RateLimited` with the reset, a connection that fails is `Unreachable`, a 404 is `NoRelease` | `Release`, `Asset`, `GithubError`, `StudioUpdate`, `latest_release`, `download`, `look_for_studio_update` |
-| `src/settings.rs` | `<config dir>/satz-studio/settings.toml`: a missing file is the first run, a broken one is an error; six fields and no credential among them — the satz path, `dismissed_satz` (the satz release newer than the build whose notice the operator dismissed, which permits and refuses nothing), the MCP ceiling, `agent_command`, the theme and the folder the Start screen opened last; `data_dir` is where the one-shot scripts go | `Settings`, `Theme`, `settings_path`, `data_dir` |
+| `src/settings.rs` | `<config dir>/satz-studio/settings.toml`: a missing file is the first run, a broken one is an error; six fields and no credential among them — the satz path, `dismissed_satz` (the satz release newer than the build whose notice the operator dismissed, which permits and refuses nothing), the MCP ceiling an agent's configuration is written with, `agent_command`, the theme and the folder the Start screen opened last; `data_dir` is where the one-shot scripts go | `Settings`, `Theme`, `settings_path`, `data_dir` |
 | `src/diag.rs` | the one diagnostic type: `Diagnostic::from_finding` turns one of satz's findings into it — the severity mapped, the `kind` carried, a relative file resolved against the estate's directory, the group's header in front of the message — and `parse_satz_output` reads what satz prints: its findings in the layout it gives a reader (a group's title, per finding a row of severity, kind, `file:line` and subject with the message and `fix:` indented under it, a block of rows sharing one message, the footer of counts) as one diagnostic per row with the same message `from_finding` builds, and around them `file:line: msg`, `satz: line N: msg`, the severity prefixes, the banner dropped, an indented line continuing the one above | `Diagnostic`, `Severity`, `DiagSource`, `parse_satz_output` |
 
 `build.rs` compiles `vendor/satz-tree-sitter/src/parser.c` (and `scanner.c` when the
@@ -152,7 +153,8 @@ the stores are written from there only:
   living as long as the estate is open: `Reload`, `RunCommand`, `RunNoticeCommand`,
   `CancelCommand`, `OpenInTerminal`, `Answer`, `AcceptDefaults`,
   `WritePrerequisites`, `CommitEdit`, `AddPack`, `RemovePack`, `MergePresets`,
-  `ReviewPack`, `PlacePrivate`, `CloseReview`, `InitRepository`, `Close`, `Switch`.
+  `ReviewPack`, `PlacePrivate`, `CloseReview`, `InitRepository`, `Export`, `Close`,
+  `Switch`.
 
 A reporting command takes one `--format` and one `--out`, both required, and writes one
 file instead of printing (satz's ADR 0021). The app names the destination: the file the
@@ -215,7 +217,7 @@ the decisions sheet or the workbook, written by `satz questions --format <format
 <file>` as an `Export` action of the estate coroutine, which runs it like any command
 into the shared log, then checks the file is there and not empty and opens it. The
 formats are read once per session from `satz questions --help`, so the picker is the
-installed satz's own set; a help the app cannot read is a toast and the card's text. Commands stopped being a
+installed satz's own set; a help the app cannot read is a toast and the card's text. Commands is not a
 destination: `PALETTE` is a table and `CommandDeck` renders any group of it, so Checks
 and Deploy each gather their own and the palette over the window (⌘K) holds them all.
 Packs carries the pack review (`src/views/review.rs`): `satz review-pack` over a pack
@@ -266,9 +268,10 @@ into `AppStore.import`.
 
 The SOURCE decides the shape and the shape decides the flags. `ImportOptions::argv`
 renders `--only`, `--exclude`, `--all`, `--on-collision`, `--customer-shortname`,
-`--output` and `--verbose` for a state document or a live scope, `--wrap-all` for
-Terraform HCL — never a
-flag of another shape. `--into` is not among them: importing only what an open estate
+`--output` and `--verbose` for a state document or a live scope, `--organization` for a
+state document alone — satz writes no estate from a state that names no organisation
+without it, and refuses it on a live sweep, which reads the organisation from its root —
+and `--wrap-all` for Terraform HCL — never a flag of another shape. `--into` is not among them: importing only what an open estate
 does not already declare grows an estate that is open, which is not what this door does.
 The source is checked in two halves. `ImportOptions::check_source_exists` is the cheap
 one the form asks on every keystroke: the source is there, and a live scope is one.
@@ -293,7 +296,11 @@ failure whatever the exit status was.
 `ImportReport::of` splits the streamed lines — everything on stdout, plus the stderr
 lines satz marks `warning:`, `error:` or `import:` — into what it wrote, what it skipped
 with the reasons and levers satz names, the params it could not derive with satz's own
-reason for each, its warnings, and the rest, in order. It rewrites no line and drops
+reason for each, its warnings, and the rest, in order. The warnings are satz's
+`warning:` and `error:` lines and the two losses it reports as `import:` blocks, each
+with the indented lines under it: the attributes the provider schema names that the
+estate does not carry, which an apply would reset, and the asset types Cloud Asset
+Inventory does not serve, of which nothing is in the estate. It rewrites no line and drops
 none: a section that stops matching moves its line to `rest`. A live import also prints
 what it read from the credentials — an organisation id, a directory id, a billing
 account, an administrator's address. That is the same class of value `init` derives and
@@ -314,26 +321,24 @@ nowhere else.
    installer; any other failure is `SatzStatus::Unusable`. A satz that is located is
    `SatzStatus::Located`, whatever newer release it is, and only `Located` opens an
    estate; `satz_notice` is the banner's notice for a satz past the build's.
-3. `EstateSession::open(bin, dir, main, allow)` resolves `main` as satz resolves a name
-   on the command line, makes it absolute, and spawns `satz mcp --root <root> --allow
-   <allow>` through `McpSession::open`. `<root>` is `session_root`: the longest common
-   prefix of the estate's directory, every directory its resolved config names
-   (`yaml_dir`, `hcl_dir`, `schema_dir`, `presets_dir`, each `include_dirs` entry) and
-   the main file's directory — the directory itself for an estate whose config stays
-   inside it, the repository root for `tests/fixtures/smoke`, whose paths reach into
-   `vendor/satz`. Directories that share no component have no common prefix, and the
-   empty path is not an answer: `session_root` returns `SatzError::NoCommonRoot` naming
-   them, because the root is the boundary `satz mcp` enforces. The session keeps the root
-   it opened with, so the configuration the Agent destination writes for an external
-   client carries that same root rather than deriving a second one. `allow` is
-   `Settings.mcp_allow`, `read,write` by default.
-4. `McpSession::open` initializes and keeps the server's `instructions`, lists the
-   tools as `ToolInfo` with their `ToolAnnotations`, reads `satz://guide`, and calls
-   `satz_open {config, estate}` for the `OpenReport` with `runs_as` and
-   `deployment_mode`. The child's stderr is a broadcast channel: `stderr()` subscribes
-   from now on, `stderr_backlog()` returns the last 256 lines, `pid()` names the child.
-   A child that has exited is `SatzError::Closed` on the next call; an initialize that
-   fails is `SatzError::Mcp` carrying what satz said before it died.
+3. `EstateSession::open(bin, dir, main)` resolves `main` as satz resolves a name on the
+   command line, makes it absolute, and asks satz for the root: `satz --config <dir>
+   mcp-config <main> --client claude-code --allow read,write` prints the server a client
+   starts, and its `--root` — the directory holding `config.toml`, canonicalised — is the
+   root (`mcp_config::root`,
+   [ADR 0022](adr/0022-the-mcp-root-is-the-one-satz-mcp-config-renders.md)). The window
+   and every client it configures work under the same boundary. The session then spawns
+   `satz mcp --root <root> --allow read,write` through `McpSession::open`: `read,write` is
+   `Allow::STUDIO`, what the window's own writes need, whatever ceiling Settings holds for
+   the agent ([ADR
+   0021](adr/0021-the-settings-ceiling-is-the-agents-and-studio-writes-at-its-own.md)). An
+   estate file outside its config directory is refused by satz at `satz_open`, naming
+   the root.
+4. `McpSession::open` initializes and calls `satz_open {config, estate}` for the
+   `OpenReport` with `runs_as` and `deployment_mode`. The child's stderr is read to its
+   end into a backlog of the last 256 lines. A child that has exited is
+   `SatzError::Closed` on the next call; an initialize that fails is `SatzError::Mcp`
+   carrying what satz said before it died.
 5. The estate coroutine's `Reload` builds the model: `HclState::read(hcl_dir)`;
    `WorkTree::read` of the estate file's directory; `satz_questions` and `satz_packs`
    over the session for the `QuestionsReport` and the `PacksReport`; then, on a blocking
@@ -486,7 +491,14 @@ estate and starts it; nothing is remembered between sessions.
   (`satz::mcp_config::args`, `SatzCli::output`). The binary is the satz that printed it,
   by absolute path, and the root is the estate's own directory: both are satz's to
   resolve, and the app passes neither. The ceiling is `Settings.mcp_allow`, written out
-  on every run.
+  on every run; it is the agent's alone, and it bounds the satz server, not an agent
+  that has a shell of its own
+  ([ADR 0021](adr/0021-the-settings-ceiling-is-the-agents-and-studio-writes-at-its-own.md)).
+- **What the client runs at is read from its file.** After every run the card reads the
+  file satz's notes name (`mcp_config::written`) for satz's key and compares that entry
+  with the block satz printed for the setting: not configured, configured at the ceiling
+  shown, or another entry with "Replace it" — the `--write --force` run. Saving Settings
+  writes no client file.
 - **Writing it** is the same command with `--write`: satz merges its own key into the
   file that client reads — `.mcp.json` beside the estate for Claude Code, Claude
   Desktop's own configuration file for Claude Desktop — and leaves every other server in
@@ -558,7 +570,7 @@ the tree and over the commits a pull request adds, or the push to `main` that me
 | [0002](adr/0002-a-separate-repository-with-satz-pinned-once.md) | a separate repository; satz pinned once, as the submodule; the binary required at `MIN_SATZ` |
 | [0003](adr/0003-the-document-layer-is-the-tree-sitter-grammar.md) | the document layer is the tree-sitter grammar, vendored and compiled in; satz-core stays the authority on meaning |
 | [0004](adr/0004-claude-natively-other-providers-adapt-into-its-message-model.md) | Claude natively: the Messages API wire types are the app's message model; other providers adapt into it — superseded by 0020 |
-| [0005](adr/0005-tool-approval-by-mcp-annotation-and-the-capability-ceiling.md) | tool approval by the MCP annotations satz declares; the capability ceiling stays satz's |
+| [0005](adr/0005-tool-approval-by-mcp-annotation-and-the-capability-ceiling.md) | tool approval by the MCP annotations satz declares; the capability ceiling stays satz's — amended by 0020 |
 | [0006](adr/0006-apply-and-bootstrap-run-in-the-users-terminal.md) | `apply` and `bootstrap` run in the user's terminal, never with `-auto-approve` |
 | [0007](adr/0007-pack-rows-are-derived-from-the-estate-file.md) | superseded by 0018 — pack rows derived from the estate file, the questions report and the resolved params |
 | [0008](adr/0008-transcripts-live-outside-the-estate.md) | transcripts live under the app's data directory, never inside an estate — superseded by 0020 |
@@ -574,13 +586,15 @@ the tree and over the commits a pull request adds, or the push to `main` that me
 | [0018](adr/0018-the-packs-view-shows-satzs-pack-graph.md) | the Packs view shows satz's pack graph (`satz_packs`) and switches a pack with `satz_add_pack` and `satz_remove_pack`; the app derives no pack row and no dependency |
 | [0019](adr/0019-the-pack-review-runs-the-cli-and-places-a-private-pack-as-a-local-fork.md) | the pack review runs `satz review-pack` through the CLI with the estate's config; a private pack is placed as `<stem>.local.satz`, never over other text; upstream is a pull request by hand |
 | [0020](adr/0020-the-agent-is-an-external-client-that-studio-configures-and-starts.md) | the app runs no model: the Agent destination writes the estate's `satz mcp` configuration for an external client and starts it — superseding 0004, 0008, 0009, 0010 and 0013, and amending 0005 |
+| [0021](adr/0021-the-settings-ceiling-is-the-agents-and-studio-writes-at-its-own.md) | the Settings ceiling is the external agent's alone; the app's own `satz mcp` runs at `read,write`; the Agent view shows the ceiling on disk beside the setting and offers Replace where they differ |
+| [0022](adr/0022-the-mcp-root-is-the-one-satz-mcp-config-renders.md) | the root of the app's own `satz mcp` is the one `satz mcp-config` renders — the estate's config directory — for the window and every client alike |
 
 ## 7. Not built, and why
 
 - **No embedded terminal.** `apply` and `bootstrap` hand stdio to tofu and to the
   human; tofu's approval prompt is the safety step. `EstateSession::external_command`
-  writes a one-shot script under `<data dir>/satz-studio/run/` holding `cd "<estate>"
-  && "<satz>" --config . <args…>`, and `open_in_terminal` opens it with the OS
+  writes a one-shot script under `<data dir>/satz-studio/run/` holding `cd '<estate>'
+  && '<satz>' --config . <args…>`, and `open_in_terminal` opens it with the OS
   terminal. The app learns nothing from the terminal; `-auto-approve` is never passed.
 - **No pack logic of the app's own.** Which packs an estate uses, what each needs and
   what a switch writes are satz's pack graph, read through `satz_packs` and changed
