@@ -40,7 +40,8 @@
         "presets/integrations/microsoft-sentinel-network-logs.satz",
         "presets/ci/verification-runner.satz",
         "presets/ci/verification-runner-grant.satz",
-        "presets/exemptions/exemption-tag.satz"
+        "presets/exemptions/exemption-tag.satz",
+        "presets/interface-notice.satz"
       ],
       "excludes": [],
       "findings": []
@@ -1479,6 +1480,30 @@
           ],
           "params": [
             "use_exemption_tag"
+          ],
+          "met": false
+        }
+      ],
+      "required_by": [],
+      "excludes": [],
+      "findings": []
+    },
+    {
+      "path": "presets/interface-notice.satz",
+      "role": "pack",
+      "gate": "interface_notice_pubsub",
+      "gate_declared_in": "presets/estate-map.satz",
+      "default": "false",
+      "line": "absent",
+      "deploys": false,
+      "requires": [
+        {
+          "kind": "gate",
+          "any_of": [
+            "presets/estate-map.satz"
+          ],
+          "params": [
+            "interface_notice_pubsub"
           ],
           "met": false
         }

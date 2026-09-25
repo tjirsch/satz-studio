@@ -20,7 +20,9 @@
 
 use dioxus::prelude::*;
 use satz_studio_core::model::answer_kind;
-use satz_studio_core::satz::reports::{Blast, QuestionKind, QuestionRow, QuestionState, Reversal};
+use satz_studio_core::satz::reports::{
+    Blast, NO_BRANCH, QuestionKind, QuestionRow, QuestionState, Reversal,
+};
 
 use crate::components::{
     Button, ButtonVariant, Card, CardVariant, Chip, ChipKind, Draft, FieldKind, Icon,
@@ -175,19 +177,29 @@ impl Walk {
 }
 
 /// The option the view starts on: the one the estate binds, else the one the pack
-/// offers as its default, else none.
+/// offers as its default, else nothing chosen. A choice that is not required binds and
+/// offers [`NO_BRANCH`] like an option.
 pub fn initial_option(q: &QuestionRow) -> Option<String> {
-    q.options
+    q.bound_option().map(str::to_string).or_else(|| {
+        let default = q.default.as_ref()?.as_str()?;
+        let known = q.options.iter().any(|o| o.param == default)
+            || (q.offers_none() && default == NO_BRANCH);
+        known.then(|| default.to_string())
+    })
+}
+
+/// The chips of a choice: each option's param and label, then [`NO_BRANCH`] where the
+/// choice is not required.
+pub fn choices(q: &QuestionRow) -> Vec<(String, String)> {
+    let mut out: Vec<(String, String)> = q
+        .options
         .iter()
-        .find(|o| o.selected)
-        .map(|o| o.param.clone())
-        .or_else(|| {
-            let default = q.default.as_ref()?.as_str()?;
-            q.options
-                .iter()
-                .find(|o| o.param == default)
-                .map(|o| o.param.clone())
-        })
+        .map(|o| (o.param.clone(), o.label.clone()))
+        .collect();
+    if q.offers_none() {
+        out.push((NO_BRANCH.to_string(), "None".to_string()));
+    }
+    out
 }
 
 /// What the card's filled button does: write the card's value and move on, or move on.
@@ -259,16 +271,21 @@ pub struct Held {
 
 /// A typed answer's field. `offered` is the report's value — the estate's own for an
 /// answered question, else the pack's default — which is where the field starts.
+/// `empty_answers` is the question saying what `""` means (`empty = "…"`), which makes
+/// an empty field an answer.
 pub fn held_param(
     kind: FieldKind,
     subject: &str,
     offered: Option<&serde_json::Value>,
+    empty_answers: bool,
     draft: &Draft,
 ) -> Held {
     Held {
         changed: *draft != Draft::of_json(offered, kind),
-        // nothing typed is no answer to a question that offers nothing
-        valid: draft.problem(kind, subject).is_none() && (offered.is_some() || !draft.is_empty()),
+        // nothing typed is no answer to a question that offers nothing, unless the
+        // question says what nothing means
+        valid: draft.problem(kind, subject).is_none()
+            && (offered.is_some() || empty_answers || !draft.is_empty()),
         value: draft.to_json(),
     }
 }
@@ -302,18 +319,17 @@ pub fn recommends_otherwise(q: &QuestionRow) -> Option<&str> {
     }
 }
 
-/// A question's state as the card's chip and the list say it: an icon and the words.
+/// A question's state as the card's chip and the list say it: an icon and the words. A
+/// choice says its bound option's label, or `none`.
 pub fn state_of(q: &QuestionRow) -> (&'static str, String) {
+    let answer = match q.kind {
+        QuestionKind::Oneof => q.bound_label().unwrap_or_default(),
+        QuestionKind::Param => q.current.as_ref().map(|v| q.shown(v)).unwrap_or_default(),
+    };
     match q.state {
         QuestionState::Unanswered if q.blocking => ("priority_high", "needs a value".to_string()),
         QuestionState::Unanswered => ("radio_button_unchecked", "open".to_string()),
-        QuestionState::Answered => (
-            "check_circle",
-            format!(
-                "answered: {}",
-                q.current.as_ref().map(shown).unwrap_or_default()
-            ),
-        ),
+        QuestionState::Answered => ("check_circle", format!("answered: {answer}")),
         QuestionState::NotApplicable => ("block", "not asked: its ask_when is false".to_string()),
     }
 }
@@ -573,16 +589,13 @@ fn QuestionCard(
     let initial = kind.map(|k| Draft::of_json(q.offered(), k));
     let mut draft = use_signal(|| initial.clone());
     let mut chosen = use_signal(|| initial_option(&q));
-    let bound = q
-        .options
-        .iter()
-        .find(|o| o.selected)
-        .map(|o| o.param.clone());
+    let bound = q.bound_option().map(str::to_string);
 
     // What the card holds, read when it is asked for — a press can arrive before the
     // render that follows the keystroke before it — so the button and Enter agree.
     let held = {
         let offered = q.offered().cloned();
+        let empty_answers = q.empty.is_some();
         let subject = q.subject.clone();
         let bound = bound.clone();
         let oneof = q.kind == QuestionKind::Oneof;
@@ -591,7 +604,9 @@ fn QuestionCard(
                 Some(held_oneof(chosen().as_deref(), bound.as_deref()))
             } else {
                 match (kind, draft()) {
-                    (Some(k), Some(d)) => Some(held_param(k, &subject, offered.as_ref(), &d)),
+                    (Some(k), Some(d)) => {
+                        Some(held_param(k, &subject, offered.as_ref(), empty_answers, &d))
+                    }
                     _ => None,
                 }
             }
@@ -620,9 +635,16 @@ fn QuestionCard(
         (None, true, _) => "no default — a value is needed".to_string(),
         (None, false, _) => String::new(),
         (Some(v), _, _) if q.state == QuestionState::Answered => {
-            format!("the estate's own value: {}", shown(v))
+            format!("the estate's own value: {}", q.shown(v))
         }
-        (Some(v), _, _) => format!("the pack's default: {}", shown(v)),
+        (Some(v), _, _) => format!("the pack's default: {}", q.shown(v)),
+    };
+    // `q.shown` already carries the meaning beside an offered ""
+    let offers_empty = q.offered().and_then(|v| v.as_str()) == Some("");
+    let field_hint = match (&q.empty, offers_empty, field_hint.is_empty()) {
+        (Some(meaning), false, true) => format!("empty means {meaning}"),
+        (Some(meaning), false, false) => format!("{field_hint}; empty means {meaning}"),
+        _ => field_hint,
     };
     let forward = text_forward(q.state, now.is_some());
     let picked = chosen().and_then(|c| q.options.iter().find(|o| o.param == c).cloned());
@@ -695,15 +717,14 @@ fn QuestionCard(
                             },
                             (QuestionKind::Oneof, _, _) => rsx! {
                                 div { class: "interview__options",
-                                    for o in q.options.iter().cloned() {
+                                    for (param, label) in choices(&q) {
                                         {
-                                            let param = o.param.clone();
-                                            let is_chosen = chosen().as_deref() == Some(o.param.as_str());
+                                            let is_chosen = chosen().as_deref() == Some(param.as_str());
                                             rsx! {
                                                 Chip {
-                                                    key: "{o.param}",
+                                                    key: "{param}",
                                                     kind: ChipKind::Filter,
-                                                    label: o.label.clone(),
+                                                    label,
                                                     selected: is_chosen,
                                                     onclick: move |_| chosen.set(Some(param.clone())),
                                                 }
@@ -717,6 +738,11 @@ fn QuestionCard(
                                         if let Some(why) = &o.why {
                                             " — {why}"
                                         }
+                                    }
+                                } else if chosen().as_deref() == Some(NO_BRANCH) {
+                                    p { class: "interview__option-why",
+                                        code { "{NO_BRANCH}" }
+                                        " — every option is bound false"
                                     }
                                 }
                             },
@@ -831,7 +857,7 @@ mod tests {
     fn an_answered_field_changed_and_changed_back_reads_next_again() {
         let kind = FieldKind::Text;
         let written = json!("europe-west3");
-        let held = |d: Draft| held_param(kind, "region", Some(&written), &d);
+        let held = |d: Draft| held_param(kind, "region", Some(&written), false, &d);
         let open = held(Draft::of_json(Some(&written), kind));
         assert!(!open.changed && open.valid);
         let typed = held(Draft::Text("europe-west4".into()));
@@ -849,7 +875,7 @@ mod tests {
     #[test]
     fn an_empty_field_on_a_question_that_offers_nothing_cannot_be_accepted() {
         let kind = FieldKind::List(crate::components::typed_field::ListElem::Text);
-        let h = held_param(kind, "emails", None, &Draft::of_json(None, kind));
+        let h = held_param(kind, "emails", None, false, &Draft::of_json(None, kind));
         assert!(!h.valid);
         assert_eq!(
             button(primary(
@@ -864,10 +890,59 @@ mod tests {
             kind,
             "emails",
             None,
+            false,
             &Draft::List(vec!["a@example.com".into()]),
         );
         assert!(one.valid);
         assert_eq!(one.value, json!(["a@example.com"]));
+    }
+
+    /// A question whose `empty` says what `""` means takes an empty field as its answer,
+    /// and the card says the meaning beside the value.
+    #[test]
+    fn an_empty_field_answers_a_question_that_says_what_empty_means() {
+        let kind = FieldKind::Text;
+        let empty = Draft::of_json(None, kind);
+        assert!(!held_param(kind, "workload_folder_name", None, false, &empty).valid);
+        let h = held_param(kind, "workload_folder_name", None, true, &empty);
+        assert!(h.valid);
+        assert_eq!(h.value, json!(""));
+        let mut folder = q("workload_folder_name", QuestionState::Answered);
+        folder.empty = Some("the organisation".into());
+        folder.current = Some(json!(""));
+        assert_eq!(
+            listed(&folder),
+            "workload_folder_name · answered: \"\" (the organisation)"
+        );
+    }
+
+    /// A choice that is not required has a None chip, starts on it when satz offers it,
+    /// and reads Next on it once the estate binds every option false.
+    #[test]
+    fn a_choice_that_is_not_required_offers_none() {
+        let mut c: QuestionRow = serde_json::from_value(json!({
+            "subject": "interface_notice", "kind": "oneof", "prompt": "p", "reversal": "edit",
+            "blast": "low", "state": "unanswered", "blocking": false, "pack_description": "d",
+            "default": "none",
+            "options": [{"param": "interface_notice_pubsub", "label": "Pub/Sub", "selected": false}],
+            "from": "f", "pack": "estate_map"
+        }))
+        .unwrap();
+        let params: Vec<String> = choices(&c).into_iter().map(|(p, _)| p).collect();
+        assert_eq!(params, ["interface_notice_pubsub", NO_BRANCH]);
+        assert_eq!(initial_option(&c).as_deref(), Some(NO_BRANCH));
+        let h = held_oneof(Some(NO_BRANCH), c.bound_option());
+        assert!(h.valid && h.changed);
+        assert_eq!(h.value, json!("none"));
+        c.state = QuestionState::Answered;
+        c.default = None;
+        assert_eq!(initial_option(&c).as_deref(), Some(NO_BRANCH));
+        let h = held_oneof(Some(NO_BRANCH), c.bound_option());
+        assert_eq!(button(primary(c.state, h.changed, h.valid, false)), NEXT);
+        assert_eq!(listed(&c), "interface_notice · answered: None");
+        c.required = true;
+        c.state = QuestionState::Unanswered;
+        assert_eq!(choices(&c).len(), 1, "a required choice has no None chip");
     }
 
     #[test]

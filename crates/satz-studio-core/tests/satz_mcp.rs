@@ -1,5 +1,6 @@
-//! `McpSession` over the installed satz, rooted at the repository so the fixture's
-//! paths into `vendor/satz` are inside the boundary.
+//! `McpSession` over the installed satz, rooted at the repository so satz's smoke
+//! estate in `vendor/satz` is inside the boundary, and open under that estate's own
+//! `config.toml`.
 
 use std::path::PathBuf;
 use std::time::Duration;
@@ -20,9 +21,12 @@ fn repo_root() -> PathBuf {
 async fn open(allow: Allow) -> McpSession {
     let bin = SatzBinary::locate(None).await.unwrap();
     let root = repo_root();
+    // satz's own config of its smoke estate: `satz mcp` answers only for an estate of
+    // the config it is open under, and the file's own config is the one beside it
     let config = root
+        .join("vendor")
+        .join("satz")
         .join("tests")
-        .join("fixtures")
         .join("smoke")
         .join("config.toml");
     let estate = root
@@ -137,9 +141,12 @@ async fn a_bad_argument_is_a_refusal_and_an_unknown_tool_is_invalid_params() {
 async fn a_refused_open_is_an_error_not_a_session() {
     let bin = SatzBinary::locate(None).await.unwrap();
     let root = repo_root();
+    // satz's own config of its smoke estate: `satz mcp` answers only for an estate of
+    // the config it is open under, and the file's own config is the one beside it
     let config = root
+        .join("vendor")
+        .join("satz")
         .join("tests")
-        .join("fixtures")
         .join("smoke")
         .join("config.toml");
     let estate = root

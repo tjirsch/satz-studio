@@ -76,13 +76,13 @@ async fn showcase_params_carry_their_questions_and_leave_the_gates_out() {
             "billing_account_infra",
             "default_region",
             "audit_retention_days",
-            "want_optional",
             "pack_bucket_location",
             "pack_bucket_adopted",
+            "team_folder_name",
             "archive_project_folder",
             "infra_project_services",
         ],
-        "the group_model options are a oneof, answered as a choice"
+        "the options of group_model and optional_extras are choices, answered as one"
     );
 
     let region = row(&m.params, "default_region");
@@ -134,7 +134,7 @@ async fn showcase_params_carry_their_questions_and_leave_the_gates_out() {
     }
 
     // the showcase's own switch is a file the pack graph does not know: its line is
-    // the estate's, and its gate a param like any other
+    // the estate's, and its gate the option of a choice, answered as one
     assert!(
         m.packs
             .unmanaged
@@ -143,7 +143,15 @@ async fn showcase_params_carry_their_questions_and_leave_the_gates_out() {
         "{:?}",
         m.packs.unmanaged
     );
-    assert_eq!(row(&m.params, "want_optional").kind, ParamKind::Bool);
+    assert!(m.params.iter().all(|r| r.name != "want_optional"));
+    // a question whose `empty` says what "" means: its "" is an answer
+    let team = row(&m.params, "team_folder_name");
+    let q = team
+        .question
+        .as_ref()
+        .expect("team_folder_name has a question");
+    assert_eq!(q.state, QuestionState::Answered);
+    assert_eq!(q.empty.as_deref(), Some("no team folder"));
     assert!(
         m.packs
             .packs

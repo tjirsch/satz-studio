@@ -191,7 +191,7 @@ pub fn ImportEstate() -> Element {
                     Some(Ok(ImportPlan::InitThenImport)) => rsx! {
                         p { class: "import__plan",
                             Icon { name: "info", size: 18 }
-                            "This folder holds no config.toml, so satz import would refuse it. satz init runs first and writes config.toml, yaml/, hcl/, schemas/ and .gitignore; the import then fills them. With credentials that name an organisation, init also writes an estate file of its own — the one the import writes is the one that opens."
+                            "This folder holds no config.toml, so satz import would refuse it. satz init runs first and writes config.toml, satz/, hcl/, schemas/ and .gitignore; the import then fills them. With credentials that name an organisation, init also writes an estate file of its own — the one the import writes is the one that opens."
                         }
                     },
                     _ => rsx! {},
@@ -414,6 +414,15 @@ fn ShapeOptions(options: Signal<ImportOptions>, running: bool) -> Element {
             }
         },
         ImportShape::Hcl => rsx! {
+            TextField {
+                label: "Organization",
+                value: current.organization.clone(),
+                placeholder: "123456789012",
+                monospace: true,
+                disabled: running,
+                supporting: "--organization, the organisation this configuration belongs to. satz writes no estate from a configuration that names no organisation, nor from any --wrap-all import, unless it is given here; a configuration that names one is held to it.",
+                oninput: move |v: String| options.write().organization = v,
+            }
             h3 { class: "import__subheading", "How much to translate" }
             Switch {
                 label: "Carry every block verbatim",

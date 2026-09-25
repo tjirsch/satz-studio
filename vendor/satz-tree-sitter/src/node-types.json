@@ -209,6 +209,62 @@
     "fields": {}
   },
   {
+    "type": "export",
+    "named": true,
+    "fields": {
+      "description": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "string",
+            "named": true
+          }
+        ]
+      },
+      "name": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "string",
+            "named": true
+          }
+        ]
+      },
+      "value": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "boolean",
+            "named": true
+          },
+          {
+            "type": "list",
+            "named": true
+          },
+          {
+            "type": "number",
+            "named": true
+          },
+          {
+            "type": "object",
+            "named": true
+          },
+          {
+            "type": "reference",
+            "named": true
+          },
+          {
+            "type": "string",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
     "type": "hcl_block",
     "named": true,
     "fields": {
@@ -310,6 +366,47 @@
           }
         ]
       }
+    }
+  },
+  {
+    "type": "interface",
+    "named": true,
+    "fields": {
+      "body": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "interface_body",
+            "named": true
+          }
+        ]
+      },
+      "name": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "string",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
+    "type": "interface_body",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "export",
+          "named": true
+        }
+      ]
     }
   },
   {
@@ -551,11 +648,19 @@
           "named": true
         },
         {
+          "type": "export",
+          "named": true
+        },
+        {
           "type": "hcl_block",
           "named": true
         },
         {
           "type": "header",
+          "named": true
+        },
+        {
+          "type": "interface",
           "named": true
         },
         {
@@ -726,6 +831,10 @@
     "named": false
   },
   {
+    "type": "description",
+    "named": false
+  },
+  {
     "type": "deviates",
     "named": false
   },
@@ -735,6 +844,10 @@
   },
   {
     "type": "estate",
+    "named": false
+  },
+  {
+    "type": "export",
     "named": false
   },
   {
@@ -759,6 +872,10 @@
   },
   {
     "type": "implements",
+    "named": false
+  },
+  {
+    "type": "interface",
     "named": false
   },
   {

@@ -75,7 +75,8 @@ pub enum NodeKind {
     Attr { key: Span, eq: Span, value: NodeId },
     /// a list's items and an object's entries are the children; the scalars are leaves
     Value(ValueKind),
-    /// `claim`, `question`, `action`, `suppress`, `hcl` — kept whole in V1; the comments
+    /// `claim`, `question`, `action`, `notice`, `offers`, `export`, `interface`,
+    /// `suppress`, `hcl` — kept whole in V1; the comments
     /// inside are still children
     Opaque { statement: String },
     /// a `//`, `#` or `/* … */` comment, wherever it stands

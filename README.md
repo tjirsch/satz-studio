@@ -29,9 +29,10 @@ before it runs. What satz wrote is read back out of the directory rather than gu
 and the estate it wrote opens. Beside the log the result carries satz's own report split
 into what it wrote, what it skipped and why, the params it could not derive with its
 reason for each, and its warnings — among them the attributes an apply would reset and
-the asset types Cloud Asset Inventory does not serve. A state that names no organisation
-takes it in the form's Organization field (`--organization`), which satz needs before it
-writes an estate from it.
+the asset types Cloud Asset Inventory does not serve. A state or a Terraform configuration
+that names no organisation takes it in the form's Organization field (`--organization`),
+which satz needs before it writes an estate from it; an HCL import with `--wrap-all`
+translates nothing and always needs it.
 
 **Open** walks a folder for every `config.toml` under it and opens one of the estates
 beside it.
@@ -95,7 +96,7 @@ that holds them up — in front of apply and bootstrap, which satz refuses.
 
 ## What it needs
 
-- **`satz` 0.81.0 or newer.** `MIN_SATZ` in `crates/satz-studio-core/src/satz/binary.rs`
+- **`satz` 0.84.0 or newer.** `MIN_SATZ` in `crates/satz-studio-core/src/satz/binary.rs`
   names the oldest satz this build works with. It rises when a satz release breaks the
   app or the app starts using something a later satz introduced, not with every satz
   release. Install satz with its installer or bring it up to date with `satz

@@ -34,6 +34,10 @@ resource "google_storage_bucket" "b" {
 }
 "#;
 
+/// The organisation the configuration belongs to: `MAIN_TF` names none, and satz writes
+/// no estate from the hcl shape without one. satz's documented example value.
+const ORGANIZATION: &str = "123456789012";
+
 /// `satz <argv>` in `dir` with no `--config`, as [`SatzCli::run_in`] runs it behind the
 /// door: whether it exited zero, and every line it streamed.
 async fn run_in(dir: &Path, args: &[String]) -> (bool, Vec<CliLine>) {
@@ -82,6 +86,7 @@ async fn the_hcl_shape_writes_an_estate_the_read_back_finds() {
     let options = ImportOptions {
         shape: ImportShape::Hcl,
         source: "src".to_string(),
+        organization: ORGANIZATION.to_string(),
         ..Default::default()
     };
     let dir = satz_studio_core::estate::EstateDir::open(&estate.root).unwrap();
@@ -125,6 +130,30 @@ async fn the_hcl_shape_writes_an_estate_the_read_back_finds() {
     assert!(report.skipped.is_empty() && report.warnings.is_empty());
 }
 
+/// A configuration that names no organisation, imported without `--organization`, is
+/// refused and writes nothing; the form's field is what the refusal asks for.
+#[tokio::test]
+async fn the_hcl_shape_without_an_organisation_is_refused_and_writes_nothing() {
+    let estate = support::estate_dir(None);
+    let source = estate.root.join("src");
+    std::fs::create_dir_all(&source).unwrap();
+    std::fs::write(source.join("main.tf"), MAIN_TF).unwrap();
+    let options = ImportOptions {
+        shape: ImportShape::Hcl,
+        source: "src".to_string(),
+        ..Default::default()
+    };
+    let dir = satz_studio_core::estate::EstateDir::open(&estate.root).unwrap();
+    let dirs = options.write_dirs(&dir);
+    let before = satz_files(&dirs).unwrap();
+
+    let (ok, lines) = run_in(&estate.root, &options.argv()).await;
+    assert!(!ok, "satz wrote an estate with no organisation");
+    let said = stderr(&lines);
+    assert!(said.contains("--organization"), "{said}");
+    assert!(written_since(&before, &dirs).unwrap().is_empty());
+}
+
 /// A second run over the same source writes the same file again. The read-back is a hash
 /// and not a listing, so it answers this as a file WRITTEN rather than as nothing having
 /// happened — which is what lets the door open the estate of a re-run.
@@ -137,6 +166,7 @@ async fn a_second_import_over_the_same_file_is_still_a_file_written() {
     let options = ImportOptions {
         shape: ImportShape::Hcl,
         source: "src".to_string(),
+        organization: ORGANIZATION.to_string(),
         ..Default::default()
     };
     let dir = satz_studio_core::estate::EstateDir::open(&estate.root).unwrap();

@@ -81,6 +81,14 @@ pub struct QuestionRow {
     pub recommend: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub options: Vec<OptionRow>,
+    /// a choice only: exactly one option must be set. A choice that is not required is
+    /// also answered [`NO_BRANCH`] — every option `false`
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub required: bool,
+    /// what an empty answer means, where the question says (`empty = "…"`): `""` is then
+    /// an answer — offered, accepted and counted — rather than one still to give
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub empty: Option<String>,
     /// the file that declared it
     pub from: String,
     pub pack: String,
@@ -95,7 +103,48 @@ impl QuestionRow {
     pub fn offered(&self) -> Option<&serde_json::Value> {
         self.current.as_ref().or(self.default.as_ref())
     }
+    /// A choice that is not required, which [`NO_BRANCH`] answers besides its options.
+    pub fn offers_none(&self) -> bool {
+        self.kind == QuestionKind::Oneof && !self.required
+    }
+    /// The answer a choice carries: the option the estate sets, or [`NO_BRANCH`] for an
+    /// answered choice that is not required and sets none of them.
+    pub fn bound_option(&self) -> Option<&str> {
+        self.options
+            .iter()
+            .find(|o| o.selected)
+            .map(|o| o.param.as_str())
+            .or_else(|| {
+                (self.offers_none() && self.state == QuestionState::Answered).then_some(NO_BRANCH)
+            })
+    }
+    /// The label of the answer a choice carries: its bound option's, or `None` for
+    /// [`NO_BRANCH`].
+    pub fn bound_label(&self) -> Option<String> {
+        let b = self.bound_option()?;
+        Some(
+            self.options
+                .iter()
+                .find(|o| o.param == b)
+                .map_or_else(|| "None".to_string(), |o| o.label.clone()),
+        )
+    }
+    /// A value as satz shows it: a string is itself, and an empty answer to a question
+    /// that says what `""` means carries that meaning beside it.
+    pub fn shown(&self, v: &serde_json::Value) -> String {
+        match (&self.empty, v) {
+            (Some(meaning), serde_json::Value::String(s)) if s.is_empty() => {
+                format!("\"\" ({meaning})")
+            }
+            (_, serde_json::Value::String(s)) => s.clone(),
+            (_, other) => other.to_string(),
+        }
+    }
 }
+
+/// The answer to a choice that is not `required` which sets none of its options: every
+/// option is bound `false`. satz's `NO_BRANCH` (`vendor/satz/src/questions.rs`).
+pub const NO_BRANCH: &str = "none";
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct OptionRow {
@@ -229,7 +278,8 @@ pub struct Finding {
     pub severity: FindingSeverity,
     /// Which check spoke, kebab-case as satz writes it: `unadopted-pack`,
     /// `missing-required`, `written-reference`, `conflict`, `dry-run-conflict`,
-    /// `suppression`, `emit`, `prerequisites`, `providers`, `action`, `hcl-passthrough`.
+    /// `suppression`, `emit`, `prerequisites`, `providers`, `action`, `hcl-passthrough`,
+    /// `workload-folder`.
     /// A `String` rather than an enum, so a kind satz adds is carried through instead
     /// of failing the whole result.
     pub kind: String,
@@ -823,6 +873,67 @@ mod tests {
         let again: serde_json::Value = serde_json::to_value(&report).unwrap();
         let original: serde_json::Value = serde_json::from_str(SMOKE).unwrap();
         assert_eq!(again, original);
+    }
+
+    /// The recorded `satz questions --format json` of satz's showcase estate, which binds
+    /// every option of its choice that is not required `false` and answers its
+    /// `empty` question `""`.
+    const SHOWCASE: &str = include_str!("../../tests/fixtures/questions-showcase.json");
+
+    /// A choice that is not required is answered `none`, and a question whose `empty`
+    /// says what `""` means takes `""` as an answer: both read out of what satz reports.
+    #[test]
+    fn a_choice_answered_none_and_an_empty_answer_read_as_satz_reports_them() {
+        let report: QuestionsReport = serde_json::from_str(SHOWCASE).unwrap();
+        let again: serde_json::Value = serde_json::to_value(&report).unwrap();
+        let original: serde_json::Value = serde_json::from_str(SHOWCASE).unwrap();
+        assert_eq!(again, original, "the showcase report round-trips");
+        let by = |s: &str| {
+            report
+                .questions
+                .iter()
+                .find(|q| q.subject == s)
+                .unwrap_or_else(|| panic!("the recorded report asks no `{s}`"))
+        };
+        let extras = by("optional_extras");
+        assert_eq!(extras.state, QuestionState::Answered);
+        assert!(!extras.required && extras.offers_none());
+        assert_eq!(extras.bound_option(), Some(NO_BRANCH));
+        assert_eq!(extras.bound_label().as_deref(), Some("None"));
+        let model = by("group_model");
+        assert!(model.required && !model.offers_none());
+        assert_eq!(model.bound_option(), Some("group_model_flat"));
+        let folder = by("team_folder_name");
+        assert_eq!(folder.state, QuestionState::Answered);
+        assert_eq!(folder.empty.as_deref(), Some("no team folder"));
+        assert_eq!(folder.current, Some(serde_json::json!("")));
+        assert_eq!(
+            folder.shown(&serde_json::json!("")),
+            "\"\" (no team folder)"
+        );
+        assert_eq!(folder.shown(&serde_json::json!("Team A")), "Team A");
+    }
+
+    #[test]
+    fn an_answered_choice_that_sets_no_option_is_bound_to_none() {
+        let mut q: QuestionRow = serde_json::from_value(serde_json::json!({
+            "subject": "interface_notice", "kind": "oneof", "prompt": "p", "reversal": "edit",
+            "blast": "none", "state": "answered", "blocking": false, "pack_description": "d",
+            "options": [{"param": "interface_notice_pubsub", "label": "Pub/Sub", "selected": false}],
+            "from": "f", "pack": "p"
+        }))
+        .unwrap();
+        assert_eq!(q.bound_option(), Some(NO_BRANCH));
+        assert_eq!(q.bound_label().as_deref(), Some("None"));
+        q.options[0].selected = true;
+        assert_eq!(q.bound_option(), Some("interface_notice_pubsub"));
+        assert_eq!(q.bound_label().as_deref(), Some("Pub/Sub"));
+        q.options[0].selected = false;
+        q.required = true;
+        assert_eq!(q.bound_option(), None, "a required choice has no none");
+        q.required = false;
+        q.state = QuestionState::Unanswered;
+        assert_eq!(q.bound_option(), None, "an open choice binds nothing yet");
     }
 
     #[test]
