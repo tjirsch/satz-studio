@@ -4,7 +4,10 @@
 //! else — the `=` column and the trailing comment keep their bytes — and the reverse
 //! edit restores the original bytes. What `edit_commit.rs` proves already (a good
 //! edit lands, a bad one rolls back naming the real file, a file changed on disk is
-//! refused, a delegated write is verified or restored) is not repeated here.
+//! refused, a delegated write is verified or restored) is not repeated here. Over the
+//! skeleton `satz interview --create` writes, which carries `init`'s scaffold: its
+//! `private = true` on the state bucket and the IaC service account is satz's bool, and
+//! flipping it passes the check and flips back to the original bytes.
 
 #[path = "fixtures/e2e/support.rs"]
 mod e2e;
@@ -13,6 +16,8 @@ mod support;
 
 use satz_studio_core::cst::{NodeKind, TypedValue};
 use satz_studio_core::edit::{Edit, EditSession, sha256_hex};
+use satz_studio_core::model::{ResourceNode, SourceValue};
+use satz_studio_core::schema::AttrType;
 
 const PARAM: &str = "audit_retention_days";
 
@@ -117,4 +122,85 @@ async fn an_edit_replaces_the_value_span_alone_and_the_reverse_edit_restores_the
     assert_eq!(support::read(&session.main), original);
     assert_eq!(committed.sha256, original_sha);
     assert!(copy.temp_files().is_empty(), "{:?}", copy.temp_files());
+}
+
+fn child<'a>(nodes: &'a [ResourceNode], key: &str) -> &'a ResourceNode {
+    nodes
+        .iter()
+        .find(|n| n.key == key)
+        .unwrap_or_else(|| panic!("no node `{key}`"))
+}
+
+#[tokio::test]
+async fn the_scaffolds_private_is_a_bool_the_writer_flips_and_restores() {
+    let estate = e2e::estate_dir(None);
+    let main = estate.create_skeleton("new.satz").await;
+    let session = estate.open("new.satz").await;
+    e2e::answer_like_the_smoke_matrix(&session).await;
+    let (_, cli) = support::checkers(&session);
+    let original = support::read(&main);
+
+    let private_rows = |m: &satz_studio_core::model::EstateModel| {
+        let folder = child(&child(&m.outline, "google_folder").children, "infra_folder");
+        let project = child(&child(&folder.children, "google_project").children, "infra");
+        let bucket = child(
+            &child(&project.children, "google_storage_bucket").children,
+            "state",
+        );
+        let account = child(
+            &child(&project.children, "google_service_account").children,
+            "provisioner",
+        );
+        [bucket, account].map(|node| {
+            node.attrs
+                .iter()
+                .find(|r| r.key == "private")
+                .unwrap_or_else(|| panic!("{}: no `private` row", node.key))
+                .clone()
+        })
+    };
+
+    let m = e2e::model(&session, Vec::new()).await;
+    for row in private_rows(&m) {
+        assert_eq!(row.typed, AttrType::Bool, "line {}", row.line);
+        assert_eq!(row.value, SourceValue::Bool(true), "line {}", row.line);
+        assert!(row.editable, "line {}", row.line);
+    }
+
+    // the bucket's flips to false: that line alone changes, and satz's check passes
+    let es = EditSession::open(&main).unwrap();
+    let proposed = es
+        .apply(&[Edit::ReplaceValue {
+            node: private_rows(&m)[0].id,
+            value: TypedValue::Bool(false),
+        }])
+        .unwrap();
+    support::within(proposed.commit(&cli)).await.unwrap();
+    let flipped = support::read(&main);
+    let changed: Vec<(&str, &str)> = original
+        .lines()
+        .zip(flipped.lines())
+        .filter(|(a, b)| a != b)
+        .collect();
+    assert_eq!(changed.len(), 1, "{changed:?}");
+    assert!(
+        changed[0].1.trim_start().starts_with("private"),
+        "{changed:?}"
+    );
+    let m = e2e::model(&session, Vec::new()).await;
+    let [bucket, account] = private_rows(&m);
+    assert_eq!(bucket.value, SourceValue::Bool(false));
+    assert_eq!(account.value, SourceValue::Bool(true));
+
+    // and back: the original bytes
+    let es = EditSession::open(&main).unwrap();
+    let proposed = es
+        .apply(&[Edit::ReplaceValue {
+            node: bucket.id,
+            value: TypedValue::Bool(true),
+        }])
+        .unwrap();
+    support::within(proposed.commit(&cli)).await.unwrap();
+    assert_eq!(support::read(&main), original);
+    assert!(estate.temp_files().is_empty(), "{:?}", estate.temp_files());
 }

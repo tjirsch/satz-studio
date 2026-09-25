@@ -540,3 +540,35 @@ fn without_a_registry_everything_typed_is_unknown() {
     }
     assert_eq!(m.uses.len(), 3, "the use lines are still found");
 }
+
+/// `private = true` is satz's own body key (the interface leaves the resource out): a
+/// bool row, editable, not a provider argument — whether the resource stands in a map or
+/// alone — and it names nothing missing.
+#[test]
+fn private_is_satzs_bool_and_not_a_provider_argument() {
+    let text = "estate x\n\ngoogle_storage_bucket {\n  b {\n    private  = true\n    name     = \"n\"\n    location = \"EU\"\n  }\n}\n\ngoogle_folder {\n  f {\n    display_name = \"F\"\n    google_project {\n      p {\n        name = \"n\"\n        google_service_account {\n          sa {\n            private    = false\n            account_id = \"sa\"\n          }\n        }\n      }\n    }\n  }\n}\n";
+    let m = inline(text, &Env::new());
+
+    let bucket = child(&child(&m.outline, "google_storage_bucket").children, "b");
+    let private = row(bucket, "private");
+    assert_eq!(private.typed, AttrType::Bool);
+    assert_eq!(private.value, SourceValue::Bool(true));
+    assert!(private.editable);
+    assert!(private.optional && !private.required && !private.computed);
+    assert!(
+        bucket.missing_required.is_empty(),
+        "{:?}",
+        bucket.missing_required
+    );
+
+    let folder = child(&child(&m.outline, "google_folder").children, "f");
+    let project = child(&child(&folder.children, "google_project").children, "p");
+    let sa = child(
+        &child(&project.children, "google_service_account").children,
+        "sa",
+    );
+    let private = row(sa, "private");
+    assert_eq!(private.typed, AttrType::Bool);
+    assert_eq!(private.value, SourceValue::Bool(false));
+    assert!(private.editable);
+}

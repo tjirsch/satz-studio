@@ -26,6 +26,22 @@
     }
   },
   {
+    "type": "all_resources",
+    "named": true,
+    "fields": {
+      "type": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
     "type": "attribute",
     "named": true,
     "fields": {
@@ -212,8 +228,18 @@
     "type": "export",
     "named": true,
     "fields": {
+      "attach": {
+        "multiple": true,
+        "required": false,
+        "types": [
+          {
+            "type": "list",
+            "named": true
+          }
+        ]
+      },
       "description": {
-        "multiple": false,
+        "multiple": true,
         "required": false,
         "types": [
           {
@@ -236,6 +262,10 @@
         "multiple": false,
         "required": true,
         "types": [
+          {
+            "type": "all_resources",
+            "named": true
+          },
           {
             "type": "boolean",
             "named": true
@@ -404,6 +434,10 @@
       "types": [
         {
           "type": "export",
+          "named": true
+        },
+        {
+          "type": "use_interface",
           "named": true
         }
       ]
@@ -750,6 +784,36 @@
     }
   },
   {
+    "type": "use_interface",
+    "named": true,
+    "fields": {
+      "condition": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      },
+      "names": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "list",
+            "named": true
+          },
+          {
+            "type": "string",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
     "type": "use_statement",
     "named": true,
     "fields": {
@@ -814,7 +878,15 @@
     "named": false
   },
   {
+    "type": "all",
+    "named": false
+  },
+  {
     "type": "as",
+    "named": false
+  },
+  {
+    "type": "attach",
     "named": false
   },
   {

@@ -357,7 +357,8 @@ nowhere else.
    and on the top bar's Reload; no file watcher runs.
 
 The model is derived, never guessed: a key the schema does not know is `Unknown` and
-read-only. `ResourceNode.missing_required` lists the schema's required attributes and
+read-only. satz's own `private` in a resource's body is typed as satz reads it, a bool,
+and is never a provider argument. `ResourceNode.missing_required` lists the schema's required attributes and
 blocks the node lacks, minus what satz derives from the position. An `AttrRow` is
 locked when it is `import-id`, computed-only, or inside an `Unknown` block; a value
 carrying an interpolation, a reference or an object is edited in `EditMode::Source`. A
