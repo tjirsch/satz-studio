@@ -1,0 +1,106 @@
+{
+  "estate": "vendor/satz/tests/smoke/yaml/showcase.satz",
+  "questions": [
+    {
+      "subject": "customer_shortname",
+      "kind": "param",
+      "prompt": "Short name identifying this customer",
+      "why": "Project ids, bucket names and group prefixes derive from it, and those ids are globally unique — changing it later recreates them.",
+      "reversal": "recreate",
+      "blast": "none",
+      "state": "answered",
+      "current": "corp",
+      "blocking": false,
+      "shape": "string",
+      "pack_description": "The showcase estate — every language feature in one compilable file. The reference (docs/language.md) cites this file by section instead of carrying loose snippets; scripts/smoke.sh transpiles it in CI. Example values only (docs/examples.md).",
+      "from": "vendor/satz/tests/smoke/yaml/showcase.satz",
+      "pack": "showcase"
+    },
+    {
+      "subject": "default_region",
+      "kind": "param",
+      "prompt": "Which region should regional resources default to?",
+      "why": "Moving a bucket or a dataset later is a copy, not an edit.",
+      "reversal": "state_surgery",
+      "blast": "low",
+      "state": "answered",
+      "current": "europe-west3",
+      "blocking": false,
+      "shape": "string",
+      "pack_description": "The showcase estate — every language feature in one compilable file. The reference (docs/language.md) cites this file by section instead of carrying loose snippets; scripts/smoke.sh transpiles it in CI. Example values only (docs/examples.md).",
+      "recommend": "\"europe-west3\"",
+      "from": "vendor/satz/tests/smoke/yaml/showcase.satz",
+      "pack": "showcase"
+    },
+    {
+      "subject": "group_model",
+      "kind": "oneof",
+      "prompt": "Which security-group model does this customer run?",
+      "why": "Splitting network authority out later means a new group, membership moves and re-granted roles.",
+      "reversal": "state_surgery",
+      "blast": "low",
+      "state": "answered",
+      "blocking": false,
+      "pack_description": "The showcase estate — every language feature in one compilable file. The reference (docs/language.md) cites this file by section instead of carrying loose snippets; scripts/smoke.sh transpiles it in CI. Example values only (docs/examples.md).",
+      "options": [
+        {
+          "param": "group_model_flat",
+          "label": "Flat — network authority sits with project admins",
+          "selected": true
+        },
+        {
+          "param": "group_model_split",
+          "label": "Split — a separate network-admins group",
+          "why": "For customers with a distinct network team.",
+          "selected": false
+        }
+      ],
+      "required": true,
+      "from": "vendor/satz/tests/smoke/yaml/showcase.satz",
+      "pack": "showcase"
+    },
+    {
+      "subject": "team_folder_name",
+      "kind": "param",
+      "prompt": "Display name of a folder for the team",
+      "reversal": "edit",
+      "blast": "none",
+      "state": "answered",
+      "current": "",
+      "blocking": false,
+      "shape": "string",
+      "pack_description": "The showcase estate — every language feature in one compilable file. The reference (docs/language.md) cites this file by section instead of carrying loose snippets; scripts/smoke.sh transpiles it in CI. Example values only (docs/examples.md).",
+      "empty": "no team folder",
+      "from": "vendor/satz/tests/smoke/yaml/showcase.satz",
+      "pack": "showcase"
+    },
+    {
+      "subject": "optional_extras",
+      "kind": "oneof",
+      "prompt": "Which optional extras does this estate take?",
+      "reversal": "edit",
+      "blast": "none",
+      "state": "answered",
+      "blocking": false,
+      "pack_description": "The showcase estate — every language feature in one compilable file. The reference (docs/language.md) cites this file by section instead of carrying loose snippets; scripts/smoke.sh transpiles it in CI. Example values only (docs/examples.md).",
+      "options": [
+        {
+          "param": "want_optional",
+          "label": "The optional pack — one more bucket",
+          "selected": false
+        }
+      ],
+      "from": "vendor/satz/tests/smoke/yaml/showcase.satz",
+      "pack": "showcase"
+    }
+  ],
+  "summary": {
+    "total": 5,
+    "answered": 5,
+    "unanswered": 0,
+    "not_applicable": 0,
+    "blocking": 0,
+    "one_way_doors": 1,
+    "complete": true
+  }
+}

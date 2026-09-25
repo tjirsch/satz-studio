@@ -242,3 +242,21 @@ fn malformed_text_still_yields_a_tree_that_is_the_file_and_names_the_error() {
         assert!(cst.lower().is_err(), "{label}: satz accepts it");
     }
 }
+
+/// `export` and `interface` — what an estate publishes to the HCL beside it — are
+/// statements the tree keeps whole, as satz v0.84.0's `init` writes them.
+#[test]
+fn an_export_and_an_interface_are_kept_whole() {
+    let text = "estate acme\n\nexport \"workload_folder\" = \"organizations/{customer_organization_id}\" description \"where the teams' folders live\"\n\ninterface \"team_a\" {\n  // the team's own\n  export \"bucket\" = \"${{google_storage_bucket.b.name}}\"\n}\n";
+    let cst = Cst::parse(text).unwrap();
+    assert_eq!(
+        labels(&cst, cst.root()),
+        ["Header", "Opaque(export)", "Opaque(interface)"]
+    );
+    let interface = child(&cst, cst.root(), 2);
+    assert!(
+        cst.slice(cst.node(interface).span)
+            .starts_with("interface \"team_a\"")
+    );
+    assert_eq!(labels(&cst, interface), ["Comment"]);
+}

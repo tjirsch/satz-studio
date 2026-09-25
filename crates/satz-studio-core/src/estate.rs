@@ -32,13 +32,13 @@ pub struct ToolConfig {
 }
 
 fn default_yaml_dir() -> String {
-    "yaml".to_string()
+    "satz".to_string()
 }
 fn default_hcl_dir() -> String {
     "hcl".to_string()
 }
 fn default_include_dirs() -> Vec<String> {
-    vec![".".to_string(), "yaml".to_string()]
+    vec![".".to_string(), default_yaml_dir()]
 }
 fn default_schema_dir() -> String {
     "schemas".to_string()
@@ -50,7 +50,7 @@ fn default_tf_tool() -> String {
     "tofu".to_string()
 }
 fn default_provider_version() -> String {
-    "7.12.0".to_string()
+    "7.14.1".to_string()
 }
 fn default_validation_level() -> String {
     "warn".to_string()
@@ -404,6 +404,40 @@ mod tests {
         let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures");
         let found = EstateDir::discover(&root);
         assert_eq!(found, vec![fixture().join("config.toml")]);
+    }
+
+    /// The first string literal in the body of `fn <name>()` in satz's
+    /// `src/settings.rs` at the pinned submodule — the default satz itself applies.
+    fn satz_default(name: &str) -> String {
+        let src = std::fs::read_to_string(
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../vendor/satz/src/settings.rs"),
+        )
+        .unwrap();
+        let at = src
+            .find(&format!("fn {name}()"))
+            .unwrap_or_else(|| panic!("satz's settings.rs has no `fn {name}()`"));
+        let rest = &src[at..];
+        let open = rest.find('"').unwrap() + 1;
+        let close = open + rest[open..].find('"').unwrap();
+        rest[open..close].to_string()
+    }
+
+    #[test]
+    fn the_defaults_for_omitted_keys_are_satzs() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("config.toml"), "").unwrap();
+        let e = EstateDir::open(tmp.path()).unwrap();
+        let c = &e.tool;
+        assert_eq!(c.yaml_dir, satz_default("default_yaml_dir"));
+        assert_eq!(c.yaml_dir, "satz");
+        assert_eq!(c.include_dirs, [".", "satz"]);
+        assert_eq!(c.hcl_dir, satz_default("default_hcl_dir"));
+        assert_eq!(c.schema_dir, satz_default("default_schema_dir"));
+        assert_eq!(c.presets_dir, satz_default("default_presets_dir"));
+        assert_eq!(c.tf_tool, satz_default("default_tf_tool"));
+        assert_eq!(c.provider_version, satz_default("default_version"));
+        assert_eq!(c.validation_level, satz_default("default_validation_level"));
+        assert!(e.yaml_dir().ends_with("satz"));
     }
 
     #[test]

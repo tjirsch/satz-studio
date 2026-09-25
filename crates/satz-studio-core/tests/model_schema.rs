@@ -13,7 +13,7 @@ fn schemas() -> PathBuf {
 #[test]
 fn load_all_reads_every_type_of_the_fixture() {
     let registry = ResourceRegistry::load_all(&schemas()).unwrap();
-    assert_eq!(registry.resources.len(), 45);
+    assert_eq!(registry.resources.len(), 47);
     assert_eq!(
         registry.providers(),
         vec!["registry.opentofu.org/hashicorp/google".to_string()]

@@ -341,11 +341,12 @@ const FILE_ORDER: [(&str, &str); 4] = [
 /// keep in step. A core subject this list does not name still shows, under a label made
 /// from its own name, after the named ones: a question satz adds is a row, never a
 /// silence.
-const CORE_ORDER: [(&str, &str); 11] = [
+const CORE_ORDER: [(&str, &str); 12] = [
     ("customer_domain", "Domain"),
     ("first_admin", "First admin"),
     ("billing_account_infra", "Billing account"),
     ("infra_folder_name", "Infrastructure folder"),
+    ("workload_folder_name", "Workload folder"),
     ("infra_project_name", "Infrastructure project"),
     ("infra_bucket_name", "State bucket"),
     ("svc_iac_account", "IaC service account"),
@@ -465,15 +466,16 @@ fn source_line(value: &SourceValue) -> String {
     }
 }
 
-/// The answer as one line. A choice is answered by an option's name, which the report
-/// carries as the current value like any other.
+/// The answer as one line. A choice says the label of the option it binds, or `None`; an
+/// empty answer to a question that says what `""` means says that meaning.
 fn answer(q: &QuestionRow) -> Reading {
     match q.state {
-        QuestionState::Answered => Reading::Value(
-            q.current
-                .as_ref()
-                .map_or_else(|| "answered".to_string(), json_line),
-        ),
+        QuestionState::Answered => Reading::Value(match (&q.current, q.bound_label()) {
+            (_, Some(label)) => label,
+            (Some(v), None) if q.empty.is_some() && v.as_str() == Some("") => q.shown(v),
+            (Some(v), None) => json_line(v),
+            (None, None) => "answered".to_string(),
+        }),
         QuestionState::Unanswered | QuestionState::NotApplicable => Reading::NotAnswered,
     }
 }
@@ -964,6 +966,29 @@ mod tests {
         let facts = identity(Some(&[]), Some(&r));
         assert_eq!(labels(answered_rows(&facts)), ["Domain"]);
         assert_eq!(answered_rows(&facts)[0].reading, Reading::NotAnswered);
+    }
+
+    /// The workload folder answered `""` says what `""` means — the organisation — rather
+    /// than an empty line; a choice says its option's label.
+    #[test]
+    fn an_empty_answer_says_its_meaning_and_a_choice_its_label() {
+        let mut folder = row("workload_folder_name", CORE_PACK, Some(json!("")));
+        folder.empty = Some("the organisation".to_string());
+        let r = report(vec![folder]);
+        let facts = identity(Some(&[]), Some(&r));
+        assert_eq!(labels(answered_rows(&facts)), ["Workload folder"]);
+        assert_eq!(
+            answered_rows(&facts)[0].reading,
+            value("\"\" (the organisation)")
+        );
+        let choice: QuestionRow = serde_json::from_value(json!({
+            "subject": "security_model", "kind": "oneof", "prompt": "p", "reversal": "edit",
+            "blast": "low", "state": "answered", "blocking": false, "pack_description": "d",
+            "options": [{"param": "security_model_s1", "label": "S1", "selected": true}],
+            "from": "presets/estate-core.satz", "pack": CORE_PACK
+        }))
+        .unwrap();
+        assert_eq!(answer(&choice), value("S1"));
     }
 
     /// The card is the estate's own identity: a pack's question belongs to Decisions, and

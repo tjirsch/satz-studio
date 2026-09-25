@@ -1,7 +1,7 @@
 //! `satz init`: the one command that makes an estate where there was none.
 //!
 //! It runs in a working directory rather than against a `--config`
-//! ([`super::SatzCli::run_in`]) and creates `config.toml`, `yaml/`, `hcl/`, `schemas/`,
+//! ([`super::SatzCli::run_in`]) and creates `config.toml`, `satz/`, `hcl/`, `schemas/`,
 //! `.gitignore` and the estate file there. It is a LIVE, credentialed command: what the
 //! command line does not state it derives from the Application Default Credentials —
 //! `customer_domain` and the first admin from the ADC identity, `customer_id` and
@@ -42,6 +42,11 @@ pub struct InitOptions {
     pub billing_account_infra: String,
     /// `--default-region`. Left empty satz writes its own default.
     pub default_region: String,
+    /// `--workload-folder-name`: the display name of the folder directly under the
+    /// organisation that holds the customer's and the teams' folders. Left empty satz
+    /// writes `workload_folder_name = ""` — the organisation itself, for which nothing is
+    /// created.
+    pub workload_folder_name: String,
     /// `--tf-tool`: `tofu` or `terraform`.
     pub tf_tool: String,
     /// `--defaults`: the provider sets to include — `google` is the set satz knows,
@@ -67,6 +72,7 @@ impl InitOptions {
         flag("--customer-id", &self.customer_id);
         flag("--billing-account-infra", &self.billing_account_infra);
         flag("--default-region", &self.default_region);
+        flag("--workload-folder-name", &self.workload_folder_name);
         flag("--tf-tool", &self.tf_tool);
         for (name, list) in [
             ("--defaults", &self.defaults),
@@ -140,6 +146,7 @@ mod tests {
             customer_id: CUSTOMER_ID.to_string(),
             billing_account_infra: "012345-6789AB-CDEF01".to_string(),
             default_region: "europe-west3".to_string(),
+            workload_folder_name: "Workloads".to_string(),
             tf_tool: "tofu".to_string(),
             defaults: vec!["google".to_string()],
             providers: vec!["google-beta".to_string(), "random".to_string()],
@@ -156,6 +163,8 @@ mod tests {
                 "012345-6789AB-CDEF01",
                 "--default-region",
                 "europe-west3",
+                "--workload-folder-name",
+                "Workloads",
                 "--tf-tool",
                 "tofu",
                 "--defaults",
@@ -176,6 +185,7 @@ mod tests {
             customer_id: "   ".to_string(),
             billing_account_infra: String::new(),
             default_region: String::new(),
+            workload_folder_name: " ".to_string(),
             tf_tool: String::new(),
             defaults: vec![String::new(), "  ".to_string()],
             providers: Vec::new(),
@@ -218,10 +228,10 @@ mod tests {
     #[test]
     fn created_finds_the_estate_file_by_reading_the_directory() {
         let tmp = tempfile::tempdir().unwrap();
-        std::fs::create_dir_all(tmp.path().join("yaml")).unwrap();
-        std::fs::write(tmp.path().join("config.toml"), "yaml_dir = \"yaml\"\n").unwrap();
+        std::fs::create_dir_all(tmp.path().join("satz")).unwrap();
+        std::fs::write(tmp.path().join("config.toml"), "yaml_dir = \"satz\"\n").unwrap();
         std::fs::write(
-            tmp.path().join("yaml").join(format!("{CUSTOMER_ID}.satz")),
+            tmp.path().join("satz").join(format!("{CUSTOMER_ID}.satz")),
             "estate acme\n",
         )
         .unwrap();
@@ -240,8 +250,9 @@ mod tests {
     #[test]
     fn created_reports_no_estate_when_init_wrote_none() {
         let tmp = tempfile::tempdir().unwrap();
-        std::fs::create_dir_all(tmp.path().join("yaml")).unwrap();
-        std::fs::write(tmp.path().join("config.toml"), "yaml_dir = \"yaml\"\n").unwrap();
+        std::fs::create_dir_all(tmp.path().join("satz")).unwrap();
+        // no `yaml_dir`: the estate directory is `satz/`, as satz reads it
+        std::fs::write(tmp.path().join("config.toml"), "").unwrap();
         let (_, estates) = created(tmp.path()).unwrap();
         assert!(estates.is_empty());
     }

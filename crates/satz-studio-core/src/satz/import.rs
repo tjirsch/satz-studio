@@ -10,7 +10,7 @@
 //! The SOURCE decides the shape ([`ImportShape`]) and the shape decides the flags:
 //! `--on-collision`, `--only`, `--exclude`, `--all`, `--customer-shortname` and
 //! `--output` belong to a state file or a live scope, `--organization` to a state file
-//! alone, `--wrap-all` to Terraform HCL.
+//! and Terraform HCL, `--wrap-all` to Terraform HCL.
 //! [`ImportOptions::argv`]
 //! renders exactly the flags of the chosen shape, so no form can send satz a flag it
 //! would ignore.
@@ -124,8 +124,9 @@ pub struct ImportOptions {
     pub on_collision: OnCollision,
     /// `--customer-shortname`: the one value no platform fact carries (state, live)
     pub customer_shortname: String,
-    /// `--organization`: the organisation a state belongs to, for a state that names
-    /// none — satz writes no estate from such a state without it (state; a live sweep
+    /// `--organization`: the organisation the source belongs to, for a source that names
+    /// none — satz writes no estate from such a state or configuration without it, nor
+    /// from any `--wrap-all` import, which translates nothing (state, hcl; a live sweep
     /// reads it from its own root, and satz refuses the flag there)
     pub organization: String,
     /// `--output`: the file inside `yaml_dir`; empty is satz's `discovered.satz`
@@ -170,6 +171,7 @@ impl ImportOptions {
                 }
             }
             ImportShape::Hcl => {
+                push_value(&mut argv, "--organization", &self.organization);
                 if self.wrap_all {
                     argv.push("--wrap-all".to_string());
                 }
@@ -678,14 +680,14 @@ mod tests {
             "--verbose",
         ];
         let state = [state_and_live.as_slice(), &["--organization"]].concat();
-        let hcl_only = ["--wrap-all"];
-        let not_live = [hcl_only.as_slice(), &["--organization"]].concat();
-        let not_hcl = state.clone();
+        let hcl = ["--organization", "--wrap-all"];
+        let not_live = hcl.to_vec();
+        let not_hcl = state_and_live.to_vec();
 
         for (shape, mine, others) in [
-            (ImportShape::State, state.as_slice(), hcl_only.to_vec()),
+            (ImportShape::State, state.as_slice(), vec!["--wrap-all"]),
             (ImportShape::Live, state_and_live.as_slice(), not_live),
-            (ImportShape::Hcl, hcl_only.as_slice(), not_hcl),
+            (ImportShape::Hcl, hcl.as_slice(), not_hcl),
         ] {
             let argv = ImportOptions {
                 shape,

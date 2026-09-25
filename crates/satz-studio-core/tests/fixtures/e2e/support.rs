@@ -37,7 +37,7 @@ pub const MAP: &str = "presets/estate-map.satz";
 /// The seven values `vendor/satz/scripts/smoke.sh` types into the interview
 /// (`printf '%s\n' y C0example 123456789012 example.com acme Acme first.admin
 /// 012345-6789AB-CDEF01 '' '' …`), in the order the pack asks them. The `y` before them
-/// accepts the eight defaults; the empty lines after them accept the two names derived
+/// accepts the nine defaults; the empty lines after them accept the two names derived
 /// from the short name. Every value is a documented example value.
 pub const TYPED: [(&str, &str); 7] = [
     ("customer_id", "C0example"),

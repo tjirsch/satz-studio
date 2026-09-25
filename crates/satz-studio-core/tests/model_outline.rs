@@ -104,7 +104,7 @@ fn smoke_is_configuration_then_maps_of_resources() {
         m.schema,
         SchemaStatus::Loaded {
             providers: vec!["registry.opentofu.org/hashicorp/google".to_string()],
-            resources: 45
+            resources: 47
         }
     );
     assert_eq!(

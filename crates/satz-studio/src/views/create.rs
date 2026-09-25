@@ -69,7 +69,7 @@ pub fn CreateEstate() -> Element {
             Card { variant: CardVariant::Outlined, class: "create__form",
                 h2 { class: "create__heading", Icon { name: "add_home", size: 22 } "New estate" }
                 p { class: "create__description",
-                    "satz init writes config.toml, yaml/, hcl/, schemas/, .gitignore and the estate file into the folder you choose. It reads your Application Default Credentials and derives the customer's domain, directory id, organisation id, billing account and first administrator from the platform, saying of each where it came from."
+                    "satz init writes config.toml, satz/, hcl/, schemas/, .gitignore and the estate file into the folder you choose. It reads your Application Default Credentials and derives the customer's domain, directory id, organisation id, billing account and first administrator from the platform, saying of each where it came from."
                 }
 
                 div { class: "create__folder",
@@ -110,6 +110,14 @@ pub fn CreateEstate() -> Element {
                     disabled: running,
                     supporting: "Left blank, satz writes europe-west3.",
                     oninput: move |v: String| options.write().default_region = v,
+                }
+                TextField {
+                    label: "Workload folder",
+                    value: options().workload_folder_name,
+                    placeholder: "Workloads",
+                    disabled: running,
+                    supporting: "The folder directly under the organisation that holds the customer's and the teams' folders. Left blank, they live at the organisation and no folder is created.",
+                    oninput: move |v: String| options.write().workload_folder_name = v,
                 }
                 p { class: "create__label", "Terraform tool" }
                 SegmentedButton {
