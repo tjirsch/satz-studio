@@ -284,7 +284,7 @@ impl Walker<'_> {
                 if let Some(grant) = self.member_grant(c, tf_type)? {
                     children.push(grant);
                 }
-            } else if let Some(row) = self.row(c, &shape, true)? {
+            } else if let Some(row) = self.body_row(c, &shape)? {
                 attrs.push(row);
             }
         }
@@ -329,7 +329,7 @@ impl Walker<'_> {
                 if let Some(grant) = self.member_grant(c, tf_type)? {
                     children.push(grant);
                 }
-            } else if let Some(row) = self.row(c, &shape, true)? {
+            } else if let Some(row) = self.body_row(c, &shape)? {
                 attrs.push(row);
             }
         }
@@ -400,6 +400,24 @@ impl Walker<'_> {
             children: Vec::new(),
             uses: Vec::new(),
             missing_required: Vec::new(),
+        }))
+    }
+
+    /// A row of a resource's own body. satz reads its own keys there before the schema
+    /// (`satz_body_key`), so `private` is typed as satz reads it — `true` or `false` —
+    /// whatever the provider's schema says, and is never a required provider argument.
+    fn body_row(&self, id: NodeId, shape: &Shape<'_>) -> Result<Option<AttrRow>, ModelError> {
+        let row = self.row(id, shape, true)?;
+        Ok(row.map(|r| match r.key.as_str() {
+            "private" => AttrRow {
+                typed: AttrType::Bool,
+                required: false,
+                optional: true,
+                computed: false,
+                editable: true,
+                ..r
+            },
+            _ => r,
         }))
     }
 

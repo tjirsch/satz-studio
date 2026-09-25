@@ -260,3 +260,42 @@ fn an_export_and_an_interface_are_kept_whole() {
     );
     assert_eq!(labels(&cst, interface), ["Comment"]);
 }
+
+/// What satz v0.84.1 adds inside the two statements — `use interface` in both forms and
+/// with a gate, an export's `attach [ … ]`, and `all <type>` — stays inside them: the
+/// tree keeps each statement whole, is the file byte for byte, has no `Error` node, and
+/// takes no `use interface` for a pack line.
+#[test]
+fn use_interface_attach_and_all_stay_inside_their_statements() {
+    let text = "estate acme\n\nparams {\n  want_extra = true\n}\n\nexport \"folders\" = all google_folder description \"Every folder, by label\"\nexport \"buckets\" = all google_storage_bucket\n\ninterface \"audit\" {\n  export \"audit_bucket\" = \"${{google_storage_bucket.b.name}}\" description \"The audit bucket\"\n}\n\ninterface \"extra\" {\n  export \"extra_bucket\" = \"${{google_storage_bucket.b.url}}\"\n}\n\ninterface \"team\" {\n  use interface \"audit\"\n  use interface \"extra\" when want_extra\n  // the team grants on its own project\n  export \"project\" = \"${{google_project.p.project_id}}\" attach [\"google_project_iam_member\"] description \"The team's project\"\n}\n\ninterface \"ops\" {\n  use interface [\"audit\", \"extra\"]\n}\n";
+    let cst = Cst::parse(text).unwrap();
+    assert_eq!(cst.text(), text);
+    assert_eq!(
+        labels(&cst, cst.root()),
+        [
+            "Header",
+            "Params",
+            "Opaque(export)",
+            "Opaque(export)",
+            "Opaque(interface)",
+            "Opaque(interface)",
+            "Opaque(interface)",
+            "Opaque(interface)"
+        ]
+    );
+    assert!(
+        cst.nodes()
+            .all(|(_, n)| !matches!(n.kind, NodeKind::Error { .. })),
+        "an Error node where satz accepts the file"
+    );
+    let team = child(&cst, cst.root(), 6);
+    let whole = cst.slice(cst.node(team).span);
+    assert!(whole.starts_with("interface \"team\""), "{whole}");
+    assert!(whole.contains("attach [\"google_project_iam_member\"]"));
+    assert_eq!(labels(&cst, team), ["Comment"]);
+    assert!(
+        satz_studio_core::cst::scan_uses(&cst).is_empty(),
+        "`use interface` is not a pack line"
+    );
+    cst.lower().expect("satz-core parses it");
+}
