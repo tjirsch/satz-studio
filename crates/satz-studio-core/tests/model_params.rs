@@ -81,6 +81,7 @@ async fn showcase_params_carry_their_questions_and_leave_the_gates_out() {
             "team_folder_name",
             "archive_project_folder",
             "infra_project_services",
+            "event_topics",
         ],
         "the options of group_model and optional_extras are choices, answered as one"
     );

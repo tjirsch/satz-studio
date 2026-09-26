@@ -7,7 +7,9 @@
 
 use dioxus::prelude::*;
 use satz_studio_core::satz::project::AddProjectArgs;
-use satz_studio_core::satz::reports::{ExportHow, ExportRow, InterfaceRow, InterfacesReport};
+use satz_studio_core::satz::reports::{
+    ExportHow, ExportRow, InterfaceRow, InterfacesReport, RequestRow,
+};
 
 use crate::components::{
     Button, ButtonVariant, Card, CardVariant, Checkbox, Chip, ChipKind, Dialog, Icon,
@@ -172,6 +174,46 @@ fn ReportCards(report: InterfacesReport) -> Element {
                 key: "{iface.name}",
                 rows: report.of(&iface.name).cloned().collect::<Vec<_>>(),
                 iface: iface.clone(),
+            }
+        }
+        if !report.requests.is_empty() {
+            RequestsCard { requests: report.requests.clone() }
+        }
+    }
+}
+
+/// What a project may ask the estate for: one row per request point — the list, the field
+/// that names an entry, the fields an entry may carry, how many entries it holds.
+#[component]
+fn RequestsCard(requests: Vec<RequestRow>) -> Element {
+    rsx! {
+        Card { variant: CardVariant::Outlined, class: "interfaces__card",
+            div { class: "interfaces__card-head",
+                Icon { name: "move_to_inbox", size: 22 }
+                h2 { class: "interfaces__name", "What projects may request" }
+            }
+            p { class: "interfaces__supporting",
+                "A project adds entries to one of these lists in a pack of its own, "
+                code { "contributes_<list>" }
+                ", checked with "
+                code { "satz check-request" }
+                " and handed to the estate by pull request."
+            }
+            for r in requests {
+                div { key: "{r.param}", class: "interfaces__export",
+                    div { class: "interfaces__export-head",
+                        code { class: "interfaces__export-name", "{r.param}" }
+                        Chip { kind: ChipKind::Assist, icon: "key", label: format!("key {}", r.key) }
+                        span { class: "interfaces__supporting",
+                            {format!("{} entr{}", r.entries, if r.entries == 1 { "y" } else { "ies" })}
+                        }
+                        code { class: "interfaces__at", "{r.file}:{r.line}" }
+                    }
+                    code { class: "interfaces__value", {r.fields.join(", ")} }
+                    if let Some(d) = r.description.clone() {
+                        p { class: "interfaces__supporting", "{d}" }
+                    }
+                }
             }
         }
     }

@@ -261,6 +261,46 @@ fn an_export_and_an_interface_are_kept_whole() {
     assert_eq!(labels(&cst, interface), ["Comment"]);
 }
 
+/// `each <list> by <field> { … }` inside a resource type map is one entry the tree keeps
+/// whole beside the map's labels: the tree is the file byte for byte, has no `Error`
+/// node, and satz-core parses it.
+#[test]
+fn an_each_entry_is_kept_whole_inside_its_map() {
+    let text = "estate acme\n\ngoogle_pubsub_topic {\n  each event_topics by name {\n    name = \"{each.name}\"\n    message_retention_duration = each.retention\n  }\n  hand_written {\n    name = \"x\"\n  }\n}\n";
+    let cst = Cst::parse(text).unwrap();
+    assert_eq!(cst.text(), text);
+    assert!(
+        cst.nodes()
+            .all(|(_, n)| !matches!(n.kind, NodeKind::Error { .. })),
+        "an Error node where satz accepts the file"
+    );
+    let map = child(&cst, cst.root(), 1);
+    let each = child(&cst, map, 0);
+    assert!(
+        cst.slice(cst.node(each).span)
+            .starts_with("each event_topics by name {"),
+        "{}",
+        cst.slice(cst.node(each).span)
+    );
+    assert!(
+        matches!(cst.node(each).kind, NodeKind::Opaque { ref statement } if statement == "each")
+    );
+    cst.lower().expect("satz-core parses it");
+}
+
+/// A `request` statement is kept whole like the other statements.
+#[test]
+fn a_request_statement_is_kept_whole() {
+    let text = "pack net version \"1.0\"\n\nparams {\n  subnets = []\n}\n\nrequest subnets {\n  key    = \"name\"\n  fields = [\"name\", \"cidr\"]\n}\n";
+    let cst = Cst::parse(text).unwrap();
+    assert_eq!(cst.text(), text);
+    assert_eq!(
+        labels(&cst, cst.root()),
+        ["Header", "Params", "Opaque(request)"]
+    );
+    cst.lower().expect("satz-core parses it");
+}
+
 /// `all <type> under <folder>` stays inside its export, and a `private <type>.<label>`
 /// statement is one statement kept whole: the tree is the file byte for byte, has no
 /// `Error` node, and satz-core parses it.

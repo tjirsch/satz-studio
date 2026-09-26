@@ -790,6 +790,8 @@ pub struct InterfacesReport {
     /// every declared interface; `core` is none of them — the core exports are the rows
     /// with no `interface`
     pub interfaces: Vec<InterfaceRow>,
+    /// the lists a project may add entries to (`request`), and the shape of an entry
+    pub requests: Vec<RequestRow>,
 }
 
 impl InterfacesReport {
@@ -860,6 +862,22 @@ impl ExportRow {
             .as_ref()
             .map(|i| format!("{i}.{}", self.name))
     }
+}
+
+/// One request point of `satz interfaces`: a list a project may add entries to.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct RequestRow {
+    /// the list param a project's `contributes_<param>` adds to
+    pub param: String,
+    /// the field that names an entry
+    pub key: String,
+    /// every field an entry may carry
+    pub fields: Vec<String>,
+    pub description: Option<String>,
+    /// the entries the list holds now
+    pub entries: usize,
+    pub file: String,
+    pub line: usize,
 }
 
 /// One declared interface.

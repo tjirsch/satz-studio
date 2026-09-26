@@ -139,7 +139,10 @@ impl<'t> Builder<'t> {
             "block" => self.block(n),
             "string" | "number" | "boolean" | "reference" | "list" | "object" => self.value(n),
             "claim" | "question" | "action" | "notice" | "offers" | "export" | "interface"
-            | "suppress" | "private" | "hcl_block" => Ok(self.opaque(n)),
+            | "suppress" | "private" | "request" | "hcl_block" => Ok(self.opaque(n)),
+            // `each <list> by <field> { … }` inside a resource type map: kept whole, the
+            // bodies it writes exist only once the estate compiles
+            "each" => Ok(self.opaque(n)),
             other => Err(CstError::Parse {
                 line: line(n),
                 message: format!(
