@@ -371,6 +371,10 @@
             "named": false
           },
           {
+            "type": "interface",
+            "named": false
+          },
+          {
             "type": "pack",
             "named": false
           }
@@ -382,6 +386,10 @@
         "types": [
           {
             "type": "identifier",
+            "named": true
+          },
+          {
+            "type": "string",
             "named": true
           }
         ]
@@ -897,6 +905,10 @@
     "type": "comment",
     "named": true,
     "extra": true
+  },
+  {
+    "type": "common",
+    "named": false
   },
   {
     "type": "contributes",

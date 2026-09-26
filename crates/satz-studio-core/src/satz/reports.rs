@@ -454,7 +454,8 @@ pub struct Contributed {
     pub values: Vec<String>,
 }
 
-/// A `use` of a file the pack graph does not know.
+/// A `use` of a file the pack graph does not know: an estate's own file, or the
+/// interface file of a central estate.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Unmanaged {
     pub path: String,
@@ -473,6 +474,9 @@ pub struct PacksReport {
     /// every node of the graph, in the graph's order
     pub packs: Vec<PackRow>,
     pub unmanaged: Vec<Unmanaged>,
+    /// the `use` lines of generated interface files (`interface "<name>"` as their
+    /// header) — central estates' interfaces a project estate reads, no pack
+    pub interfaces: Vec<Unmanaged>,
     /// the compile's pack findings, each with its pack as `subject`
     pub findings: Vec<Finding>,
 }

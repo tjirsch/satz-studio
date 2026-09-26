@@ -1100,6 +1100,7 @@ mod tests {
                 findings: Vec::new(),
             }],
             unmanaged: Vec::new(),
+            interfaces: Vec::new(),
             findings: (0..findings)
                 .map(|i| Finding {
                     severity: FindingSeverity::Warning,

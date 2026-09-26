@@ -51,7 +51,8 @@ pub enum ValueKind {
 pub enum NodeKind {
     /// the root: the whole file
     Document,
-    /// `estate NAME` or `pack NAME version "…"`; a `version` string is a `Value` child
+    /// `estate NAME`, `pack NAME version "…"` or `interface "NAME"` (a generated
+    /// interface file; `name` without the quotes); a `version` string is a `Value` child
     Header { keyword: String, name: String },
     /// the `params { … }` block
     Params,

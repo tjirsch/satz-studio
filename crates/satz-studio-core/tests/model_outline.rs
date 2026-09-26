@@ -33,6 +33,7 @@ fn no_packs(main: &Path) -> PacksReport {
         note: None,
         packs: Vec::new(),
         unmanaged: Vec::new(),
+        interfaces: Vec::new(),
         findings: Vec::new(),
     }
 }

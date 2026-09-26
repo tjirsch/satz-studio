@@ -299,3 +299,91 @@ fn use_interface_attach_and_all_stay_inside_their_statements() {
     );
     cst.lower().expect("satz-core parses it");
 }
+
+/// The file satz v0.85.0 generates for a project, `interfaces/<project>/<name>/satz/
+/// interface.satz`: the header `interface "<name>"` alone on its line and nothing but
+/// `central`, `output`, `lookup` and `managed` blocks. The tree is the file, the header
+/// names the interface without its quotes and carries no value — satz wrote the name,
+/// nothing edits it — and satz-core reads it as an interface file.
+#[test]
+fn a_generated_interface_file_is_its_header_and_four_kinds_of_block() {
+    let text = "interface \"archive\"\n\ncentral {\n  estate        = \"showcase\"\n  organizations = [\"organizations/123456789012\"]\n}\n\noutput \"archive_project_id\" {\n  value       = \"acme-archive-001\"\n  attach      = [\"google_project_iam_member\"]\n  targets     = [\"google_project.archive\"]\n  description = \"The project's Google project\"\n}\n\nlookup \"data.google_project.archive\" {\n  reads      = \"google_project.archive\"\n  permission = \"resourcemanager.projects.get\"\n  arguments {\n    project_id = \"acme-archive-001\"\n  }\n}\n\nmanaged \"google_project.archive\" {\n  ids = [\"acme-archive-001\"]\n  keys {\n    project_id = \"acme-archive-001\"\n  }\n}\n";
+    let cst = Cst::parse(text).unwrap();
+    assert_eq!(cst.text(), text);
+    assert_eq!(
+        labels(&cst, cst.root()),
+        ["Header", "Block", "Block", "Block", "Block"]
+    );
+    let header = child(&cst, cst.root(), 0);
+    assert_eq!(
+        cst.node(header).kind,
+        NodeKind::Header {
+            keyword: "interface".into(),
+            name: "archive".into()
+        }
+    );
+    assert!(labels(&cst, header).is_empty(), "the name is no value");
+    assert_eq!(cst.slice(cst.node(header).span), "interface \"archive\"");
+    assert!(
+        cst.nodes()
+            .all(|(_, n)| !matches!(n.kind, NodeKind::Error { .. })),
+        "an Error node where satz accepts the file"
+    );
+    assert!(cst.params().is_none());
+    assert!(satz_studio_core::cst::scan_uses(&cst).is_empty());
+    let file = cst.lower().expect("satz-core reads it");
+    assert!(file.estate.is_none());
+    let iface = file.interface_file.expect("an interface file");
+    assert_eq!(iface.name, "archive");
+    assert_eq!(iface.estate, "showcase");
+}
+
+/// `interface "x" common { … }` is an interface statement kept whole, and the two sides
+/// of a project estate — its `use` of a generated interface file and its
+/// `${{interface.<export>}}` strings — are an ordinary use line and ordinary string
+/// values: the tree is the file, the reference is the value's own text, and satz-core
+/// parses both files.
+#[test]
+fn a_common_interface_and_an_interface_reference_round_trip() {
+    let central = "estate acme\n\ninterface \"audit\" common {\n  export \"audit_bucket_name\" = \"${{google_storage_bucket.audit_logs.name}}\" description \"The audit log bucket\"\n}\n";
+    let cst = Cst::parse(central).unwrap();
+    assert_eq!(cst.text(), central);
+    assert_eq!(labels(&cst, cst.root()), ["Header", "Opaque(interface)"]);
+    let audit = child(&cst, cst.root(), 1);
+    assert!(
+        cst.slice(cst.node(audit).span)
+            .starts_with("interface \"audit\" common {")
+    );
+    let file = cst.lower().expect("satz-core parses the central estate");
+    assert!(
+        file.interfaces
+            .iter()
+            .any(|i| i.name == "audit" && i.common)
+    );
+
+    let project = "estate archive_project\n\nuse \"vendor/archive/archive/satz/interface.satz\"\n\ngoogle_project {\n  archive_work {\n    name      = \"acme-archive-work\"\n    folder_id = \"${{interface.infra_folder}}\"\n    labels = {\n      central = \"${{interface.customer_domain}}\"\n    }\n  }\n}\n";
+    let cst = Cst::parse(project).unwrap();
+    assert_eq!(cst.text(), project);
+    assert!(
+        cst.nodes()
+            .all(|(_, n)| !matches!(n.kind, NodeKind::Error { .. })),
+        "an Error node where satz accepts the file"
+    );
+    let uses = satz_studio_core::cst::scan_uses(&cst);
+    assert_eq!(uses.len(), 1);
+    assert_eq!(uses[0].path, "vendor/archive/archive/satz/interface.satz");
+    let strings: Vec<&str> = cst
+        .nodes()
+        .filter(|(_, n)| n.kind == NodeKind::Value(ValueKind::Str))
+        .map(|(_, n)| cst.slice(n.span))
+        .collect();
+    assert!(
+        strings.contains(&"\"${{interface.infra_folder}}\""),
+        "{strings:?}"
+    );
+    assert!(
+        strings.contains(&"\"${{interface.customer_domain}}\""),
+        "{strings:?}"
+    );
+    cst.lower().expect("satz-core parses the project estate");
+}
