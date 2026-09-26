@@ -1,0 +1,175 @@
+{
+  "estate": "showcase",
+  "exports": [
+    {
+      "name": "customer_domain",
+      "how": "static",
+      "value": "\"example.com\"",
+      "targets": [],
+      "attach": [],
+      "description": "The customer's primary domain",
+      "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
+      "line": 238
+    },
+    {
+      "name": "default_region",
+      "how": "static",
+      "value": "\"europe-west3\"",
+      "targets": [],
+      "attach": [],
+      "description": "The region the estate builds in",
+      "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
+      "line": 239
+    },
+    {
+      "name": "infra_project_id",
+      "how": "static",
+      "value": "\"corp-infra-001\"",
+      "targets": [
+        "google_project.infra"
+      ],
+      "attach": [],
+      "description": "The infrastructure project",
+      "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
+      "line": 240
+    },
+    {
+      "name": "infra_folder",
+      "how": "lookup",
+      "value": "data.google_active_folder.infra.name",
+      "targets": [
+        "google_folder.infra"
+      ],
+      "attach": [],
+      "description": "The infrastructure folder, folders/<number>",
+      "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
+      "line": 241
+    },
+    {
+      "name": "workload_folder",
+      "how": "static",
+      "value": "\"organizations/123456789012\"",
+      "targets": [],
+      "attach": [],
+      "description": "Where the customer's and the projects' folders live: the organisation",
+      "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
+      "line": 242
+    },
+    {
+      "name": "infra_project_number",
+      "how": "lookup",
+      "value": "data.google_project.infra.number",
+      "targets": [
+        "google_project.infra"
+      ],
+      "attach": [],
+      "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
+      "line": 243
+    },
+    {
+      "name": "audit_bucket_url",
+      "how": "static",
+      "value": "\"gs://corp-audit-logs\"",
+      "targets": [
+        "google_storage_bucket.audit_logs"
+      ],
+      "attach": [],
+      "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
+      "line": 244
+    },
+    {
+      "name": "regions",
+      "how": "static",
+      "value": "[\"europe-west3\", \"europe-west4\"]",
+      "targets": [],
+      "attach": [],
+      "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
+      "line": 245
+    },
+    {
+      "name": "folders",
+      "how": "map",
+      "value": "{ \"infra\" = data.google_active_folder.infra.name }",
+      "all": "google_folder",
+      "targets": [
+        "google_folder.infra"
+      ],
+      "attach": [],
+      "description": "Every folder, by label",
+      "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
+      "line": 250
+    },
+    {
+      "name": "buckets",
+      "how": "map",
+      "value": "{ \"audit_logs\" = \"corp-audit-logs\" }",
+      "all": "google_storage_bucket",
+      "targets": [
+        "google_storage_bucket.audit_logs"
+      ],
+      "attach": [],
+      "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
+      "line": 251
+    },
+    {
+      "name": "archive_project_id",
+      "interface": "archive",
+      "how": "static",
+      "value": "\"corp-archive-001\"",
+      "targets": [
+        "google_project.archive"
+      ],
+      "attach": [
+        "google_project_iam_member"
+      ],
+      "description": "The project's Google project",
+      "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
+      "line": 267
+    },
+    {
+      "name": "archive_project_number",
+      "interface": "archive",
+      "how": "lookup",
+      "value": "data.google_project.archive.number",
+      "targets": [
+        "google_project.archive"
+      ],
+      "attach": [],
+      "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
+      "line": 268
+    },
+    {
+      "name": "audit_bucket_name",
+      "interface": "audit",
+      "how": "static",
+      "value": "\"corp-audit-logs\"",
+      "targets": [
+        "google_storage_bucket.audit_logs"
+      ],
+      "attach": [],
+      "description": "The audit log bucket",
+      "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
+      "line": 262
+    }
+  ],
+  "interfaces": [
+    {
+      "name": "archive",
+      "common": false,
+      "uses": [
+        "audit"
+      ],
+      "exports": 2,
+      "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
+      "line": 265
+    },
+    {
+      "name": "audit",
+      "common": true,
+      "uses": [],
+      "exports": 1,
+      "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
+      "line": 261
+    }
+  ]
+}

@@ -5,8 +5,9 @@
 //! ([`import`]), `satz review-pack` and the two places a reviewed pack goes ([`review`]),
 //! what `satz self-update --check-only` found ([`self_update`]), the configuration a
 //! client needs to reach this estate as `satz mcp-config` prints it ([`mcp_config`]), the MCP
-//! session over `satz mcp` ([`mcp`]), and one session per open estate that every view
-//! shares ([`session`]). [`reports`] are the JSON payloads a reporting command
+//! session over `satz mcp` ([`mcp`]), `satz interfaces` and `satz add-project`, the
+//! interface plane through the CLI ([`project`]), and one session per open estate that
+//! every view shares ([`session`]). [`reports`] are the JSON payloads a reporting command
 //! writes with `--format json` and the server returns as `structuredContent`.
 
 pub mod binary;
@@ -17,6 +18,7 @@ pub mod init;
 pub mod install;
 pub mod mcp;
 pub mod mcp_config;
+pub mod project;
 pub mod reports;
 pub mod review;
 pub mod self_update;

@@ -11,7 +11,8 @@
 # it. The tests are `cargo test -p satz-studio-core --locked --test 'e2e_*'`:
 # tests/e2e_interview.rs, tests/e2e_map.rs, tests/e2e_edit.rs, tests/e2e_import.rs,
 # tests/e2e_answer_shapes.rs, tests/e2e_pack_edges.rs, tests/e2e_notices.rs,
-# tests/e2e_review.rs, tests/e2e_mcp_config.rs and tests/e2e_interface.rs, each creating its own temporary
+# tests/e2e_review.rs, tests/e2e_mcp_config.rs, tests/e2e_interface.rs and tests/e2e_projects.rs,
+# each creating its own temporary
 # estate over vendor/satz, and tests/e2e_export.rs, which
 # exports the smoke estate's decisions sheet and workbook into a temporary directory. No live import runs: the
 # import tests drive the Terraform HCL and legacy YAML shapes, which read files.

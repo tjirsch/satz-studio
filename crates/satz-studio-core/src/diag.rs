@@ -311,7 +311,8 @@ pub fn parse_satz_output(text: &str, source: DiagSource) -> Vec<Diagnostic> {
     out
 }
 
-fn is_banner(line: &str) -> bool {
+/// satz's version banner, `satz vX (built …)`, which it prints on stderr first.
+pub(crate) fn is_banner(line: &str) -> bool {
     line.starts_with("satz v") && line.contains("(built ")
 }
 

@@ -1,6 +1,6 @@
 //! The JSON a reporting command writes with `--format json` and satz returns as
 //! `structuredContent` over MCP, typed. Shapes mirror satz `src/questions.rs`,
-//! `src/review_pack.rs` and `src/mcp.rs` at the pinned release: unknown fields are ignored (satz may add some),
+//! `src/review_pack.rs`, `src/interface_report.rs` and `src/mcp.rs` at the pinned release: unknown fields are ignored (satz may add some),
 //! missing required fields fail loudly (satz removed one, and the pin must move).
 
 use std::collections::BTreeMap;
@@ -777,6 +777,105 @@ pub struct Refusal {
     pub findings: Vec<Finding>,
 }
 
+/// What `satz interfaces <estate> --format json` writes: what the estate publishes to the
+/// projects that read it — every export with the interface it stands in, and every
+/// interface with what it uses. satz's `InterfacesReport`
+/// (`vendor/satz/src/interface_report.rs`), read off the same compile `transpile` runs.
+/// No MCP tool serves it; the app reads it through the CLI (ADR 0023).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct InterfacesReport {
+    pub estate: String,
+    /// every export, the core ones first, then each interface's in declaration order
+    pub exports: Vec<ExportRow>,
+    /// every declared interface; `core` is none of them — the core exports are the rows
+    /// with no `interface`
+    pub interfaces: Vec<InterfaceRow>,
+}
+
+impl InterfacesReport {
+    /// The core exports: the ones every interface carries.
+    pub fn core(&self) -> impl Iterator<Item = &ExportRow> {
+        self.exports.iter().filter(|e| e.interface.is_none())
+    }
+
+    /// The exports interface `name` declares itself.
+    pub fn of<'a>(&'a self, name: &'a str) -> impl Iterator<Item = &'a ExportRow> {
+        self.exports
+            .iter()
+            .filter(move |e| e.interface.as_deref() == Some(name))
+    }
+}
+
+/// How a project's module holds an export's value.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ExportHow {
+    /// a literal
+    Static,
+    /// a data source the project's plan reads
+    Lookup,
+    /// `all <type>`: a map keyed by label
+    Map,
+}
+
+impl ExportHow {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ExportHow::Static => "static",
+            ExportHow::Lookup => "lookup",
+            ExportHow::Map => "map",
+        }
+    }
+}
+
+/// One export of the estate.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ExportRow {
+    pub name: String,
+    /// the interface it stands in; absent for a core export, which every interface carries
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub interface: Option<String>,
+    pub how: ExportHow,
+    /// what a project's module holds: the literal, or the data source expression
+    pub value: String,
+    /// the resource type of an `all` map
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub all: Option<String>,
+    /// the estate's resources it names, by address
+    pub targets: Vec<String>,
+    /// the attachment types a project may create against it
+    pub attach: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    /// where it is declared, as satz names the file
+    pub file: String,
+    pub line: usize,
+}
+
+impl ExportRow {
+    /// The name `satz add-project --export` takes for it: `<interface>.<name>`; `None` for
+    /// a core export, which satz refuses to copy.
+    pub fn qualified(&self) -> Option<String> {
+        self.interface
+            .as_ref()
+            .map(|i| format!("{i}.{}", self.name))
+    }
+}
+
+/// One declared interface.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct InterfaceRow {
+    pub name: String,
+    /// in the library every project's folder carries: marked `common`, or declared in a pack
+    pub common: bool,
+    /// the interfaces its module also carries, directly or through another
+    pub uses: Vec<String>,
+    /// how many exports it declares itself
+    pub exports: usize,
+    pub file: String,
+    pub line: usize,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1173,6 +1272,81 @@ mod tests {
             assert!(
                 serde_json::from_value::<PackReview>(without).is_err(),
                 "a review without `{field}` was read"
+            );
+        }
+    }
+
+    /// `satz interfaces showcase.satz --format json`, recorded from the release the app is
+    /// tested against over `tests/fixtures/smoke/config.toml`: the smoke showcase's core
+    /// exports, its common `audit` interface and `archive`, which uses it.
+    const INTERFACES: &str = include_str!("../../tests/fixtures/interfaces-showcase.json");
+
+    #[test]
+    fn the_recorded_interfaces_report_round_trips() {
+        let report: InterfacesReport = serde_json::from_str(INTERFACES).unwrap();
+        assert!(report.core().any(|e| e.name == "workload_folder"));
+        let audit = report
+            .interfaces
+            .iter()
+            .find(|i| i.name == "audit")
+            .unwrap();
+        assert!(audit.common);
+        assert_eq!(report.of("audit").count(), audit.exports);
+        let archive = report
+            .interfaces
+            .iter()
+            .find(|i| i.name == "archive")
+            .unwrap();
+        assert_eq!(archive.uses, ["audit"]);
+        assert!(report.of("archive").any(|e| !e.attach.is_empty()));
+        assert!(
+            report
+                .exports
+                .iter()
+                .any(|e| e.how == ExportHow::Map && e.all.is_some())
+        );
+        assert_eq!(
+            report
+                .of("archive")
+                .find(|e| e.name == "archive_project_number")
+                .and_then(ExportRow::qualified)
+                .as_deref(),
+            Some("archive.archive_project_number")
+        );
+        assert!(report.core().all(|e| e.qualified().is_none()));
+        let again: serde_json::Value = serde_json::to_value(&report).unwrap();
+        let original: serde_json::Value = serde_json::from_str(INTERFACES).unwrap();
+        assert_eq!(again, original);
+    }
+
+    /// A field satz always sends is required, and a `how` satz adds fails the report.
+    #[test]
+    fn an_export_row_without_a_field_satz_always_sends_fails() {
+        let row = serde_json::json!({
+            "name": "x", "how": "static", "value": "\"v\"", "targets": [], "attach": [],
+            "file": "e.satz", "line": 1
+        });
+        assert!(serde_json::from_value::<ExportRow>(row.clone()).is_ok());
+        for field in ["name", "how", "value", "targets", "attach", "file", "line"] {
+            let mut without = row.clone();
+            without.as_object_mut().unwrap().remove(field);
+            assert!(
+                serde_json::from_value::<ExportRow>(without).is_err(),
+                "a row without `{field}` was read"
+            );
+        }
+        let mut unknown = row;
+        unknown["how"] = serde_json::json!("sideways");
+        assert!(serde_json::from_value::<ExportRow>(unknown).is_err());
+        let iface = serde_json::json!({
+            "name": "audit", "common": true, "uses": [], "exports": 1, "file": "e.satz", "line": 2
+        });
+        for field in ["name", "common", "uses", "exports", "file", "line"] {
+            let mut without = iface.clone();
+            without.as_object_mut().unwrap().remove(field);
+            assert!(
+                serde_json::from_value::<InterfaceRow>(without).is_err(),
+                "an interface without `{field}` was read"
             );
         }
     }

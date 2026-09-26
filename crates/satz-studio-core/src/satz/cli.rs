@@ -97,6 +97,21 @@ impl SatzCli {
     /// streamed: for a command whose whole output is the answer — a block to render, a
     /// help to read. A non-zero exit is an error carrying stderr as satz wrote it.
     pub async fn output(&self, args: &[String]) -> Result<Output, SatzError> {
+        let (status, output) = self.finished(args).await?;
+        if !status.success() {
+            return Err(SatzError::Exit {
+                command: args.join(" "),
+                status,
+                stderr: output.stderr,
+            });
+        }
+        Ok(output)
+    }
+
+    /// `satz --config <dir> <args…>`, run to its end with both pipes held, and the exit
+    /// status beside them whatever it is: for a command whose exit status is satz's
+    /// answer — a write satz refuses exits non-zero with the reason on stderr.
+    pub async fn finished(&self, args: &[String]) -> Result<(ExitStatus, Output), SatzError> {
         let line = args.join(" ");
         let output = self
             .command(args)
@@ -106,18 +121,13 @@ impl SatzCli {
                 context: format!("running `satz {line}`"),
                 source: e,
             })?;
-        let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
-        if !output.status.success() {
-            return Err(SatzError::Exit {
-                command: line,
-                status: output.status,
-                stderr,
-            });
-        }
-        Ok(Output {
-            stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
-            stderr,
-        })
+        Ok((
+            output.status,
+            Output {
+                stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+                stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+            },
+        ))
     }
 
     /// `satz --config <dir> <command…> --help`: the long help, as satz prints it on
