@@ -97,7 +97,7 @@
       "attach": [],
       "description": "Every folder, by label",
       "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
-      "line": 250
+      "line": 251
     },
     {
       "name": "buckets",
@@ -109,7 +109,21 @@
       ],
       "attach": [],
       "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
-      "line": 251
+      "line": 252
+    },
+    {
+      "name": "infra_projects",
+      "how": "map",
+      "value": "{ \"archive\" = \"corp-archive-001\", \"infra\" = \"corp-infra-001\" }",
+      "all": "google_project",
+      "targets": [
+        "google_project.archive",
+        "google_project.infra"
+      ],
+      "attach": [],
+      "description": "The Google projects in the infrastructure folder",
+      "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
+      "line": 253
     },
     {
       "name": "archive_project_id",
@@ -124,7 +138,7 @@
       ],
       "description": "The project's Google project",
       "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
-      "line": 267
+      "line": 272
     },
     {
       "name": "archive_project_number",
@@ -136,7 +150,7 @@
       ],
       "attach": [],
       "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
-      "line": 268
+      "line": 273
     },
     {
       "name": "audit_bucket_name",
@@ -149,7 +163,7 @@
       "attach": [],
       "description": "The audit log bucket",
       "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
-      "line": 262
+      "line": 267
     }
   ],
   "interfaces": [
@@ -161,7 +175,7 @@
       ],
       "exports": 2,
       "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
-      "line": 265
+      "line": 270
     },
     {
       "name": "audit",
@@ -169,7 +183,7 @@
       "uses": [],
       "exports": 1,
       "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
-      "line": 261
+      "line": 266
     }
   ]
 }

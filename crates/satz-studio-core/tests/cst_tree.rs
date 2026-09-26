@@ -261,6 +261,31 @@ fn an_export_and_an_interface_are_kept_whole() {
     assert_eq!(labels(&cst, interface), ["Comment"]);
 }
 
+/// `all <type> under <folder>` stays inside its export, and a `private <type>.<label>`
+/// statement is one statement kept whole: the tree is the file byte for byte, has no
+/// `Error` node, and satz-core parses it.
+#[test]
+fn all_under_and_a_private_statement_are_kept_whole() {
+    let text = "estate acme\n\nexport \"team\" = all google_project under google_folder.team_a description \"The team's projects\"\n\nprivate google_storage_bucket.logs\n";
+    let cst = Cst::parse(text).unwrap();
+    assert_eq!(cst.text(), text);
+    assert_eq!(
+        labels(&cst, cst.root()),
+        ["Header", "Opaque(export)", "Opaque(private)"]
+    );
+    assert!(
+        cst.nodes()
+            .all(|(_, n)| !matches!(n.kind, NodeKind::Error { .. })),
+        "an Error node where satz accepts the file"
+    );
+    let private = child(&cst, cst.root(), 2);
+    assert_eq!(
+        cst.slice(cst.node(private).span),
+        "private google_storage_bucket.logs"
+    );
+    cst.lower().expect("satz-core parses it");
+}
+
 /// What satz v0.84.1 adds inside the two statements — `use interface` in both forms and
 /// with a gate, an export's `attach [ … ]`, and `all <type>` — stays inside them: the
 /// tree keeps each statement whole, is the file byte for byte, has no `Error` node, and
