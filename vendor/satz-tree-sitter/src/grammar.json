@@ -63,6 +63,10 @@
         },
         {
           "type": "SYMBOL",
+          "name": "request"
+        },
+        {
+          "type": "SYMBOL",
           "name": "hcl_block"
         },
         {
@@ -702,6 +706,31 @@
         }
       ]
     },
+    "request": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "STRING",
+          "value": "request"
+        },
+        {
+          "type": "FIELD",
+          "name": "param",
+          "content": {
+            "type": "SYMBOL",
+            "name": "identifier"
+          }
+        },
+        {
+          "type": "FIELD",
+          "name": "body",
+          "content": {
+            "type": "SYMBOL",
+            "name": "body"
+          }
+        }
+      ]
+    },
     "suppress": {
       "type": "SEQ",
       "members": [
@@ -925,6 +954,47 @@
         {
           "type": "SYMBOL",
           "name": "use_statement"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "each"
+        }
+      ]
+    },
+    "each": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "STRING",
+          "value": "each"
+        },
+        {
+          "type": "FIELD",
+          "name": "list",
+          "content": {
+            "type": "SYMBOL",
+            "name": "identifier"
+          }
+        },
+        {
+          "type": "STRING",
+          "value": "by"
+        },
+        {
+          "type": "FIELD",
+          "name": "key",
+          "content": {
+            "type": "SYMBOL",
+            "name": "identifier"
+          }
+        },
+        {
+          "type": "FIELD",
+          "name": "body",
+          "content": {
+            "type": "SYMBOL",
+            "name": "body"
+          }
         }
       ]
     },
@@ -1260,7 +1330,7 @@
               "type": "IMMEDIATE_TOKEN",
               "content": {
                 "type": "PATTERN",
-                "value": "[A-Za-z0-9_]+"
+                "value": "[A-Za-z0-9_.]+"
               }
             },
             "named": true,

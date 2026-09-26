@@ -40,6 +40,14 @@ async fn the_report_reads_and_an_interface_is_added_or_refused() {
         .of("archive")
         .find(|e| e.name == "archive_project_id")
         .expect("archive exports archive_project_id");
+    // the list a project may add entries to, and the shape of an entry
+    let topics = report
+        .requests
+        .iter()
+        .find(|r| r.param == "event_topics")
+        .expect("the showcase takes requests for event_topics");
+    assert_eq!(topics.key, "name");
+    assert_eq!(topics.fields, ["name", "retention"]);
     assert_eq!(id.attach, ["google_project_iam_member"]);
     assert!(
         report.core().any(|e| e.name == "workload_folder"),

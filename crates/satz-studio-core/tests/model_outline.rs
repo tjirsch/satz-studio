@@ -335,8 +335,10 @@ fn showcase_decodes_references_locks_import_ids_and_keeps_statements_out() {
             "google_organization_iam_member",
             "google_folder",
             "google_project",
+            // the map holding the `each` is a block; the `each` in it is kept whole
+            "google_pubsub_topic",
         ],
-        "claim, question, action, suppress and hcl are not blocks"
+        "claim, question, action, suppress, private, request and hcl are not blocks"
     );
     let top: Vec<(&str, Option<&str>, UseState)> = m
         .uses

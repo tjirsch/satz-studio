@@ -252,6 +252,8 @@ fn walk_entries(entries: &[Entry], out: &mut Vec<(usize, String)>) {
             Entry::Use { path, line, .. } => {
                 out.push((*line, format!("str:{:?}", vec![StrPart::Lit(path.clone())])));
             }
+            // the tree keeps an `each` whole, as it keeps a statement
+            Entry::Each { .. } => {}
         }
     }
 }
