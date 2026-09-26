@@ -59,6 +59,10 @@
         },
         {
           "type": "SYMBOL",
+          "name": "private"
+        },
+        {
+          "type": "SYMBOL",
           "name": "hcl_block"
         },
         {
@@ -532,6 +536,31 @@
             "type": "SYMBOL",
             "name": "identifier"
           }
+        },
+        {
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "SEQ",
+              "members": [
+                {
+                  "type": "STRING",
+                  "value": "under"
+                },
+                {
+                  "type": "FIELD",
+                  "name": "under",
+                  "content": {
+                    "type": "SYMBOL",
+                    "name": "identifier"
+                  }
+                }
+              ]
+            },
+            {
+              "type": "BLANK"
+            }
+          ]
         }
       ]
     },
@@ -653,6 +682,23 @@
               "type": "BLANK"
             }
           ]
+        }
+      ]
+    },
+    "private": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "STRING",
+          "value": "private"
+        },
+        {
+          "type": "FIELD",
+          "name": "resource",
+          "content": {
+            "type": "SYMBOL",
+            "name": "identifier"
+          }
         }
       ]
     },

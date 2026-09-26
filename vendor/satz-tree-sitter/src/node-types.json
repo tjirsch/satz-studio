@@ -38,6 +38,16 @@
             "named": true
           }
         ]
+      },
+      "under": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
       }
     }
   },
@@ -639,6 +649,22 @@
     }
   },
   {
+    "type": "private",
+    "named": true,
+    "fields": {
+      "resource": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
     "type": "question",
     "named": true,
     "fields": {
@@ -715,6 +741,10 @@
         },
         {
           "type": "params",
+          "named": true
+        },
+        {
+          "type": "private",
           "named": true
         },
         {
@@ -991,6 +1021,10 @@
     "named": false
   },
   {
+    "type": "private",
+    "named": false
+  },
+  {
     "type": "question",
     "named": false
   },
@@ -1016,6 +1050,10 @@
   },
   {
     "type": "trust",
+    "named": false
+  },
+  {
+    "type": "under",
     "named": false
   },
   {
