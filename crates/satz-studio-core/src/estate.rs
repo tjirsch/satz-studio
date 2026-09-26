@@ -15,6 +15,10 @@ pub struct ToolConfig {
     pub yaml_dir: String,
     #[serde(default = "default_hcl_dir")]
     pub hcl_dir: String,
+    /// where satz writes the estate's interfaces for the projects beside it — output,
+    /// like `hcl_dir`, rewritten whole on every transpile
+    #[serde(default = "default_interfaces_dir")]
+    pub interfaces_dir: String,
     #[serde(default = "default_include_dirs")]
     pub include_dirs: Vec<String>,
     #[serde(default = "default_schema_dir")]
@@ -36,6 +40,9 @@ fn default_yaml_dir() -> String {
 }
 fn default_hcl_dir() -> String {
     "hcl".to_string()
+}
+fn default_interfaces_dir() -> String {
+    "interfaces".to_string()
 }
 fn default_include_dirs() -> Vec<String> {
     vec![".".to_string(), default_yaml_dir()]
@@ -70,6 +77,7 @@ impl ToolConfig {
         ToolConfig {
             yaml_dir: at(&self.yaml_dir),
             hcl_dir: at(&self.hcl_dir),
+            interfaces_dir: at(&self.interfaces_dir),
             include_dirs: self.include_dirs.iter().map(|d| at(d)).collect(),
             schema_dir: at(&self.schema_dir),
             presets_dir: at(&self.presets_dir),
@@ -143,7 +151,8 @@ impl EstateDir {
     }
 
     /// Every `config.toml` under `root`, depth-limited and blind to the directories that
-    /// never hold one (`hcl/`, `target/`, `evidence/`, `node_modules/`, dot-directories),
+    /// never hold one (`hcl/`, `interfaces/`, `target/`, `evidence/`, `node_modules/`,
+    /// dot-directories),
     /// at most 200 — a fleet root is somebody's home directory in the worst case, as
     /// satz's own `find_configs` says.
     pub fn discover(root: &Path) -> Vec<PathBuf> {
@@ -322,7 +331,7 @@ fn find_configs(root: &Path, depth: usize, out: &mut Vec<PathBuf>) {
         if path.is_dir() {
             if !matches!(
                 name.as_str(),
-                "hcl" | "target" | "evidence" | "node_modules"
+                "hcl" | "interfaces" | "target" | "evidence" | "node_modules"
             ) {
                 dirs.push(path);
             }
@@ -406,6 +415,44 @@ mod tests {
         assert_eq!(found, vec![fixture().join("config.toml")]);
     }
 
+    /// `interfaces/` is satz's output like `hcl/`: a generated interface folder is never
+    /// walked for an estate, whatever it holds.
+    #[test]
+    fn discover_skips_the_interfaces_satz_generates() {
+        let tmp = tempfile::tempdir().unwrap();
+        let estate = tmp.path().join("central");
+        for d in [
+            "hcl",
+            "interfaces/common/audit",
+            "interfaces/archive/archive/satz",
+        ] {
+            std::fs::create_dir_all(estate.join(d)).unwrap();
+        }
+        std::fs::write(estate.join("config.toml"), "").unwrap();
+        std::fs::write(estate.join("hcl/config.toml"), "").unwrap();
+        std::fs::write(estate.join("interfaces/archive/config.toml"), "").unwrap();
+        assert_eq!(
+            EstateDir::discover(tmp.path()),
+            vec![estate.join("config.toml")]
+        );
+    }
+
+    #[test]
+    fn interfaces_dir_resolves_against_the_config_like_hcl_dir() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(
+            tmp.path().join("config.toml"),
+            "interfaces_dir = \"out/interfaces\"\n",
+        )
+        .unwrap();
+        let e = EstateDir::open(tmp.path()).unwrap();
+        assert_eq!(e.tool.interfaces_dir, "out/interfaces");
+        assert_eq!(
+            PathBuf::from(&e.runtime.interfaces_dir),
+            tmp.path().join("out/interfaces")
+        );
+    }
+
     /// The first string literal in the body of `fn <name>()` in satz's
     /// `src/settings.rs` at the pinned submodule — the default satz itself applies.
     fn satz_default(name: &str) -> String {
@@ -432,6 +479,8 @@ mod tests {
         assert_eq!(c.yaml_dir, "satz");
         assert_eq!(c.include_dirs, [".", "satz"]);
         assert_eq!(c.hcl_dir, satz_default("default_hcl_dir"));
+        assert_eq!(c.interfaces_dir, satz_default("default_interfaces_dir"));
+        assert_eq!(c.interfaces_dir, "interfaces");
         assert_eq!(c.schema_dir, satz_default("default_schema_dir"));
         assert_eq!(c.presets_dir, satz_default("default_presets_dir"));
         assert_eq!(c.tf_tool, satz_default("default_tf_tool"));

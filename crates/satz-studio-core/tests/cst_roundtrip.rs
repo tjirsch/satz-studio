@@ -134,6 +134,10 @@ fn differential(name: &str, cst: &Cst, file: &File) {
         NodeKind::Header { keyword, name } => Some((keyword.clone(), name.clone())),
         _ => None,
     });
+    if let Some(iface) = &file.interface_file {
+        interface_file(name, cst, iface, header);
+        return;
+    }
     match header {
         Some((keyword, hname)) => {
             assert_eq!(
@@ -198,6 +202,37 @@ fn differential(name: &str, cst: &Cst, file: &File) {
         panic!(
             "{name}: entries differ\n  only in the tree: {only_tree:?}\n  only in the AST:  {only_ast:?}"
         );
+    }
+}
+
+/// A generated interface file: satz reads its `central`, `output`, `lookup` and
+/// `managed` blocks into the `InterfaceFile` and leaves no entry of an estate, so the tree
+/// is held to the header and to those four block kinds at the top.
+fn interface_file(
+    name: &str,
+    cst: &Cst,
+    iface: &satz_core::satz::InterfaceFile,
+    header: Option<(String, String)>,
+) {
+    assert_eq!(
+        header,
+        Some(("interface".to_string(), iface.name.clone())),
+        "{name}: the interface header"
+    );
+    assert!(
+        cst.params().is_none(),
+        "{name}: an interface file has params"
+    );
+    for &c in &cst.node(cst.root()).children {
+        match &cst.node(c).kind {
+            NodeKind::Header { .. } | NodeKind::Comment => {}
+            NodeKind::Block { key, .. } => assert!(
+                ["central", "output", "lookup", "managed"].contains(&cst.slice(*key)),
+                "{name}: a `{}` block in an interface file",
+                cst.slice(*key)
+            ),
+            other => panic!("{name}: {other:?} at the top of an interface file"),
+        }
     }
 }
 

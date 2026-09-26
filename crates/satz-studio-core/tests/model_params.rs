@@ -186,6 +186,7 @@ fn a_reference_takes_the_shape_of_what_it_resolves_to() {
         note: None,
         packs: Vec::new(),
         unmanaged: Vec::new(),
+        interfaces: Vec::new(),
         findings: Vec::new(),
     };
     let m = EstateModel::build(

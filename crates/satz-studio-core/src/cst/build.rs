@@ -150,8 +150,10 @@ impl<'t> Builder<'t> {
         }
     }
 
-    /// `estate NAME` / `pack NAME [version "…"] [content]`: the keyword and the name as
-    /// text, a `version` string as a `Value` child.
+    /// `estate NAME` / `pack NAME [version "…"] [content]` / `interface "NAME"` (the
+    /// header of a generated interface file): the keyword and the name as text — an
+    /// interface's name without its quotes, as satz reads it — and a `version` string as
+    /// a `Value` child. The quoted name of an interface is no value: satz writes it.
     fn header(&mut self, n: Ts<'_>) -> NodeId {
         let keyword = n
             .child_by_field_name("kind")
@@ -159,14 +161,25 @@ impl<'t> Builder<'t> {
             .unwrap_or_default();
         let name = n
             .child_by_field_name("name")
-            .map(|c| self.text_of(c).to_string())
+            .map(|c| {
+                let t = self.text_of(c);
+                if c.kind() == "string" {
+                    t.strip_prefix('"')
+                        .and_then(|t| t.strip_suffix('"'))
+                        .unwrap_or(t)
+                        .to_string()
+                } else {
+                    t.to_string()
+                }
+            })
             .unwrap_or_default();
+        let version = n.child_by_field_name("version").map(|c| c.id());
         let id = self.push_at(NodeKind::Header { keyword, name }, n);
         let mut out = Vec::new();
         for c in kids(n) {
             if let Some(t) = self.trivia(c) {
                 out.push(t);
-            } else if c.kind() == "string" {
+            } else if Some(c.id()) == version {
                 out.push(self.push_at(NodeKind::Value(ValueKind::Str), c));
             }
         }

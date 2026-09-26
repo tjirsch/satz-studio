@@ -778,6 +778,7 @@ mod tests {
             note: None,
             packs,
             unmanaged: Vec::new(),
+            interfaces: Vec::new(),
             findings: Vec::new(),
         }
     }
