@@ -48,7 +48,13 @@ each finding in the diagnostics drawer at its line — then placed in the estate
 library as a `.local.satz` or handed upstream by a pull request;
 **Decisions**, the
 questions those packs declare and it has not answered; **Estate**, the file
-itself — its params and its resource tree; **Checks**, what judges it, from the compile
+itself — its params, its resource tree, and the interfaces it publishes to the projects
+that read it, as `satz interfaces` reports them: the core exports every interface
+carries, then each interface with the interfaces it uses and its own exports. "New
+interface" there is `satz add-project` as a form — a name, "Onboard a project" with its
+owner group or "Interface only", the interfaces to use and other interfaces' exports to
+carry again, and the command line as it will run — written by satz and checked like an
+answer; **Checks**, what judges it, from the compile
 to the compliance catalogs; **Deploy**, what hands it off. Agent and Settings sit at the
 foot of the rail, with Commands between them. Beside the estate the top bar names sit
 reload, "Switch estate" — the Start screen with your estates listed — and "Close estate";
@@ -96,7 +102,7 @@ that holds them up — in front of apply and bootstrap, which satz refuses.
 
 ## What it needs
 
-- **`satz` 0.85.0 or newer.** `MIN_SATZ` in `crates/satz-studio-core/src/satz/binary.rs`
+- **`satz` 0.86.1 or newer.** `MIN_SATZ` in `crates/satz-studio-core/src/satz/binary.rs`
   names the oldest satz this build works with. It rises when a satz release breaks the
   app or the app starts using something a later satz introduced, not with every satz
   release. Install satz with its installer or bring it up to date with `satz

@@ -16,7 +16,7 @@ use std::time::Duration;
 
 use satz_studio_core::cst::{Cst, NodeKind, UseState, scan_uses};
 use satz_studio_core::diag::{Diagnostic, plain};
-use satz_studio_core::edit::{Committed, Delegated, McpChecker, Restore, Snapshot};
+use satz_studio_core::edit::{Committed, Delegated, Restore, delegated_write};
 use satz_studio_core::estate::EstateDir;
 use satz_studio_core::model::EstateModel;
 use satz_studio_core::satz::reports::{
@@ -244,8 +244,8 @@ pub fn accept_defaults() -> InterviewArgs {
     }
 }
 
-/// The path every delegated write of the app takes
-/// (`delegated_write` in `crates/satz-studio/src/state/estate_actions.rs`): the write
+/// The path every delegated write of the app takes (`edit::delegated_write`, which
+/// `delegated` in `crates/satz-studio/src/state/estate_actions.rs` calls): the write
 /// lock, the bytes recorded, the tool on the session inside `Snapshot::delegate`, with
 /// `McpChecker` for the check of a call that landed.
 pub async fn delegate<A: serde::Serialize>(
@@ -253,17 +253,14 @@ pub async fn delegate<A: serde::Serialize>(
     tool: &str,
     args: &A,
 ) -> Delegated {
-    let _lock = session.write_lock().await;
-    let snapshot = Snapshot::take(&session.main).unwrap();
     let args = serde_json::to_value(args)
         .unwrap()
         .as_object()
         .cloned()
         .unwrap();
-    let checker = McpChecker {
-        session: Arc::clone(session),
-    };
-    within(snapshot.delegate(session.tool(tool, args), &checker)).await
+    within(delegated_write(session, session.tool(tool, args)))
+        .await
+        .unwrap()
 }
 
 /// The path the app's `Answer` and `AcceptDefaults` actions take: [`delegate`] over

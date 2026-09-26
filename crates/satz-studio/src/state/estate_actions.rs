@@ -19,18 +19,19 @@ use futures_util::StreamExt;
 use satz_studio_core::cst::Cst;
 use satz_studio_core::diag::{DiagSource, Diagnostic, Severity};
 use satz_studio_core::edit::{
-    CheckFailure, Checker, CommitError, Committed, Delegated, Edit, EditSession, McpChecker,
-    Rollback, Snapshot,
+    self, CheckFailure, Checker, CommitError, Committed, Delegated, Edit, EditSession, McpChecker,
+    Rollback,
 };
 use satz_studio_core::estate::{EstateDir, HclState};
 use satz_studio_core::git::{self, WorkTree};
 use satz_studio_core::model::EstateModel;
+use satz_studio_core::satz::project::{self, AddProjectArgs};
 use satz_studio_core::satz::reports::{
     AddPackArgs, FindingSeverity, InterviewArgs, InterviewReport, MergeReport, NoticeRow,
     PackChange, PackReview, PacksReport, PrerequisitesResult, QuestionsReport, RemovePackArgs,
 };
 use satz_studio_core::satz::review::{self, PlaceError, Placed};
-use satz_studio_core::satz::{CliLine, EstateSession, ToolOutcome, export};
+use satz_studio_core::satz::{CliLine, EstateSession, SatzError, ToolOutcome, export};
 use satz_studio_core::schema::{ResourceRegistry, SchemaError};
 use tokio_util::sync::CancellationToken;
 
@@ -80,6 +81,9 @@ pub enum EstateAction {
     AddPack(AddPackArgs),
     /// `satz_remove_pack`: the pack's gate bound false, its line left as it is
     RemovePack(RemovePackArgs),
+    /// `satz add-project` through the CLI: a project's section, or an interface alone,
+    /// appended to the main file by satz's own writer under the delegated-write discipline
+    AddProject(AddProjectArgs),
     /// `satz_merge_presets`: the line for a pack the library gained
     MergePresets,
     /// `satz --config <dir> review-pack <pack> [--against <estate>]`: the pack judged
@@ -154,6 +158,7 @@ pub async fn estate_coroutine(
             EstateAction::WritePrerequisites => write_prerequisites(&session, app).await,
             EstateAction::CommitEdit(edit) => commit_edit(&session, app, edit).await,
             EstateAction::AddPack(args) => switch_pack(&session, app, "satz_add_pack", &args).await,
+            EstateAction::AddProject(args) => add_project(&session, app, args).await,
             EstateAction::RemovePack(args) => {
                 switch_pack(&session, app, "satz_remove_pack", &args).await
             }
@@ -238,7 +243,7 @@ impl Carried {
 }
 
 /// A delegated write: satz's own writer works on the real file, so the bytes are
-/// recorded first and [`Snapshot::delegate`] runs the call around them — a call that
+/// recorded first and [`edit::Snapshot::delegate`] runs the call around them — a call that
 /// landed is checked on the real path and restored when the check refuses; a refusal, or
 /// a call that returned nothing, is compared with the record and restored when satz had
 /// changed the file. A call that did not land is satz's own sentence, followed by what
@@ -256,35 +261,107 @@ async fn delegated_write<F>(
 where
     F: FnOnce(&ToolOutcome) -> Result<String, String>,
 {
-    let _lock = session.write_lock().await;
-    let snapshot = match Snapshot::take(&session.main) {
-        Ok(s) => s,
+    delegated(
+        session,
+        app,
+        DiagSource::Tool(name.to_string()),
+        session.tool(name, args),
+        landed,
+    )
+    .await
+}
+
+/// The delegated write around any call that writes the main file and answers as a tool
+/// does — a tool over the session, or a satz command through the CLI
+/// ([`project::add_project`]). `source` names the call in the drawer and in the message
+/// of a call that did not land. The lock, the record and the check are
+/// [`edit::delegated_write`], the one implementation the e2e tests drive too.
+async fn delegated<C, F>(
+    session: &Arc<EstateSession>,
+    app: Store<AppStore>,
+    source: DiagSource,
+    call: C,
+    landed: F,
+) -> Carried
+where
+    C: Future<Output = Result<ToolOutcome, SatzError>>,
+    F: FnOnce(&ToolOutcome) -> Result<String, String>,
+{
+    let name = match &source {
+        DiagSource::Tool(n) | DiagSource::Command(n) => n.clone(),
+        other => format!("{other:?}"),
+    };
+    match edit::delegated_write(session, call).await {
         Err(e) => {
             toast(app, ToastKind::Error, e.to_string());
-            return Carried::default();
+            Carried::default()
         }
-    };
-    let checker = McpChecker {
-        session: Arc::clone(session),
-    };
-    match snapshot.delegate(session.tool(name, args), &checker).await {
-        Delegated::Landed { outcome, committed } => {
+        Ok(Delegated::Landed { outcome, committed }) => {
             match landed(&outcome) {
                 Ok(text) => toast(app, ToastKind::Info, text),
                 Err(e) => toast(app, ToastKind::Error, e),
             }
             Carried::checked(carried_findings(&committed))
         }
-        Delegated::RolledBack { error, .. } => Carried::checked(rolled_back(app, error)),
-        Delegated::NotLanded(not_landed) => {
-            let text = not_landed.message(name);
+        Ok(Delegated::RolledBack { error, .. }) => Carried::checked(rolled_back(app, error)),
+        Ok(Delegated::NotLanded(not_landed)) => {
+            let text = not_landed.message(&name);
             toast(app, ToastKind::Error, text.clone());
             Carried {
                 checked: Vec::new(),
-                refused: Some(Diagnostic::error(text, DiagSource::Tool(name.to_string()))),
+                refused: Some(Diagnostic::error(text, source)),
             }
         }
     }
+}
+
+/// A project onboarded into the estate, or an interface added to it: `satz add-project`
+/// through the CLI — no MCP tool serves it (ADR 0023) — under the delegated-write
+/// discipline, then the reload. satz writes the section at the end of the main file; a
+/// refusal (a name the estate declares already, an estate that publishes no
+/// `workload_folder`, an export that is a core one) wrote nothing and is satz's sentence,
+/// in the toast, in the drawer and in the wizard.
+async fn add_project(session: &Arc<EstateSession>, app: Store<AppStore>, args: AddProjectArgs) {
+    let estate = app.estate();
+    if estate.adding_project().cloned() {
+        toast(app, ToastKind::Error, "satz add-project is running already");
+        return;
+    }
+    estate.adding_project().set(true);
+    estate.added_project().set(None);
+    let name = args.name.clone();
+    let mut refused = None;
+    let carried = delegated(
+        session,
+        app,
+        DiagSource::Command(project::ADD_PROJECT.to_string()),
+        project::add_project(&session.cli, &session.main, &args),
+        |_| {
+            Ok(if args.interface_only {
+                format!("interface \"{name}\" added — the next transpile writes interfaces/{name}/")
+            } else {
+                format!("project {name} onboarded — the next transpile writes interfaces/{name}/")
+            })
+        },
+    )
+    .await;
+    if let Some(d) = &carried.refused {
+        refused = Some(d.message.clone());
+    } else if carried
+        .checked
+        .iter()
+        .any(|d| d.severity == Severity::Error)
+    {
+        refused = Some(format!(
+            "the check refused the estate with interface \"{}\" in it; the file is back as it was — the drawer says why",
+            args.name
+        ));
+    }
+    estate
+        .added_project()
+        .set(Some(refused.map_or(Ok(args.name.clone()), Err)));
+    estate.adding_project().set(false);
+    reload_with(session, app, carried).await;
 }
 
 /// One answer, or every default: `satz_interview` on the real file.
@@ -1131,6 +1208,20 @@ async fn reload_with(session: &Arc<EstateSession>, app: Store<AppStore>, carried
             None
         }
     };
+
+    // What the estate publishes. No MCP tool serves it, so it is the CLI's `satz
+    // interfaces` (ADR 0023); a failure is satz's reason, in the tab and in the drawer,
+    // never an estate that publishes nothing.
+    let interfaces = project::interfaces(&session.cli, &session.main)
+        .await
+        .map_err(|e| project::said(&e));
+    if let Err(e) = &interfaces {
+        diagnostics.push(Diagnostic::error(
+            format!("satz interfaces: {e}"),
+            DiagSource::Command("interfaces".to_string()),
+        ));
+    }
+    estate.interfaces().set(Some(interfaces));
 
     let main = session.main.clone();
     let dir = session.dir.clone();

@@ -21,7 +21,7 @@ use std::path::{Path, PathBuf};
 use std::pin::Pin;
 
 pub use check::{CliChecker, McpChecker};
-pub use snapshot::{Cause, Delegated, NotLanded, Restore, Snapshot};
+pub use snapshot::{Cause, Delegated, NotLanded, Restore, Snapshot, delegated_write};
 
 use crate::cst::{Cst, NodeId, TypedValue};
 use crate::diag::Diagnostic;

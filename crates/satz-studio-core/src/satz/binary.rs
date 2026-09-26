@@ -13,7 +13,7 @@ use super::SatzError;
 /// submodule's satz ([`SatzBinary::built_against`]), and rises only when a satz release
 /// breaks the app or the app starts using something a later satz introduced — a routine pin
 /// bump leaves it alone (ADR 0014).
-pub const MIN_SATZ: &str = "0.85.0";
+pub const MIN_SATZ: &str = "0.86.1";
 
 /// The manifest of the submodule `vendor/satz`, whose version is the satz this build is
 /// built and tested against.

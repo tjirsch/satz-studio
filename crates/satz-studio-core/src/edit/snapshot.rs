@@ -8,9 +8,10 @@
 //! necessarily written nothing. "Rolled back" means the bytes are back.
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
-use super::{CheckFailure, Checker, CommitError, Committed, Rollback, sha256_hex};
-use crate::satz::{SatzError, ToolOutcome};
+use super::{CheckFailure, Checker, CommitError, Committed, McpChecker, Rollback, sha256_hex};
+use crate::satz::{EstateSession, SatzError, ToolOutcome};
 
 /// A file's bytes before a delegated write, with their hash.
 #[derive(Debug, Clone)]
@@ -169,6 +170,27 @@ impl Snapshot {
             }),
         }
     }
+}
+
+/// The whole of a delegated write on the estate's main file, as the app makes it: the
+/// session's write lock, the bytes recorded, then `call` — a tool over the session, or a
+/// satz command through its CLI ([`crate::satz::project::add_project`]) — inside
+/// [`Snapshot::delegate`], with [`McpChecker`] for the check of a call that landed.
+/// `call` runs only once the lock is held and the record taken. A file that cannot be
+/// recorded is the error, and nothing ran.
+pub async fn delegated_write<F>(
+    session: &Arc<EstateSession>,
+    call: F,
+) -> Result<Delegated, CommitError>
+where
+    F: Future<Output = Result<ToolOutcome, SatzError>>,
+{
+    let _lock = session.write_lock().await;
+    let snapshot = Snapshot::take(&session.main)?;
+    let checker = McpChecker {
+        session: Arc::clone(session),
+    };
+    Ok(snapshot.delegate(call, &checker).await)
 }
 
 impl NotLanded {
