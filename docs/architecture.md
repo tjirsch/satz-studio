@@ -1,8 +1,7 @@
 # satz-studio architecture
 
 What satz-studio is built of and how its parts run, for people changing it. The
-decisions behind the shape are in [`adr/`](adr/README.md). Where a part is not built,
-the section names the unit that builds it.
+decisions behind the shape are in [`adr/`](adr/README.md).
 
 ## 1. Goal
 
@@ -11,16 +10,24 @@ interview satz's packs declare, edits the pack choices (the estate map) and the 
 in the estate files through typed fields, runs satz commands, and sets an external agent
 up on the estate and starts it. It runs no model itself
 ([ADR 0020](adr/0020-the-agent-is-an-external-client-that-studio-configures-and-starts.md)).
-Version one edits what exists: an answer, a pack choice, an attribute value. Adding and
-removing resources and blocks is not in it.
+It edits what exists — an answer, a pack choice, an attribute value — and adds one kind
+of thing: a project's section, or an interface block alone, written by `satz add-project`
+from the New interface wizard. Resources and blocks are otherwise neither added nor
+removed.
 
 ## 2. Constraints
 
 - **satz owns the estate.** The writers for answers (`satz_interview`), for pack
-  switches (`satz_add_pack`, `satz_remove_pack`) and for import ids (`satz adopt`) are
-  satz's; the app calls them and
+  switches (`satz_add_pack`, `satz_remove_pack`), for the prerequisites
+  (`satz_update_prerequisites`), for a project's section (`satz add-project`) and for
+  import ids (`satz adopt --execute --import`, the command a pack's notice names) are
+  satz's; the app calls them, inside the delegated-write discipline of section 4b, and
   never re-implements them. What the app writes itself is one value inside its span,
-  checked by `satz transpile --check` before it replaces the file.
+  checked by `satz transpile --check` before it replaces the file. Beside the estate file
+  it writes a reviewed pack into the estate's library as `<stem>.local.satz`
+  (`review::place_private`, under the same lock and checked the same way), a palette
+  command's report into `reports_dir()` (read into the log and removed), and satz's
+  verified installer script into a temporary directory of its own (`satz::install`).
 - **The app never touches `hcl_dir` or `interfaces_dir`.** The generated HCL and the
   interfaces satz writes for the projects beside the estate are satz's output; the app
   reads the estate's `config.toml` to learn where they are and leaves them alone.
@@ -79,8 +86,9 @@ removing resources and blocks is not in it.
   banner offers the satz-studio release while it names a newer satz. A look that fails says why in Settings and raises no toast.
 - **Privacy.** The repository is public with its history: example values only, satz's
   gate on every commit. The app holds no credential and keeps no conversation: what it
-  writes outside an estate is the settings file and the one-shot scripts it opens in the
-  terminal.
+  writes outside an estate is the settings file, the one-shot scripts it opens in the
+  terminal, a palette command's report under `reports_dir()` while the log reads it, and
+  satz's installer script in a temporary directory of its own while it runs.
 - **Offline tests.** Every unit tests against `tests/fixtures` and the pinned
   `vendor/satz`; the tests that drive the `satz` binary need it installed. Nothing needs
   a network or a credential.
@@ -109,7 +117,7 @@ Two crates in one workspace, satz pinned once as the submodule `vendor/satz`
 | `src/satz/init.rs` | `satz init` as a typed thing: `InitOptions` renders the flags it was given to argv and passes nothing for a field left blank, so a blank field is the instruction to derive — or, for `--workload-folder-name`, satz's own `""`, the organisation; `check_target` refuses a directory that is not there or already holds a `config.toml`; `created` reads what a finished run left, because `init` names the estate file after a customer id it may have derived and the name is not knowable in advance | `InitOptions`, `check_target`, `created` |
 | `src/satz/mcp.rs` | one `satz mcp` child per estate, spoken to with rmcp over stdio; every rmcp type stays inside this file. A tool's refusal is a `ToolOutcome` with `is_error`; a JSON-RPC `invalid_params` error in place of a result — a tool name satz does not serve — is `SatzError::InvalidParams` naming the tool | `McpSession`, `ToolOutcome` |
 | `src/satz/session.rs` | one session per open estate: the CLI runner, the MCP child rooted where `satz mcp-config` roots a client's server and started at `Allow::STUDIO`, the write lock every writer takes, the identity from `satz_open`; `apply` and `bootstrap` as a one-shot script in the OS terminal, its paths single-quoted for `sh` (`sh_path`) and double-quoted with `%` doubled for `cmd.exe` (`cmd_path`) | `EstateSession` |
-| `src/satz/reports.rs` | serde mirrors of what a reporting command writes with `--format json` and satz returns as `structuredContent`: unknown fields ignored, missing required fields fail; the questions report round-trips a recorded output of the pinned satz. `Finding` is satz's own list of what the compile found after the front end — a `CompileSummary` carries the warnings and infos it did not refuse on, a `Refusal` the ones it did; `kind` is the kebab-case word satz writes, kept as a `String` so a kind satz adds is carried instead of failing the result. `NoticeRow` is what a pack asks to be run once it is on, with the param that acknowledges it; `severity` is required and typed — `error` is the one that holds up every command writing to the organisation — so a notice without one, or with a word satz adds, fails the report rather than reading as one that holds nothing up, and an interview report without `notices` fails too. A `QuestionRow` carries `required` for a choice and `empty` for a question that says what `""` means; a choice that is not required is answered `NO_BRANCH` (`none`, every option `false`) as well as by an option, `bound_option` and `bound_label` read which one an answered choice carries, and `shown` writes an empty answer with its meaning beside it, as satz does. `PacksReport` is `satz_packs`: one `PackRow` per node of satz's pack graph — its role, gate, answer, default and value, where its `use` line stands (`PackLine`, at its line number), whether it deploys, what it `requires` (each a `Requirement` with `met`), what it is `required_by` and `excludes`, its notices, what it `contributes` to another pack's list params and the compile's findings about it — the `use` lines the graph does not know, the `use` lines of central estates' generated interface files (`interfaces`), and the findings with the pack as `subject` and the command that answers each as `fix`. Every field satz always sends is required, and a line state satz adds fails the report; it round-trips a recorded `satz packs --format json` of the smoke estate. `AddPackArgs`, `RemovePackArgs` and `PackChange` are the arguments and the result of `satz_add_pack` and `satz_remove_pack`. `MergeReport` is `satz_merge_presets`: its events (`MergeEvent`, tagged by `kind`; an event kind satz adds fails the report, an outcome word satz adds is carried), its `MergeCounts`, `attention` and the notices it opened; `lines()` is the report as the command log shows it, in sentences; it round-trips a recorded merge of the smoke estate. `PackReview` is `satz review-pack --format json`: the pack, the estate it was folded into, what it emits and its findings, every field required; `passed()` is satz's verdict — no finding is an error; it round-trips two recorded reviews of the pinned satz, one clean and one broken. `InterfacesReport` is `satz interfaces --format json`: every export (`ExportRow` — its interface, absent for a core export, `how` as `ExportHow`, a word satz adds failing the report, the value, the type of an `all` map, the targets, the attach points, the description and `file:line`) and every interface (`InterfaceRow` — `common`, `uses`, the count of its own exports, `file:line`); `core()` and `of(name)` select the rows, `qualified()` is the `<interface>.<name>` `satz add-project --export` takes; it round-trips a recorded report of the smoke showcase | `QuestionsReport`, `QuestionRow`, `InterviewArgs`, `InterviewReport`, `NoticeRow`, `PrerequisitesResult`, `OpenReport`, `CompileSummary`, `Finding`, `FindingSeverity`, `Refusal`, `PacksReport`, `PackRow`, `PackRole`, `PackLine`, `Requirement`, `RequirementKind`, `Unmanaged`, `AddPackArgs`, `RemovePackArgs`, `PackChange`, `MergeReport`, `MergeEvent`, `MergeCounts`, `PackReview`, `InterfacesReport`, `ExportRow`, `ExportHow`, `InterfaceRow` |
+| `src/satz/reports.rs` | serde mirrors of what a reporting command writes with `--format json` and satz returns as `structuredContent`: unknown fields ignored, missing required fields fail; the questions report round-trips a recorded output of the pinned satz. `Finding` is satz's own list of what the compile found after the front end — a `CompileSummary` carries the warnings and infos it did not refuse on, a `Refusal` the ones it did; `kind` is the kebab-case word satz writes, kept as a `String` so a kind satz adds is carried instead of failing the result. `NoticeRow` is what a pack asks to be run once it is on, with the param that acknowledges it; `severity` is required and typed — `error` is the one that holds up every command writing to the organisation — so a notice without one, or with a word satz adds, fails the report rather than reading as one that holds nothing up, and an interview report without `notices` fails too. A `QuestionRow` carries `required` for a choice and `empty` for a question that says what `""` means; a choice that is not required is answered `NO_BRANCH` (`none`, every option `false`) as well as by an option, `bound_option` and `bound_label` read which one an answered choice carries, and `shown` writes an empty answer with its meaning beside it, as satz does. `PacksReport` is `satz_packs`: one `PackRow` per node of satz's pack graph — its role, gate, answer, default and value, where its `use` line stands (`PackLine`, at its line number), whether it deploys, what it `requires` (each a `Requirement` with `met`), what it is `required_by` and `excludes`, its notices, what it `contributes` to another pack's list params and the compile's findings about it — the `use` lines the graph does not know, the `use` lines of central estates' generated interface files (`interfaces`), and the findings with the pack as `subject` and the command that answers each as `fix`. Every field satz always sends is required, and a line state satz adds fails the report; it round-trips a recorded `satz packs --format json` of the smoke estate. `AddPackArgs`, `RemovePackArgs` and `PackChange` are the arguments and the result of `satz_add_pack` and `satz_remove_pack`. `MergeReport` is `satz_merge_presets`: its events (`MergeEvent`, tagged by `kind`; an event kind satz adds fails the report, an outcome word satz adds is carried), its `MergeCounts`, `attention` and the notices it opened; `lines()` is the report as the command log shows it, in sentences; it round-trips a recorded merge of the smoke estate. `PackReview` is `satz review-pack --format json`: the pack, the estate it was folded into, what it emits and its findings, every field required; `passed()` is satz's verdict — no finding is an error; it round-trips two recorded reviews of the pinned satz, one clean and one broken. `InterfacesReport` is `satz interfaces --format json`: every export (`ExportRow` — its interface, absent for a core export, `how` as `ExportHow`, a word satz adds failing the report, the value, the type of an `all` map, the targets, the attach points, the description and `file:line`) and every interface (`InterfaceRow` — `common`, `uses`, the count of its own exports, `file:line`); `core()` and `of(name)` select the rows, `qualified()` is the `<interface>.<name>` `satz add-project --export` takes; `requests` is every request point (`RequestRow` — the list a project may add entries to, the field that keys an entry, the fields an entry may carry, the entries it holds, the description and `file:line`); it round-trips a recorded report of the smoke showcase | `QuestionsReport`, `QuestionRow`, `InterviewArgs`, `InterviewReport`, `NoticeRow`, `PrerequisitesResult`, `OpenReport`, `CompileSummary`, `Finding`, `FindingSeverity`, `Refusal`, `PacksReport`, `PackRow`, `PackRole`, `PackLine`, `Requirement`, `RequirementKind`, `Unmanaged`, `AddPackArgs`, `RemovePackArgs`, `PackChange`, `MergeReport`, `MergeEvent`, `MergeCounts`, `PackReview`, `InterfacesReport`, `ExportRow`, `ExportHow`, `InterfaceRow`, `RequestRow` |
 | `src/satz/review.rs` | `satz review-pack` and the two places a reviewed pack goes ([ADR 0019](adr/0019-the-pack-review-runs-the-cli-and-places-a-private-pack-as-a-local-fork.md)): `review` runs `satz --config <estate dir> review-pack <pack> [--against <estate>] --format json` through `json_verdict`, holds the exit status to the report's own verdict (`SatzError::Verdict` when they disagree) and keeps the bytes it judged, refusing a pack that changed while satz read it; `diagnostics` is each finding at its `file:line` from `satz review-pack`. `local_name` is `<stem>.local.satz` — a `.local.satz` keeps its name, a `.diff.satz` is refused — and `upstream_name` is `presets/<stem>.satz`. `place_private` writes the reviewed bytes into `presets_dir` under that name: refused when the pack changed since its review or the library is missing, nothing written when the file holds these bytes already, refused when it holds anything else; the file is created with `create_new`, the estate is checked with it in the library, and a refusal or a checker that could not run removes it again | `ReviewedPack`, `review`, `review_args`, `diagnostics`, `local_name`, `local_target`, `upstream_name`, `place_private`, `Placed`, `PlaceError` |
 | `src/satz/mcp_config.rs` | `satz mcp-config <estate> --client <client> --allow <ceiling>`, which is where the configuration an agentic client reads comes from: `args` is that argument vector, with `--write` for a write and `--write --force` for the one refusal that asks for it; `run` hands back what satz printed, the block on stdout and its notes on stderr; `outcome` is the line a write ended on, for the toast; `refusal` is satz's own stderr where satz refused, unreworded; `force_would_answer` is whether satz's refusal is the one `--force` answers, by the sentence satz prints; `server` reads the one server of the printed block and `root` its `--root`, the root the app's own session takes ([ADR 0022](adr/0022-the-mcp-root-is-the-one-satz-mcp-config-renders.md)); `target_file` is the file satz's notes say a write goes to, and `written` reads satz's key there against the printed entry — absent, the same, another entry, or unreadable ([ADR 0021](adr/0021-the-settings-ceiling-is-the-agents-and-studio-writes-at-its-own.md)) | `Client`, `Run`, `Printed`, `Server`, `OnDisk`, `Written`, `args`, `run`, `outcome`, `refusal`, `force_would_answer`, `server`, `root`, `target_file`, `written` |
 | `src/satz/project.rs` | the interface plane through the CLI ([ADR 0023](adr/0023-the-interfaces-tab-reads-and-writes-through-the-cli.md)): `interfaces` is `satz interfaces <estate> --format json` typed as `InterfacesReport`, and `said` is satz's reason when it refuses; `AddProjectArgs` is `satz add-project`'s arguments — `argv(estate)` renders the name, `--interface-only` or `--owner-group`, each `--use-interface` and each `--export`, and `problem` says in satz's words what satz would refuse before it reads the estate: a name that is not `[a-z][a-z0-9-]*` or is `core` or `common` (`valid_name`), a project without a group address, an interface alone with an owner group or with nothing picked; `add_project` runs the command to its end as the call of a delegated write, a non-zero exit a `ToolOutcome` with `is_error` and satz's stderr sentence (the banner and `error: ` dropped), a zero exit the line satz ends on | `AddProjectArgs`, `ADD_PROJECT`, `interfaces`, `add_project`, `valid_name`, `said`, `sentence` |
@@ -140,10 +148,14 @@ Dioxus 0.7 on the webview renderer
 ([ADR 0001](adr/0001-dioxus-desktop-on-the-webview-renderer.md)); `docs/ui.md` is the
 window's own page. `src/main.rs` opens the window; `src/app.rs` loads `Settings` (a
 file that does not parse is the `Fatal` page), provides the `AppStore` and starts the
-app coroutine. State is two `#[derive(Store)]` roots in `src/state/mod.rs`, `AppStore`
-and the `EstateStore` inside it, which is reset when an estate opens or closes; the
-fields are listed in `docs/ui.md`. Every side effect runs in one of two coroutines and
-the stores are written from there only:
+app coroutine. State is one `#[derive(Store)]` root in `src/state/mod.rs`, `AppStore`,
+with six stores nested in it — `EstateStore`, reset when an estate opens or closes,
+`CreateStore`, `ImportStore`, `UpdateStore`, `StudioLookStore` and `InstallStore`; the
+fields are listed in `docs/ui.md`. Every side effect that touches an estate or the satz
+the app runs goes through one of two coroutines, and the stores are written from there.
+The exceptions write no estate file: the Agent view runs `satz mcp-config` itself
+(section 4c), and the Start screen, the review card and Settings open the OS's file
+dialogs and folders from the view.
 
 - **the app coroutine** (`src/state/app_actions.rs`, `AppAction`): `LocateSatz`,
   `Discover`, `OpenEstate`, `CloseEstate`, `CreateEstate`, `CancelCreate`,
@@ -162,12 +174,15 @@ A reporting command takes one `--format` and one `--out`, both required, and wri
 file instead of printing (satz's ADR 0021). The app names the destination: the file the
 command's own `--out` field names, which is the estate's and stays, else one under
 `reports_dir()` — the app's directory in the system temporary directory — which
-`RunCommand` reads into the log after the streamed lines and removes. `update-prerequisites`
-is the one command in the palette the ADR leaves on the console, and the palette runs it
-with `--report-only`, in satz's default text: the command writes the estate file by default, and a write from
-the palette would hold no write lock and reload no model. The writing run is offered in
-Checks instead, as `EstateAction::WritePrerequisites` — `satz_update_prerequisites
-{report_only: false}` through the delegated-write discipline of section 4b.
+`RunCommand` reads into the log after the streamed lines and removes. The palette writes
+no estate file: a write from it would hold no write lock and reload no model. So
+`update-prerequisites` — the one command in the palette the ADR leaves on the console,
+in satz's default text — and `merge-presets`, which write the estate file by default,
+run with `--report-only` fixed, and `get-presets` is offered without the `--force` that
+overwrites the packs the estate uses. The writing runs are the locked actions': the
+prerequisites in Checks, as `EstateAction::WritePrerequisites` — `satz_update_prerequisites
+{report_only: false}` through the delegated-write discipline of section 4b — and the merge
+in Packs, as `EstateAction::MergePresets` under the write lock and followed by a reload.
 
 A pack can name one command to be run once it is switched on — its `notice`, which the
 estate acknowledges by binding the notice's param `true` (satz's ADR 0033). satz returns
@@ -177,8 +192,10 @@ the notices a write opened in that write's own report, once, and the app holds t
 away is the estate binding its param, and satz decides that — every reload asks
 `EstateDir::acknowledged` over the params it has just folded — so "I ran it" (an `Answer`
 binding the param) and `satz adopt --execute --import` (which binds it itself) both end
-the same way. `RunNoticeCommand` is the notice's own command run in the app: the same
-run as `RunCommand`, followed by a reload, because that command writes the estate file.
+the same way. `RunNoticeCommand` is the notice's own command run in the app: `satz adopt
+--execute --import` writes the estate file, so it is a delegated write of section 4b whose
+call is the CLI — streamed into the log while it runs, under the write lock with the main
+file recorded before and checked after — followed by a reload.
 
 `apply`, `bootstrap` and `migrate` run in the user's own terminal
 ([ADR 0006](adr/0006-apply-and-bootstrap-run-in-the-users-terminal.md),
@@ -187,8 +204,8 @@ separate palette entry that creates nothing and runs in the app, which is what t
 Overview's day-0 row offers.
 
 The shell (`src/shell/`) is the navigation rail with its badges, the top bar with the
-`runs_as`, satz-studio-version and satz-version chips and the actions beside them, the
-`SatzBanner` while satz is missing, too old or does not run, and as a notice while it is
+estate's name and directory, the actions beside them (reload, switch, close) and the
+drawer toggle at its end, the `SatzBanner` while satz is missing, too old or does not run, and as a notice while it is
 newer than the build, the diagnostics drawer, the commands palette, the notice
 dialog and the snackbar host.
 
@@ -344,8 +361,10 @@ nowhere else.
    carrying what satz said before it died.
 5. The estate coroutine's `Reload` builds the model: `HclState::read(hcl_dir)`;
    `WorkTree::read` of the estate file's directory; `satz_questions` and `satz_packs`
-   over the session for the `QuestionsReport` and the `PacksReport`; then, on a blocking
-   thread, the main file read, `Cst::parse`, `EstateDir::params` and
+   over the session for the `QuestionsReport` and the `PacksReport`, and `satz
+   interfaces` through the CLI for the `InterfacesReport` — no MCP tool serves it, and a
+   failure is satz's reason in the Interfaces tab and a diagnostic in the drawer; then,
+   on a blocking thread, the main file read, `Cst::parse`, `EstateDir::params` and
    `ResourceRegistry::load_all(schema_dir)`; then
    `EstateModel::build(main, cst, schema, env, questions, packs, diagnostics)`,
    where `schema` is `Result<&ResourceRegistry, &Path>`
@@ -407,7 +426,8 @@ holds other text.
 ### 4b. The write discipline
 
 Every writer takes `EstateSession::write_lock` first and holds it across the check and
-the rename: a view edit, an interview answer, a pack switched. An agent that writes the
+the rename: a view edit, an interview answer, a pack switched, the prerequisites
+written, a project added, a notice's `satz adopt`, a pack placed in the library. An agent that writes the
 estate does it through its own `satz mcp`, outside this window and outside this lock, and
 the estate is re-read when the window comes back to the front.
 
@@ -477,22 +497,28 @@ call and decides what stands, whatever the call comes to (`Delegated`):
 and the error), followed, when the bytes were put back, by "satz refused and had
 changed `<file>`; the file is back as it was". It is a toast and a `DiagSource::Tool`
 diagnostic in the drawer, beside what the reload's own check says of the file.
-A project onboarded into the estate, or an interface added to it, is the one delegated
-write whose call is a command rather than a tool: `satz add-project` through the session's
-`SatzCli` (`project::add_project`), because the interface plane's MCP tools are paused
-and the app's own `satz mcp` is the server an external agent gets
+Two delegated writes have a command rather than a tool as their call. A project
+onboarded into the estate, or an interface added to it, is `satz add-project` through the
+session's `SatzCli` (`project::add_project`), because the interface plane's MCP tools are
+paused and the app's own `satz mcp` is the server an external agent gets
 ([ADR 0023](adr/0023-the-interfaces-tab-reads-and-writes-through-the-cli.md)). The
-process result is mapped to a `ToolOutcome` — a non-zero exit is `is_error` with satz's
-stderr sentence, a zero exit the line satz ends on — and runs inside the same
-`edit::delegated_write` as every tool: the write lock, the record, the check with
-`McpChecker` on the real path, the recorded bytes back on a refusal. It is satz's own
-writer on the real file, so it is no second way to write a file. When satz serves the
-interface plane over MCP, the call is `session.tool` and nothing else changes.
+command a pack's notice names, `satz adopt <estate> --execute --import`, is the other
+(`RunNoticeCommand`): it streams into the estate's log while it runs, Cancel kills the
+child, and its record covers the main file — an `"import-id"` satz writes into another
+file the estate uses, a `.local.satz` fork in the library, and what `--import` puts into
+the Terraform state stay as satz left them. Both map the process result to a
+`ToolOutcome` (`project::outcome`) — a non-zero exit is `is_error` with satz's stderr
+sentence, a zero exit what satz printed — and run inside the same `edit::delegated_write`
+as every tool: the write lock, the record, the check with `McpChecker` on the real path,
+the recorded bytes back on a refusal. Each is satz's own writer on the real file, so
+neither is a second way to write a file. When satz serves the interface plane over MCP,
+`add-project`'s call is `session.tool` and nothing else changes.
 
 `satz_merge_presets` is outside this discipline: it writes the library as well as the
 estate file, so a record of the estate file alone cannot put the estate back — restoring
 it over a repointed fork would point the estate at the changed upstream pack — and
-satz runs it only inside a git work tree, whose history is its undo.
+satz runs it only inside a git work tree, whose history is its undo. It still runs under
+the write lock and is followed by a reload; the palette's `merge-presets` reports only.
 `EstateDir::estates` never lists a checked temp file; `.gitignore` carries the suffix.
 
 ### 4c. The agent handoff
@@ -546,16 +572,20 @@ estate and starts it; nothing is remembered between sessions.
 `Dioxus.toml` names the bundle identity and the five files every bundle carries,
 `LICENSE`, `NOTICE`, `THIRD-PARTY-LICENSES.md` (the licence text of every crate the app is compiled from), `LICENSE-MaterialSymbols` (the icon font's) and `LICENSE-satz-tree-sitter` (the vendored grammar's) (`bundle.resources`, which dx resolves against the directory it runs in — the
 repository root — and copies under the file name alone, so no two may share one); `dx bundle --release --platform desktop` produces the
-bundle per OS, and U10 builds the release workflow that runs it. The
-webview is a runtime dependency: WebView2 on Windows, `webkit2gtk-4.1` on Linux.
+bundle per OS, and `.github/workflows/release.yml` runs it on a release tag (the README's
+Release section). The webview is a runtime dependency: WebView2 on Windows,
+`webkit2gtk-4.1` on Linux.
 
 `.github/workflows/ci.yml` runs `core` on `ubuntu-24.04` once per commit — on a pull
-request for a branch, on the push for `main`, since a branch's pull request already runs
-the jobs on the branch merged into `main`: the desktop crate's system libraries, then `scripts/install-satz.sh`, then
+request for a branch, on the push for `main` (a branch push alone runs nothing, since its
+pull request already runs the jobs on the branch merged into `main`), on a `v*` tag and
+on a manual dispatch, so `release.yml` bundles a tree the jobs have passed on: the
+desktop crate's system libraries, then `scripts/install-satz.sh`, then
 `cargo fmt -p satz-studio-core -p satz-studio -- --check` (the two packages;
 `vendor/satz` is satz's own), `cargo clippy --workspace --all-targets --locked -- -D
-warnings`, `cargo test --workspace --locked` and `cargo build -p satz-studio --locked`, then
-`cargo fetch --locked` and `scripts/update-third-party-licenses.sh --check` with the
+warnings`, `cargo test --workspace --locked --no-fail-fast`, `scripts/e2e.sh --ci` (the
+verification harness, `docs/verification.md`) and `cargo build -p satz-studio --locked`,
+then `cargo fetch --locked` and `scripts/update-third-party-licenses.sh --check` with the
 cargo-about version the script names, which fails when `THIRD-PARTY-LICENSES.md` is not
 what `Cargo.lock` generates or a dependency's licence is not on `about.toml`'s
 allow-list.
@@ -569,7 +599,7 @@ locates the real binary asserts it is at the build's satz exactly. It
 also writes the runner's satz config (`self_update_frequency = "never"`) when none
 exists, so no update check reaches GitHub while the tests drive satz. `platforms` (`macos-15`,
 `windows-2022`) runs the same formatting, clippy, test and build steps on the same
-events; on Windows a PowerShell step does what `scripts/install-satz.sh` does, through
+events, and neither the harness nor the licence check; on Windows a PowerShell step does what `scripts/install-satz.sh` does, through
 satz's `satz-installer.ps1`: the sidecar check, the run the app makes (`powershell -File`,
 `SATZ_INSTALL_DIR`, `SATZ_NO_MODIFY_PATH=1`), the `MIN_SATZ` floor and the satz config. macOS is Apple silicon alone: `macos-15-intel` is the most expensive
 runner in the catalogue and ran the same code on the same OS beside `macos-15` — the
@@ -587,7 +617,7 @@ the tree and over the commits a pull request adds, or the push to `main` that me
 | [0002](adr/0002-a-separate-repository-with-satz-pinned-once.md) | a separate repository; satz pinned once, as the submodule; the binary required at `MIN_SATZ` |
 | [0003](adr/0003-the-document-layer-is-the-tree-sitter-grammar.md) | the document layer is the tree-sitter grammar, vendored and compiled in; satz-core stays the authority on meaning |
 | [0004](adr/0004-claude-natively-other-providers-adapt-into-its-message-model.md) | Claude natively: the Messages API wire types are the app's message model; other providers adapt into it — superseded by 0020 |
-| [0005](adr/0005-tool-approval-by-mcp-annotation-and-the-capability-ceiling.md) | tool approval by the MCP annotations satz declares; the capability ceiling stays satz's — amended by 0020 |
+| [0005](adr/0005-tool-approval-by-mcp-annotation-and-the-capability-ceiling.md) | tool approval by the MCP annotations satz declares; the capability ceiling stays satz's — the approval card superseded by 0020, the ceiling the agent's configuration alone since 0021 |
 | [0006](adr/0006-apply-and-bootstrap-run-in-the-users-terminal.md) | `apply` and `bootstrap` run in the user's terminal, never with `-auto-approve` |
 | [0007](adr/0007-pack-rows-are-derived-from-the-estate-file.md) | superseded by 0018 — pack rows derived from the estate file, the questions report and the resolved params |
 | [0008](adr/0008-transcripts-live-outside-the-estate.md) | transcripts live under the app's data directory, never inside an estate — superseded by 0020 |
@@ -596,7 +626,7 @@ the tree and over the commits a pull request adds, or the push to `main` that me
 | [0011](adr/0011-the-licence-is-apache-2-0.md) | the licence is Apache 2.0, with `NOTICE` for the material bundled under other terms |
 | [0012](adr/0012-migrate-hands-off-to-the-terminal.md) | `migrate` hands off to the terminal with `apply` and `bootstrap`; `bootstrap --dry-run` is a check that runs in the app |
 | [0013](adr/0013-the-claude-code-stream-log-is-verbatim-off-by-default-and-bounded.md) | the Claude Code stream log is verbatim, off by default, one file per conversation, and bounded to ten files of 16 MiB — superseded by 0020 |
-| [0014](adr/0014-a-newer-satz-is-a-notice-and-the-app-looks-for-releases.md) | a satz newer than the build runs and is a notice, not a gate; the app looks for releases of itself and of satz once per launch and says so in the title and the top bar |
+| [0014](adr/0014-a-newer-satz-is-a-notice-and-the-app-looks-for-releases.md) | a satz newer than the build runs and is a notice, not a gate; the app looks for releases of itself and of satz once per launch and says so in the window title, the banner and Settings |
 | [0015](adr/0015-the-packs-view-draws-the-dependency-tree-the-packs-declare.md) | superseded by 0018 — the dependency tree the packs declare with `ask_when`, drawn as tree blocks in the grid with connectors in CSS |
 | [0016](adr/0016-macos-is-apple-silicon-alone.md) | macOS is Apple silicon alone, in CI and in the release; Linux and Windows stay x86_64 |
 | [0017](adr/0017-a-release-is-cargo-release-on-main.md) | a release is `cargo release` on `main`: the version bump is the one commit that lands without a pull request |

@@ -1,6 +1,7 @@
 # 0014 — a newer satz is a notice, and the app looks for releases of itself and of satz
 
-- **Status:** accepted
+- **Status:** accepted; amended 2026-09-27 — the two facts are the window title's, the
+  banner's and Settings', not chips in the top bar (see the amendment below)
 - **Date:** 2026-09-16
 - **Deciders:** the maintainer
 
@@ -66,8 +67,10 @@ satz below `MIN_SATZ`.**
   untested claim this rule avoids.
 - **Where it says so.** The window title is `satz-studio <version>`, followed by
   "update available" for either release that is newer. A title bar cannot be clicked, so
-  the top bar carries the same two facts as chips that act: the satz-studio chip opens the
-  release page, and the satz chip runs `satz self-update`. A look that fails, whether
+  the facts are acted on elsewhere: Settings opens the satz-studio release page and runs
+  `satz self-update`, and the notice banner offers the satz-studio release while it names
+  a newer satz. The top bar carries the estate's address and nothing about versions
+  (`docs/ui.md`). A look that fails, whether
   GitHub is unreachable or the unauthenticated API returns its 403 for the hourly limit,
   puts its reason in Settings and raises no toast.
 
@@ -137,3 +140,13 @@ satz below `MIN_SATZ`.**
   one lacking what it uses — and the reason is in the change that raised it.
 - **Bad:** the minimum is not run against itself, because satz keeps five releases; it is
   as good as the attention paid to (1) and (2).
+
+## Amendment — 2026-09-27: no chips in the top bar
+
+The decision's "Where it says so" named two chips in the top bar that act on the found
+releases. They are not built, and the top bar carries the estate's address alone
+(`crates/satz-studio/src/shell/top_bar.rs`, `docs/ui.md`), so that each fact about the
+estate and about the versions has one place. The two facts stand in the window title,
+which cannot be clicked; the actions are Settings' — the release page, `satz self-update`,
+"Check only" and "Look for a satz-studio update" — and the notice banner offers the
+satz-studio release while it names a newer satz. Nothing else in the decision changes.

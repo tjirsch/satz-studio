@@ -157,7 +157,7 @@ pub async fn app_coroutine(mut rx: UnboundedReceiver<AppAction>, app: Store<AppS
 /// sidecar and run into the folder of that same binary.
 ///
 /// A `check_only` run is read: satz's `Latest version:` line against the satz that was
-/// asked becomes `update.found`, which the top bar, the title and Settings offer. An
+/// asked becomes `update.found`, which the title names and Settings offers. An
 /// install clears it. A run the app started on its own ([`Asked::AtLaunch`]) says a failure
 /// in the log card and never in a toast: a look that could not reach GitHub is a fact to
 /// read, not an error to interrupt with.
@@ -295,7 +295,7 @@ fn update_satz(app: Store<AppStore>, check_only: bool, asked: Asked) -> Option<C
 /// Who started a `satz self-update` run.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Asked {
-    /// the operator, from the banner, the top bar or Settings: a failure is a toast
+    /// the operator, from the banner or Settings: a failure is a toast
     ByOperator,
     /// the app, once at launch: a failure is read in Settings and interrupts nothing
     AtLaunch,

@@ -382,19 +382,15 @@ pub const PALETTE: &[CommandSpec] = &[
         head: &["get-presets"],
         estate: EstateArg::None,
         tail: &[],
-        fields: &[
-            Field::Flag {
-                key: "force",
-                flag: "--force",
-                label: "Overwrite packs the estate uses as well",
-            },
-            Field::Option {
-                key: "pristine_dir",
-                flag: "--pristine-dir",
-                label: "Pristine directory",
-                placeholder: "take the library from here instead of downloading",
-            },
-        ],
+        // `--force` is not offered: it overwrites the packs the estate uses, which changes
+        // what the estate compiles to under the window with no write lock held and no
+        // reload after it. The forced refresh is the terminal's.
+        fields: &[Field::Option {
+            key: "pristine_dir",
+            flag: "--pristine-dir",
+            label: "Pristine directory",
+            placeholder: "take the library from here instead of downloading",
+        }],
         reports: false,
         external: false,
     },
@@ -402,16 +398,16 @@ pub const PALETTE: &[CommandSpec] = &[
         id: "merge-presets",
         label: "merge-presets",
         icon: "merge",
-        description: "Reconcile the presets with upstream: new packs installed, unmodified ones upgraded, edited ones forked.",
+        description: "What reconciling the presets with upstream would do: new packs installed, unmodified ones upgraded, edited ones forked — reported, nothing written.",
+        // `--report-only` is fixed, as it is for `update-prerequisites`: the command writes
+        // the estate file and the library by default, and a write from the palette would
+        // hold no write lock and reload no model, which `RunCommand` does neither of. The
+        // writing run is the Packs view's `EstateAction::MergePresets`, under the lock
+        // and followed by a reload.
         head: &["merge-presets"],
         estate: EstateArg::Flag,
-        tail: &[],
+        tail: &["--report-only"],
         fields: &[
-            Field::Flag {
-                key: "report_only",
-                flag: "--report-only",
-                label: "Report only, write nothing",
-            },
             Field::Option {
                 key: "pristine_dir",
                 flag: "--pristine-dir",
@@ -986,14 +982,16 @@ mod tests {
     #[test]
     fn the_estate_flag_and_trailing_words() {
         let mut v = defaults(spec("merge-presets"));
-        v.insert("report_only".into(), "true".into());
+        v.insert("adopt".into(), "all".into());
         assert_eq!(
             built("merge-presets", "C0example.satz", &v),
             [
                 "merge-presets",
                 "--estate",
                 "C0example.satz",
-                "--report-only"
+                "--report-only",
+                "--adopt",
+                "all"
             ]
         );
         let mut v = defaults(spec("plan"));
@@ -1081,6 +1079,52 @@ mod tests {
         assert_eq!(
             args,
             ["update-prerequisites", "C0example.satz", "--report-only"]
+        );
+    }
+
+    /// The palette writes no estate file: `RunCommand` holds no write lock and reloads no
+    /// model, so the two commands that write one by default are pinned to their reporting
+    /// mode, and `get-presets` is offered without the `--force` that overwrites the packs
+    /// the estate uses. The writing runs are the locked actions' and the terminal's.
+    #[test]
+    fn the_palette_runs_no_writer_of_the_estate() {
+        for id in ["merge-presets", "update-prerequisites"] {
+            let s = spec(id);
+            assert_eq!(s.tail, ["--report-only"], "{id}");
+            assert!(
+                !s.fields
+                    .iter()
+                    .any(|f| matches!(f, Field::Flag { flag, .. } if *flag == "--report-only")),
+                "{id}: the flag is fixed, not a choice"
+            );
+        }
+        assert_eq!(
+            built(
+                "merge-presets",
+                "C0example.satz",
+                &defaults(spec("merge-presets"))
+            ),
+            [
+                "merge-presets",
+                "--estate",
+                "C0example.satz",
+                "--report-only"
+            ]
+        );
+        assert!(
+            !spec("get-presets")
+                .fields
+                .iter()
+                .any(|f| matches!(f, Field::Flag { flag, .. } if *flag == "--force")),
+            "get-presets offers no --force"
+        );
+        assert_eq!(
+            built(
+                "get-presets",
+                "C0example.satz",
+                &defaults(spec("get-presets"))
+            ),
+            ["get-presets"]
         );
     }
 

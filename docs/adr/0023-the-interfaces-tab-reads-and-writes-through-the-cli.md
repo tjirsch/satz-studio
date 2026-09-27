@@ -40,7 +40,7 @@ the check afterwards, the recorded bytes back on a refusal.
    `SatzCli::json_report` over `satz interfaces`; the write is `satz add-project` run by
    the session's `SatzCli` as the call inside `Snapshot::delegate`, its process result
    mapped to a `ToolOutcome` — a non-zero exit is `is_error` with satz's stderr sentence,
-   a zero exit the line satz ends on. It is satz's own writer on the real file, so it is
+   a zero exit what satz printed. It is satz's own writer on the real file, so it is
    no second way to write a file. Costs a CLI call per reload (`satz interfaces`
    compiles the estate) and a second transport for one write, which the MCP tools
    replace when they arrive.
@@ -63,7 +63,9 @@ app (`docs/ui.md`), and what an estate publishes is part of what the estate file
 - Every reload runs `satz interfaces` beside `satz_questions` and `satz_packs`. A
   failure is satz's reason in the tab and a diagnostic in the drawer, never an estate
   that publishes nothing.
-- `MIN_SATZ` is 0.86.1: the app uses a command that release introduced.
+- `MIN_SATZ` is at least 0.86.1, the release that introduced `satz interfaces` and
+  `satz add-project`; `crates/satz-studio-core/src/satz/binary.rs` holds its current
+  value.
 - When satz serves the interface plane over MCP, `add_project` is replaced by
   `session.tool("satz_add_project", …)` inside the same `delegated_write`, and the read
   by the tool; this record is then superseded in that part.
