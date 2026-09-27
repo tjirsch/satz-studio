@@ -23,6 +23,7 @@
         "presets/billing-account-permissions.satz",
         "presets/organization-budget.satz",
         "presets/billing-export.satz",
+        "presets/shared-network.satz",
         "presets/security-audit/sa-security-audit.satz",
         "presets/scc/scc-service-enablement.satz",
         "presets/monitoring/project-cis-log-alerts.satz",
@@ -208,6 +209,30 @@
           ]
         }
       ],
+      "findings": []
+    },
+    {
+      "path": "presets/shared-network.satz",
+      "role": "pack",
+      "gate": "use_shared_network",
+      "gate_declared_in": "presets/estate-map.satz",
+      "default": "false",
+      "line": "absent",
+      "deploys": false,
+      "requires": [
+        {
+          "kind": "gate",
+          "any_of": [
+            "presets/estate-map.satz"
+          ],
+          "params": [
+            "use_shared_network"
+          ],
+          "met": false
+        }
+      ],
+      "required_by": [],
+      "excludes": [],
       "findings": []
     },
     {
