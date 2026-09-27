@@ -5,8 +5,8 @@
 //! app reads it. The LIVE shape is never run here and must never be — it reads a Google
 //! organisation with the maintainer's credentials and would put an organisation id, a
 //! project id and a billing account into a test's output, every one of which the privacy
-//! gate refuses. The legacy YAML shape is driven over satz's own corpus fixtures, which
-//! is where the "the conversion is written BESIDE its source" rule is proved.
+//! gate refuses. The state shape is driven as far as its refusal: a raw `.tfstate` is
+//! refused by the form and by satz alike, before anything is written.
 //!
 //! What is under test is the app's half: the argv (in the module's own tests), where the
 //! file lands, that it is found by reading the directory rather than by predicting a

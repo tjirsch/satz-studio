@@ -2,7 +2,7 @@
 
 - **Status:** accepted
 - **Date:** 2026-09-18
-- **Deciders:** Thomas
+- **Deciders:** the maintainer
 
 ## Context
 
@@ -44,8 +44,11 @@ architecture.
   for macOS, Linux and Windows, because a CLI on a customer's machine is not this app on
   the maintainer's.
 
-## Alternatives
+## Pros and cons of the options
 
+- **Apple silicon alone, in CI and in the release** *(chosen)*. **Good:** the platform
+  matrix halves, the costliest runner is out of the loop, and what is published is what
+  is built and tested. **Bad:** an Intel Mac gets nothing but a build from source.
 - **Keep both, test one.** Build the Intel bundle on a tag while testing only on Apple
   silicon. Rejected as the worst of the two: it publishes an artifact no test has run
   against, which is how a broken bundle reaches someone.

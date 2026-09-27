@@ -85,15 +85,16 @@ no credential. Everything is checked against `tests/fixtures` and the pinned
 
 ## The checks
 
-CI runs these on every push and pull request, and a pull request merges when they
-pass. Run them first:
+CI runs these once per commit — on a pull request, and on the push to `main` that
+merges it — and a pull request merges when they pass. Run them first:
 
 ```sh
 cargo fmt -p satz-studio-core -p satz-studio -- --check
-cargo clippy --workspace --all-targets -- -D warnings
+cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo test --workspace --locked
 bash scripts/e2e.sh
 bash scripts/check-names.sh
+bash scripts/update-third-party-licenses.sh --check   # cargo-about at the version the script names
 ```
 
 `cargo fmt` names the two packages. `--all` reaches into `vendor/satz`, which is
@@ -103,9 +104,12 @@ fails the build. `scripts/e2e.sh` is the verification harness
 `MIN_SATZ`, the end-to-end tests of the core crate pass against it, and the app
 builds.
 
-`ci.yml` runs the Linux job and the macOS and Windows jobs on every push and pull
-request; `names-gate.yml` runs the privacy gate over the tree and over the commits
-the push adds.
+`ci.yml` runs the Linux job and the macOS and Windows jobs on every pull request, on
+the push to `main` that merges it, on a release tag and by hand — a branch push alone
+runs nothing, because its pull request runs the same jobs on the branch merged into
+`main`; the verification harness and the licence check run in the Linux job.
+`names-gate.yml` runs the privacy gate over the tree and over the commits a pull
+request or the push to `main` adds.
 
 ## Releasing
 
@@ -134,7 +138,7 @@ repository).
 `scripts/check-names.sh` is satz's gate, carried here as a copy. It is neutral — it
 names nobody — and rejects those shapes in files and in commit messages, local files
 if they are ever staged (`CLAUDE.local.md`, `*.local.md`, `.claude/`), and any commit
-whose author or committer is neither the maintainer's identity nor a GitHub noreply
+whose author or committer is not a GitHub noreply
 address (`<id>+<user>@users.noreply.github.com` — turn on "keep my email address
 private" in your GitHub settings).
 

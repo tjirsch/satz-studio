@@ -12,12 +12,13 @@ App (src/app.rs)            the stores, the app coroutine, the stylesheets, the 
 └─ Shell (src/shell/)
    └─ EstateHost             one per open estate: owns the estate coroutine
       └─ Frame
-         ├─ NavigationRail   six primary destinations, Agent and Settings at the foot
+         ├─ NavigationRail   six primary destinations; Agent, the Commands button and Settings at the foot
          ├─ TopBar           estate name and directory, reload, switch, close
          ├─ SatzBanner       satz missing, too old or not running; a notice while newer than the build
          ├─ Content          the view of `AppStore.nav`
          ├─ DiagnosticsDrawer
          ├─ CommandPalette   over the window while `AppStore.palette_open`
+         ├─ NoticeDialog     the first notice the estate holds, while `estate.notices_open`
          └─ SnackbarHost
 ```
 
@@ -46,15 +47,19 @@ so a log line re-renders the log and not the rail:
 | `snackbar` | the toast queue (`VecDeque<Toast>`, three visible) |
 | `drawer_open` | the diagnostics drawer |
 | `create` | the `CreateStore`: the one `satz init` run behind the Create door — `log`, `running`, `command`, `outcome`, reset when a run starts. What `init` derives from the credentials is in these lines while the window shows them and in the estate satz wrote; it reaches no file of the app's own |
-| `estate` | the `EstateStore`: `model`, `cst` (the main file's document tree as read at the last reload — the views slice a value's source text and a line's text from it), `questions`, `interview` (what the last `satz_interview` call returned; `rename_to` is read from it), `diagnostics`, `command_log`, `running`, `last_command`, `outcome`, `loading`, `hcl` (the `HclState` of `hcl_dir`: whether `main.tf` is there and whether it has been initialised), `work_tree` (whether git holds the estate file's directory in a work tree — `None` until the first reload has asked), `export_formats` (the formats `satz questions --help` lists, read when the session opens, or why they could not be read), `last_export` (the format and the file of the last export, which "Export again" writes over), `review` (the pack the Packs view reviewed last — the bytes it judged and satz's report — or the pack and why its review failed; a reload leaves it, and the drawer shows its findings until it is closed), `reviewing` (a review or a placement is running), `interfaces` (what the estate publishes, from `satz interfaces` at every reload, or satz's reason it could not say; `None` until the first reload), `adding_project` (a `satz add-project` write is running), `added_project` (how the last one ended: the name it added, or satz's refusal) — reset when an estate opens or closes |
+| `import` | the `ImportStore`: the one `satz import` run behind the Import door — `log` (the `satz init` that runs first on the two-step path included), `running`, `command` (one command line, or the two), `outcome`, and `report`, satz's own import report split out of the run's lines (`ImportReport`); what a live import prints about the credentials stays in these lines and in the estate satz wrote |
+| `estate` | the `EstateStore`: `model`, `cst` (the main file's document tree as read at the last reload — the views slice a value's source text and a line's text from it), `questions`, `interview` (what the last `satz_interview` call returned; `rename_to` is read from it), `diagnostics`, `command_log`, `running`, `last_command`, `outcome`, `loading`, `hcl` (the `HclState` of `hcl_dir`: whether `main.tf` is there and whether it has been initialised), `work_tree` (whether git holds the estate file's directory in a work tree — `None` until the first reload has asked), `export_formats` (the formats `satz questions --help` lists, read when the session opens, or why they could not be read), `last_export` (the format and the file of the last export, which "Export again" writes over), `review` (the pack the Packs view reviewed last — the bytes it judged and satz's report — or the pack and why its review failed; a reload leaves it, and the drawer shows its findings until it is closed), `reviewing` (a review or a placement is running), `interfaces` (what the estate publishes, from `satz interfaces` at every reload, or satz's reason it could not say; `None` until the first reload), `adding_project` (a `satz add-project` write is running), `added_project` (how the last one ended: the name it added, or satz's refusal), `notices` (the notices the window holds — what `satz_interview`, `satz_add_pack` and `satz_merge_presets` opened and the estate has not acknowledged), `notices_open` (the notice dialog is raised) — reset when an estate opens or closes |
 
 `DiagnosticSelection(Signal<Option<Diagnostic>>)` is a second context: the drawer sets
 it when a row is clicked, the estate views read it.
 
 ### Coroutines
 
-Every side effect runs in one of two coroutines; the stores are written from there and
-nothing blocks in an event handler.
+Every side effect that touches an estate or the satz the app runs goes through one of
+two coroutines; the stores are written from there and nothing blocks in an event handler.
+The exceptions write no estate file: the Agent view runs `satz mcp-config` itself (below),
+and the Start screen, the review card and Settings open the OS's file dialogs and folders
+from the view.
 
 - **The app coroutine** (`src/state/app_actions.rs`, `AppAction`) locates satz at
   startup (`SatzBinary::locate` with the Settings path), walks `last_root` if there is
@@ -113,14 +118,12 @@ nothing blocks in an event handler.
   has just run and whose findings are carried in.
   `RunCommand(args)` runs `satz --config <dir> <args…>` in a tokio task and streams its
   lines, ANSI stripped, into `command_log` from a local task, so the loop stays free for
-  `CancelCommand`. `RunNoticeCommand(args)` is the command a pack's notice names, run
-  the same way and followed by a reload, because that command writes the estate file —
-  `satz adopt --execute --import` puts the live ids in it and binds the notice's param.
-  A `RunCommand` or an `InitRepository` refused because a command is
-  running leaves that command's cancel token in place, so `CancelCommand` still stops
-  it. `OpenInTerminal(args)` writes the one-shot script
+  `CancelCommand`. A `RunCommand`, a `RunNoticeCommand` or an `InitRepository` refused
+  because a command is running leaves that command's cancel token in place, so
+  `CancelCommand` still stops it. `OpenInTerminal(args)` writes the one-shot script
   (`EstateSession::external_command`) and opens it in the OS terminal. `Close` drops the
-  session.
+  session and puts the window on the Start screen as it stands; `Switch` does the same
+  with the Open door showing.
   `InitRepository` is the Overview's repository row pressed: `git init -b main`,
   `git add -A` and one commit naming the estate (`git::init_steps`), run in the estate
   directory one after the other through `git::run`, streamed into `command_log` like a
@@ -168,8 +171,15 @@ nothing blocks in an event handler.
     {report_only: false}`: satz works out offline which roles the IaC service account
     lacks and which APIs the infra project does not enable, and writes both into the
     estate. `delegated_write` is the one implementation the two share.
+  - `RunNoticeCommand(args)` is the command a pack's notice names — `satz adopt
+    <estate> --execute --import`, which puts the live ids into the estate file and binds
+    the notice's param — as a delegated write whose call is the CLI: the lines stream into
+    `command_log` while it runs, the main file is recorded before and checked after, a
+    non-zero exit is satz's refusal with the bytes put back where satz had changed them,
+    and `CancelCommand` kills the child. The outcome under the log says whether it landed
+    and the check passed, and the toast is the last line satz printed.
   - `AddProject(AddProjectArgs)` is `satz add-project` under the same delegated-write
-    discipline, the one whose call is a command rather than a tool
+    discipline, one of the two whose call is a command rather than a tool
     ([ADR 0023](adr/0023-the-interfaces-tab-reads-and-writes-through-the-cli.md)):
     `edit::delegated_write` around `project::add_project`, which runs the command
     through the session's `SatzCli` and reads a non-zero exit as satz's refusal. satz
@@ -205,13 +215,12 @@ nothing blocks in an event handler.
     refuses removes the file again, and its diagnostics join the drawer.
   - `CloseReview` drops the review, and its findings leave the drawer.
 
-An error from either — a refusal, a missing binary, a function another unit has not
-built — is a toast in the snackbar and, where it concerns the estate, a diagnostic in
-the drawer or an outcome under the log.
+An error from either — a refusal, a missing binary — is a toast in the snackbar and,
+where it concerns the estate, a diagnostic in the drawer or an outcome under the log.
 
 ### Views
 
-The window is ordered by the job, not by what was built when. With an estate open the
+The window is ordered by the job. With an estate open the
 rail reads **Overview, Packs, Decisions, Estate, Checks, Deploy**, then Agent and
 Settings at its foot; with none open it carries Settings alone and the window stands on
 the Start screen. Packs stands before Decisions because a pack is what DECLARES a
@@ -240,10 +249,11 @@ is a pack switch and not a value.
 | Estate | `src/views/estate.rs` | the estate in three tabs, `ParamsPane`, `ResourcesPane` and `InterfacesPane`, with the counts on each — the interfaces' count is the interfaces the estate declares, `…` before the first reload and `!` when satz could not say. A diagnostic chosen in the drawer opens the Resources tab, where its line is. The Interfaces tab is a tab and not a destination: the rail holds six primary destinations, the pattern's limit |
 | Estate · Params | `src/views/params.rs` | one row per `ParamRow`, grouped by the asking question's pack (else "estate"): a typed field by `ParamKind` in value mode, or the Satz source in source mode — a row whose value carries a `{param}` or `${…}` opens there, with its parts as chips; the question's `why` as a tooltip, a one-way-door chip, a raw-line toggle showing the line; a commit on Enter, blur, a switch flip or a chip change is `CommitEdit(Edit::ReplaceParam)` with a `TypedValue` in value mode and `TypedValue::Raw` in source mode |
 | Estate · Resources | `src/views/resources.rs` | two panes: the tree of `ResourceNode`s (an icon per kind, a resource's name, `use` lines as leaves, branches collapsed below depth 2, a chip with the count of required attributes not written) and the selected node's card: kind, type, line, the missing required names, then one row per `AttrRow` — a typed field by `AttrType` (string, number, bool, a list of one of them; everything else and `Unknown` in source mode), locked rows dimmed with the reason (`import-id`, computed, not in the schema), source mode with its chips; a commit is `CommitEdit(Edit::ReplaceValue)`. Without a schema every row is locked and the header carries "Run update-schema". A row clicked in the drawer selects the node at its line |
-| Estate · Interfaces | `src/views/interfaces.rs` | what the estate publishes to the projects that read it, as `satz interfaces` reports it, and nothing the app derives: a lead line with **New interface** (filled, `add`) beside it; an outlined card **core** — "every interface carries these" — with the core exports; then one outlined card per declared interface in the report's order: its name, a `common` assist chip (`public`) with "In the library every project's folder carries" where satz marks it common, its `file:line`, a "uses" row of assist chips (`hub`) naming the interfaces it uses, and its own exports, or a line saying it declares none and carries the core exports and those of the interfaces it uses. Last, when the estate declares request points, an outlined card **What projects may request** (`move_to_inbox`): a line saying a project adds entries in a pack of its own, `contributes_<list>`, checked with `satz check-request` and handed over by pull request, then one row per request point — the list's name, an assist chip `key <field>` (`key`), how many entries the list holds, its `file:line`, the fields an entry may carry in a monospace block, and its description. An export is a row: its name, an assist chip for how a project holds it — `static` (`text_fields`), `lookup` (`search`) or `map · <type>` (`data_object`) for an `all` map — an assist chip `attach <type>` (`link`) per attach point, its `file:line` at the row's end, then the value a project's module holds in a monospace block and its description. `file:line` is text: an export line is no resource node, so it selects nothing. While the first reload runs the tab is a progress card; when satz refuses the estate it is satz's reason in the error container, and New interface is disabled. **New interface** opens the wizard, a dialog (`ProjectWizard`): the Name field (monospace, satz's rule said under it in the error colour while it is broken), a segmented button **Onboard a project** (`add_business`) / **Interface only** (`hub`) with a line saying what each writes, the **Owner group** field for a project (`<name>@<domain>`), **Interfaces to use** as filter chips over every declared interface but the one being named, **Exports to carry again** as checkboxes of every non-core export grouped under the interface that declares it (each sends `<interface>.<name>`), the command line exactly as it will run (`command_line`), and, in the error colour, the first thing satz would refuse (`AddProjectArgs::problem`) — a name, a missing or malformed owner group, an interface alone with nothing picked. Create (filled, `add`) is disabled while there is a problem and while a write runs, which shows a progress bar; Cancel and the scrim close the wizard except while a write runs. Create sends `AddProject`; the wizard closes and empties when the write lands, and satz's refusal stands in it in the error container |
+| Estate · Interfaces | `src/views/interfaces.rs` | what the estate publishes to the projects that read it, as `satz interfaces` reports it, and nothing the app derives: a lead line with **New interface** (filled, `add`) beside it; for an estate that declares no export and no interface, one filled card saying it publishes nothing to a project; else an outlined card **core** — "every interface carries these" — with the core exports; then one outlined card per declared interface in the report's order: its name, a `common` assist chip (`public`) with "In the library every project's folder carries" where satz marks it common, its `file:line`, a "uses" row of assist chips (`hub`) naming the interfaces it uses, and its own exports, or a line saying it declares none and carries the core exports and those of the interfaces it uses. Last, when the estate declares request points, an outlined card **What projects may request** (`move_to_inbox`): a line saying a project adds entries in a pack of its own, `contributes_<list>`, checked with `satz check-request` and handed over by pull request, then one row per request point — the list's name, an assist chip `key <field>` (`key`), how many entries the list holds, its `file:line`, the fields an entry may carry in a monospace block, and its description. An export is a row: its name, an assist chip for how a project holds it — `static` (`text_fields`), `lookup` (`search`) or `map · <type>` (`data_object`) for an `all` map — an assist chip `attach <type>` (`link`) per attach point, its `file:line` at the row's end, then the value a project's module holds in a monospace block and its description. `file:line` is text: an export line is no resource node, so it selects nothing. While the first reload runs the tab is a progress card; when satz refuses the estate it is satz's reason in the error container, and New interface is disabled. **New interface** opens the wizard, a dialog (`ProjectWizard`): the Name field (monospace, satz's rule said under it in the error colour while it is broken), a segmented button **Onboard a project** (`add_business`) / **Interface only** (`hub`) with a line saying what each writes, the **Owner group** field for a project (`<name>@<domain>`), **Interfaces to use** as filter chips over every declared interface but the one being named, **Exports to carry again** as checkboxes of every non-core export grouped under the interface that declares it (each sends `<interface>.<name>`), the command line exactly as it will run (`command_line`), and, in the error colour, the first thing satz would refuse (`AddProjectArgs::problem`) — a name, a missing or malformed owner group, an interface alone with nothing picked. Create (filled, `add`) is disabled while there is a problem and while a write runs, which shows a progress bar; Cancel and the scrim close the wizard except while a write runs. Create sends `AddProject`; the wizard closes and empties when the write lands, and satz's refusal stands in it in the error container |
 | Checks | `src/views/checks.rs` | what judges the estate: the `CHECKS` deck — `transpile --check`, `update-prerequisites` (`--report-only`, fixed), `require`, `report-compliance`, `bootstrap --dry-run` — with the one-click commands. When the last compile found prerequisites undeclared, a card above it carries each finding and "Write them into the estate", which is `WritePrerequisites`: satz's own writer under the write lock, checked and reloaded like an answer |
 | Deploy | `src/views/deploy.rs` | what hands the estate off: the `hcl_dir` path with two chips saying whether `main.tf` is written and whether the directory is initialised, then the `DEPLOY` deck — `transpile`, `hcl-init`, `plan` in the app; `apply`, `migrate`, `bootstrap` as command lines to copy or open in the terminal |
 | Agent | `src/views/agent.rs` | configuring an agentic client on the open estate and starting it: a lead card saying the app runs no model and that the ceiling bounds the satz server only, with the Settings ceiling as an assist chip, then one outlined card per client — **Claude Code** and **Claude Desktop**. Each card holds what the client's file holds for the estate — "not configured", "configured: <ceiling>", or another entry in a tertiary container with "Replace it" — then the block `satz mcp-config <estate> --client <client> --allow <ceiling>` printed, satz's notes under it in the secondary colour, and the row "Configure <client>" and "Copy"; the Claude Code card also carries "Open in <client>", which runs the configured command in the estate's directory in the OS terminal. "Configure <client>" runs the same command with `--write`: the line satz ends on is the toast and all of satz's words stand in the card. A refusal stands in an error container in that card, as satz wrote it, and only the one refusal satz answers with `--force` — its own key already there with other arguments — offers "Replace it". A command that is not configured disables "Open in <client>" and says Settings names the client; one that is not installed is an error toast naming it |
+| Settings · releases | `src/views/satz_release.rs` | the half of the Settings satz card that is about releases (`SatzReleaseActions`): what the launch looks found for satz and for satz-studio, or why a look failed, or that the satz check did not run and why; "Look for a satz-studio update", one look at a time; and, while no satz is found, "Install satz" with the installer's log. The banner offers the same actions while satz is unusable or newer than the build; here they always are |
 | Settings | `src/views/settings.rs` | every `Settings` field as a form, in three cards: **satz** — the path with the detected version, "Update satz", "Check only" and the run's log, `SatzReleaseActions`, and the capability ceiling of the agent's satz MCP server — written into a client's configuration when Configure is pressed on the Agent page, bounding the satz server and not an agent's own shell; the app's own `satz mcp` runs at `read,write` whatever it holds; **Agent** — the command line of the agentic client the Agent destination starts, with where that client is on `PATH` under the field, in the error colour when it is not installed or not named; **Appearance** — the theme; and below them the actions row with the file, "Show file", Discard and Save. Save writes the file and locates satz again. There is no credential and no engine here: the app runs no model |
 | Commands | `src/views/commands.rs` | not a destination: `PALETTE` is the table of every satz command the app runs, and `CommandDeck` renders any group of them — the list, the chosen entry's argument fields (a reporting command's format as a segmented button), the command line as it will run, Run and Cancel, and `CommandLog`, the streamed log with stdout and stderr distinguished, followed by the file a reporting command wrote where the app named it. `CommandPalette` is every entry in a dialog over the window, on ⌘K / Ctrl+K or the top bar's button, with `ONE_CLICK` — `whoami`, `transpile --check` and `questions`, palette entries run at their defaults — as one click each. Every entry opens in the format a person reads: `text` where satz offers it, `markdown` where it does not (`report-compliance`); `json` stays a choice in the format picker, and no entry fixes a format in its fixed words — `update-prerequisites` runs `--report-only` in satz's text. The log shows what satz printed, and the file a reporting command wrote, as satz wrote it `CHECKS` and `DEPLOY` are the two groups the destinations gather |
 | Gallery | `src/views/gallery.rs` | every component in its variants, light and dark side by side. A development route: the rail offers it only with `SATZ_STUDIO_DEBUG` set, and nothing else navigates to it |
@@ -319,7 +329,7 @@ works offline.
 | `Radio` | `.m-radio` | <https://m3.material.io/components/radio-button/specs> | — |
 | `SegmentedButton` | `.m-segmented` | <https://m3.material.io/components/segmented-buttons/specs> | single-select only |
 | `Tabs`, `Tab` | `.m-tabs`, `.m-tab` | <https://m3.material.io/components/tabs/specs> | primary tabs only; fixed tabs, no scrollable row, no swipe |
-| `Dialog` | `.m-dialog` | <https://m3.material.io/components/dialogs/specs> | basic dialog only; no full-screen dialog; a `class` prop styles one whose body needs it (the commands palette, the notice dialog) |
+| `Dialog` | `.m-dialog` | <https://m3.material.io/components/dialogs/specs> | basic dialog only; no full-screen dialog; a `class` prop styles one whose body needs it (the commands palette, the notice dialog, the New interface wizard's `project-dialog`) |
 | `List`, `ListItem` | `.m-list`, `.m-list-item` | <https://m3.material.io/components/lists/specs> | one- and two-line items; no three-line item, no dividers |
 | `Tree`, `TreeItem` | `.m-tree` | — (not a Material 3 component) | a nested list with a disclosure per branch, styled with list-item tokens; a `trailing` slot at the row's end |
 | `ConnectorTree`, `ConnectorBranch` (`ConnectorLine::Solid`, `Dashed`; `error`, `trunk_error`, `label`) | `.m-connector-tree` | — (not a Material 3 component; the anatomy is the indented tree of a file explorer, with boxes for rows) | boxes joined by right-angle connectors: a root box, then per branch a vertical trunk from the parent and a horizontal branch into the child box, recursing through `branches`. The connectors are 2 px borders on the tree's own elements in `outline`, the error variant in `error` — nested lists and absolutely placed spans, no SVG and no measuring, so a tree cannot cross itself and follows every resize and zoom. The branch meets its box 32 px below the box's top, the centre of a card's head row under its padding; a head that wraps meets the connector above its centre. A `label` is one line of 20 px above the box, cut with an ellipsis. No disclosure: every branch is shown |
@@ -351,23 +361,24 @@ and the door card on the Start screen, and their classes live in `views.css`, so
 
 - **Navigation rail:** six primary destinations in the order the work happens —
   Overview `dashboard`, Packs `inventory_2`, Decisions `quiz`, Estate `description`,
-  Checks `fact_check`, Deploy `rocket_launch` — and a bottom-aligned group of two, Agent
-  `smart_toy` and Settings `settings`, in the rail's footer slot. Overview carries the count
-  of what the estate owes and Decisions the count of unanswered questions. With no
-  estate open the primary group is empty and the footer carries Settings alone: there is
-  nothing to work on, and the window stands on the Start screen. `SATZ_STUDIO_DEBUG`
-  adds Gallery `palette` to the footer, and Commands stands in it between Agent and
-  Settings. There is no FAB: opening an estate is what the Start screen does, and
+  Checks `fact_check`, Deploy `rocket_launch` — and, in the rail's footer slot, two
+  bottom-aligned secondary destinations, Agent `smart_toy` and Settings `settings`, with
+  the Commands button between them. Overview carries the count of what the estate owes
+  and Decisions the count of unanswered questions. With no estate open the primary group
+  is empty and the footer carries Settings alone: there is nothing to work on, and the
+  window stands on the Start screen. `SATZ_STUDIO_DEBUG` adds Gallery `palette` to the
+  footer. There is no FAB: opening an estate is what the Start screen does, and
   switching one is the top bar's action.
 
-  **The pattern's limit, so it is not argued later.** Material 3 puts three to seven
-  destinations in a navigation rail
-  (<https://m3.material.io/components/navigation-rail/guidelines>). Six primary plus a
-  group of two is inside it because Agent and Settings are bottom-aligned SECONDARY
-  items, not peers of the six. A seventh PRIMARY destination breaks the pattern, and
-  the answer then is a navigation drawer — not a smaller font, not a denser rail, not an
-  eighth icon. `crates/satz-studio/src/state/mod.rs` holds `View::PRIMARY` and a test
-  that fails outside three to seven.
+  **The pattern's limit.** Material 3 puts three to seven destinations in a navigation
+  rail (<https://m3.material.io/components/navigation-rail/guidelines>). Six primary
+  plus a footer of two is inside it because Agent and Settings are bottom-aligned
+  SECONDARY items, not peers of the six, and six is this app's limit: a seventh PRIMARY
+  destination is a navigation drawer's — not a smaller font, not a denser rail, not an
+  eighth icon — which is why the Interfaces view is a tab of Estate
+  ([ADR 0023](adr/0023-the-interfaces-tab-reads-and-writes-through-the-cli.md)).
+  `crates/satz-studio/src/state/mod.rs` holds `View::PRIMARY` and a test that fails
+  outside three to six.
 - **Top bar:** the estate's file name and directory, and beside them — in the
   `TopAppBar`'s own `beside` slot, not at the bar's far end — what acts on that estate:
   reload, "Switch estate", "Close estate", and the reload spinner while a reload runs.
@@ -391,14 +402,15 @@ and the door card on the Start screen, and their classes live in `views.css`, so
   one command to run when it goes into an estate — `satz adopt` for the CIS org-policy
   packs, so every policy that is already live is in the state before the apply — and
   satz returns that notice in the report of the write that opened it (`satz_interview`,
-  `satz_merge_presets`). The window holds them and raises a basic dialog over whatever
+  `satz_add_pack`, `satz_merge_presets`). The window holds them and raises a basic dialog over whatever
   destination the operator is on, one notice at a time, headed by the pack and carrying
   its sentence, the command as satz writes it, and what binding the notice's param
   means. Its actions are **Later** (lowers the dialog, the notice stands), **Run it**
   (the command in the app's log, over the Overview where that log stands beside the
   notice's own row, or in the OS terminal where the app runs that command)
   and **I ran it** (binds the param `true` through `satz_interview`, which is what an
-  acknowledgement is). A command the app will not run — one that is not satz's, one that
+  acknowledgement is). Run it is a delegated write: the main file is recorded before the
+  command and checked after it, and put back when the check or satz refuses. A command the app will not run — one that is not satz's, one that
   quotes a word, one carrying a placeholder other than `<estate>` — is shown with the
   reason in place of the button, and is the operator's to run. A notice leaves the
   window when the estate binds its param, whoever bound it: every reload asks satz
@@ -498,7 +510,7 @@ step 12 needs an agentic client installed. Nothing in the walk changes a live
 organisation: `bootstrap` and `apply` are read as command lines, never run.
 
 0. **Create.** Estates → Create → a folder and a customer id → Create. The window lands
-   on **Decisions**, not on Overview: the skeleton has 16 questions of its own and nothing
+   on **Decisions**, not on Overview: the skeleton has 18 questions of its own and nothing
    else yet. Overview's identity card opens with the short name, the customer, the
    customer id and the organisation id as the skeleton's `params { }` block has them —
    the customer id given, a param `satz init` wrote as `""` reading "empty" — and carries
@@ -609,16 +621,16 @@ organisation: `bootstrap` and `apply` are read as command lines, never run.
     reads `satz-studio <version>`, and Settings → the satz card says what the satz check
     and the satz-studio look found (with `self_update_frequency = "never"` in
     `~/.config/satz/satz.toml`, the card says the satz check did not run and why). Write a
-    script that answers `--version` with a version one patch past the build's satz and
-    hands everything else to the installed satz — `#!/bin/sh`, then `if [ "$1" =
-    --version ]; then echo 'satz 0.81.1'; else exec ~/.local/bin/satz "$@"; fi` for a build
-    against 0.81.0 — make it executable, and set it as the satz binary in Settings → Save.
-    The tertiary banner names 0.81.1 and the build's satz and says it is a patch release,
-    with the satz-studio look's sentence under it; the
-    Open door opens the smoke estate's copy. "Dismiss" → the banner goes and `settings.toml`
-    reads `dismissed_satz = "0.81.1"`. A second script like it answering `satz 0.82.0`, set
-    as the satz binary → Save: the notice is back and says it is a minor release. Clear the
-    path → Save, and the installed satz is in use again.
+    script that answers `--version` with a version one patch past the build's satz (the
+    version `vendor/satz/Cargo.toml` names, X.Y.Z below) and hands everything else to the
+    installed satz — `#!/bin/sh`, then `if [ "$1" = --version ]; then echo 'satz
+    X.Y.Z+1'; else exec ~/.local/bin/satz "$@"; fi` — make it executable, and set it as
+    the satz binary in Settings → Save. The tertiary banner names that version and the
+    build's satz and says it is a patch release, with the satz-studio look's sentence under
+    it; the Open door opens the smoke estate's copy. "Dismiss" → the banner goes and
+    `settings.toml` reads `dismissed_satz = "X.Y.Z+1"`. A second script like it answering
+    `satz X.Y+1.0`, set as the satz binary → Save: the notice is back and says it is a
+    minor release. Clear the path → Save, and the installed satz is in use again.
 14. **Export the decisions.** Decisions → the sign-off card under the walk offers the
     formats `satz questions --help` lists (`text`, `markdown`, `pdf`, `json`, `xlsx` at
     the pinned satz), on `markdown` with nothing under it, on `xlsx` with satz's line "a
@@ -650,7 +662,10 @@ organisation: `bootstrap` and `apply` are read as command lines, never run.
     "Interfaces (2)": the core card lists `workload_folder` and the other core exports,
     `folders` and `buckets` with a `map · <type>` chip; `audit` carries the `common` chip;
     `archive` reads "uses audit" and its `archive_project_id` an `attach
-    google_project_iam_member` chip. "New interface" → type `Reports`: the name turns red
+    google_project_iam_member` chip. Last, the card "What projects may request" carries
+    `event_topics` with the chip `key name`, its entry count, `showcase.satz:<line>`, the
+    fields `name, retention` and the description the showcase gives the request. "New
+    interface" → type `Reports`: the name turns red
     with satz's rule and Create stays disabled; type `reports`, choose "Interface only":
     the problem line says it needs a pick; pick `audit` and tick `archive_project_number`:
     the command line reads `satz --config … add-project … --name reports

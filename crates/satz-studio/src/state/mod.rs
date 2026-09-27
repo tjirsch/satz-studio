@@ -499,7 +499,7 @@ pub struct AppStore {
     pub create: CreateStore,
     /// the `satz import` run behind the Import door
     pub import: ImportStore,
-    /// the `satz self-update` run offered by the banner, the top bar and Settings, and the
+    /// the `satz self-update` run offered by the banner and Settings, and the
     /// `--check-only` run the app makes once at launch
     pub update: UpdateStore,
     /// the look for a newer satz-studio: once at launch, again from Settings
@@ -555,14 +555,15 @@ pub fn toast(app: Store<AppStore>, kind: ToastKind, text: impl Into<String>) {
 mod tests {
     use super::*;
 
-    /// Material 3 puts three to seven destinations in a navigation rail. Six primary
-    /// ones and a bottom-aligned group of two is inside the pattern because the group
-    /// is secondary; a seventh PRIMARY destination is not, and the answer then is a
-    /// navigation drawer rather than a smaller font (`docs/ui.md`).
+    /// Material 3 puts three to seven destinations in a navigation rail, and six is this
+    /// app's limit: six primary ones and a bottom-aligned footer of two secondary ones is
+    /// inside the pattern because the footer's are not peers of the six; a seventh PRIMARY
+    /// destination is a navigation drawer's, not a smaller font's (`docs/ui.md`), so the
+    /// Interfaces view is a tab of Estate and not a destination (ADR 0023).
     #[test]
     fn the_rail_stays_inside_the_navigation_rail_pattern() {
         assert!(
-            (3..=7).contains(&View::PRIMARY.len()),
+            (3..=6).contains(&View::PRIMARY.len()),
             "{} primary destinations",
             View::PRIMARY.len()
         );

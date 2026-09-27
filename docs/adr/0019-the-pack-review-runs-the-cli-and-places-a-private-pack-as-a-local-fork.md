@@ -39,7 +39,7 @@ full of are checked by the satz repository's shell gate, not by `review-pack`.
 2. **The MCP tool, refusing a pack outside the root.** No write; costs the review of
    exactly the packs that most need one — the ones not yet in any estate.
 3. **The CLI with the estate's config: `satz --config <estate dir> review-pack <pack>
-   [--against <estate>] --format json`.** Reviews a pack wherever it is, with the
+   [--against <estate>] --format json`** *(chosen)*. Reviews a pack wherever it is, with the
    library, the schema and the adoption rules the estate itself compiles with. Costs a
    second transport for one command: its exit status is a verdict (non-zero when the
    pack does not clear the bar, with the report written either way), so the CLI runner
@@ -47,9 +47,10 @@ full of are checked by the satz repository's shell gate, not by `review-pack`.
    verdict, refusing a run where the two disagree.
 
 For the private destination: a plain `X.satz` (costs a file an update may overwrite)
-or `X.local.satz` (the suffix satz reserves for the user). For upstream: automate the
-pull request (costs a GitHub integration that would pre-empt satz's own
-`contribute-pack`), or say what the pull request takes and leave it to the author.
+or `X.local.satz` *(chosen)* (the suffix satz reserves for the user). For upstream:
+automate the pull request (costs a GitHub integration that would pre-empt satz's own
+`contribute-pack`), or say what the pull request takes and leave it to the author
+*(chosen)*.
 
 ## Decision
 

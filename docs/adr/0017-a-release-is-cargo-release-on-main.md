@@ -1,4 +1,4 @@
-# A release is `cargo release` on `main`, not a version-bump pull request
+# 0017 — a release is `cargo release` on `main`, not a version-bump pull request
 
 - **Status:** accepted
 - **Date:** 2026-09-20

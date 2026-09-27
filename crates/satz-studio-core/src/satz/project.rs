@@ -5,6 +5,7 @@
 //! ([`crate::edit::delegated_write`]), with [`add_project`] as its call.
 
 use std::path::Path;
+use std::process::ExitStatus;
 
 use super::reports::InterfacesReport;
 use super::{SatzCli, SatzError, ToolOutcome};
@@ -123,35 +124,41 @@ fn owner_group_problem(group: &str) -> Option<String> {
     None
 }
 
-/// `satz --config <dir> add-project …` run to its end, as the call of a delegated write:
-/// a zero exit is a write that landed, its text the line satz ends on; a non-zero exit is
-/// satz's refusal, `is_error` with satz's sentence — stderr without the version banner
-/// and the `error: ` in front. The write is satz's on the real file; the discipline
-/// around it is the caller's.
+/// `satz --config <dir> add-project …` run to its end, as the call of a delegated write
+/// ([`outcome`]). The write is satz's on the real file; the discipline around it is the
+/// caller's.
 pub async fn add_project(
     cli: &SatzCli,
     estate: &Path,
     args: &AddProjectArgs,
 ) -> Result<ToolOutcome, SatzError> {
     let (status, output) = cli.finished(&args.argv(estate)).await?;
-    Ok(if status.success() {
-        ToolOutcome {
+    Ok(outcome(ADD_PROJECT, status, &output.stdout, &output.stderr))
+}
+
+/// The process result of a satz command that writes the estate file, as the call of a
+/// delegated write reads it: a zero exit is a write that landed, its text what satz
+/// printed on stdout, trimmed; a non-zero exit is satz's refusal, `is_error` with satz's
+/// sentence — stderr without the version banner and the `error: ` in front — or, when
+/// satz said nothing, the exit status under `command`'s name.
+pub fn outcome(command: &str, status: ExitStatus, stdout: &str, stderr: &str) -> ToolOutcome {
+    if status.success() {
+        return ToolOutcome {
             structured: None,
-            text: output.stdout.trim().to_string(),
+            text: stdout.trim().to_string(),
             is_error: false,
-        }
-    } else {
-        let said = sentence(&output.stderr);
-        ToolOutcome {
-            structured: None,
-            text: if said.is_empty() {
-                format!("satz add-project exited with {status} and said nothing")
-            } else {
-                said
-            },
-            is_error: true,
-        }
-    })
+        };
+    }
+    let said = sentence(stderr);
+    ToolOutcome {
+        structured: None,
+        text: if said.is_empty() {
+            format!("{command} exited with {status} and said nothing")
+        } else {
+            said
+        },
+        is_error: true,
+    }
 }
 
 /// What a failed `satz interfaces` says to the operator: satz's own stderr as
@@ -177,6 +184,52 @@ pub fn sentence(stderr: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// An exit status of 1, as the platform encodes one.
+    fn failed() -> ExitStatus {
+        #[cfg(unix)]
+        {
+            std::os::unix::process::ExitStatusExt::from_raw(1 << 8)
+        }
+        #[cfg(windows)]
+        {
+            std::os::windows::process::ExitStatusExt::from_raw(1)
+        }
+    }
+
+    #[test]
+    fn a_zero_exit_is_what_satz_printed_and_a_non_zero_one_is_its_sentence_or_the_status() {
+        let landed = outcome(
+            "satz adopt",
+            ExitStatus::default(),
+            "adopt: acknowledged the notice\nadopt: 2 \"import-id\"(s) written.\n",
+            "satz v0.86.5 (built 2026-09-26 17:31:04)\n",
+        );
+        assert!(!landed.is_error);
+        assert_eq!(
+            landed.text,
+            "adopt: acknowledged the notice\nadopt: 2 \"import-id\"(s) written."
+        );
+        let refused = outcome(
+            "satz adopt",
+            failed(),
+            "",
+            "satz v0.86.5 (built 2026-09-26 17:31:04)\nerror: 2 candidates: a, b — pin \"import-id\" by hand\n",
+        );
+        assert!(refused.is_error);
+        assert_eq!(
+            refused.text,
+            "2 candidates: a, b — pin \"import-id\" by hand"
+        );
+        let silent = outcome("satz adopt", failed(), "", "");
+        assert!(silent.is_error);
+        assert!(
+            silent.text.starts_with("satz adopt exited with "),
+            "{}",
+            silent.text
+        );
+        assert!(silent.text.ends_with("and said nothing"), "{}", silent.text);
+    }
 
     #[test]
     fn a_project_renders_its_owner_group_and_the_choices_in_order() {

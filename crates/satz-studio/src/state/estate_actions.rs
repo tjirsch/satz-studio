@@ -47,9 +47,10 @@ pub enum EstateAction {
     /// `satz --config <dir> <args…>`, streamed into the log; a reporting command's
     /// file goes into the log after it, whole
     RunCommand(Vec<String>),
-    /// the command a pack's notice names, run the same way — and the estate read again
-    /// when it ends, because that command writes the file: `satz adopt --execute
-    /// --import` puts the live ids in it and binds the notice's param itself
+    /// the command a pack's notice names — `satz adopt <estate> --execute --import`, which
+    /// puts the live ids into the estate file and binds the notice's param itself —
+    /// streamed into the log inside the delegated-write discipline, and the estate read
+    /// again when it ends
     RunNoticeCommand(Vec<String>),
     CancelCommand,
     /// `satz questions <estate> --format <format> --out <out>`, run like any other
@@ -124,7 +125,7 @@ pub async fn estate_coroutine(
                 running.started(run_command(&session, app, args, After::Nothing))
             }
             EstateAction::RunNoticeCommand(args) => {
-                running.started(run_command(&session, app, args, After::Reload))
+                running.started(notice_command(&session, app, args))
             }
             EstateAction::CancelCommand => running.cancel(),
             EstateAction::Export { format, out } => {
@@ -228,8 +229,9 @@ struct Carried {
     /// what the check of the write said — the findings of a check that passed, or the
     /// refusal's own — which the reload keeps instead of running the check again
     checked: Vec<Diagnostic>,
-    /// a tool that refused: satz's own sentence, in the drawer beside what the reload's
-    /// check says of the file it left as it was
+    /// a call that did not land — satz refused, the call ended without a result, or the
+    /// write could not start — in the drawer beside what the reload's check says of the
+    /// file it left as it was
     refused: Option<Diagnostic>,
 }
 
@@ -273,9 +275,11 @@ where
 
 /// The delegated write around any call that writes the main file and answers as a tool
 /// does — a tool over the session, or a satz command through the CLI
-/// ([`project::add_project`]). `source` names the call in the drawer and in the message
-/// of a call that did not land. The lock, the record and the check are
-/// [`edit::delegated_write`], the one implementation the e2e tests drive too.
+/// ([`project::add_project`], [`streamed_command`]). `source` names the call in the drawer
+/// and in the message of a call that did not land. The lock, the record and the check are
+/// [`edit::delegated_write`], the one implementation the e2e tests drive too. A write that
+/// could not start — the file could not be recorded, and nothing ran — is carried as a
+/// refusal, so no caller reads it as a write that landed.
 async fn delegated<C, F>(
     session: &Arc<EstateSession>,
     app: Store<AppStore>,
@@ -293,8 +297,12 @@ where
     };
     match edit::delegated_write(session, call).await {
         Err(e) => {
-            toast(app, ToastKind::Error, e.to_string());
-            Carried::default()
+            let text = e.to_string();
+            toast(app, ToastKind::Error, text.clone());
+            Carried {
+                checked: Vec::new(),
+                refused: Some(Diagnostic::error(text, source)),
+            }
         }
         Ok(Delegated::Landed { outcome, committed }) => {
             match landed(&outcome) {
@@ -663,12 +671,10 @@ pub fn quote(word: &str) -> String {
     }
 }
 
-/// What follows a run: nothing, the estate read again because the command wrote it, or
-/// the document an export wrote checked and opened.
+/// What follows a run: nothing, or the document an export wrote checked and opened.
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum After {
     Nothing,
-    Reload,
     Open(Exported),
 }
 
@@ -723,7 +729,6 @@ fn run_command(
     }
     let token = CancellationToken::new();
     let (tx, mut lines) = tokio::sync::mpsc::channel::<CliLine>(256);
-    let reread = Arc::clone(session);
     let cli = session.cli.clone();
     let argv = args.clone();
     let child = token.clone();
@@ -781,11 +786,142 @@ fn run_command(
         }
         estate.outcome().set(Some(outcome));
         estate.running().set(false);
-        if after == After::Reload {
-            reload(&reread, app).await;
-        }
     });
     Some(token)
+}
+
+/// The command a pack's notice names, run in the app: `satz adopt <estate> --execute
+/// --import`, which writes the verified `"import-id"`s into the estate and binds the
+/// notice's param. It is satz's own writer on the estate file, so it runs as `satz
+/// add-project` does — through the session's `SatzCli` as the call of
+/// [`edit::delegated_write`]: the write lock, the record of the main file, the check on the
+/// real path once satz exited zero, the recorded bytes back when the check refuses or when
+/// satz exited non-zero having changed the file — with its lines streamed into the estate's
+/// log as a command's are, and the reload after it. Cancel kills the child, and the record
+/// decides what stands. The record is of the main file: an `"import-id"` satz wrote into a
+/// `.local.satz` fork in the library, and what `--import` put into the Terraform state,
+/// stay where satz put them.
+fn notice_command(
+    session: &Arc<EstateSession>,
+    app: Store<AppStore>,
+    args: Vec<String>,
+) -> Option<CancellationToken> {
+    if app.estate().running().cloned() {
+        toast(app, ToastKind::Info, "a command is already running");
+        return None;
+    }
+    let token = CancellationToken::new();
+    let estate = app.estate();
+    estate
+        .last_command()
+        .set(Some(command_line(&session.dir.dir, &args)));
+    estate.command_log().clear();
+    estate.outcome().set(None);
+    estate.running().set(true);
+    let session = Arc::clone(session);
+    let child = token.clone();
+    spawn(async move {
+        let command = format!(
+            "satz {}",
+            args.first().map(String::as_str).unwrap_or_default()
+        );
+        let call = streamed_command(&session, app, &command, &args, child);
+        let carried = delegated(
+            &session,
+            app,
+            DiagSource::Command(command.clone()),
+            call,
+            |outcome| Ok(last_line(&outcome.text, &command)),
+        )
+        .await;
+        estate
+            .outcome()
+            .set(Some(delegated_outcome(&carried, &command)));
+        estate.running().set(false);
+        reload_with(&session, app, carried).await;
+    });
+    Some(token)
+}
+
+/// `satz --config <dir> <args…>` streamed into the estate's log line by line, as the call
+/// of a delegated write: the child and the forwarding run together, so the log fills while
+/// the command runs, and the exit status with what satz printed becomes the
+/// [`ToolOutcome`] the record judges ([`project::outcome`]). A cancelled child is the
+/// call's error, and the record puts back what it had changed.
+async fn streamed_command(
+    session: &Arc<EstateSession>,
+    app: Store<AppStore>,
+    command: &str,
+    args: &[String],
+    cancel: CancellationToken,
+) -> Result<ToolOutcome, SatzError> {
+    let (tx, mut lines) = tokio::sync::mpsc::channel::<CliLine>(256);
+    let run = session.cli.run(args, tx, cancel);
+    let forward = async {
+        let (mut stdout, mut stderr) = (Vec::new(), Vec::new());
+        while let Some(line) = lines.recv().await {
+            let clean = match line {
+                CliLine::Stdout(s) => {
+                    let s = strip_ansi(&s);
+                    stdout.push(s.clone());
+                    CliLine::Stdout(s)
+                }
+                CliLine::Stderr(s) => {
+                    let s = strip_ansi(&s);
+                    stderr.push(s.clone());
+                    CliLine::Stderr(s)
+                }
+            };
+            app.estate().command_log().push(clean);
+        }
+        (stdout, stderr)
+    };
+    let (status, (stdout, stderr)) = tokio::join!(run, forward);
+    Ok(project::outcome(
+        command,
+        status?,
+        &stdout.join("\n"),
+        &stderr.join("\n"),
+    ))
+}
+
+/// The toast after a streamed command landed: the last line satz printed — `adopt` ends on
+/// what it wrote and what to run next — or that it landed, for one that printed nothing.
+fn last_line(text: &str, command: &str) -> String {
+    text.lines()
+        .rev()
+        .map(str::trim)
+        .find(|l| !l.is_empty())
+        .map_or_else(|| format!("{command} landed"), str::to_string)
+}
+
+/// The outcome under the log after a delegated write: a call that did not land is its
+/// message; a check that refused — an error among the findings carried, since a check that
+/// passed carries warnings and infos alone — put the bytes back; otherwise the write landed
+/// and the check passed.
+fn delegated_outcome(carried: &Carried, command: &str) -> CommandOutcome {
+    if let Some(d) = &carried.refused {
+        return CommandOutcome {
+            ok: false,
+            text: d.message.clone(),
+        };
+    }
+    if carried
+        .checked
+        .iter()
+        .any(|d| d.severity == Severity::Error)
+    {
+        return CommandOutcome {
+            ok: false,
+            text: format!(
+                "{command} wrote the estate and the check refused it; the file is back as it was"
+            ),
+        };
+    }
+    CommandOutcome {
+        ok: true,
+        text: format!("{command} landed and the check passed"),
+    }
 }
 
 /// The directory satz asks git about before `merge-presets` edits the estate: the estate
@@ -1399,6 +1535,53 @@ mod tests {
             opened: Vec::new(),
             notices: Vec::new(),
         }
+    }
+
+    /// The outcome under the log after a delegated write, as the notice's `satz adopt`
+    /// sets it: a call that did not land is its message; an error among the carried
+    /// findings is the check's refusal with the bytes back; otherwise it landed.
+    #[test]
+    fn a_delegated_writes_outcome_is_its_refusal_the_checks_or_that_it_landed() {
+        let refused = Carried {
+            checked: Vec::new(),
+            refused: Some(Diagnostic::error(
+                "2 candidates — satz refused and had changed new.satz; the file is back as it was",
+                DiagSource::Command("satz adopt".to_string()),
+            )),
+        };
+        let outcome = delegated_outcome(&refused, "satz adopt");
+        assert!(!outcome.ok);
+        assert!(outcome.text.starts_with("2 candidates"), "{}", outcome.text);
+
+        let mut error = Diagnostic::error("unknown param", DiagSource::Check);
+        error.severity = Severity::Error;
+        let rolled_back = Carried::checked(vec![error]);
+        let outcome = delegated_outcome(&rolled_back, "satz adopt");
+        assert!(!outcome.ok);
+        assert!(
+            outcome.text.contains("the check refused"),
+            "{}",
+            outcome.text
+        );
+
+        let mut warning = Diagnostic::error("a pack is not adopted", DiagSource::Check);
+        warning.severity = Severity::Warning;
+        let landed = Carried::checked(vec![warning]);
+        let outcome = delegated_outcome(&landed, "satz adopt");
+        assert!(outcome.ok);
+        assert_eq!(outcome.text, "satz adopt landed and the check passed");
+    }
+
+    #[test]
+    fn the_toast_after_a_streamed_command_is_satzs_last_line() {
+        assert_eq!(
+            last_line(
+                "adopt: acknowledged the notice\nadopt: 2 written.\n\n",
+                "satz adopt"
+            ),
+            "adopt: 2 written."
+        );
+        assert_eq!(last_line("  \n", "satz adopt"), "satz adopt landed");
     }
 
     #[test]

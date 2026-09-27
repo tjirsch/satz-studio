@@ -50,8 +50,10 @@ library as a `.local.satz` or handed upstream by a pull request;
 questions those packs declare and it has not answered; **Estate**, the file
 itself — its params, its resource tree, and the interfaces it publishes to the projects
 that read it, as `satz interfaces` reports them: the core exports every interface
-carries, then each interface with the interfaces it uses and its own exports. "New
-interface" there is `satz add-project` as a form — a name, "Onboard a project" with its
+carries, then each interface with the interfaces it uses and its own exports, and —
+where the estate declares `request` statements — what projects may request: each list a
+project may add entries to, the field that keys an entry and the fields an entry
+carries. "New interface" there is `satz add-project` as a form — a name, "Onboard a project" with its
 owner group or "Interface only", the interfaces to use and other interfaces' exports to
 carry again, and the command line as it will run — written by satz and checked like an
 answer; **Checks**, what judges it, from the compile
@@ -96,7 +98,9 @@ org-policy packs, so every policy that is already live is in the state before th
 apply. Switching such a pack on raises that notice as a dialog: it carries the pack's
 own sentence and the command, and offers to run it, to say it has been run, or to leave
 it for later. The estate says a notice has been dealt with by binding its param, which
-is what "I ran it" writes and what `satz adopt --execute --import` writes itself; until
+is what "I ran it" writes and what `satz adopt --execute --import` writes itself — run
+from the dialog, it is satz's own writer under the same guard as an answer: the file is
+recorded before, checked after, and put back if either refuses; until
 then the notice stands on the Overview, in the diagnostics drawer, and — for a notice
 that holds them up — in front of apply and bootstrap, which satz refuses.
 
@@ -184,7 +188,7 @@ the suite needs a network or a credential.
 | `tests/fixtures/` | an estate directory over satz's smoke estates, its `config.toml` pointing into the submodule; a test that writes copies it first |
 | `docs/` | [`architecture.md`](docs/architecture.md), [`ui.md`](docs/ui.md), [`verification.md`](docs/verification.md) and the decision records under [`adr/`](docs/adr/README.md) |
 | `scripts/` | the privacy gate (`check-names.sh`), the satz installer CI runs on Linux and macOS (`install-satz.sh`, the newest satz release verified against its SHA-256 sidecar and held to `MIN_SATZ` or newer; the Windows job does the same in a PowerShell step of `ci.yml`), the verification harness (`e2e.sh`), the grammar refresh (`sync-grammar.sh`), the third-party licence texts (`update-third-party-licenses.sh`, which writes `THIRD-PARTY-LICENSES.md` from `Cargo.lock` with `cargo about`; `about.toml` is its allow-list of licences and its targets, `about.hbs` its layout) |
-| `.github/workflows/` | `ci.yml` (formatting, clippy, tests, the verification harness, a build of the app, the third-party licence texts against `Cargo.lock`; Linux, macOS on Apple silicon, and Windows on every push), `release.yml` (the bundles of the three operating systems on a tag) and `names-gate.yml` (the privacy gate over the tree and the commits) |
+| `.github/workflows/` | `ci.yml` (once per commit — on a pull request, on the push to `main` that merges it, on a release tag and by hand: formatting, clippy, tests and a build of the app on Linux, macOS on Apple silicon and Windows; the verification harness and the third-party licence texts against `Cargo.lock` on Linux), `release.yml` (the bundles of the three operating systems on a tag) and `names-gate.yml` (the privacy gate over the tree and the commits) |
 | `.githooks/` | the pre-commit and commit-msg hooks that run the gate locally |
 
 ## Release

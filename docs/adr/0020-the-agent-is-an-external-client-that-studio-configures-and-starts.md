@@ -56,8 +56,9 @@ of that exists anywhere else.
 ## Decision
 
 **satz-studio runs no model.** The Chat destination, both engines, the transcripts, the
-credential handling and the engine settings are deleted. In the rail's second secondary
-slot stands **Agent**, which sets an external agent up on the open estate and starts it:
+credential handling and the engine settings are deleted. In the first of the rail's two
+secondary slots, above Settings, stands **Agent**, which sets an external agent up on the
+open estate and starts it:
 
 - The app renders the `satz mcp` invocation for the open estate in the two shapes a
   client reads — `.mcp.json`, the project file Claude Code reads in the directory it

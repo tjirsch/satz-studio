@@ -1,7 +1,7 @@
 //! Keeping pace with satz, as the window says it: the notice for a satz newer than the
 //! build, what the release looks found for satz-studio and for satz, the window's title,
 //! and whether satz's installer is offered. Pure functions over the stores, so every
-//! sentence the banner, the top bar, the title and Settings show is tested here.
+//! sentence the banner, the title and Settings show is tested here.
 
 use satz_studio_core::github::StudioUpdate;
 use satz_studio_core::satz::self_update::SatzRelease;
@@ -86,7 +86,7 @@ pub fn satz_release_sentence(
 }
 
 /// The newer satz release a check found, while it is still newer than `running`, the satz
-/// in use — what the top bar and the title offer to install.
+/// in use — what the title names and Settings offers to install.
 pub fn satz_available<'a>(
     found: Option<&'a Result<SatzRelease, String>>,
     running: Option<&semver::Version>,

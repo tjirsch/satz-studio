@@ -15,7 +15,8 @@
 # each creating its own temporary
 # estate over vendor/satz, and tests/e2e_export.rs, which
 # exports the smoke estate's decisions sheet and workbook into a temporary directory. No live import runs: the
-# import tests drive the Terraform HCL and legacy YAML shapes, which read files.
+# import tests drive the Terraform HCL shape, which reads files, and the state shape's
+# refusal of a raw .tfstate.
 # docs/verification.md says what they prove.
 #
 # bash 3.2 compatible (macOS default).
