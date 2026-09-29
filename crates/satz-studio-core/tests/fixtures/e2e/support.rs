@@ -405,6 +405,22 @@ pub async fn check_lines(cli: &SatzCli, main: &Path) -> (bool, Vec<CliLine>) {
     (status.success(), lines)
 }
 
+/// What `check_lines` collected, split into stdout and stderr, each in the order it
+/// arrived. The two pipes are read concurrently, so their interleaving varies from run
+/// to run (on Windows most of all); within one pipe the order is satz's own. A test
+/// that compares two runs compares these, never the interleaved list.
+pub fn streams(lines: &[CliLine]) -> (Vec<&str>, Vec<&str>) {
+    let mut stdout = Vec::new();
+    let mut stderr = Vec::new();
+    for line in lines {
+        match line {
+            CliLine::Stdout(t) => stdout.push(t.as_str()),
+            CliLine::Stderr(t) => stderr.push(t.as_str()),
+        }
+    }
+    (stdout, stderr)
+}
+
 /// The stderr half of what `check_lines` collected, joined.
 pub fn stderr_of(lines: &[CliLine]) -> String {
     lines

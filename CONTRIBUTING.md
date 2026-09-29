@@ -107,7 +107,10 @@ builds.
 `ci.yml` runs the Linux job and the macOS and Windows jobs on every pull request, on
 the push to `main` that merges it, on a release tag and by hand — a branch push alone
 runs nothing, because its pull request runs the same jobs on the branch merged into
-`main`; the verification harness and the licence check run in the Linux job.
+`main`; the verification harness and the licence check run in the Linux job. It also
+runs once a day on `main` against the newest satz release, so a satz release that
+breaks the app is seen the day it ships; a failed daily run opens an issue, or
+comments on the one still open.
 `names-gate.yml` runs the privacy gate over the tree and over the commits a pull
 request or the push to `main` adds.
 

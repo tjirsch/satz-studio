@@ -62,7 +62,9 @@ the rules that apply to every change, whoever or whatever makes it.
   warnings`. A warning is a failure, in CI and before a commit. The rest of the gate is
   `cargo test --workspace --locked`, `bash scripts/e2e.sh`, `bash scripts/check-names.sh`
   and `bash scripts/update-third-party-licenses.sh --check`. CI runs it once per commit —
-  on a pull request, on the push to `main` that merges it, on a release tag and by hand;
+  on a pull request, on the push to `main` that merges it, on a release tag and by hand,
+  and once a day on `main` against the newest satz release, a failed daily run opening an
+  issue;
   a branch push alone runs nothing, because its pull request runs the same jobs —
   formatting, clippy, tests and a build on Linux, macOS and Windows, the harness and the
   licence check on Linux.

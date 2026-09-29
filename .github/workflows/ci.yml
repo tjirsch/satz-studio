@@ -18,6 +18,12 @@ name: ci
 # webview and their own satz installer. A release tag and a manual dispatch run both as well, so release.yml bundles a tree
 # they have passed on.
 #
+# A schedule runs both once a day on `main`, so a satz release that breaks the app is
+# seen the day it ships rather than on the next pull request: every run installs the
+# newest satz release, and so does this one. A scheduled run that fails also fails
+# `report`, which opens an issue — or comments on the one still open — with the run's
+# link; it is the only job that writes, and only to issues.
+#
 # macOS is Apple silicon alone, here and in release.yml (decided 2026-09-18, ADR 0016):
 # nothing in this app is architecture-dependent — the webview and the satz binary are
 # the platform's, not the chip's — and `macos-15-intel` is the most expensive
@@ -29,6 +35,8 @@ on:
     tags: ['v*']
   pull_request:
   workflow_dispatch:
+  schedule:
+    - cron: '17 5 * * *'
 
 permissions:
   contents: read
@@ -154,3 +162,32 @@ jobs:
         run: cargo test --workspace --locked --no-fail-fast
       - name: build the app
         run: cargo build -p satz-studio --locked
+
+  # A scheduled run that failed: an issue with the run's link, or a comment on the one
+  # still open under the same title, so a satz release that breaks the app for several
+  # days is one issue. Pull requests, pushes, tags and manual runs report in their own
+  # checks and skip this job.
+  report:
+    needs: [core, platforms]
+    if: failure() && github.event_name == 'schedule'
+    runs-on: ubuntu-24.04
+    permissions:
+      issues: write
+    steps:
+      - name: open or update the issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title='The daily CI run against the newest satz release failed'
+          body="The scheduled run of \`ci.yml\` on \`main\` failed: $RUN_URL
+
+          It installs the newest satz release, so a failure the day satz releases is the alarm that the app has fallen behind; the answer is a satz-studio patch release."
+          open=$(gh issue list --state open --search "\"$title\" in:title" --json number,title \
+            --jq "map(select(.title == \"$title\")) | .[0].number // empty")
+          if [ -n "$open" ]; then
+            gh issue comment "$open" --body "$body"
+          else
+            gh issue create --title "$title" --body "$body"
+          fi
