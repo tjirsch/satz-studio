@@ -1,8 +1,8 @@
 //! The app's own writer on disk, over a copy of the smoke estate: a `ReplaceValue`
 //! with the node's own value leaves the file's hash and the output of
-//! `satz transpile --check` unchanged; an edit replaces the value span and nothing
-//! else — the `=` column and the trailing comment keep their bytes — and the reverse
-//! edit restores the original bytes. What `edit_commit.rs` proves already (a good
+//! `satz transpile --check` unchanged, stdout and stderr each in its own order; an
+//! edit replaces the value span and nothing else — the `=` column and the trailing
+//! comment keep their bytes — and the reverse edit restores the original bytes. What `edit_commit.rs` proves already (a good
 //! edit lands, a bad one rolls back naming the real file, a file changed on disk is
 //! refused, a delegated write is verified or restored) is not repeated here. Over the
 //! skeleton `satz interview --create` writes, which carries `init`'s scaffold: its
@@ -49,7 +49,10 @@ async fn a_no_op_edit_leaves_the_hash_and_the_check_output_unchanged() {
 
     let (passed, after) = e2e::check_lines(&session.cli, &session.main).await;
     assert!(passed, "{after:?}");
-    assert_eq!(before, after, "the check says the same, line for line");
+    let (out_before, err_before) = e2e::streams(&before);
+    let (out_after, err_after) = e2e::streams(&after);
+    assert_eq!(out_before, out_after, "the check's stdout, line for line");
+    assert_eq!(err_before, err_after, "the check's stderr, line for line");
 }
 
 #[tokio::test]

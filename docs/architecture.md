@@ -606,7 +606,16 @@ runner in the catalogue and ran the same code on the same OS beside `macos-15` �
 difference is the architecture, and nothing here is architecture-dependent, the webview
 and the satz binary being the platform's rather than the chip's.
 `release.yml` does not build it either: macOS is Apple silicon in both, and an Intel Mac
-gets no bundle. Linux and Windows are unchanged and x86_64 — this is about the Mac. `.github/workflows/names-gate.yml` runs `scripts/check-names.sh` over
+gets no bundle. Linux and Windows are unchanged and x86_64 — this is about the Mac.
+A `schedule:` trigger runs both jobs once a day on `main` (05:17 UTC), so a satz release
+that breaks the app is seen the day it ships rather than on the next pull request, and so
+is a toolchain or runner-image change. The trigger needs no token from the satz
+repository. A scheduled run whose jobs fail runs a third job, `report`, the only one with
+a write permission (`issues: write`): it opens the issue "The daily CI run against the
+newest satz release failed" with the run's link, or comments on it while it is open, so
+a breakage that lasts several days is one issue. GitHub disables a schedule in a
+repository with no activity for 60 days; the Actions tab then offers to enable it again.
+`.github/workflows/names-gate.yml` runs `scripts/check-names.sh` over
 the tree and over the commits a pull request adds, or the push to `main` that merges it.
 
 ## 6. Decisions
