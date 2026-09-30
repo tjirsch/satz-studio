@@ -291,7 +291,7 @@ pub fn owed(f: &Facts) -> Vec<Owed> {
             id: "prerequisites",
             icon: "admin_panel_settings",
             title: "The prerequisites are not declared".to_string(),
-            detail: "The compile found roles this estate's own resource types need and its IaC service account is not granted, or APIs its infrastructure project does not enable. The drawer carries each of them; `satz update-prerequisites` writes them into the file.".to_string(),
+            detail: "The compile found roles this estate's own resource types need and its IaC service account is not granted, or APIs a project its resources' calls are billed to does not enable. The drawer carries each of them; `satz update-prerequisites` writes them into the file.".to_string(),
             remedies: vec![Remedy::Go(View::Checks)],
         });
     }

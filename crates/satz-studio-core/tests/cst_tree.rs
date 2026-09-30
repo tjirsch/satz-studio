@@ -452,3 +452,42 @@ fn a_common_interface_and_an_interface_reference_round_trip() {
     );
     cst.lower().expect("satz-core parses the project estate");
 }
+
+/// A claim carrying its measure (`gcloud`, `gcloud_check`, `risk`) is one opaque statement
+/// of the showcase, whole, and the tree over the showcase names no error.
+#[test]
+fn a_claim_with_its_measure_is_kept_whole() {
+    let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../vendor/satz/tests/smoke/yaml/showcase.satz");
+    let text = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+    let cst = Cst::parse(&text).unwrap();
+    assert!(
+        !cst.nodes()
+            .any(|(_, n)| matches!(n.kind, NodeKind::Error { .. })),
+        "the showcase parses without an error node"
+    );
+    let measured: Vec<&str> = cst
+        .node(cst.root())
+        .children
+        .iter()
+        .filter(|&&c| {
+            cst.node(c).kind
+                == NodeKind::Opaque {
+                    statement: "claim".into(),
+                }
+        })
+        .map(|&c| cst.slice(cst.node(c).span))
+        .filter(|s| s.contains("gcloud_check"))
+        .collect();
+    assert!(
+        !measured.is_empty(),
+        "the showcase has a claim with a measure"
+    );
+    for claim in measured {
+        assert!(claim.starts_with("claim \""), "{claim}");
+        assert!(claim.ends_with('}'), "{claim}");
+        for key in ["gcloud = [", "gcloud_check = [", "risk = \""] {
+            assert!(claim.contains(key), "`{key}` inside {claim}");
+        }
+    }
+}

@@ -39,7 +39,7 @@ pub fn ChecksView() -> Element {
                     for (i, message) in prerequisites.iter().enumerate() {
                         p { key: "{i}", class: "checks__finding", "{message}" }
                     }
-                    p { class: "checks__note", "Writing them binds the roles on the estate's IaC service account and the APIs on its infrastructure project, in the estate file. satz works both out offline, from the resource types this estate emits; the write goes through the same check and rollback as an answer." }
+                    p { class: "checks__note", "Writing them binds the roles on the estate's IaC service account and each API on the project its calls are billed to — the infrastructure project, or the project a resource sits inside — in the estate file; an API for a project a pack declares is named, not written. satz works both out offline, from the resource types this estate emits; the write goes through the same check and rollback as an answer." }
                     div { class: "checks__actions",
                         Button {
                             variant: ButtonVariant::Filled,

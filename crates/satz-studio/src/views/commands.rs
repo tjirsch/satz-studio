@@ -214,7 +214,7 @@ pub const PALETTE: &[CommandSpec] = &[
         id: "update-prerequisites",
         label: "update-prerequisites",
         icon: "admin_panel_settings",
-        description: "What the estate's resource types oblige it to declare and does not: the roles its IaC service account is missing, and the APIs its infrastructure project does not enable.",
+        description: "What the estate's resource types oblige it to declare and does not: the roles its IaC service account is missing, and the APIs a project its resources' calls are billed to does not enable.",
         // one of the two commands satz's ADR 0021 leaves on the console: the exit code
         // is the answer and the text is the diagnosis, so it takes no `--out`.
         // `--report-only` is fixed: the command writes the estate file by default, and

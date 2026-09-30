@@ -442,8 +442,7 @@
         "presets/cis/bucket-retention-dry-run.satz",
         "presets/cis/cloud-sql-dry-run.satz",
         "presets/cis/cloud-sql-iam-and-deletion-protection-dry-run.satz",
-        "presets/cis/confidential-computing-dry-run.satz",
-        "presets/integrations/microsoft-defender-for-cloud.satz"
+        "presets/cis/confidential-computing-dry-run.satz"
       ],
       "excludes": [],
       "notices": [
@@ -1206,16 +1205,6 @@
             "use_defender"
           ],
           "met": false
-        },
-        {
-          "kind": "data",
-          "any_of": [
-            "presets/cis/CIS-GCP-Foundation-4.0.satz"
-          ],
-          "params": [
-            "allowed_policy_member_subjects"
-          ],
-          "met": true
         }
       ],
       "required_by": [
@@ -1224,14 +1213,6 @@
         "presets/integrations/microsoft-defender-for-cloud-cspm-role-least-privilege.satz"
       ],
       "excludes": [],
-      "contributes": [
-        {
-          "param": "allowed_policy_member_subjects",
-          "values": [
-            "serviceAccount:mdc-agentless-scanning@guardians-prod-diskscanning.iam.gserviceaccount.com"
-          ]
-        }
-      ],
       "findings": []
     },
     {

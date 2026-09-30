@@ -169,8 +169,10 @@ from the view.
     no pack line itself.
   - `WritePrerequisites` is the same delegated write over `satz_update_prerequisites
     {report_only: false}`: satz works out offline which roles the IaC service account
-    lacks and which APIs the infra project does not enable, and writes both into the
-    estate. `delegated_write` is the one implementation the two share.
+    lacks and which APIs a project its resources' calls are billed to does not enable
+    — the infrastructure project, or the project a resource sits inside — and writes
+    both into the estate, naming rather than writing an API for a project a pack
+    declares. `delegated_write` is the one implementation the two share.
   - `RunNoticeCommand(args)` is the command a pack's notice names — `satz adopt
     <estate> --execute --import`, which puts the live ids into the estate file and binds
     the notice's param — as a delegated write whose call is the CLI: the lines stream into

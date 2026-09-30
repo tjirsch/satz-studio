@@ -500,8 +500,8 @@ fn queue_notices(app: Store<AppStore>, opened: &[NoticeRow]) {
 }
 
 /// The writing half of `update-prerequisites`: satz works out which roles the IaC
-/// service account lacks and which APIs the infra project does not enable, and writes
-/// both into the estate. It is offline and it is satz's own writer, so it goes through
+/// service account lacks and which APIs a project its resources' calls are billed to
+/// does not enable, and writes both into the estate. It is offline and it is satz's own writer, so it goes through
 /// the same discipline as an answer — the write lock, the snapshot, the check on the
 /// real path — rather than a command that rewrites the file under the window.
 async fn write_prerequisites(session: &Arc<EstateSession>, app: Store<AppStore>) {
