@@ -275,6 +275,42 @@
     }
   },
   {
+    "type": "each_interface",
+    "named": true,
+    "fields": {
+      "key": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      },
+      "list": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      }
+    },
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "interface",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
     "type": "export",
     "named": true,
     "fields": {
@@ -395,6 +431,10 @@
       "types": [
         {
           "type": "hcl_body",
+          "named": true
+        },
+        {
+          "type": "hcl_heredoc",
           "named": true
         },
         {
@@ -786,6 +826,10 @@
           "named": true
         },
         {
+          "type": "each_interface",
+          "named": true
+        },
+        {
           "type": "export",
           "named": true
         },
@@ -1053,6 +1097,10 @@
   {
     "type": "hcl",
     "named": false
+  },
+  {
+    "type": "hcl_heredoc",
+    "named": true
   },
   {
     "type": "hcl_string",

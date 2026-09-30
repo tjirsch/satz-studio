@@ -1,6 +1,6 @@
 # 0023 — the Interfaces tab reads and writes through the CLI
 
-- **Status:** accepted
+- **Status:** accepted; the write half superseded (2026-09-30, below)
 - **Date:** 2026-09-26
 - **Deciders:** the maintainer
 
@@ -69,3 +69,13 @@ app (`docs/ui.md`), and what an estate publishes is part of what the estate file
 - When satz serves the interface plane over MCP, `add_project` is replaced by
   `session.tool("satz_add_project", …)` inside the same `delegated_write`, and the read
   by the tool; this record is then superseded in that part.
+
+## Amendment (2026-09-30) — the write half is gone with the command
+
+satz v0.90.0 removed `satz add-project`
+([ADR 0075](../../vendor/satz/docs/adr/0075-each-writes-an-interface-per-entry-and-onboarding-is-a-pack.md)):
+a project is onboarded by an entry of `projects` in `presets/project-onboarding.satz`,
+and a top-level `each` writes its interface. The New interface wizard, `AddProjectArgs`,
+`add_project` and the `AddProject` action are removed with it, and the tab reads
+`satz interfaces` only. An entry of `projects` is a value in a list param; the app adds no
+writer for it here. The read half of this record stands.

@@ -336,11 +336,6 @@ pub struct EstateStore {
     /// what the estate publishes, from `satz interfaces` at every reload — or satz's
     /// reason it could not say; `None` until the first reload has asked
     pub interfaces: Option<Result<InterfacesReport, String>>,
-    /// a `satz add-project` write is running
-    pub adding_project: bool,
-    /// how the last `satz add-project` of this session ended: the name it added, or
-    /// satz's refusal. The wizard closes on the one and shows the other
-    pub added_project: Option<Result<String, String>>,
 }
 
 /// The pack review of the Packs view.

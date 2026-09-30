@@ -69,9 +69,9 @@ the rules that apply to every change, whoever or whatever makes it.
   formatting, clippy, tests and a build on Linux, macOS and Windows, the harness and the
   licence check on Linux.
 - **satz owns the estate; the app edits inside a span.** An answer, a pack switch, the
-  prerequisites, a project's section and an import id are written by satz's own writer
+  prerequisites and an import id are written by satz's own writer
   (`satz_interview`, `satz_add_pack`, `satz_remove_pack`, `satz_update_prerequisites`,
-  `satz add-project`, the notice's `satz adopt --execute --import`) on the real file,
+  the notice's `satz adopt --execute --import`) on the real file,
   every one through `edit::delegated_write`: the write lock, a `Snapshot` taken first,
   the check on the real path, and the bytes written back if the check refuses or satz
   refused having changed the file. Every other edit is the document layer's:

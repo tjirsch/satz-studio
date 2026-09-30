@@ -174,7 +174,7 @@ impl Snapshot {
 
 /// The whole of a delegated write on the estate's main file, as the app makes it: the
 /// session's write lock, the bytes recorded, then `call` — a tool over the session, or a
-/// satz command through its CLI ([`crate::satz::project::add_project`]) — inside
+/// satz command through its CLI (the notice's `satz adopt`) — inside
 /// [`Snapshot::delegate`], with [`McpChecker`] for the check of a call that landed.
 /// `call` runs only once the lock is held and the record taken. A file that cannot be
 /// recorded is the error, and nothing ran.

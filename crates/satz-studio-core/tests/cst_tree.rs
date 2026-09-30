@@ -301,6 +301,38 @@ fn a_request_statement_is_kept_whole() {
     cst.lower().expect("satz-core parses it");
 }
 
+/// A request point's `patterns` stays inside the statement, and a top-level `each <list>
+/// by <field> { interface … }` is one statement kept whole (satz ADR 0075): the tree is
+/// the file byte for byte, has no `Error` node, keeps a comment inside the `each` as
+/// its child, and satz-core parses it.
+#[test]
+fn request_patterns_and_a_top_level_each_of_interfaces_are_kept_whole() {
+    let text = "pack onboarding version \"1.0\"\n\nparams {\n  projects = []\n}\n\nrequest projects {\n  key      = \"name\"\n  fields   = [\"name\", \"owner_group\"]\n  patterns = { name = \"[a-z][a-z0-9-]*\" owner_group = \"[^@: ]+@[^@: ]+\" }\n}\n\neach projects by name {\n  // one interface per project\n  interface \"{each.name}\" {\n    export \"project_id\" = \"${{google_project.{each.name}.project_id}}\" description \"The project\"\n  }\n}\n";
+    let cst = Cst::parse(text).unwrap();
+    assert_eq!(cst.text(), text);
+    assert_eq!(
+        labels(&cst, cst.root()),
+        ["Header", "Params", "Opaque(request)", "Opaque(each)"]
+    );
+    assert!(
+        cst.nodes()
+            .all(|(_, n)| !matches!(n.kind, NodeKind::Error { .. })),
+        "an Error node where satz accepts the file"
+    );
+    let request = child(&cst, cst.root(), 2);
+    assert!(
+        cst.slice(cst.node(request).span)
+            .contains("patterns = { name = \"[a-z][a-z0-9-]*\""),
+        "the patterns stay inside the request"
+    );
+    let each = child(&cst, cst.root(), 3);
+    let whole = cst.slice(cst.node(each).span);
+    assert!(whole.starts_with("each projects by name {"), "{whole}");
+    assert!(whole.ends_with('}'), "{whole}");
+    assert_eq!(labels(&cst, each), ["Comment"]);
+    cst.lower().expect("satz-core parses it");
+}
+
 /// `all <type> under <folder>` stays inside its export, and a `private <type>.<label>`
 /// statement is one statement kept whole: the tree is the file byte for byte, has no
 /// `Error` node, and satz-core parses it.

@@ -140,9 +140,10 @@ impl<'t> Builder<'t> {
             "string" | "number" | "boolean" | "reference" | "list" | "object" => self.value(n),
             "claim" | "question" | "action" | "notice" | "offers" | "export" | "interface"
             | "suppress" | "private" | "request" | "hcl_block" => Ok(self.opaque(n)),
-            // `each <list> by <field> { … }` inside a resource type map: kept whole, the
-            // bodies it writes exist only once the estate compiles
-            "each" => Ok(self.opaque(n)),
+            // `each <list> by <field> { … }` inside a resource type map, and at the top
+            // level around `interface` blocks: kept whole, the bodies and interfaces it
+            // writes exist only once the estate compiles
+            "each" | "each_interface" => Ok(self.opaque(n)),
             other => Err(CstError::Parse {
                 line: line(n),
                 message: format!(
@@ -371,6 +372,7 @@ impl<'t> Builder<'t> {
     fn opaque(&mut self, n: Ts<'_>) -> NodeId {
         let statement = match n.kind() {
             "hcl_block" => "hcl",
+            "each_interface" => "each",
             k => k,
         }
         .to_string();

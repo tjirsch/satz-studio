@@ -854,16 +854,6 @@ pub struct ExportRow {
     pub line: usize,
 }
 
-impl ExportRow {
-    /// The name `satz add-project --export` takes for it: `<interface>.<name>`; `None` for
-    /// a core export, which satz refuses to copy.
-    pub fn qualified(&self) -> Option<String> {
-        self.interface
-            .as_ref()
-            .map(|i| format!("{i}.{}", self.name))
-    }
-}
-
 /// One request point of `satz interfaces`: a list a project may add entries to.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct RequestRow {
@@ -873,11 +863,30 @@ pub struct RequestRow {
     pub key: String,
     /// every field an entry may carry
     pub fields: Vec<String>,
+    /// per field, the regular expression the whole of its value matches; satz leaves the
+    /// key out when the request point sets none
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub patterns: BTreeMap<String, String>,
     pub description: Option<String>,
     /// the entries the list holds now
     pub entries: usize,
     pub file: String,
     pub line: usize,
+}
+
+impl RequestRow {
+    /// The fields in satz's order, each with the pattern its value matches as satz's
+    /// text report writes it, `<field> ~ <regex>`, joined by `, `.
+    pub fn fields_shown(&self) -> String {
+        self.fields
+            .iter()
+            .map(|f| match self.patterns.get(f) {
+                Some(re) => format!("{f} ~ {re}"),
+                None => f.clone(),
+            })
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
 }
 
 /// One declared interface.
@@ -1323,15 +1332,6 @@ mod tests {
                 .iter()
                 .any(|e| e.how == ExportHow::Map && e.all.is_some())
         );
-        assert_eq!(
-            report
-                .of("archive")
-                .find(|e| e.name == "archive_project_number")
-                .and_then(ExportRow::qualified)
-                .as_deref(),
-            Some("archive.archive_project_number")
-        );
-        assert!(report.core().all(|e| e.qualified().is_none()));
         let again: serde_json::Value = serde_json::to_value(&report).unwrap();
         let original: serde_json::Value = serde_json::from_str(INTERFACES).unwrap();
         assert_eq!(again, original);

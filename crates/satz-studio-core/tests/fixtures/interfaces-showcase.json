@@ -9,7 +9,7 @@
       "attach": [],
       "description": "The customer's primary domain",
       "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
-      "line": 263
+      "line": 264
     },
     {
       "name": "default_region",
@@ -19,7 +19,7 @@
       "attach": [],
       "description": "The region the estate builds in",
       "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
-      "line": 264
+      "line": 265
     },
     {
       "name": "infra_project_id",
@@ -31,7 +31,7 @@
       "attach": [],
       "description": "The infrastructure project",
       "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
-      "line": 265
+      "line": 266
     },
     {
       "name": "infra_folder",
@@ -43,7 +43,7 @@
       "attach": [],
       "description": "The infrastructure folder, folders/<number>",
       "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
-      "line": 266
+      "line": 267
     },
     {
       "name": "workload_folder",
@@ -53,7 +53,7 @@
       "attach": [],
       "description": "Where the customer's and the projects' folders live: the organisation",
       "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
-      "line": 267
+      "line": 268
     },
     {
       "name": "infra_project_number",
@@ -64,7 +64,7 @@
       ],
       "attach": [],
       "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
-      "line": 268
+      "line": 269
     },
     {
       "name": "audit_bucket_url",
@@ -75,7 +75,7 @@
       ],
       "attach": [],
       "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
-      "line": 269
+      "line": 270
     },
     {
       "name": "regions",
@@ -84,7 +84,7 @@
       "targets": [],
       "attach": [],
       "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
-      "line": 270
+      "line": 271
     },
     {
       "name": "folders",
@@ -97,7 +97,7 @@
       "attach": [],
       "description": "Every folder, by label",
       "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
-      "line": 276
+      "line": 277
     },
     {
       "name": "buckets",
@@ -109,7 +109,7 @@
       ],
       "attach": [],
       "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
-      "line": 277
+      "line": 278
     },
     {
       "name": "infra_projects",
@@ -123,7 +123,7 @@
       "attach": [],
       "description": "The Google projects in the infrastructure folder",
       "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
-      "line": 278
+      "line": 279
     },
     {
       "name": "archive_project_id",
@@ -138,7 +138,7 @@
       ],
       "description": "The project's Google project",
       "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
-      "line": 297
+      "line": 298
     },
     {
       "name": "archive_project_number",
@@ -150,7 +150,7 @@
       ],
       "attach": [],
       "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
-      "line": 298
+      "line": 299
     },
     {
       "name": "audit_bucket_name",
@@ -163,7 +163,33 @@
       "attach": [],
       "description": "The audit log bucket",
       "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
-      "line": 292
+      "line": 293
+    },
+    {
+      "name": "topic",
+      "interface": "billing-events",
+      "how": "static",
+      "value": "\"projects/corp-infra-001/topics/corp-billing\"",
+      "targets": [
+        "google_pubsub_topic.billing"
+      ],
+      "attach": [],
+      "description": "The project's Pub/Sub topic",
+      "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
+      "line": 309
+    },
+    {
+      "name": "topic",
+      "interface": "orders-events",
+      "how": "static",
+      "value": "\"projects/corp-infra-001/topics/corp-orders\"",
+      "targets": [
+        "google_pubsub_topic.orders"
+      ],
+      "attach": [],
+      "description": "The project's Pub/Sub topic",
+      "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
+      "line": 309
     }
   ],
   "interfaces": [
@@ -175,7 +201,7 @@
       ],
       "exports": 2,
       "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
-      "line": 295
+      "line": 296
     },
     {
       "name": "audit",
@@ -183,7 +209,27 @@
       "uses": [],
       "exports": 1,
       "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
-      "line": 291
+      "line": 292
+    },
+    {
+      "name": "billing-events",
+      "common": false,
+      "uses": [
+        "audit"
+      ],
+      "exports": 1,
+      "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
+      "line": 307
+    },
+    {
+      "name": "orders-events",
+      "common": false,
+      "uses": [
+        "audit"
+      ],
+      "exports": 1,
+      "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
+      "line": 307
     }
   ],
   "requests": [
@@ -194,6 +240,10 @@
         "name",
         "retention"
       ],
+      "patterns": {
+        "name": "[a-z][a-z0-9-]*",
+        "retention": "[0-9]+s"
+      },
       "description": "A Pub/Sub topic in the infrastructure project",
       "entries": 2,
       "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
