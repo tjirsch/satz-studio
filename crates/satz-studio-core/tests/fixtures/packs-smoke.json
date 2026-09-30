@@ -23,6 +23,7 @@
         "presets/billing-account-permissions.satz",
         "presets/organization-budget.satz",
         "presets/billing-export.satz",
+        "presets/project-onboarding.satz",
         "presets/shared-network.satz",
         "presets/security-audit/sa-security-audit.satz",
         "presets/scc/scc-service-enablement.satz",
@@ -209,6 +210,30 @@
           ]
         }
       ],
+      "findings": []
+    },
+    {
+      "path": "presets/project-onboarding.satz",
+      "role": "pack",
+      "gate": "use_project_onboarding",
+      "gate_declared_in": "presets/estate-map.satz",
+      "default": "false",
+      "line": "absent",
+      "deploys": false,
+      "requires": [
+        {
+          "kind": "gate",
+          "any_of": [
+            "presets/estate-map.satz"
+          ],
+          "params": [
+            "use_project_onboarding"
+          ],
+          "met": false
+        }
+      ],
+      "required_by": [],
+      "excludes": [],
       "findings": []
     },
     {

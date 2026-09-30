@@ -53,10 +53,9 @@ that read it, as `satz interfaces` reports them: the core exports every interfac
 carries, then each interface with the interfaces it uses and its own exports, and —
 where the estate declares `request` statements — what projects may request: each list a
 project may add entries to, the field that keys an entry and the fields an entry
-carries. "New interface" there is `satz add-project` as a form — a name, "Onboard a project" with its
-owner group or "Interface only", the interfaces to use and other interfaces' exports to
-carry again, and the command line as it will run — written by satz and checked like an
-answer; **Checks**, what judges it, from the compile
+carries, each with the pattern its value must match. A project is onboarded by an entry
+of `projects` in satz's `presets/project-onboarding.satz`, which writes its interface
+with the rest; **Checks**, what judges it, from the compile
 to the compliance catalogs; **Deploy**, what hands it off. Agent and Settings sit at the
 foot of the rail, with Commands between them. Beside the estate the top bar names sit
 reload, "Switch estate" — the Start screen with your estates listed — and "Close estate";

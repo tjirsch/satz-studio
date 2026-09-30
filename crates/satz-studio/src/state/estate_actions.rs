@@ -25,7 +25,7 @@ use satz_studio_core::edit::{
 use satz_studio_core::estate::{EstateDir, HclState};
 use satz_studio_core::git::{self, WorkTree};
 use satz_studio_core::model::EstateModel;
-use satz_studio_core::satz::project::{self, AddProjectArgs};
+use satz_studio_core::satz::project;
 use satz_studio_core::satz::reports::{
     AddPackArgs, FindingSeverity, InterviewArgs, InterviewReport, MergeReport, NoticeRow,
     PackChange, PackReview, PacksReport, PrerequisitesResult, QuestionsReport, RemovePackArgs,
@@ -82,9 +82,6 @@ pub enum EstateAction {
     AddPack(AddPackArgs),
     /// `satz_remove_pack`: the pack's gate bound false, its line left as it is
     RemovePack(RemovePackArgs),
-    /// `satz add-project` through the CLI: a project's section, or an interface alone,
-    /// appended to the main file by satz's own writer under the delegated-write discipline
-    AddProject(AddProjectArgs),
     /// `satz_merge_presets`: the line for a pack the library gained
     MergePresets,
     /// `satz --config <dir> review-pack <pack> [--against <estate>]`: the pack judged
@@ -159,7 +156,6 @@ pub async fn estate_coroutine(
             EstateAction::WritePrerequisites => write_prerequisites(&session, app).await,
             EstateAction::CommitEdit(edit) => commit_edit(&session, app, edit).await,
             EstateAction::AddPack(args) => switch_pack(&session, app, "satz_add_pack", &args).await,
-            EstateAction::AddProject(args) => add_project(&session, app, args).await,
             EstateAction::RemovePack(args) => {
                 switch_pack(&session, app, "satz_remove_pack", &args).await
             }
@@ -275,7 +271,7 @@ where
 
 /// The delegated write around any call that writes the main file and answers as a tool
 /// does — a tool over the session, or a satz command through the CLI
-/// ([`project::add_project`], [`streamed_command`]). `source` names the call in the drawer
+/// ([`streamed_command`]). `source` names the call in the drawer
 /// and in the message of a call that did not land. The lock, the record and the check are
 /// [`edit::delegated_write`], the one implementation the e2e tests drive too. A write that
 /// could not start — the file could not be recorded, and nothing ran — is carried as a
@@ -321,55 +317,6 @@ where
             }
         }
     }
-}
-
-/// A project onboarded into the estate, or an interface added to it: `satz add-project`
-/// through the CLI — no MCP tool serves it (ADR 0023) — under the delegated-write
-/// discipline, then the reload. satz writes the section at the end of the main file; a
-/// refusal (a name the estate declares already, an estate that publishes no
-/// `workload_folder`, an export that is a core one) wrote nothing and is satz's sentence,
-/// in the toast, in the drawer and in the wizard.
-async fn add_project(session: &Arc<EstateSession>, app: Store<AppStore>, args: AddProjectArgs) {
-    let estate = app.estate();
-    if estate.adding_project().cloned() {
-        toast(app, ToastKind::Error, "satz add-project is running already");
-        return;
-    }
-    estate.adding_project().set(true);
-    estate.added_project().set(None);
-    let name = args.name.clone();
-    let mut refused = None;
-    let carried = delegated(
-        session,
-        app,
-        DiagSource::Command(project::ADD_PROJECT.to_string()),
-        project::add_project(&session.cli, &session.main, &args),
-        |_| {
-            Ok(if args.interface_only {
-                format!("interface \"{name}\" added — the next transpile writes interfaces/{name}/")
-            } else {
-                format!("project {name} onboarded — the next transpile writes interfaces/{name}/")
-            })
-        },
-    )
-    .await;
-    if let Some(d) = &carried.refused {
-        refused = Some(d.message.clone());
-    } else if carried
-        .checked
-        .iter()
-        .any(|d| d.severity == Severity::Error)
-    {
-        refused = Some(format!(
-            "the check refused the estate with interface \"{}\" in it; the file is back as it was — the drawer says why",
-            args.name
-        ));
-    }
-    estate
-        .added_project()
-        .set(Some(refused.map_or(Ok(args.name.clone()), Err)));
-    estate.adding_project().set(false);
-    reload_with(session, app, carried).await;
 }
 
 /// One answer, or every default: `satz_interview` on the real file.
@@ -792,8 +739,8 @@ fn run_command(
 
 /// The command a pack's notice names, run in the app: `satz adopt <estate> --execute
 /// --import`, which writes the verified `"import-id"`s into the estate and binds the
-/// notice's param. It is satz's own writer on the estate file, so it runs as `satz
-/// add-project` does — through the session's `SatzCli` as the call of
+/// notice's param. It is satz's own writer on the estate file, so it runs through the
+/// session's `SatzCli` as the call of
 /// [`edit::delegated_write`]: the write lock, the record of the main file, the check on the
 /// real path once satz exited zero, the recorded bytes back when the check refuses or when
 /// satz exited non-zero having changed the file — with its lines streamed into the estate's
