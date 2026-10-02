@@ -337,6 +337,8 @@ fn showcase_decodes_references_locks_import_ids_and_keeps_statements_out() {
             "google_project",
             // the map holding the `each` is a block; the `each` in it is kept whole
             "google_pubsub_topic",
+            // the `each … when subscription` map is a block like any other
+            "google_pubsub_subscription",
         ],
         "claim, question, action, suppress, private, request and hcl are not blocks"
     );
