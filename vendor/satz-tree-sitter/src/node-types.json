@@ -252,6 +252,16 @@
           }
         ]
       },
+      "condition": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      },
       "key": {
         "multiple": false,
         "required": true,
@@ -269,6 +279,16 @@
           {
             "type": "identifier",
             "named": true
+          }
+        ]
+      },
+      "negation": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "not",
+            "named": false
           }
         ]
       }
@@ -1120,6 +1140,10 @@
   },
   {
     "type": "interface",
+    "named": false
+  },
+  {
+    "type": "not",
     "named": false
   },
   {
