@@ -76,7 +76,7 @@ async fn the_report_reads_what_the_estate_publishes_and_what_projects_may_reques
         .find(|r| r.param == "event_topics")
         .expect("the showcase takes requests for event_topics");
     assert_eq!(topics.key, "name");
-    assert_eq!(topics.fields, ["name", "retention"]);
+    assert_eq!(topics.fields, ["name", "retention", "subscription"]);
     assert_eq!(
         topics.patterns.get("name").map(String::as_str),
         Some("[a-z][a-z0-9-]*")
@@ -87,6 +87,6 @@ async fn the_report_reads_what_the_estate_publishes_and_what_projects_may_reques
     );
     assert_eq!(
         topics.fields_shown(),
-        "name ~ [a-z][a-z0-9-]*, retention ~ [0-9]+s"
+        "name ~ [a-z][a-z0-9-]*, retention ~ [0-9]+s, subscription"
     );
 }
