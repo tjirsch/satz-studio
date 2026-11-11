@@ -328,7 +328,7 @@ pub struct EstateStore {
     /// the last decisions sheet or workbook this session wrote, which "Export again"
     /// writes over
     pub last_export: Option<Exported>,
-    /// the pack the Packs view reviewed last with `satz review-pack`, or why its review
+    /// the pack the Packs view reviewed last with `satz review-preset`, or why its review
     /// failed; its findings stand in the drawer beside the estate's own until it is closed
     pub review: Option<PackReviewState>,
     /// a review or a placement is running

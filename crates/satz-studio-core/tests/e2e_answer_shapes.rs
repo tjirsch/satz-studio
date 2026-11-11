@@ -164,7 +164,7 @@ async fn every_question_of_every_pack_is_answered_in_the_shape_its_param_is_decl
     let registry = ResourceRegistry::load_all(&dir.schema_dir()).unwrap();
     let cst = Cst::parse(&text).unwrap();
     let packs: PacksReport =
-        support::within(cli.json_report(&["packs".to_string(), main.display().to_string()]))
+        support::within(cli.json_report(&["presets".to_string(), main.display().to_string()]))
             .await
             .unwrap();
     // the model builds over an estate that uses every pack there is

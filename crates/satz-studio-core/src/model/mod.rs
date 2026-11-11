@@ -7,7 +7,7 @@
 //! satz's `EstateResolver` and `split_body` do, and [`params`] reads the `params { }`
 //! block beside the questions report and the shape of every resolved param, which is what
 //! an answer is typed in ([`answer_kind`]). The packs are satz's own report
-//! (`satz_packs`), carried as it came: which packs the estate uses and what each needs is
+//! (`satz_presets`), carried as it came: which packs the estate uses and what each needs is
 //! satz's pack graph, and the model derives none of it. [`value`] decodes a value the way
 //! satz's lexer reads it.
 
@@ -200,7 +200,7 @@ pub struct EstateModel {
     pub main: PathBuf,
     pub outline: Vec<ResourceNode>,
     pub params: Vec<ParamRow>,
-    /// `satz_packs` for this estate: every pack the pack graph offers, as the estate has it
+    /// `satz_presets` for this estate: every pack the pack graph offers, as the estate has it
     pub packs: PacksReport,
     /// the comment block directly above each `use` line, active or commented, by the
     /// line's number: the phase the pack can be adopted in
@@ -225,7 +225,7 @@ impl EstateModel {
     /// The model of `main`, whose parsed text is `cst`. `schema` is the registry, or
     /// the directory it is missing from; `env` the resolved params
     /// (`EstateDir::params`); `questions` the report of `satz_questions`; `packs` the
-    /// report of `satz_packs`; `diagnostics` what the parse and the compile said.
+    /// report of `satz_presets`; `diagnostics` what the parse and the compile said.
     pub fn build(
         main: &Path,
         cst: &Cst,

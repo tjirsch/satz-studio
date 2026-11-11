@@ -142,7 +142,7 @@ mod tests {
         let pack = Path::new("/home/packs/team-access.satz");
         let at = |file: &str, line: Option<u32>| Diagnostic {
             line,
-            ..Diagnostic::error("m", DiagSource::Command("review-pack".to_string())).at(file, 1)
+            ..Diagnostic::error("m", DiagSource::Command("review-preset".to_string())).at(file, 1)
         };
         assert_eq!(
             destination(

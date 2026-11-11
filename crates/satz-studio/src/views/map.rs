@@ -1,9 +1,9 @@
-//! The Packs destination: satz's pack report (`satz_packs`) as cards. The map first; then
+//! The Packs destination: satz's pack report (`satz_presets`) as cards. The map first; then
 //! every pack whose line the file carries, under the phase that line stands under; then
 //! the packs the file has no line for; then the `use` lines the pack graph does not know.
 //! A pack that another needs — and that meets that need alone — is a tree: its card, and
 //! the cards of the packs that need it hung below by right-angle connectors, whatever
-//! phase their lines stand under. A switch is `satz_add_pack` or `satz_remove_pack`: what
+//! phase their lines stand under. A switch is `satz_add_preset` or `satz_remove_preset`: what
 //! a pack needs, what it deploys and what a switch does are satz's pack graph, and the
 //! view derives none of it. Above the sections stands the pack review
 //! ([`crate::views::review`]), for a pack the operator writes rather than switches.
@@ -353,7 +353,7 @@ pub fn PacksView() -> Element {
                     }
                 }
             }
-            p { class: "view__lead", "A switch is satz's add-pack or remove-pack: satz binds the gate, writes the line where the pack graph places it, and refuses a switch while a pack it needs is off or a pack that needs it is on. merge-presets reconciles this estate's library with upstream: a pack that is missing is installed, an unmodified one is upgraded, an edited one is forked rather than overwritten. Its flags are in the commands palette." }
+            p { class: "view__lead", "A switch is satz's add-preset or remove-preset: satz binds the gate, writes the line where the pack graph places it, and refuses a switch while a pack it needs is off or a pack that needs it is on. merge-presets reconciles this estate's library with upstream: a pack that is missing is installed, an unmodified one is upgraded, an edited one is forked rather than overwritten. Its flags are in the commands palette." }
             PackReviewCard {}
             for (i, f) in loose.iter().enumerate() {
                 div { key: "loose-{i}", class: "pack-card__diag",
@@ -1031,7 +1031,7 @@ mod tests {
     #[test]
     fn the_recorded_report_hangs_every_pack_under_the_one_it_needs() {
         let r: PacksReport = serde_json::from_str(include_str!(
-            "../../../satz-studio-core/tests/fixtures/packs-smoke.json"
+            "../../../satz-studio-core/tests/fixtures/presets-smoke.json"
         ))
         .unwrap();
         let s = sections(&r, &BTreeMap::new());
@@ -1133,7 +1133,7 @@ mod tests {
             finding(
                 &logsink.path,
                 "needs the map",
-                Some("satz add-pack C0example.satz presets/estate-map.satz"),
+                Some("satz add-preset C0example.satz presets/estate-map.satz"),
             ),
             finding("presets/gone.satz", "a pack the graph has no row for", None),
         ];
@@ -1142,7 +1142,7 @@ mod tests {
             [
                 (
                     "needs the map".to_string(),
-                    Some("satz add-pack C0example.satz presets/estate-map.satz".to_string())
+                    Some("satz add-preset C0example.satz presets/estate-map.satz".to_string())
                 ),
                 ("another".to_string(), None),
             ]

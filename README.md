@@ -42,8 +42,8 @@ order: **Overview**, which estate this is — its short name, the customer, the 
 id and the organisation id as its own file sets them, then the infrastructure it names,
 in its own answers — and what it still has to do; **Packs**,
 every pack satz's pack graph offers, as the estate has it, the packs that need another
-hung below it, each switched on and off by satz's own `add-pack` and `remove-pack`,
-and a pack you wrote reviewed against the library's own bar with `satz review-pack` —
+hung below it, each switched on and off by satz's own `add-preset` and `remove-preset`,
+and a pack you wrote reviewed against the library's own bar with `satz review-preset` —
 each finding in the diagnostics drawer at its line — then placed in the estate's
 library as a `.local.satz` or handed upstream by a pull request;
 **Decisions**, the
@@ -105,7 +105,7 @@ that holds them up — in front of apply and bootstrap, which satz refuses.
 
 ## What it needs
 
-- **`satz` 0.86.5 or newer.** `MIN_SATZ` in `crates/satz-studio-core/src/satz/binary.rs`
+- **`satz` 0.95.1 or newer.** `MIN_SATZ` in `crates/satz-studio-core/src/satz/binary.rs`
   names the oldest satz this build works with. It rises when a satz release breaks the
   app or the app starts using something a later satz introduced, not with every satz
   release. Install satz with its installer or bring it up to date with `satz

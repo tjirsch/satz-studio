@@ -2,9 +2,9 @@
 //! It reloads the model, runs CLI commands with their output streamed into the store,
 //! calls tools, hands `apply` and `bootstrap` to the OS terminal, and is the one place
 //! the estate is written from: an answer through satz's own writer, a value through
-//! the app's, a pack switched through `satz_add_pack` and `satz_remove_pack` — each under
+//! the app's, a pack switched through `satz_add_preset` and `satz_remove_preset` — each under
 //! the session's write lock, each verified by `satz transpile --check`, each followed by
-//! a reload. It also runs `satz review-pack` for the Packs view and places a reviewed
+//! a reload. It also runs `satz review-preset` for the Packs view and places a reviewed
 //! pack in the estate's library, the estate checked with it there. A running
 //! command streams from a tokio task into a local task, so the loop stays free to take
 //! `CancelCommand`; the three git commands that put the estate in a repository run the
@@ -77,14 +77,14 @@ pub enum EstateAction {
     /// the app's own writer: the edit applied in memory, checked as a temp file
     /// beside the real one, renamed over it
     CommitEdit(Edit),
-    /// `satz_add_pack`: the pack's gate bound true and its line made active where the
+    /// `satz_add_preset`: the pack's gate bound true and its line made active where the
     /// pack graph places it, by satz's own writer — the map's line as much as any other
     AddPack(AddPackArgs),
-    /// `satz_remove_pack`: the pack's gate bound false, its line left as it is
+    /// `satz_remove_preset`: the pack's gate bound false, its line left as it is
     RemovePack(RemovePackArgs),
     /// `satz_merge_presets`: the line for a pack the library gained
     MergePresets,
-    /// `satz --config <dir> review-pack <pack> [--against <estate>]`: the pack judged
+    /// `satz --config <dir> review-preset <pack> [--against <estate>]`: the pack judged
     /// against the library's bar, its findings into the drawer at their lines
     ReviewPack {
         pack: PathBuf,
@@ -155,9 +155,11 @@ pub async fn estate_coroutine(
             }
             EstateAction::WritePrerequisites => write_prerequisites(&session, app).await,
             EstateAction::CommitEdit(edit) => commit_edit(&session, app, edit).await,
-            EstateAction::AddPack(args) => switch_pack(&session, app, "satz_add_pack", &args).await,
+            EstateAction::AddPack(args) => {
+                switch_pack(&session, app, "satz_add_preset", &args).await
+            }
             EstateAction::RemovePack(args) => {
-                switch_pack(&session, app, "satz_remove_pack", &args).await
+                switch_pack(&session, app, "satz_remove_preset", &args).await
             }
             EstateAction::MergePresets => {
                 {
@@ -356,8 +358,8 @@ async fn interview(session: &Arc<EstateSession>, app: Store<AppStore>, args: Int
     reload_with(session, app, carried).await;
 }
 
-/// One pack switched on or off by satz's own pack logic: `satz_add_pack` or
-/// `satz_remove_pack` on the real file, under the delegated-write discipline. satz binds
+/// One pack switched on or off by satz's own pack logic: `satz_add_preset` or
+/// `satz_remove_preset` on the real file, under the delegated-write discipline. satz binds
 /// the gate, writes or uncomments the line, compiles the estate and restores it when the
 /// compile refuses; a switch satz refuses — a pack it needs is off, a pack that needs it
 /// is on, a line not gated on its gate — wrote nothing and names why. A switch that
@@ -1088,7 +1090,7 @@ fn merge_outcome(report: &MergeReport) -> CommandOutcome {
     }
 }
 
-/// `satz review-pack` with the estate's config, through the CLI: the MCP tool is confined
+/// `satz review-preset` with the estate's config, through the CLI: the MCP tool is confined
 /// to the estate's root, and a pack under review usually lives outside it. The review
 /// replaces the last one; its findings join the drawer, which opens on a review that has
 /// something to say above an info, and the verdict is a toast. A review that failed —
@@ -1118,7 +1120,7 @@ async fn review_pack(
         }
         Err(e) => {
             let error = e.to_string();
-            toast(app, ToastKind::Error, format!("review-pack: {error}"));
+            toast(app, ToastKind::Error, format!("review-preset: {error}"));
             app.estate()
                 .review()
                 .set(Some(PackReviewState::Failed { pack, error }));
@@ -1278,15 +1280,15 @@ async fn reload_with(session: &Arc<EstateSession>, app: Store<AppStore>, carried
     estate.questions().set(questions.clone());
 
     let packs = match session
-        .tool("satz_packs", serde_json::Map::new())
+        .tool("satz_presets", serde_json::Map::new())
         .await
-        .and_then(|o| o.typed::<PacksReport>("satz_packs"))
+        .and_then(|o| o.typed::<PacksReport>("satz_presets"))
     {
         Ok(report) => Some(report),
         Err(e) => {
             diagnostics.push(Diagnostic::error(
                 e.to_string(),
-                DiagSource::Tool("satz_packs".to_string()),
+                DiagSource::Tool("satz_presets".to_string()),
             ));
             None
         }

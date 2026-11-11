@@ -48,7 +48,7 @@ async fn showcase_params_carry_their_questions_and_leave_the_gates_out() {
     let estate = fixture();
     let main = estate.yaml_dir().join("showcase.satz");
     let report: QuestionsReport = json_report(&estate, "questions", "showcase.satz").await;
-    let packs: PacksReport = json_report(&estate, "packs", "showcase.satz").await;
+    let packs: PacksReport = json_report(&estate, "presets", "showcase.satz").await;
     let text = std::fs::read_to_string(&main).unwrap();
     let cst = Cst::parse(&text).unwrap();
     let env = estate.params(&main).unwrap();

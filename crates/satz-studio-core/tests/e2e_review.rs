@@ -1,4 +1,4 @@
-//! `satz review-pack` end to end with the installed satz, the way the Packs view runs it:
+//! `satz review-preset` end to end with the installed satz, the way the Packs view runs it:
 //! the CLI with the estate's directory as `--config`, over an estate the smoke matrix's
 //! answers complete. A pack of satz's own library clears the bar; the broken fixture
 //! (`tests/fixtures/review/team-access.satz`) does not, and each of its findings is a

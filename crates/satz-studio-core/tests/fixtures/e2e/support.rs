@@ -3,7 +3,7 @@
 //! absolute path; the skeleton `satz interview --create` writes into it; the answers
 //! satz's smoke matrix pipes; the answer path the app takes (`Snapshot::take`, then
 //! `Snapshot::delegate` around `satz_interview` with `McpChecker`); a pack switched as
-//! the app switches it (`satz_add_pack`, `satz_remove_pack`); the model built as the app
+//! the app switches it (`satz_add_preset`, `satz_remove_preset`); the model built as the app
 //! builds it; and the output of `satz transpile --check` with the banner stripped. Each test file
 //! includes it with `#[path = "fixtures/e2e/support.rs"]` and uses the part it needs.
 #![allow(dead_code)]
@@ -298,13 +298,13 @@ pub async fn questions(session: &EstateSession) -> QuestionsReport {
     outcome.typed("satz_questions").unwrap()
 }
 
-/// `satz_packs` over the session.
+/// `satz_presets` over the session.
 pub async fn packs(session: &EstateSession) -> PacksReport {
-    let outcome = within(session.tool("satz_packs", serde_json::Map::new()))
+    let outcome = within(session.tool("satz_presets", serde_json::Map::new()))
         .await
         .unwrap();
     assert!(!outcome.is_error, "{}", outcome.text);
-    outcome.typed("satz_packs").unwrap()
+    outcome.typed("satz_presets").unwrap()
 }
 
 /// The path the app's `AddPack` and `RemovePack` actions take: [`delegate`] over the
@@ -328,26 +328,26 @@ pub async fn switch<A: serde::Serialize>(
     }
 }
 
-/// `satz_add_pack` on `pack`, the app's way; a refusal fails the test.
+/// `satz_add_preset` on `pack`, the app's way; a refusal fails the test.
 pub async fn add_pack(session: &Arc<EstateSession>, pack: &str) -> (PackChange, Committed) {
     let args = AddPackArgs {
         pack: pack.to_string(),
         with_requirements: false,
     };
-    switch(session, "satz_add_pack", &args)
+    switch(session, "satz_add_preset", &args)
         .await
-        .unwrap_or_else(|e| panic!("add-pack {pack}: {e}"))
+        .unwrap_or_else(|e| panic!("add-preset {pack}: {e}"))
 }
 
-/// `satz_remove_pack` on `pack`, the app's way; a refusal fails the test.
+/// `satz_remove_preset` on `pack`, the app's way; a refusal fails the test.
 pub async fn remove_pack(session: &Arc<EstateSession>, pack: &str) -> (PackChange, Committed) {
     let args = RemovePackArgs {
         pack: pack.to_string(),
         cascade: false,
     };
-    switch(session, "satz_remove_pack", &args)
+    switch(session, "satz_remove_preset", &args)
         .await
-        .unwrap_or_else(|e| panic!("remove-pack {pack}: {e}"))
+        .unwrap_or_else(|e| panic!("remove-preset {pack}: {e}"))
 }
 
 /// The model as the app's reload builds it: the questions and the packs over the

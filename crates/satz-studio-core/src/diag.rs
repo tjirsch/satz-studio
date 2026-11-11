@@ -484,7 +484,7 @@ packs on while a pack they need is off (2)
 warning  pack-requirement  yaml/smoke.satz:139  presets/monitoring/organization-audit-logsink.satz
 warning  pack-requirement  yaml/smoke.satz:140  presets/monitoring/organization-cis-log-alerts-central.satz
     needs `presets/estate-map.satz`, which is off
-    fix: satz add-pack smoke.satz presets/estate-map.satz
+    fix: satz add-preset smoke.satz presets/estate-map.satz
 
 notices open — what a pack asks to be run once it is on (1)
 
@@ -517,7 +517,7 @@ error    providers
             assert_eq!(d[i].line, Some(line));
             assert_eq!(
                 d[i].message,
-                "packs on while a pack they need is off: needs `presets/estate-map.satz`, which is off\nfix: satz add-pack smoke.satz presets/estate-map.satz"
+                "packs on while a pack they need is off: needs `presets/estate-map.satz`, which is off\nfix: satz add-preset smoke.satz presets/estate-map.satz"
             );
         }
 

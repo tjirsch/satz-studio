@@ -146,7 +146,7 @@ impl SatzCli {
     }
 
     /// Run a reporting command whose exit status is a VERDICT on what it judged — `satz
-    /// review-pack` exits non-zero when the pack does not clear the bar, and writes its
+    /// review-preset` exits non-zero when the pack does not clear the bar, and writes its
     /// report either way — and type the report with the status beside it. A non-zero exit
     /// that wrote no file is an error carrying stderr: satz failed before it judged
     /// anything. The caller holds the status to the report's own verdict.

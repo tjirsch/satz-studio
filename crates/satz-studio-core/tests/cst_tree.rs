@@ -10,6 +10,7 @@ fn label(kind: &NodeKind) -> String {
         NodeKind::Document => "Document".into(),
         NodeKind::Header { .. } => "Header".into(),
         NodeKind::Params => "Params".into(),
+        NodeKind::Inputs => "Inputs".into(),
         NodeKind::ParamEntry { .. } => "ParamEntry".into(),
         NodeKind::Use { .. } => "Use".into(),
         NodeKind::Block { .. } => "Block".into(),

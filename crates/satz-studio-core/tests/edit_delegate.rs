@@ -102,8 +102,8 @@ async fn a_call_that_ended_without_a_result_is_compared_and_restored_too() {
     );
     assert!(matches!(n.restore, Restore::Restored(_)), "{n:?}");
     assert_eq!(std::fs::read_to_string(&path).unwrap(), BEFORE);
-    let message = n.message("satz_add_pack");
-    assert!(message.starts_with("satz_add_pack: "), "{message}");
+    let message = n.message("satz_add_preset");
+    assert!(message.starts_with("satz_add_preset: "), "{message}");
     assert!(
         message.ends_with(
             " — the call ended without a result and had changed new.satz; the file is back as it was"
@@ -117,8 +117,11 @@ async fn a_call_that_ended_without_a_result_is_compared_and_restored_too() {
     let n = not_landed(snapshot.delegate(call, &Unreached).await);
     assert!(matches!(n.restore, Restore::Untouched), "{n:?}");
     assert_eq!(
-        n.message("satz_add_pack"),
-        format!("satz_add_pack: {}", SatzError::Closed("killed".to_string()))
+        n.message("satz_add_preset"),
+        format!(
+            "satz_add_preset: {}",
+            SatzError::Closed("killed".to_string())
+        )
     );
 
     // a file the call removed counts as changed

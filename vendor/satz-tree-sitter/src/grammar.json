@@ -23,6 +23,10 @@
         },
         {
           "type": "SYMBOL",
+          "name": "inputs"
+        },
+        {
+          "type": "SYMBOL",
           "name": "use_statement"
         },
         {
@@ -170,6 +174,30 @@
         {
           "type": "STRING",
           "value": "params"
+        },
+        {
+          "type": "STRING",
+          "value": "{"
+        },
+        {
+          "type": "REPEAT",
+          "content": {
+            "type": "SYMBOL",
+            "name": "param"
+          }
+        },
+        {
+          "type": "STRING",
+          "value": "}"
+        }
+      ]
+    },
+    "inputs": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "STRING",
+          "value": "inputs"
         },
         {
           "type": "STRING",

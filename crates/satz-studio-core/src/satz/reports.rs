@@ -303,7 +303,7 @@ pub struct Finding {
     pub fix: Option<String>,
 }
 
-/// What `satz review-pack <pack> --format json` writes and `satz_review_pack` returns:
+/// What `satz review-preset <pack> --format json` writes and `satz_review_preset` returns:
 /// one pack judged against the preset library's own bar. satz's `Review`
 /// (`vendor/satz/src/review_pack.rs`).
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -321,7 +321,7 @@ pub struct PackReview {
 
 impl PackReview {
     /// satz's verdict: the pack clears the bar when no finding is an error. Warnings are
-    /// the author's to weigh. `satz review-pack` exits non-zero exactly when this is false.
+    /// the author's to weigh. `satz review-preset` exits non-zero exactly when this is false.
     pub fn passed(&self) -> bool {
         !self
             .findings
@@ -464,7 +464,7 @@ pub struct Unmanaged {
     pub at_line: u32,
 }
 
-/// What `satz_packs` returns: every pack the pack graph offers, as this estate has it.
+/// What `satz_presets` returns: every pack the pack graph offers, as this estate has it.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct PacksReport {
     pub estate: String,
@@ -493,7 +493,7 @@ impl PacksReport {
     }
 }
 
-/// The arguments of `satz_add_pack`, as the app sends them.
+/// The arguments of `satz_add_preset`, as the app sends them.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct AddPackArgs {
     /// the pack's path (`presets/…`) or its gate
@@ -503,7 +503,7 @@ pub struct AddPackArgs {
     pub with_requirements: bool,
 }
 
-/// The arguments of `satz_remove_pack`, as the app sends them.
+/// The arguments of `satz_remove_preset`, as the app sends them.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct RemovePackArgs {
     /// the pack's path (`presets/…`) or its gate
@@ -531,7 +531,7 @@ pub struct LineEdit {
     pub edit: String,
 }
 
-/// What `satz_add_pack` and `satz_remove_pack` return.
+/// What `satz_add_preset` and `satz_remove_preset` return.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct PackChange {
     pub estate: String,
@@ -1189,9 +1189,9 @@ mod tests {
         assert_eq!((f.subject, f.fix), (None, None));
     }
 
-    /// `satz packs vendor/satz/tests/smoke/yaml/smoke.satz --format json`, recorded from
+    /// `satz presets vendor/satz/tests/smoke/yaml/smoke.satz --format json`, recorded from
     /// the release the app is tested against over `tests/fixtures/smoke/config.toml`.
-    const PACKS: &str = include_str!("../../tests/fixtures/packs-smoke.json");
+    const PACKS: &str = include_str!("../../tests/fixtures/presets-smoke.json");
 
     #[test]
     fn the_recorded_packs_report_round_trips() {
@@ -1238,7 +1238,7 @@ mod tests {
         assert!(serde_json::from_value::<PackRow>(unknown).is_err());
     }
 
-    /// `satz review-pack <pack> --format json`, recorded from the release the app is tested
+    /// `satz review-preset <pack> --format json`, recorded from the release the app is tested
     /// against, over
     /// `tests/fixtures/smoke/config.toml`: a pack of satz's own library, which clears the
     /// bar, and `tests/fixtures/review/team-access.satz`, which does not. The absolute

@@ -132,7 +132,8 @@ impl<'t> Builder<'t> {
     fn item(&mut self, n: Ts<'_>) -> Result<NodeId, CstError> {
         match n.kind() {
             "header" => Ok(self.header(n)),
-            "params" => self.params(n),
+            "params" => self.params(n, NodeKind::Params),
+            "inputs" => self.params(n, NodeKind::Inputs),
             "param" => self.entry(n, "name"),
             "attribute" => self.entry(n, "key"),
             "use_statement" => Ok(self.use_statement(n)),
@@ -191,8 +192,9 @@ impl<'t> Builder<'t> {
         id
     }
 
-    fn params(&mut self, n: Ts<'_>) -> Result<NodeId, CstError> {
-        let id = self.push_at(NodeKind::Params, n);
+    /// A `params { … }` or an `inputs { … }` block: the same shape, entries and trivia.
+    fn params(&mut self, n: Ts<'_>, kind: NodeKind) -> Result<NodeId, CstError> {
+        let id = self.push_at(kind, n);
         let mut out = Vec::new();
         for c in kids(n) {
             if let Some(t) = self.trivia(c) {

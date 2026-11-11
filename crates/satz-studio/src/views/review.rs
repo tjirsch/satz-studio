@@ -1,4 +1,4 @@
-//! The pack review in Packs: `satz review-pack` over a pack the operator chooses, and the
+//! The pack review in Packs: `satz review-preset` over a pack the operator chooses, and the
 //! two places a reviewed pack goes.
 //!
 //! The rules are satz's; the view runs the command ([`EstateAction::ReviewPack`]) and
@@ -112,7 +112,7 @@ pub fn PackReviewCard() -> Element {
                 }
             }
             p { class: "review__lead",
-                "satz review-pack holds a pack to the library's own bar: it parses, it is formatted, its header says what it is, its version has a changelog row, it declares no membership, it runs no legacy constraint beside its managed replacement, every type it emits has a prerequisite row, and it compiles. The pack is folded into an estate made of the documented example values, or into "
+                "satz review-preset holds a pack to the library's own bar: it parses, it is formatted, its header says what it is, its version has a changelog row, it declares no membership, it runs no legacy constraint beside its managed replacement, every type it emits has a prerequisite row, and it compiles. The pack is folded into an estate made of the documented example values, or into "
                 code { "{open.name}" }
                 " with the switch on — for a pack that estate uses. Each finding is in the drawer at its line."
             }
@@ -365,7 +365,7 @@ mod tests {
     #[test]
     fn the_marked_line_is_the_selected_finding_about_this_pack() {
         let pack = Path::new("/home/packs/team-access.satz");
-        let about_pack = Diagnostic::error("m", DiagSource::Command("review-pack".to_string()))
+        let about_pack = Diagnostic::error("m", DiagSource::Command("review-preset".to_string()))
             .at("/home/packs/team-access.satz", 17);
         let elsewhere = Diagnostic::error("m", DiagSource::Check).at("/e/yaml/C0example.satz", 17);
         assert_eq!(marked_line(Some(&about_pack), pack), Some(17));
