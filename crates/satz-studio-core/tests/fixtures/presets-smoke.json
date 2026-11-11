@@ -24,6 +24,7 @@
         "presets/organization-budget.satz",
         "presets/billing-export.satz",
         "presets/project-onboarding.satz",
+        "presets/workload-deployer.satz",
         "presets/shared-network.satz",
         "presets/security-audit/sa-security-audit.satz",
         "presets/scc/scc-service-enablement.satz",
@@ -228,6 +229,30 @@
           ],
           "params": [
             "use_project_onboarding"
+          ],
+          "met": false
+        }
+      ],
+      "required_by": [],
+      "excludes": [],
+      "findings": []
+    },
+    {
+      "path": "presets/workload-deployer.satz",
+      "role": "pack",
+      "gate": "use_workload_deployer",
+      "gate_declared_in": "presets/estate-map.satz",
+      "default": "false",
+      "line": "absent",
+      "deploys": false,
+      "requires": [
+        {
+          "kind": "gate",
+          "any_of": [
+            "presets/estate-map.satz"
+          ],
+          "params": [
+            "use_workload_deployer"
           ],
           "met": false
         }
@@ -1555,7 +1580,7 @@
       "line": 57,
       "subject": "presets/essential-contacts-organization.satz",
       "message": "`presets/essential-contacts-organization.satz` needs `presets/estate-map.satz`, which is off",
-      "fix": "satz add-pack vendor/satz/tests/smoke/yaml/smoke.satz presets/estate-map.satz"
+      "fix": "satz add-preset vendor/satz/tests/smoke/yaml/smoke.satz presets/estate-map.satz"
     },
     {
       "severity": "warning",
@@ -1565,7 +1590,7 @@
       "line": 139,
       "subject": "presets/monitoring/organization-audit-logsink.satz",
       "message": "`presets/monitoring/organization-audit-logsink.satz` needs `presets/estate-map.satz`, which is off",
-      "fix": "satz add-pack vendor/satz/tests/smoke/yaml/smoke.satz presets/estate-map.satz"
+      "fix": "satz add-preset vendor/satz/tests/smoke/yaml/smoke.satz presets/estate-map.satz"
     },
     {
       "severity": "warning",
@@ -1575,7 +1600,7 @@
       "line": 140,
       "subject": "presets/monitoring/organization-cis-log-alerts-central.satz",
       "message": "`presets/monitoring/organization-cis-log-alerts-central.satz` needs `presets/estate-map.satz`, which is off",
-      "fix": "satz add-pack vendor/satz/tests/smoke/yaml/smoke.satz presets/estate-map.satz"
+      "fix": "satz add-preset vendor/satz/tests/smoke/yaml/smoke.satz presets/estate-map.satz"
     },
     {
       "severity": "warning",
@@ -1585,7 +1610,7 @@
       "line": 60,
       "subject": "presets/cis/CIS-GCP-Foundation-4.0.satz",
       "message": "`presets/cis/CIS-GCP-Foundation-4.0.satz` needs `presets/estate-map.satz`, which is off",
-      "fix": "satz add-pack vendor/satz/tests/smoke/yaml/smoke.satz presets/estate-map.satz"
+      "fix": "satz add-preset vendor/satz/tests/smoke/yaml/smoke.satz presets/estate-map.satz"
     }
   ]
 }

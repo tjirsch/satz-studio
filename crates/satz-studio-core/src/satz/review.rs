@@ -1,9 +1,9 @@
-//! `satz review-pack` and the two places a reviewed pack goes.
+//! `satz review-preset` and the two places a reviewed pack goes.
 //!
 //! The rules a pack is held to are satz's (`vendor/satz/src/review_pack.rs`): the app
 //! runs the command, types its report ([`PackReview`]) and shows each finding at its
-//! line. It runs the CLI, `satz --config <estate dir> review-pack <pack> --format json`,
-//! and not the `satz_review_pack` tool: `satz mcp` confines every path to the estate's
+//! line. It runs the CLI, `satz --config <estate dir> review-preset <pack> --format json`,
+//! and not the `satz_review_preset` tool: `satz mcp` confines every path to the estate's
 //! root, and a pack under review is usually a file its author keeps elsewhere — placing
 //! it in the estate's library is the second destination below, which comes after the
 //! review.
@@ -30,8 +30,8 @@ use crate::diag::{DiagSource, Diagnostic, plain};
 use crate::edit::{CheckFailure, Checker, sha256_hex};
 use crate::satz::reports::CompileSummary;
 
-/// The name the findings of a review carry in the drawer: `satz review-pack`.
-pub const COMMAND: &str = "review-pack";
+/// The name the findings of a review carry in the drawer: `satz review-preset`.
+pub const COMMAND: &str = "review-preset";
 
 /// A pack, the bytes the review judged, and what satz said about them.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -47,7 +47,7 @@ pub struct ReviewedPack {
 }
 
 impl ReviewedPack {
-    /// Every finding as a diagnostic at its `file:line`, from `satz review-pack`.
+    /// Every finding as a diagnostic at its `file:line`, from `satz review-preset`.
     pub fn diagnostics(&self) -> Vec<Diagnostic> {
         diagnostics(&self.path, &self.review)
     }
@@ -62,7 +62,7 @@ impl ReviewedPack {
     }
 }
 
-/// `review-pack <pack> [--against <estate>]`: the arguments before the format and the
+/// `review-preset <pack> [--against <estate>]`: the arguments before the format and the
 /// destination, which [`SatzCli::json_verdict`] adds.
 pub fn review_args(pack: &Path, against: Option<&Path>) -> Vec<String> {
     let mut args = vec![COMMAND.to_string(), pack.display().to_string()];
@@ -313,7 +313,7 @@ mod tests {
     fn the_arguments_name_the_pack_and_the_estate_it_is_judged_in() {
         assert_eq!(
             review_args(Path::new("/e/packs/team-access.satz"), None),
-            ["review-pack", "/e/packs/team-access.satz"]
+            ["review-preset", "/e/packs/team-access.satz"]
         );
         assert_eq!(
             review_args(
@@ -321,7 +321,7 @@ mod tests {
                 Some(Path::new("/e/yaml/C0example.satz"))
             ),
             [
-                "review-pack",
+                "review-preset",
                 "/e/packs/team-access.satz",
                 "--against",
                 "/e/yaml/C0example.satz"
@@ -330,7 +330,7 @@ mod tests {
     }
 
     /// Every finding of the recorded review is a diagnostic in the pack's file, at the
-    /// line satz named where it named one, from `satz review-pack`.
+    /// line satz named where it named one, from `satz review-preset`.
     #[test]
     fn the_findings_are_diagnostics_at_file_and_line() {
         let review: PackReview = serde_json::from_str(BROKEN).unwrap();

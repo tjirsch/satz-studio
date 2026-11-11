@@ -517,6 +517,21 @@
     }
   },
   {
+    "type": "inputs",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "param",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
     "type": "interface",
     "named": true,
     "fields": {
@@ -862,6 +877,10 @@
           "named": true
         },
         {
+          "type": "inputs",
+          "named": true
+        },
+        {
           "type": "interface",
           "named": true
         },
@@ -1136,6 +1155,10 @@
   },
   {
     "type": "implements",
+    "named": false
+  },
+  {
+    "type": "inputs",
     "named": false
   },
   {

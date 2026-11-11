@@ -1,5 +1,5 @@
 //! The Packs view's switches, driven as the view drives them, on the interviewed
-//! skeleton: the map switched on through `satz_add_pack`, which uncomments its line; a
+//! skeleton: the map switched on through `satz_add_preset`, which uncomments its line; a
 //! pack switched on, which binds its gate and makes its line active, and off, which binds
 //! the gate false and leaves the line; a switch satz refuses, which writes nothing and
 //! names why; and a gate bound true whose line is gone, which satz's pack report shows as
@@ -70,7 +70,7 @@ async fn the_map_and_a_pack_are_switched_by_satz_and_a_refused_switch_writes_not
     // naming the packs that would meet it, the file as it was
     let refused = support::switch(
         &session,
-        "satz_add_pack",
+        "satz_add_preset",
         &AddPackArgs {
             pack: BILLING.to_string(),
             with_requirements: false,
@@ -199,7 +199,7 @@ async fn a_gate_bound_true_without_its_line_is_absent_and_the_check_names_the_pa
     assert!(
         warning
             .message
-            .contains(&format!("fix: satz add-pack new.satz {BUDGET}")),
+            .contains(&format!("fix: satz add-preset new.satz {BUDGET}")),
         "{}",
         warning.message
     );
@@ -229,7 +229,7 @@ async fn a_gate_bound_true_without_its_line_is_absent_and_the_check_names_the_pa
         finding
             .fix
             .as_deref()
-            .is_some_and(|f| f.starts_with("satz add-pack ") && f.ends_with(BUDGET)),
+            .is_some_and(|f| f.starts_with("satz add-preset ") && f.ends_with(BUDGET)),
         "{finding:?}"
     );
     assert!(m.params.iter().all(|p| p.name != "use_budget"));
@@ -322,14 +322,14 @@ async fn a_refused_answer_leaves_the_file_as_it_was_and_says_so_when_satz_had_ch
     support::answer_like_the_smoke_matrix(&session).await;
     let (change, _) = support::switch(
         &session,
-        "satz_add_pack",
+        "satz_add_preset",
         &AddPackArgs {
             pack: support::MAP.to_string(),
             with_requirements: true,
         },
     )
     .await
-    .unwrap_or_else(|e| panic!("add-pack the map: {e}"));
+    .unwrap_or_else(|e| panic!("add-preset the map: {e}"));
     assert_eq!(change.switched, [support::MAP]);
 
     // the central alerts read the audit logsink's project, and the logsink is off: the
@@ -372,7 +372,7 @@ async fn a_refused_answer_leaves_the_file_as_it_was_and_says_so_when_satz_had_ch
         pack: BILLING.to_string(),
         with_requirements: false,
     };
-    let Delegated::NotLanded(refused) = support::delegate(&session, "satz_add_pack", &args).await
+    let Delegated::NotLanded(refused) = support::delegate(&session, "satz_add_preset", &args).await
     else {
         panic!("billing without a security model landed")
     };
@@ -380,7 +380,7 @@ async fn a_refused_answer_leaves_the_file_as_it_was_and_says_so_when_satz_had_ch
         panic!("{refused:?}")
     };
     assert!(matches!(refused.restore, Restore::Untouched), "{refused:?}");
-    assert_eq!(refused.message("satz_add_pack"), outcome.text);
+    assert_eq!(refused.message("satz_add_preset"), outcome.text);
     assert!(!outcome.text.contains("had changed"), "{}", outcome.text);
     assert_eq!(support::read(&main), before);
     assert!(estate.temp_files().is_empty(), "{:?}", estate.temp_files());

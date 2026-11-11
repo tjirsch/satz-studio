@@ -255,6 +255,7 @@ fn signature(cst: &Cst, id: NodeId) -> String {
         NodeKind::Document => "document".to_string(),
         NodeKind::Header { keyword, name } => format!("header {keyword} {name}"),
         NodeKind::Params => "params".to_string(),
+        NodeKind::Inputs => "inputs".to_string(),
         NodeKind::ParamEntry { name, .. } => format!("param {}", s(*name)),
         NodeKind::Use { path, as_key, when } => {
             format!(

@@ -1,6 +1,6 @@
 //! The pack rows and the edges between them are satz's: the model's pack report, read
-//! over the session as the app's reload reads it (`satz_packs`), equals what
-//! `satz packs <estate> --format json` writes for the same estate — every row, every
+//! over the session as the app's reload reads it (`satz_presets`), equals what
+//! `satz presets <estate> --format json` writes for the same estate — every row, every
 //! requirement and dependent, every `use` the graph does not know, every finding. The
 //! estates are the skeleton `satz interview --create` writes, as written and interviewed
 //! with the map and two packs on, so a pin bump that changes the graph is checked here
@@ -25,7 +25,7 @@ const GRANT: &str = "presets/ci/verification-runner-grant.satz";
 
 async fn cli_report(estate: &support::Estate, main: &Path) -> PacksReport {
     let cli = estate.cli().await;
-    support::within(cli.json_report(&["packs".to_string(), main.display().to_string()]))
+    support::within(cli.json_report(&["presets".to_string(), main.display().to_string()]))
         .await
         .unwrap()
 }
@@ -60,7 +60,7 @@ fn needs(report: &PacksReport, path: &str, on: &str) -> bool {
 }
 
 #[tokio::test]
-async fn the_skeleton_s_rows_are_the_rows_satz_packs_writes() {
+async fn the_skeleton_s_rows_are_the_rows_satz_presets_writes() {
     let estate = support::estate_dir(None);
     let main = estate.create_skeleton("C0example.satz").await;
     let session = estate.open("C0example.satz").await;
@@ -91,7 +91,7 @@ async fn the_skeleton_s_rows_are_the_rows_satz_packs_writes() {
 }
 
 #[tokio::test]
-async fn an_interviewed_estate_s_rows_are_the_rows_satz_packs_writes() {
+async fn an_interviewed_estate_s_rows_are_the_rows_satz_presets_writes() {
     let estate = support::estate_dir(None);
     let main = estate.create_skeleton("C0example.satz").await;
     let session = estate.open("C0example.satz").await;
@@ -113,7 +113,7 @@ async fn an_interviewed_estate_s_rows_are_the_rows_satz_packs_writes() {
     // what needs a pack keeps it on: satz refuses the switch, naming the dependent
     let refused = support::switch(
         &session,
-        "satz_remove_pack",
+        "satz_remove_preset",
         &RemovePackArgs {
             pack: LOGSINK.to_string(),
             cascade: false,

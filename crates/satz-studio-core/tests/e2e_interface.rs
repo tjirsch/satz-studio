@@ -3,7 +3,7 @@
 //! file satz generates there is a tree that is the file, with the `interface "<name>"`
 //! header and nothing satz refuses, and discovery walks past the folder as it walks past
 //! `hcl/`. The smoke project takes the showcase's `interfaces/archive/` whole as
-//! `vendor/archive/`, as satz's smoke matrix does: `satz_packs` names its interface file
+//! `vendor/archive/`, as satz's smoke matrix does: `satz_presets` names its interface file
 //! as an interface and not as a file the graph does not know, the model builds with the
 //! `${{interface.<export>}}` strings as the values they are, and the app's writer moves
 //! one reference to another export and back through satz's check, while a reference to an
@@ -194,7 +194,7 @@ async fn the_generated_interfaces_parse_and_a_project_reads_one() {
             .map(|u| u.path.as_str())
             .collect::<Vec<_>>(),
         [INTERFACE],
-        "satz_packs names the interface file as an interface"
+        "satz_presets names the interface file as an interface"
     );
     assert!(
         model.packs.unmanaged.iter().all(|u| u.path != INTERFACE),

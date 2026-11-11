@@ -56,6 +56,9 @@ pub enum NodeKind {
     Header { keyword: String, name: String },
     /// the `params { … }` block
     Params,
+    /// the `inputs { … }` block: a template's contract, which a reader binds. Its
+    /// entries are `ParamEntry` nodes, as a `params` block's are
+    Inputs,
     /// `name = value` inside `params`
     ParamEntry { name: Span, eq: Span, value: NodeId },
     /// `use "path" [as key] [when gate]`, active; `path` spans the quotes
