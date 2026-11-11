@@ -23,6 +23,7 @@ pub mod reports;
 pub mod review;
 pub mod self_update;
 pub mod session;
+pub mod workload;
 
 pub use binary::{Ahead, MIN_SATZ, SatzBinary};
 pub use cli::{CliLine, Output, SatzCli};

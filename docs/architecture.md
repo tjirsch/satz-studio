@@ -119,6 +119,7 @@ Two crates in one workspace, satz pinned once as the submodule `vendor/satz`
 | `src/satz/review.rs` | `satz review-preset` and the two places a reviewed pack goes ([ADR 0019](adr/0019-the-pack-review-runs-the-cli-and-places-a-private-pack-as-a-local-fork.md)): `review` runs `satz --config <estate dir> review-preset <pack> [--against <estate>] --format json` through `json_verdict`, holds the exit status to the report's own verdict (`SatzError::Verdict` when they disagree) and keeps the bytes it judged, refusing a pack that changed while satz read it; `diagnostics` is each finding at its `file:line` from `satz review-preset`. `local_name` is `<stem>.local.satz` — a `.local.satz` keeps its name, a `.diff.satz` is refused — and `upstream_name` is `presets/<stem>.satz`. `place_private` writes the reviewed bytes into `presets_dir` under that name: refused when the pack changed since its review or the library is missing, nothing written when the file holds these bytes already, refused when it holds anything else; the file is created with `create_new`, the estate is checked with it in the library, and a refusal or a checker that could not run removes it again | `ReviewedPack`, `review`, `review_args`, `diagnostics`, `local_name`, `local_target`, `upstream_name`, `place_private`, `Placed`, `PlaceError` |
 | `src/satz/mcp_config.rs` | `satz mcp-config <estate> --client <client> --allow <ceiling>`, which is where the configuration an agentic client reads comes from: `args` is that argument vector, with `--write` for a write and `--write --force` for the one refusal that asks for it; `run` hands back what satz printed, the block on stdout and its notes on stderr; `outcome` is the line a write ended on, for the toast; `refusal` is satz's own stderr where satz refused, unreworded; `force_would_answer` is whether satz's refusal is the one `--force` answers, by the sentence satz prints; `server` reads the one server of the printed block and `root` its `--root`, the root the app's own session takes ([ADR 0022](adr/0022-the-mcp-root-is-the-one-satz-mcp-config-renders.md)); `target_file` is the file satz's notes say a write goes to, and `written` reads satz's key there against the printed entry — absent, the same, another entry, or unreadable ([ADR 0021](adr/0021-the-settings-ceiling-is-the-agents-and-studio-writes-at-its-own.md)) | `Client`, `Run`, `Printed`, `Server`, `OnDisk`, `Written`, `args`, `run`, `outcome`, `refusal`, `force_would_answer`, `server`, `root`, `target_file`, `written` |
 | `src/satz/project.rs` | the interface plane through the CLI ([ADR 0023](adr/0023-the-interfaces-tab-reads-and-writes-through-the-cli.md)): `interfaces` is `satz interfaces <estate> --format json` typed as `InterfacesReport`, and `said` is satz's reason when it refuses; `outcome` is the process result of a satz command that writes the estate file as the call of a delegated write reads it — a non-zero exit a `ToolOutcome` with `is_error` and satz's stderr sentence (`sentence`: the banner and `error: ` dropped), a zero exit what satz printed | `interfaces`, `outcome`, `said`, `sentence` |
+| `src/satz/workload.rs` | workload packs through the CLI ([ADR 0024](adr/0024-workload-packs-are-a-tab-of-estate-and-a-workload-estate-has-no-presets-destination.md)): `list` is `satz packs [--from <dir>] --format json` typed as `WorkloadPacksReport`; `get`, `update` and `detach` are `satz get-pack`, `update-pack` and `detach-pack` with `--format json`, read from stdout by `SatzCli::json_stdout` with the exit status beside the report — `update-pack` exits non-zero when a pack needs attention, and the two are held together | `PackSource`, `Which`, `list`, `get`, `update`, `detach` |
 | `src/satz/mod.rs` | the capability ceiling — `Allow::STUDIO`, `read,write`, is the app's own session's — and the one error type of the driver; `SatzError::Printed` is satz output the app does not read, quoted | `Allow`, `SatzError` |
 | `src/agent.rs` | starting the agentic client on the open estate ([ADR 0020](adr/0020-the-agent-is-an-external-client-that-studio-configures-and-starts.md)): `locate` is the configured client's first word on `PATH`, told apart from a line naming none, and `start` runs it in the estate's directory through the one-shot script the terminal hand-off uses, the directory quoted as that script quotes it. The configuration that points it at the estate is satz's, `src/satz/mcp_config.rs` | `AgentError`, `DEFAULT_AGENT_COMMAND`, `locate`, `program`, `script_text`, `start` |
 | `src/github.rs` | the latest release of a repository through GitHub's unauthenticated REST API, always `releases/latest` and never a tag; `look_for_studio_update` compares satz-studio's with the running version and downloads nothing; a 403 or 429 from the API is `RateLimited` with the reset, a connection that fails is `Unreachable`, a 404 is `NoRelease` | `Release`, `Asset`, `GithubError`, `StudioUpdate`, `latest_release`, `download`, `look_for_studio_update` |
@@ -180,7 +181,7 @@ run with `--report-only` fixed, and `get-presets` is offered without the `--forc
 overwrites the packs the estate uses. The writing runs are the locked actions': the
 prerequisites in Checks, as `EstateAction::WritePrerequisites` — `satz_update_prerequisites
 {report_only: false}` through the delegated-write discipline of section 4b — and the merge
-in Packs, as `EstateAction::MergePresets` under the write lock and followed by a reload.
+in Presets, as `EstateAction::MergePresets` under the write lock and followed by a reload.
 
 A pack can name one command to be run once it is switched on — its `notice`, which the
 estate acknowledges by binding the notice's param `true` (satz's ADR 0033). satz returns
@@ -214,9 +215,9 @@ plan and satz's report; **Open** (`src/views/estates.rs`) is the folder walk and
 estate cards. A door is one `Door` variant, one card in the row and one arm of the
 view's `match`, so another way in joins by being added in those three places.
 
-With an estate open the window is ordered by the job: **Overview**, **Packs**,
+With an estate open the window is ordered by the job: **Overview**, **Presets**,
 **Decisions**, **Estate**, **Checks**, **Deploy**, then Agent and Settings at the foot of
-the rail — Packs before Decisions, because a pack is what declares a question. Overview
+the rail — Presets before Decisions, because a pack is what declares a question. Overview
 (`src/views/overview.rs`) says which estate this is — the short name, the customer, the
 customer id and the organisation id from the file's own `params { }` block (the model's
 `params`), then the answers its other `estate_core` questions carry (`identity()` over
@@ -237,7 +238,7 @@ formats are read once per session from `satz questions --help`, so the picker is
 installed satz's own set; a help the app cannot read is a toast and the card's text. Commands is not a
 destination: `PALETTE` is a table and `CommandDeck` renders any group of it, so Checks
 and Deploy each gather their own and the palette over the window (⌘K) holds them all.
-Packs carries the pack review (`src/views/review.rs`): `satz review-preset` over a pack
+Presets carries the pack review (`src/views/review.rs`): `satz review-preset` over a pack
 file the operator chooses, its findings in the drawer and beside the pack's text, and
 the two places a reviewed pack goes — upstream by a pull request the card describes,
 private as a `.local.satz` in the estate's library. The Gallery is behind `SATZ_STUDIO_DEBUG`. `docs/ui.md` is the whole map, including why
@@ -393,7 +394,7 @@ one only by an edit to the estate's params. `tests/e2e_answer_shapes.rs` holds e
 question of every pack under `vendor/satz/presets` to its declaration, read from the
 pack's own text — satz's `shape` and that reading are two readings of one fact, and the
 test is that they agree. A param that is a gate in satz's pack report, and every option
-of a `oneof`, is no param row: the Packs view switches the one, the Decisions view
+of a `oneof`, is no param row: the Presets view switches the one, the Decisions view
 answers the other.
 
 The packs are satz's, not the model's. `EstateModel::packs` is the `PacksReport`
@@ -410,7 +411,7 @@ does not know is `unmanaged`, and its gate, where it has one, is a param like an
 `tests/e2e_pack_edges.rs` holds the model's report to what `satz presets --format json`
 writes for the same estate, on the skeleton as written and interviewed with packs on.
 
-A pack the operator writes is judged the same way: by satz. The Packs view runs `satz
+A pack the operator writes is judged the same way: by satz. The Presets view runs `satz
 review-preset` over a pack file anywhere on disk, through the CLI with the estate's
 config, since `satz mcp` is confined to the estate's root ([ADR
 0019](adr/0019-the-pack-review-runs-the-cli-and-places-a-private-pack-as-a-local-fork.md)).
@@ -428,6 +429,12 @@ the rename: a view edit, an interview answer, a pack switched, the prerequisites
 written, a project added, a notice's `satz adopt`, a pack placed in the library. An agent that writes the
 estate does it through its own `satz mcp`, outside this window and outside this lock, and
 the estate is re-read when the window comes back to the front.
+
+`Edit::AddUse { path }` adds `use "<path>"` as a line of its own at the top level —
+after the file's last top-level `use`, after the params block where it has none, after
+the header where it has neither — and is refused for a path the file already uses. Its
+proof is the same walk: the old tree with the added line between two top-level nodes
+against the new one, where a plain `Use` inside the inserted range is that line.
 
 A value edit, `Edit::ReplaceValue { node, value }` or `Edit::ReplaceParam { name,
 value }`:
@@ -631,12 +638,13 @@ the tree and over the commits a pull request adds, or the push to `main` that me
 | [0015](adr/0015-the-packs-view-draws-the-dependency-tree-the-packs-declare.md) | superseded by 0018 — the dependency tree the packs declare with `ask_when`, drawn as tree blocks in the grid with connectors in CSS |
 | [0016](adr/0016-macos-is-apple-silicon-alone.md) | macOS is Apple silicon alone, in CI and in the release; Linux and Windows stay x86_64 |
 | [0017](adr/0017-a-release-is-cargo-release-on-main.md) | a release is `cargo release` on `main`: the version bump is the one commit that lands without a pull request |
-| [0018](adr/0018-the-packs-view-shows-satzs-pack-graph.md) | the Packs view shows satz's pack graph (`satz_presets`) and switches a pack with `satz_add_preset` and `satz_remove_preset`; the app derives no pack row and no dependency |
+| [0018](adr/0018-the-packs-view-shows-satzs-pack-graph.md) | the Presets view shows satz's pack graph (`satz_presets`) and switches a pack with `satz_add_preset` and `satz_remove_preset`; the app derives no pack row and no dependency |
 | [0019](adr/0019-the-pack-review-runs-the-cli-and-places-a-private-pack-as-a-local-fork.md) | the pack review runs `satz review-preset` through the CLI with the estate's config; a private pack is placed as `<stem>.local.satz`, never over other text; upstream is a pull request by hand |
 | [0020](adr/0020-the-agent-is-an-external-client-that-studio-configures-and-starts.md) | the app runs no model: the Agent destination writes the estate's `satz mcp` configuration for an external client and starts it — superseding 0004, 0008, 0009, 0010 and 0013, and amending 0005 |
 | [0021](adr/0021-the-settings-ceiling-is-the-agents-and-studio-writes-at-its-own.md) | the Settings ceiling is the external agent's alone; the app's own `satz mcp` runs at `read,write`; the Agent view shows the ceiling on disk beside the setting and offers Replace where they differ |
 | [0022](adr/0022-the-mcp-root-is-the-one-satz-mcp-config-renders.md) | the root of the app's own `satz mcp` is the one `satz mcp-config` renders — the estate's config directory — for the window and every client alike |
 | [0023](adr/0023-the-interfaces-tab-reads-and-writes-through-the-cli.md) | the Interfaces tab reads `satz interfaces` through the CLI; the interface plane's MCP tools are paused. Its write half, `satz add-project`, went with the command (satz ADR 0075) |
+| [0024](adr/0024-workload-packs-are-a-tab-of-estate-and-a-workload-estate-has-no-presets-destination.md) | the destination is Presets; workload packs are the fourth tab of Estate, read through the CLI against a source the operator names and never unasked; the `use` line is `Edit::AddUse`; a workload estate — satz's presets report names an interface and holds no pack — has no Presets destination |
 
 ## 7. Not built, and why
 

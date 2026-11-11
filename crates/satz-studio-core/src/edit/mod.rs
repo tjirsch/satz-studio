@@ -34,6 +34,10 @@ pub enum Edit {
     ReplaceValue { node: NodeId, value: TypedValue },
     /// replace a param's value; an absent param is appended before `}` as `bind` appends it
     ReplaceParam { name: String, value: TypedValue },
+    /// add `use "<path>"` at the top level: on the line after the file's last top-level
+    /// `use`, after the params block where it has none, after the header where it has
+    /// neither. A file that already uses the path is refused
+    AddUse { path: String },
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -46,6 +50,12 @@ pub enum EditError {
     NotAValue(NodeId),
     #[error("the estate has no `params {{ }}` block — answers are written there")]
     NoParamsBlock,
+    #[error("the file already has `use \"{0}\"`")]
+    AlreadyUsed(String),
+    #[error("`{0}` is no path a `use` line can carry")]
+    NotAUsePath(String),
+    #[error("the file has no header, no params block and no `use` line to add a `use` after")]
+    NoPlaceForUse,
     #[error("the edit changed the document beyond its target (line {line}) — refused")]
     ChangedElsewhere { line: u32 },
     #[error("{0}: not a `.satz` file — satz reads no other")]

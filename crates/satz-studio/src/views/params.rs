@@ -58,7 +58,7 @@ pub fn ParamsPane() -> Element {
             if groups.is_empty() {
                 Card { variant: CardVariant::Filled, class: "params__empty",
                     Icon { name: "tune", size: 48, class: "placeholder__icon" }
-                    p { "The estate binds no param that is not a pack choice; the Packs destination has those." }
+                    p { "The estate binds no param that is not a pack choice; the Presets destination has those." }
                 }
             }
             for (group, rows) in groups {

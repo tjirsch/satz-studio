@@ -45,7 +45,18 @@ pub fn NavigationRail() -> Element {
     } else {
         0
     };
-    let primary: &[View] = if has_estate { &View::PRIMARY } else { &[] };
+    // a workload estate has no preset library, and no Presets destination
+    let workload_estate = app
+        .estate()
+        .model()
+        .read()
+        .as_deref()
+        .is_some_and(|m| m.packs.workload_estate());
+    let primary: Vec<View> = if has_estate {
+        View::primary(workload_estate)
+    } else {
+        Vec::new()
+    };
     let mut secondary: Vec<View> = View::SECONDARY
         .into_iter()
         .filter(|v| has_estate || !v.needs_estate())

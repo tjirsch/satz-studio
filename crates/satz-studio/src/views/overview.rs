@@ -95,7 +95,10 @@ pub fn owed(f: &Facts) -> Vec<Owed> {
     // in place and asks git whether that edit can be taken back; outside a work tree, or
     // with no git to ask, it refuses. `satz init` makes no repository, so this is owed
     // from the first minute and would otherwise surface at the first preset update.
+    // A workload estate has no preset library to update, so it owes no repository for it.
+    let workload_estate = f.model.is_some_and(|m| m.packs.workload_estate());
     match f.work_tree {
+        _ if workload_estate => {}
         Some(WorkTree::Outside(said)) => out.push(Owed {
             id: "repository",
             icon: "commit",
@@ -176,14 +179,14 @@ pub fn owed(f: &Facts) -> Vec<Owed> {
                 icon: "inventory_2",
                 title: "The pack map is switched off".to_string(),
                 detail: "`use \"presets/estate-map.satz\"` is commented out, so no pack asks this estate anything. Switching it on is what opens the questions the library declares.".to_string(),
-                remedies: vec![Remedy::Go(View::Packs)],
+                remedies: vec![Remedy::Go(View::Presets)],
             }),
             Some(PackLine::Absent) => out.push(Owed {
                 id: "map-absent",
                 icon: "inventory_2",
                 title: "The estate has no pack map".to_string(),
-                detail: "The file carries no line for `presets/estate-map.satz`, the map of pack choices every other question hangs from. Switching it on in Packs writes the line where the pack graph places it.".to_string(),
-                remedies: vec![Remedy::Go(View::Packs)],
+                detail: "The file carries no line for `presets/estate-map.satz`, the map of pack choices every other question hangs from. Switching it on in Presets writes the line where the pack graph places it.".to_string(),
+                remedies: vec![Remedy::Go(View::Presets)],
             }),
             _ => {}
         }
@@ -198,14 +201,19 @@ pub fn owed(f: &Facts) -> Vec<Owed> {
                     n => format!("The pack graph has {n} findings"),
                 },
                 detail: first.message.clone(),
-                remedies: vec![Remedy::Go(View::Packs)],
+                // a workload estate has no Presets destination to go to
+                remedies: if workload_estate {
+                    Vec::new()
+                } else {
+                    vec![Remedy::Go(View::Presets)]
+                },
             });
         }
 
         // A `use` line without its `when <gate>` deploys its pack whatever the estate
         // answers. satz reports that as `ungated-pack` only while the file declaring the
         // gate deploys, so with the map off the findings row above says nothing about it;
-        // a row satz does speak about is left to satz's own sentence, in Packs.
+        // a row satz does speak about is left to satz's own sentence, in Presets.
         let ungated = model
             .packs
             .packs
@@ -220,8 +228,8 @@ pub fn owed(f: &Facts) -> Vec<Owed> {
                     1 => "1 pack line has no gate".to_string(),
                     n => format!("{n} pack lines have no gate"),
                 },
-                detail: "A `use` line without its `when <gate>` deploys the pack whatever this estate answers, so no question switches it off. Packs names the gate each of them needs.".to_string(),
-                remedies: vec![Remedy::Go(View::Packs)],
+                detail: "A `use` line without its `when <gate>` deploys the pack whatever this estate answers, so no question switches it off. Presets names the gate each of them needs.".to_string(),
+                remedies: vec![Remedy::Go(View::Presets)],
             });
         }
 
@@ -1255,7 +1263,7 @@ mod tests {
         assert_eq!(ids(&rows), ["pack-findings"]);
         assert_eq!(rows[0].title, "The pack graph has 2 findings");
         assert_eq!(rows[0].detail, "finding 0");
-        assert_eq!(rows[0].remedies, [Remedy::Go(View::Packs)]);
+        assert_eq!(rows[0].remedies, [Remedy::Go(View::Presets)]);
     }
 
     /// satz reports `ungated-pack` only while the file declaring the gate deploys, so the
@@ -1294,7 +1302,7 @@ mod tests {
         let rows = owed(&facts(None, hcl, Some(&q), Some(&m), &[]));
         assert_eq!(ids(&rows), ["map-off", "ungated-lines"]);
         assert_eq!(rows[1].title, "1 pack line has no gate");
-        assert_eq!(rows[1].remedies, [Remedy::Go(View::Packs)]);
+        assert_eq!(rows[1].remedies, [Remedy::Go(View::Presets)]);
 
         // satz's own sentence on the row takes the line over
         report.packs[1].findings = vec!["is used without `when use_budget`".to_string()];

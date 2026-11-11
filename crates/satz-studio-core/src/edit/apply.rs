@@ -14,7 +14,18 @@ use crate::cst::{
 struct Splice {
     span: Span,
     text: String,
-    append: bool,
+    what: What,
+}
+
+/// What a splice writes.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum What {
+    /// a value over its node's span
+    Value,
+    /// the appended param entries, before the params block's `}`
+    Params,
+    /// a `use` line of its own, at the top level
+    Use,
 }
 
 /// The new text for `edits` over `cst`, proven.
@@ -24,6 +35,7 @@ pub(super) fn apply(cst: &Cst, edits: &[Edit]) -> Result<String, EditError> {
     // 1. Every edit becomes a value target with its rendering, or an appended param.
     let mut values: Vec<(NodeId, String)> = Vec::new();
     let mut appended: Vec<(String, String)> = Vec::new();
+    let mut used: Option<String> = None;
     for edit in edits {
         match edit {
             Edit::ReplaceValue { node, value } => {
@@ -47,6 +59,18 @@ pub(super) fn apply(cst: &Cst, edits: &[Edit]) -> Result<String, EditError> {
                     appended.push((name.clone(), render_value(value, &StyleCtx::default())));
                 }
             },
+            Edit::AddUse { path } => {
+                if path.is_empty() || path.contains(['"', '\\', '\n', '{', '}']) {
+                    return Err(EditError::NotAUsePath(path.clone()));
+                }
+                if used.is_some() {
+                    return Err(EditError::Duplicate("a `use` line".to_string()));
+                }
+                if top_level_uses(cst).any(|p| p == *path) {
+                    return Err(EditError::AlreadyUsed(path.clone()));
+                }
+                used = Some(path.clone());
+            }
         }
     }
     for &(inner, _) in &values {
@@ -64,7 +88,7 @@ pub(super) fn apply(cst: &Cst, edits: &[Edit]) -> Result<String, EditError> {
         .map(|(id, rendered)| Splice {
             span: cst.node(*id).span,
             text: rendered.clone(),
-            append: false,
+            what: What::Value,
         })
         .collect();
     if !appended.is_empty() {
@@ -85,9 +109,33 @@ pub(super) fn apply(cst: &Cst, edits: &[Edit]) -> Result<String, EditError> {
                 end: close,
             },
             text: ins,
-            append: true,
+            what: What::Params,
         });
     }
+    // The `use` line: a line of its own after the line its anchor ends on. An anchor
+    // that is no `use` gets a blank line between, as satz's own template writes one.
+    let use_at = match &used {
+        None => None,
+        Some(path) => {
+            let (anchor, after_use) = use_anchor(cst)?;
+            let end = cst.node(anchor).span.end;
+            let at = text[end..].find('\n').map_or(text.len(), |i| end + i + 1);
+            let mut ins = String::new();
+            if !text[..at].ends_with('\n') {
+                ins.push('\n');
+            }
+            if !after_use {
+                ins.push('\n');
+            }
+            ins.push_str(&format!("use \"{path}\"\n"));
+            splices.push(Splice {
+                span: Span { start: at, end: at },
+                text: ins,
+                what: What::Use,
+            });
+            Some(at)
+        }
+    };
 
     // 3. Where each splice lands in the new text, walking upwards; then the splices
     //    themselves, from the highest start down, so every original span stays valid.
@@ -115,10 +163,14 @@ pub(super) fn apply(cst: &Cst, edits: &[Edit]) -> Result<String, EditError> {
     let after = Cst::parse(&new)?;
     let placed = || splices.iter().zip(&new_spans);
     let value_holes: Vec<Span> = placed()
-        .filter(|(s, _)| !s.append)
+        .filter(|(s, _)| s.what == What::Value)
         .map(|(_, n)| *n)
         .collect();
-    let appended_range = placed().find(|(s, _)| s.append).map(|(_, n)| *n);
+    let appended_range = placed()
+        .find(|(s, _)| s.what == What::Params)
+        .map(|(_, n)| *n);
+    let use_range = placed().find(|(s, _)| s.what == What::Use).map(|(_, n)| *n);
+    let added_use = used.as_deref().zip(use_at);
     let names: Vec<String> = appended.into_iter().map(|(n, _)| n).collect();
     let holes: Vec<NodeId> = values.into_iter().map(|(id, _)| id).collect();
     let old = old_signatures(
@@ -126,8 +178,9 @@ pub(super) fn apply(cst: &Cst, edits: &[Edit]) -> Result<String, EditError> {
         &holes,
         cst.params().filter(|_| !names.is_empty()),
         &names,
+        added_use,
     );
-    let fresh = new_signatures(&after, &value_holes, appended_range);
+    let fresh = new_signatures(&after, &value_holes, appended_range, use_range);
     if let Some(line) = first_difference(&old, &fresh) {
         return Err(EditError::ChangedElsewhere { line });
     }
@@ -142,11 +195,11 @@ pub(super) fn apply(cst: &Cst, edits: &[Edit]) -> Result<String, EditError> {
         line: e.line as u32,
         message: e.msg,
     })?;
-    let unaligned: Vec<Sig> = new_signatures(&after, &[], None)
+    let unaligned: Vec<Sig> = new_signatures(&after, &[], None, None)
         .into_iter()
         .map(|(s, _)| s)
         .collect();
-    let aligned = new_signatures(&Cst::parse(&laid_out)?, &[], None);
+    let aligned = new_signatures(&Cst::parse(&laid_out)?, &[], None, None);
     if let Some(line) = first_difference(&unaligned, &aligned) {
         return Err(EditError::ChangedElsewhere { line });
     }
@@ -180,6 +233,32 @@ fn params_inner(text: &str) -> Option<(usize, usize)> {
     let start = cst.node(params).span.start;
     let open = start + text[start..close].find('{')? + 1;
     Some((open, close))
+}
+
+/// The paths of the file's top-level `use` lines, without their quotes.
+fn top_level_uses(cst: &Cst) -> impl Iterator<Item = &str> {
+    cst.node(cst.root())
+        .children
+        .iter()
+        .filter_map(|&id| match &cst.node(id).kind {
+            NodeKind::Use { path, .. } => Some(cst.slice(*path).trim_matches('"')),
+            _ => None,
+        })
+}
+
+/// The node a new `use` line goes after, and whether that node is a `use` itself: the
+/// last top-level `use`, else the params block, else the header.
+fn use_anchor(cst: &Cst) -> Result<(NodeId, bool), EditError> {
+    let top = &cst.node(cst.root()).children;
+    let last =
+        |pick: fn(&NodeKind) -> bool| top.iter().copied().rfind(|&id| pick(&cst.node(id).kind));
+    if let Some(id) = last(|k| matches!(k, NodeKind::Use { .. })) {
+        return Ok((id, true));
+    }
+    last(|k| matches!(k, NodeKind::Params))
+        .or_else(|| last(|k| matches!(k, NodeKind::Header { .. })))
+        .map(|id| (id, false))
+        .ok_or(EditError::NoPlaceForUse)
 }
 
 /// The value node an edit targets: the node itself when it is a value, the value of
@@ -243,6 +322,8 @@ enum Sig {
     Hole,
     /// an appended param entry, by name
     Appended(String),
+    /// an added top-level `use` line, by path
+    Used(String),
 }
 
 /// The kind and what identifies the node: a key, a name, a path and its gate; a scalar
@@ -276,13 +357,15 @@ fn signature(cst: &Cst, id: NodeId) -> String {
     }
 }
 
-/// The original tree with the edited values as holes and the appended names after the
-/// last child of the params block.
+/// The original tree with the edited values as holes, the appended names after the
+/// last child of the params block, and the added `use` before the first top-level node
+/// that starts at or after the offset its line was inserted at.
 fn old_signatures(
     cst: &Cst,
     holes: &[NodeId],
     params: Option<NodeId>,
     names: &[String],
+    added_use: Option<(&str, usize)>,
 ) -> Vec<Sig> {
     fn walk(
         cst: &Cst,
@@ -305,23 +388,56 @@ fn old_signatures(
         }
     }
     let mut out = Vec::new();
-    walk(cst, cst.root(), holes, params, names, &mut out);
+    let Some((path, at)) = added_use else {
+        walk(cst, cst.root(), holes, params, names, &mut out);
+        return out;
+    };
+    // the root's children one by one, so the added line stands between two of them
+    let root = cst.root();
+    out.push(Sig::Node(signature(cst, root)));
+    let mut placed = false;
+    for &c in &cst.node(root).children {
+        if !placed && cst.node(c).span.start >= at {
+            out.push(Sig::Used(path.to_string()));
+            placed = true;
+        }
+        walk(cst, c, holes, params, names, &mut out);
+    }
+    if !placed {
+        out.push(Sig::Used(path.to_string()));
+    }
     out
 }
 
 /// The new tree, each entry with its line: a `Value` node whose span is exactly a
 /// spliced span is a hole, a `ParamEntry` inside the appended range is an appended
-/// entry of the name it carries.
-fn new_signatures(cst: &Cst, value_holes: &[Span], appended: Option<Span>) -> Vec<(Sig, u32)> {
+/// entry of the name it carries, a plain `Use` inside the added range is the added line.
+fn new_signatures(
+    cst: &Cst,
+    value_holes: &[Span],
+    appended: Option<Span>,
+    added_use: Option<Span>,
+) -> Vec<(Sig, u32)> {
     fn walk(
         cst: &Cst,
         id: NodeId,
         value_holes: &[Span],
         appended: Option<Span>,
+        added_use: Option<Span>,
         out: &mut Vec<(Sig, u32)>,
     ) {
         let n = cst.node(id);
+        let within = |r: Span| r.start <= n.span.start && n.span.end <= r.end;
         match &n.kind {
+            NodeKind::Use {
+                path,
+                as_key: None,
+                when: None,
+            } if added_use.is_some_and(within) => {
+                let path = cst.slice(*path).trim_matches('"').to_string();
+                out.push((Sig::Used(path), n.line));
+                return;
+            }
             NodeKind::Value(_) if value_holes.contains(&n.span) => {
                 out.push((Sig::Hole, n.line));
                 return;
@@ -335,11 +451,11 @@ fn new_signatures(cst: &Cst, value_holes: &[Span], appended: Option<Span>) -> Ve
             _ => out.push((Sig::Node(signature(cst, id)), n.line)),
         }
         for &c in &n.children {
-            walk(cst, c, value_holes, appended, out);
+            walk(cst, c, value_holes, appended, added_use, out);
         }
     }
     let mut out = Vec::new();
-    walk(cst, cst.root(), value_holes, appended, &mut out);
+    walk(cst, cst.root(), value_holes, appended, added_use, &mut out);
     out
 }
 
@@ -535,5 +651,91 @@ mod tests {
         )
         .unwrap_err();
         assert!(matches!(err, EditError::NoParamsBlock), "{err}");
+    }
+
+    fn add_use(src: &str, path: &str) -> Result<String, EditError> {
+        apply(
+            &Cst::parse(src).unwrap(),
+            &[Edit::AddUse {
+                path: path.to_string(),
+            }],
+        )
+    }
+
+    #[test]
+    fn a_use_goes_on_the_line_after_the_last_top_level_use() {
+        let src = "estate e\n\nparams {\n  a = 1\n}\n\nuse \"one.satz\" // first\nuse \"two.satz\" when a\n\nblock k {\n  attr = 1\n}\n";
+        let out = add_use(src, "packs/three.satz").unwrap();
+        assert_eq!(
+            out,
+            src.replace(
+                "use \"two.satz\" when a\n",
+                "use \"two.satz\" when a\nuse \"packs/three.satz\"\n"
+            )
+        );
+    }
+
+    #[test]
+    fn a_file_without_a_use_takes_it_after_its_params_and_one_without_params_after_its_header() {
+        let out = add_use(SRC, "p.satz").unwrap();
+        assert_eq!(
+            out,
+            SRC.replace("  b = 1\n}\n", "  b = 1\n}\n\nuse \"p.satz\"\n")
+        );
+
+        let bare = "estate e // the header\n\nblock k {\n  attr = 1\n}\n";
+        let out = add_use(bare, "p.satz").unwrap();
+        assert_eq!(
+            out,
+            bare.replace(
+                "estate e // the header\n",
+                "estate e // the header\n\nuse \"p.satz\"\n"
+            )
+        );
+
+        // the last line of a file that does not end in a newline
+        assert_eq!(
+            add_use("estate e", "p.satz").unwrap(),
+            "estate e\n\nuse \"p.satz\"\n"
+        );
+    }
+
+    #[test]
+    fn a_use_the_file_has_and_a_path_no_line_can_carry_are_refused() {
+        let src = "estate e\n\nuse \"p.satz\"\n";
+        assert!(matches!(add_use(src, "p.satz"), Err(EditError::AlreadyUsed(p)) if p == "p.satz"));
+        // a commented line of the path is no use: the file does not read the pack
+        assert!(add_use("estate e\n\n// use \"p.satz\"\n", "p.satz").is_ok());
+        for bad in ["", "a\"b.satz", "a\nb.satz", "{x}.satz"] {
+            assert!(
+                matches!(add_use(src, bad), Err(EditError::NotAUsePath(_))),
+                "{bad:?}"
+            );
+        }
+        assert!(matches!(
+            add_use("block k {\n  attr = 1\n}\n", "p.satz"),
+            Err(EditError::NoPlaceForUse)
+        ));
+    }
+
+    #[test]
+    fn a_use_and_an_answer_land_in_one_edit() {
+        let out = apply(
+            &cst(),
+            &[
+                Edit::AddUse {
+                    path: "p.satz".into(),
+                },
+                Edit::ReplaceParam {
+                    name: "b".into(),
+                    value: TypedValue::Num("2".into()),
+                },
+            ],
+        )
+        .unwrap();
+        assert_eq!(
+            out,
+            SRC.replace("  b = 1\n}\n", "  b = 2\n}\n\nuse \"p.satz\"\n")
+        );
     }
 }

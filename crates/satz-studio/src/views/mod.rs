@@ -21,6 +21,7 @@ pub mod resources;
 pub mod review;
 pub mod satz_release;
 pub mod settings;
+pub mod workload_packs;
 
 use satz_studio_core::cst::{Cst, NodeId, NodeKind};
 

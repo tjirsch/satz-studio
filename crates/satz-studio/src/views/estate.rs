@@ -1,6 +1,6 @@
 //! The Estate destination: the main file as it stands — the params it binds, the
-//! resources it declares, and the interfaces it publishes to the projects that read it,
-//! three tabs over one estate.
+//! resources it declares, the interfaces it publishes to the projects that read it, and
+//! the workload packs it keeps: four tabs over one estate.
 //!
 //! Decisions and this are not two views of one thing: Decisions is the worklist of what
 //! the estate has NOT decided, and this is what it currently says. A param that answers
@@ -14,12 +14,15 @@ use crate::state::{AppStore, AppStoreStoreExt, DiagnosticSelection, EstateStoreS
 use crate::views::interfaces::InterfacesPane;
 use crate::views::params::ParamsPane;
 use crate::views::resources::ResourcesPane;
+use crate::views::workload_packs::WorkloadPacksPane;
+use satz_studio_core::satz::reports::PackState;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Pane {
     Params,
     Resources,
     Interfaces,
+    WorkloadPacks,
 }
 
 #[component]
@@ -53,6 +56,18 @@ pub fn EstateView() -> Element {
         None => "…".to_string(),
     };
 
+    // the packs that are here; what the source only offers is not the estate's
+    let packs = match &*app.estate().workload_packs().read() {
+        Some(Ok(report)) => report
+            .packs
+            .iter()
+            .filter(|p| p.state != PackState::Available)
+            .count()
+            .to_string(),
+        Some(Err(_)) => "!".to_string(),
+        None => "…".to_string(),
+    };
+
     rsx! {
         div { class: "view estate",
             header { class: "estate__head",
@@ -78,11 +93,18 @@ pub fn EstateView() -> Element {
                     selected: pane() == Pane::Interfaces,
                     onclick: move |_| pane.set(Pane::Interfaces),
                 }
+                Tab {
+                    label: format!("Workload packs ({packs})"),
+                    icon: "inventory",
+                    selected: pane() == Pane::WorkloadPacks,
+                    onclick: move |_| pane.set(Pane::WorkloadPacks),
+                }
             }
             match pane() {
                 Pane::Params => rsx! { ParamsPane {} },
                 Pane::Resources => rsx! { ResourcesPane {} },
                 Pane::Interfaces => rsx! { InterfacesPane {} },
+                Pane::WorkloadPacks => rsx! { WorkloadPacksPane {} },
             }
         }
     }

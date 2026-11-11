@@ -2301,3 +2301,32 @@
   line-height: 1.5;
   user-select: text;
 }
+
+/* ---- Estate › Workload packs: the Interfaces tab's cards, plus a source row, the
+        actions of a pack and the difference of an edited one ---------------------------- */
+
+.wpacks__sources,
+.wpacks__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.wpacks__sources {
+  margin-top: 12px;
+}
+
+.wpacks__diff {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: var(--md-sys-shape-corner-small);
+  background: var(--md-sys-color-surface-container-highest);
+  color: var(--md-sys-color-on-surface);
+  font-family: var(--md-ref-typeface-mono);
+  font-size: 0.75rem;
+  line-height: 1.5;
+  white-space: pre;
+  overflow-x: auto;
+  user-select: text;
+}

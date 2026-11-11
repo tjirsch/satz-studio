@@ -482,6 +482,13 @@ pub struct PacksReport {
 }
 
 impl PacksReport {
+    /// A workload estate: it reads an organisation's interface and has no preset
+    /// library — no pack graph in its `presets_dir`, so the report knows no pack. The
+    /// library is the organisation's estate's; this one's packs are workload packs.
+    pub fn workload_estate(&self) -> bool {
+        !self.interfaces.is_empty() && self.packs.is_empty()
+    }
+
     /// The map row, when the graph has one.
     pub fn map(&self) -> Option<&PackRow> {
         self.packs.iter().find(|p| p.role == PackRole::Map)
@@ -901,6 +908,132 @@ pub struct InterfaceRow {
     pub exports: usize,
     pub file: String,
     pub line: usize,
+}
+
+/// How a workload pack in the estate's `packs_dir` stands, as satz judges it from the
+/// pack's row in `packs_dir/origin.toml`, its local file and the source's file. satz's
+/// `State` (`vendor/satz/src/workload_packs.rs`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum PackState {
+    /// no row: the repository's own pack, which no command writes
+    Own,
+    /// fetched, unchanged since, and the source holds the same file
+    Current,
+    /// fetched, unchanged since, and the source holds another file
+    Behind,
+    /// fetched and changed here since: never overwritten unasked
+    Edited,
+    /// fetched, and the source holds it no longer
+    Gone,
+    /// fetched from another kind of source than the one that was read
+    NotChecked,
+    /// the source holds it and `packs_dir` does not
+    Available,
+}
+
+/// One workload pack of [`WorkloadPacksReport`].
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct WorkloadPackRow {
+    /// the pack's path under `packs/`, without `.satz`
+    pub id: String,
+    pub state: PackState,
+    /// the version the local file states; none for a pack that is only available
+    pub version: Option<String>,
+    /// the version the source's file states, where the source holds the pack
+    pub upstream_version: Option<String>,
+    /// where a fetched pack came from: `github:<owner>/<repo>` or `dir`
+    pub source: Option<String>,
+    /// the line an estate reads the pack with; none for a pack that is only available
+    pub use_line: Option<String>,
+}
+
+impl WorkloadPackRow {
+    /// The path of [`Self::use_line`], without `use` and the quotes: what an
+    /// [`crate::edit::Edit::AddUse`] carries.
+    pub fn use_path(&self) -> Option<&str> {
+        self.use_line
+            .as_deref()?
+            .strip_prefix("use \"")?
+            .strip_suffix('"')
+    }
+}
+
+/// What `satz packs --format json` writes: every workload pack in the estate's
+/// `packs_dir` with its state, and every pack the source holds that `packs_dir` does not.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct WorkloadPacksReport {
+    pub packs_dir: String,
+    /// what was read: `github.com/<owner>/<repo>`, or the folder
+    pub source: String,
+    pub packs: Vec<WorkloadPackRow>,
+}
+
+/// One pack `satz get-pack` installed.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct InstalledPack {
+    pub id: String,
+    pub version: String,
+    /// the file written
+    pub path: String,
+    pub use_line: String,
+}
+
+/// What `satz get-pack --format json` prints.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct GetPackReport {
+    pub source: String,
+    pub installed: Vec<InstalledPack>,
+    /// with `--all`: packs the source holds that `packs_dir` already had
+    pub present: Vec<String>,
+}
+
+/// What `satz update-pack` did with one recorded pack.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum UpdateAction {
+    Current,
+    /// overwritten with the source's file
+    Updated,
+    /// `--report-only`: an update would write it
+    WouldUpdate,
+    /// changed here since it was fetched: left as it is
+    Edited,
+    /// `--take-upstream`: changed here, and overwritten with the source's file
+    TookUpstream,
+    /// the source holds it no longer: left as it is
+    Gone,
+    NotChecked,
+}
+
+/// One pack of [`UpdatePackReport`].
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct UpdatedPack {
+    pub id: String,
+    pub action: UpdateAction,
+    pub version: String,
+    pub upstream_version: Option<String>,
+    /// for an edited pack: the local file against the source's, as a unified diff
+    pub diff: Option<String>,
+    /// what to do about it, where something is to be done
+    pub note: Option<String>,
+}
+
+/// What `satz update-pack --format json` prints. `attention` is what makes the command
+/// exit non-zero: a pack is edited or gone.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct UpdatePackReport {
+    pub source: String,
+    pub packs: Vec<UpdatedPack>,
+    pub attention: bool,
+}
+
+/// What `satz detach-pack --format json` prints.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct DetachedPack {
+    pub id: String,
+    /// where it had been fetched from
+    pub source: String,
 }
 
 #[cfg(test)]
@@ -1399,5 +1532,74 @@ mod tests {
             serde_json::to_value(&a).unwrap(),
             serde_json::json!({"answers": {"x": true}})
         );
+    }
+
+    /// An estate that reads an organisation's interface and has no pack graph is a
+    /// workload estate; one with a library is not, whatever else it reads.
+    #[test]
+    fn a_workload_estate_reads_an_interface_and_has_no_library() {
+        let library: PacksReport = serde_json::from_str(PACKS).unwrap();
+        assert!(!library.workload_estate());
+
+        let mut value: serde_json::Value = serde_json::from_str(PACKS).unwrap();
+        value["packs"] = serde_json::json!([]);
+        let bare: PacksReport = serde_json::from_value(value.clone()).unwrap();
+        assert!(
+            !bare.workload_estate(),
+            "no library and no interface: an estate without presets yet"
+        );
+
+        value["interfaces"] =
+            serde_json::json!([{"path": "vendor/common/core/satz/interface.satz", "at": 57}]);
+        let workload: PacksReport = serde_json::from_value(value.clone()).unwrap();
+        assert!(workload.workload_estate());
+
+        let mut both: serde_json::Value = serde_json::from_str(PACKS).unwrap();
+        both["interfaces"] = value["interfaces"].clone();
+        let both: PacksReport = serde_json::from_value(both).unwrap();
+        assert!(
+            !both.workload_estate(),
+            "an estate with a library keeps its presets"
+        );
+    }
+
+    /// What `satz packs`, `get-pack`, `update-pack` and `detach-pack` print with
+    /// `--format json`, as satz v0.95.0 wrote them over a folder source.
+    #[test]
+    fn the_workload_pack_reports_are_read() {
+        let list: WorkloadPacksReport = serde_json::from_str(
+            r#"{"packs_dir":"packs","source":"../up","packs":[
+                {"id":"demo","state":"edited","version":"1.1","upstream_version":"1.2","source":"dir","use_line":"use \"packs/demo.satz\""},
+                {"id":"own","state":"own","version":"9.0","upstream_version":null,"source":null,"use_line":"use \"packs/own.satz\""},
+                {"id":"sub/nested","state":"available","version":null,"upstream_version":"0.3","source":"dir","use_line":null},
+                {"id":"elsewhere","state":"not-checked","version":"1.0","upstream_version":null,"source":"github:acme/packs","use_line":null}]}"#,
+        )
+        .unwrap();
+        assert_eq!(list.packs[0].state, PackState::Edited);
+        assert_eq!(list.packs[0].use_path(), Some("packs/demo.satz"));
+        assert_eq!(list.packs[2].use_path(), None);
+        assert_eq!(list.packs[3].state, PackState::NotChecked);
+
+        let got: GetPackReport = serde_json::from_str(
+            r#"{"source":"../up","installed":[{"id":"demo","version":"1.0","path":"packs/demo.satz","use_line":"use \"packs/demo.satz\""}],"present":[]}"#,
+        )
+        .unwrap();
+        assert_eq!(got.installed[0].id, "demo");
+
+        let update: UpdatePackReport = serde_json::from_str(
+            r#"{"source":"../up","packs":[{"id":"demo","action":"edited","version":"1.1","upstream_version":"1.2","diff":"@@ -1 +1 @@\n-a\n+b\n","note":"left as it is"},
+                {"id":"other","action":"took-upstream","version":"1.0","upstream_version":"1.1","diff":null,"note":null}],"attention":true}"#,
+        )
+        .unwrap();
+        assert_eq!(update.packs[0].action, UpdateAction::Edited);
+        assert_eq!(update.packs[1].action, UpdateAction::TookUpstream);
+        assert!(update.attention);
+
+        let detached: DetachedPack =
+            serde_json::from_str(r#"{"id":"demo","source":"dir"}"#).unwrap();
+        assert_eq!(detached.source, "dir");
+
+        // a state satz grows is refused, never read as another
+        assert!(serde_json::from_str::<PackState>(r#""sideways""#).is_err());
     }
 }
