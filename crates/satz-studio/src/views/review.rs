@@ -1,4 +1,4 @@
-//! The pack review in Packs: `satz review-preset` over a pack the operator chooses, and the
+//! The pack review in Presets: `satz review-preset` over a pack the operator chooses, and the
 //! two places a reviewed pack goes.
 //!
 //! The rules are satz's; the view runs the command ([`EstateAction::ReviewPack`]) and

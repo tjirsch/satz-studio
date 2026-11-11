@@ -40,7 +40,9 @@ beside it.
 Once an estate is open the window is ordered by the job, and the rail reads in that
 order: **Overview**, which estate this is — its short name, the customer, the customer
 id and the organisation id as its own file sets them, then the infrastructure it names,
-in its own answers — and what it still has to do; **Packs**,
+in its own answers — and what it still has to do; **Presets**, for an estate that has
+a preset library (a workload's estate, which reads an organisation's interface and has
+none, has no such destination),
 every pack satz's pack graph offers, as the estate has it, the packs that need another
 hung below it, each switched on and off by satz's own `add-preset` and `remove-preset`,
 and a pack you wrote reviewed against the library's own bar with `satz review-preset` —
@@ -62,7 +64,10 @@ reload, "Switch estate" — the Start screen with your estates listed — and "C
 every satz command the app runs is one keystroke away in the commands palette (⌘K,
 Ctrl+K on Windows and Linux, or that footer button). What a command prints lands in the
 log in the form satz writes for a person — text, or markdown for the evidence report;
-`json` is a format you pick when you want the file.
+`json` is a format you pick when you want the file. Estate's fourth tab is the estate's workload packs: the ones the repository wrote
+itself and the ones `satz get-pack` fetched, listed against the satz repository or a
+folder you choose, each fetched, updated, kept as your own or added to the estate from
+its row.
 
 The Overview is three cards. The identity card says which estate this is — its short
 name, the customer, the customer id and the organisation id, the estate's other answers,

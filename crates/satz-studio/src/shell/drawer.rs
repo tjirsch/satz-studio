@@ -7,7 +7,7 @@ use crate::components::{Chip, ChipKind, Icon, List, ListItem};
 use crate::state::{AppStore, AppStoreStoreExt, DiagnosticSelection, EstateStoreStoreExt, View};
 
 /// The bottom drawer: the open estate's diagnostics, and the findings of the pack the
-/// Packs view reviewed, grouped by severity, each with its `file:line`, its source, and —
+/// Presets view reviewed, grouped by severity, each with its `file:line`, its source, and —
 /// for one of satz's findings — a chip naming the check that raised it; clicking one sets
 /// [`DiagnosticSelection`] and opens the destination where its line is ([`destination`]).
 #[component]
@@ -90,14 +90,14 @@ pub fn DiagnosticsDrawer() -> Element {
 }
 
 /// Where a click on `d` takes the window: a line of the main file is in Estate; a finding
-/// about the reviewed pack is in Packs, where the review shows the pack's text with the
+/// about the reviewed pack is in Presets, where the review shows the pack's text with the
 /// line marked; anything else stays where it is.
 pub fn destination(d: &Diagnostic, main: Option<&Path>, reviewed: Option<&Path>) -> Option<View> {
     let file = d.file.as_deref()?;
     if Some(file) == main && d.line.is_some() {
         Some(View::Estate)
     } else if Some(file) == reviewed {
-        Some(View::Packs)
+        Some(View::Presets)
     } else {
         None
     }
@@ -158,7 +158,7 @@ mod tests {
                 Some(main),
                 Some(pack)
             ),
-            Some(View::Packs)
+            Some(View::Presets)
         );
         // a finding about the whole pack still stands in the review
         assert_eq!(
@@ -167,7 +167,7 @@ mod tests {
                 Some(main),
                 Some(pack)
             ),
-            Some(View::Packs)
+            Some(View::Presets)
         );
         assert_eq!(
             destination(&at("/e/yaml/C0example.satz", None), Some(main), Some(pack)),

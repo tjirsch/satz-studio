@@ -402,7 +402,7 @@ pub const PALETTE: &[CommandSpec] = &[
         // `--report-only` is fixed, as it is for `update-prerequisites`: the command writes
         // the estate file and the library by default, and a write from the palette would
         // hold no write lock and reload no model, which `RunCommand` does neither of. The
-        // writing run is the Packs view's `EstateAction::MergePresets`, under the lock
+        // writing run is the Presets view's `EstateAction::MergePresets`, under the lock
         // and followed by a reload.
         head: &["merge-presets"],
         estate: EstateArg::Flag,

@@ -166,6 +166,37 @@ impl SatzCli {
         Ok((run.typed()?, status))
     }
 
+    /// Run a command that prints its report as JSON on stdout — `satz get-pack`, `satz
+    /// update-pack`, `satz detach-pack` take `--format json` and no `--out` — and type it
+    /// with the exit status beside it: `update-pack` exits non-zero when a pack needs
+    /// attention and prints its report either way. A non-zero exit whose stdout is no
+    /// report is an error carrying stderr: satz refused before it had one.
+    pub async fn json_stdout<T: DeserializeOwned>(
+        &self,
+        args: &[String],
+    ) -> Result<(T, ExitStatus), SatzError> {
+        let mut argv = args.to_vec();
+        argv.extend(["--format".to_string(), "json".to_string()]);
+        let command = argv.join(" ");
+        let output = self
+            .command(&argv)
+            .output()
+            .await
+            .map_err(|e| SatzError::Io {
+                context: format!("running `satz {command}`"),
+                source: e,
+            })?;
+        match serde_json::from_slice(&output.stdout) {
+            Ok(report) => Ok((report, output.status)),
+            Err(_) if !output.status.success() => Err(SatzError::Exit {
+                command,
+                status: output.status,
+                stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+            }),
+            Err(e) => Err(SatzError::Json { command, source: e }),
+        }
+    }
+
     /// `args` with `--format json --out <file>` appended, run to its end: the status,
     /// stderr, and the file it wrote — read before the temporary directory goes.
     async fn report_run(&self, args: &[String]) -> Result<ReportRun, SatzError> {

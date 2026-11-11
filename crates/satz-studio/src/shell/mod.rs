@@ -31,7 +31,7 @@ use crate::views::estate::EstateView;
 use crate::views::estates::EstatesView;
 use crate::views::gallery::GalleryView;
 use crate::views::interview::DecisionsView;
-use crate::views::map::PacksView;
+use crate::views::map::PresetsView;
 use crate::views::overview::OverviewView;
 use crate::views::settings::SettingsView;
 
@@ -100,7 +100,7 @@ fn Content() -> Element {
         View::Start => rsx! { EstatesView {} },
         View::Overview => rsx! { OverviewView {} },
         View::Decisions => rsx! { DecisionsView {} },
-        View::Packs => rsx! { PacksView {} },
+        View::Presets => rsx! { PresetsView {} },
         View::Estate => rsx! { EstateView {} },
         View::Checks => rsx! { ChecksView {} },
         View::Deploy => rsx! { DeployView {} },

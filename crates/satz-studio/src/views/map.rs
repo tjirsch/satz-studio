@@ -1,4 +1,4 @@
-//! The Packs destination: satz's pack report (`satz_presets`) as cards. The map first; then
+//! The Presets destination: satz's pack report (`satz_presets`) as cards. The map first; then
 //! every pack whose line the file carries, under the phase that line stands under; then
 //! the packs the file has no line for; then the `use` lines the pack graph does not know.
 //! A pack that another needs — and that meets that need alone — is a tree: its card, and
@@ -281,7 +281,7 @@ pub fn listed_requirements<'a>(row: &'a PackRow, report: &PacksReport) -> Vec<&'
 }
 
 #[component]
-pub fn PacksView() -> Element {
+pub fn PresetsView() -> Element {
     let app = use_context::<Store<AppStore>>();
     let handle = use_coroutine_handle::<EstateAction>();
     let model = app.estate().model().cloned();
@@ -290,7 +290,7 @@ pub fn PacksView() -> Element {
     let Some(model) = model else {
         return rsx! {
             div { class: "view packs",
-                h1 { class: "view__title", "Packs" }
+                h1 { class: "view__title", "Presets" }
                 Card { variant: CardVariant::Filled, class: "map__empty",
                     Icon { name: "map", size: 48, class: "placeholder__icon" }
                     p { "The estate model is not available — the drawer says why." }
@@ -307,7 +307,7 @@ pub fn PacksView() -> Element {
 
     rsx! {
         div { class: "view packs",
-            h1 { class: "view__title", "Packs" }
+            h1 { class: "view__title", "Presets" }
             if let Some(note) = &report.note {
                 Card { variant: CardVariant::Filled, class: "map__map-card",
                     Icon { name: "map", size: 32, class: "placeholder__icon" }

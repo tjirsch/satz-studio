@@ -4,7 +4,7 @@
 //! the estate is written from: an answer through satz's own writer, a value through
 //! the app's, a pack switched through `satz_add_preset` and `satz_remove_preset` — each under
 //! the session's write lock, each verified by `satz transpile --check`, each followed by
-//! a reload. It also runs `satz review-preset` for the Packs view and places a reviewed
+//! a reload. It also runs `satz review-preset` for the Presets view and places a reviewed
 //! pack in the estate's library, the estate checked with it there. A running
 //! command streams from a tokio task into a local task, so the loop stays free to take
 //! `CancelCommand`; the three git commands that put the estate in a repository run the
@@ -29,12 +29,15 @@ use satz_studio_core::satz::project;
 use satz_studio_core::satz::reports::{
     AddPackArgs, FindingSeverity, InterviewArgs, InterviewReport, MergeReport, NoticeRow,
     PackChange, PackReview, PacksReport, PrerequisitesResult, QuestionsReport, RemovePackArgs,
+    UpdateAction,
 };
 use satz_studio_core::satz::review::{self, PlaceError, Placed};
+use satz_studio_core::satz::workload::{self, PackSource, Which};
 use satz_studio_core::satz::{CliLine, EstateSession, SatzError, ToolOutcome, export};
 use satz_studio_core::schema::{ResourceRegistry, SchemaError};
 use tokio_util::sync::CancellationToken;
 
+use super::View;
 use super::app_actions::close_estate;
 use super::{
     AppStore, AppStoreStoreExt, CommandOutcome, Door, EstateStore, EstateStoreStoreExt, Exported,
@@ -95,6 +98,9 @@ pub enum EstateAction {
     PlacePrivate,
     /// the review closed: its card and its findings leave the window
     CloseReview,
+    /// a workload-pack command on the estate's `packs_dir`: `satz packs`, `get-pack`,
+    /// `update-pack` or `detach-pack`, then the list read again from the same source
+    Packs(PackOp),
     /// `git init -b main`, `git add -A` and one commit in the estate directory, streamed
     /// into the log: the repository `satz merge-presets` needs for its undo
     InitRepository,
@@ -104,6 +110,19 @@ pub enum EstateAction {
     /// leave it to open another: the Start screen again, with the Open door showing, so
     /// the estates it has found are the first thing there
     Switch,
+}
+
+/// What the Workload packs tab asks for.
+#[derive(Debug, Clone, PartialEq)]
+pub enum PackOp {
+    /// `satz packs` against this source, which the later operations read too
+    List(PackSource),
+    /// `satz get-pack <id>|--all`
+    Get(Which),
+    /// `satz update-pack <id>|--all [--take-upstream]`
+    Update { which: Which, take_upstream: bool },
+    /// `satz detach-pack <id>`
+    Detach(String),
 }
 
 pub async fn estate_coroutine(
@@ -190,6 +209,19 @@ pub async fn estate_coroutine(
                 app.estate().reviewing().set(false);
             }
             EstateAction::CloseReview => app.estate().review().set(None),
+            EstateAction::Packs(op) => {
+                if app.estate().packs_busy().cloned() {
+                    toast(app, ToastKind::Info, "a pack command is already running");
+                    continue;
+                }
+                app.estate().packs_busy().set(true);
+                let wrote = workload_packs(&session, app, op).await;
+                app.estate().packs_busy().set(false);
+                // a pack the estate uses may read differently now
+                if wrote {
+                    reload(&session, app).await;
+                }
+            }
             EstateAction::InitRepository => running.started(init_repository(&session, app)),
             EstateAction::Close => close_estate(app),
             EstateAction::Switch => {
@@ -1227,6 +1259,110 @@ async fn reload(session: &Arc<EstateSession>, app: Store<AppStore>) {
     reload_with(session, app, Carried::default()).await;
 }
 
+/// One workload-pack operation, and the list read again from the same source after it.
+/// A fetch, an update and a detach write `packs_dir`, so they hold the write lock; what
+/// satz refuses is a toast carrying satz's sentence. Returns whether a pack file was
+/// written, which is when the estate is read again.
+async fn workload_packs(session: &Arc<EstateSession>, app: Store<AppStore>, op: PackOp) -> bool {
+    let estate = app.estate();
+    let source = match &op {
+        PackOp::List(source) => {
+            estate.pack_source().set(Some(source.clone()));
+            estate.pack_update().set(None);
+            source.clone()
+        }
+        _ => match estate.pack_source().cloned() {
+            Some(source) => source,
+            None => {
+                toast(app, ToastKind::Error, "read a source of packs first");
+                return false;
+            }
+        },
+    };
+    let cli = &session.cli;
+    let mut wrote = false;
+    match op {
+        PackOp::List(_) => {}
+        PackOp::Get(which) => {
+            let _lock = session.write_lock().await;
+            match workload::get(cli, &which, &source).await {
+                Ok(report) if report.installed.is_empty() => {
+                    toast(
+                        app,
+                        ToastKind::Info,
+                        "every pack of the source is already here",
+                    );
+                }
+                Ok(report) => {
+                    wrote = true;
+                    let ids: Vec<&str> = report.installed.iter().map(|p| p.id.as_str()).collect();
+                    toast(app, ToastKind::Info, format!("fetched {}", ids.join(", ")));
+                }
+                Err(e) => toast(
+                    app,
+                    ToastKind::Error,
+                    format!("get-pack: {}", project::said(&e)),
+                ),
+            }
+        }
+        PackOp::Update {
+            which,
+            take_upstream,
+        } => {
+            let _lock = session.write_lock().await;
+            match workload::update(cli, &which, &source, take_upstream).await {
+                Ok(report) => {
+                    let written = report
+                        .packs
+                        .iter()
+                        .filter(|p| {
+                            matches!(p.action, UpdateAction::Updated | UpdateAction::TookUpstream)
+                        })
+                        .count();
+                    wrote = written > 0;
+                    if report.attention {
+                        toast(
+                            app,
+                            ToastKind::Error,
+                            "a pack was left as it is: it was edited here, or the source holds it no longer",
+                        );
+                    } else if written > 0 {
+                        toast(app, ToastKind::Info, format!("updated {written} pack(s)"));
+                    } else {
+                        toast(app, ToastKind::Info, "every fetched pack is current");
+                    }
+                    estate.pack_update().set(Some(report));
+                }
+                Err(e) => toast(
+                    app,
+                    ToastKind::Error,
+                    format!("update-pack: {}", project::said(&e)),
+                ),
+            }
+        }
+        PackOp::Detach(id) => {
+            let _lock = session.write_lock().await;
+            match workload::detach(cli, &id).await {
+                Ok(detached) => toast(
+                    app,
+                    ToastKind::Info,
+                    format!("{} is this repository's own pack now", detached.id),
+                ),
+                Err(e) => toast(
+                    app,
+                    ToastKind::Error,
+                    format!("detach-pack: {}", project::said(&e)),
+                ),
+            }
+        }
+    }
+    let listed = workload::list(cli, &source)
+        .await
+        .map_err(|e| project::said(&e));
+    estate.workload_packs().set(Some(listed));
+    wrote
+}
+
 /// `satz_transpile_check` on the estate as it stands: the findings of a compile that
 /// passed, the diagnostics of one that refused, or the one error of a checker that
 /// could not run.
@@ -1383,6 +1519,11 @@ async fn reload_with(session: &Arc<EstateSession>, app: Store<AppStore>, carried
         Some(Ok((model, cst))) => {
             built_ok = true;
             diagnostics = model.diagnostics.clone();
+            // a workload estate has no Presets destination: a window standing there
+            // when the estate turns out to be one goes to the Overview
+            if model.packs.workload_estate() && app.nav().cloned() == View::Presets {
+                app.nav().set(View::Overview);
+            }
             estate.model().set(Some(Arc::new(model)));
             estate.cst().set(Some(Arc::new(cst)));
         }

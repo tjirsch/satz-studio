@@ -24,16 +24,20 @@ use satz_studio_core::git::WorkTree;
 use satz_studio_core::github::StudioUpdate;
 use satz_studio_core::model::EstateModel;
 use satz_studio_core::satz::reports::{
-    InterfacesReport, InterviewReport, NoticeRow, QuestionsReport,
+    InterfacesReport, InterviewReport, NoticeRow, QuestionsReport, UpdatePackReport,
+    WorkloadPacksReport,
 };
 use satz_studio_core::satz::review::ReviewedPack;
 use satz_studio_core::satz::self_update::SatzRelease;
+use satz_studio_core::satz::workload::PackSource;
 use satz_studio_core::satz::{CliLine, EstateSession, ImportReport, QuestionsFormat, SatzBinary};
 use satz_studio_core::settings::Settings;
 
 pub use ansi::strip_ansi;
 pub use app_actions::{AppAction, app_coroutine, run_line};
-pub use estate_actions::{EstateAction, command_line, estate_coroutine, quote, reports_dir};
+pub use estate_actions::{
+    EstateAction, PackOp, command_line, estate_coroutine, quote, reports_dir,
+};
 pub use pace::{
     ahead_sentence, install_offer, newer_satz_sentence, satz_available, satz_notice,
     satz_release_sentence, studio_available, studio_look_sentence, window_title,
@@ -101,8 +105,9 @@ pub enum View {
     Overview,
     /// the questions its packs declare and it has not answered
     Decisions,
-    /// the pack lines: which are in, which are off, which the file has no line for
-    Packs,
+    /// the preset library's pack lines: which are in, which are off, which the file has
+    /// no line for. Not a destination of a workload estate, which has no library
+    Presets,
     /// the estate file itself: its params and its resource tree
     Estate,
     /// what judges the estate: the compile, the goal view, the evidence report
@@ -125,12 +130,24 @@ impl View {
     /// would cost.
     pub const PRIMARY: [View; 6] = [
         View::Overview,
-        View::Packs,
+        View::Presets,
         View::Decisions,
         View::Estate,
         View::Checks,
         View::Deploy,
     ];
+
+    /// The primary destinations of the open estate. A workload estate — one that reads
+    /// an organisation's interface and has no preset library, as satz's presets report
+    /// says ([`PacksReport::workload_estate`]) — has no Presets destination: the library
+    /// belongs to the organisation's estate, and its packs are the Estate destination's
+    /// Workload packs tab.
+    pub fn primary(workload_estate: bool) -> Vec<View> {
+        View::PRIMARY
+            .into_iter()
+            .filter(|v| !(workload_estate && *v == View::Presets))
+            .collect()
+    }
 
     /// The secondary group, bottom-aligned in the rail. Agent needs an estate — it
     /// configures an agent for the one that is open; Settings is the one destination
@@ -142,7 +159,7 @@ impl View {
             View::Start => "Estates",
             View::Overview => "Overview",
             View::Decisions => "Decisions",
-            View::Packs => "Packs",
+            View::Presets => "Presets",
             View::Estate => "Estate",
             View::Checks => "Checks",
             View::Deploy => "Deploy",
@@ -158,7 +175,7 @@ impl View {
             View::Start => "home_storage",
             View::Overview => "dashboard",
             View::Decisions => "quiz",
-            View::Packs => "inventory_2",
+            View::Presets => "inventory_2",
             View::Estate => "description",
             View::Checks => "fact_check",
             View::Deploy => "rocket_launch",
@@ -174,7 +191,7 @@ impl View {
             self,
             View::Overview
                 | View::Decisions
-                | View::Packs
+                | View::Presets
                 | View::Estate
                 | View::Checks
                 | View::Deploy
@@ -328,7 +345,7 @@ pub struct EstateStore {
     /// the last decisions sheet or workbook this session wrote, which "Export again"
     /// writes over
     pub last_export: Option<Exported>,
-    /// the pack the Packs view reviewed last with `satz review-preset`, or why its review
+    /// the pack the Presets view reviewed last with `satz review-preset`, or why its review
     /// failed; its findings stand in the drawer beside the estate's own until it is closed
     pub review: Option<PackReviewState>,
     /// a review or a placement is running
@@ -336,9 +353,21 @@ pub struct EstateStore {
     /// what the estate publishes, from `satz interfaces` at every reload — or satz's
     /// reason it could not say; `None` until the first reload has asked
     pub interfaces: Option<Result<InterfacesReport, String>>,
+    /// the estate's workload packs as `satz packs` listed them against
+    /// [`Self::pack_source`] — or satz's reason it could not; `None` until a source has
+    /// been read, which happens only when the operator asks: the default source is a
+    /// network read
+    pub workload_packs: Option<Result<WorkloadPacksReport, String>>,
+    /// the source the list was read from, and the one a fetch and an update read
+    pub pack_source: Option<PackSource>,
+    /// what the last `satz update-pack` reported: the edited packs with their
+    /// difference stand in the tab until the next list
+    pub pack_update: Option<UpdatePackReport>,
+    /// a list, a fetch, an update or a detach is running
+    pub packs_busy: bool,
 }
 
-/// The pack review of the Packs view.
+/// The pack review of the Presets view.
 #[derive(Debug, Clone, PartialEq)]
 pub enum PackReviewState {
     Reviewed(ReviewedPack),
@@ -594,7 +623,7 @@ mod tests {
             View::Start,
             View::Overview,
             View::Decisions,
-            View::Packs,
+            View::Presets,
             View::Estate,
             View::Checks,
             View::Deploy,
@@ -610,5 +639,20 @@ mod tests {
         icons.sort_unstable();
         icons.dedup();
         assert_eq!(icons.len(), all.len());
+    }
+
+    /// A workload estate has no preset library, so its rail has no Presets destination;
+    /// every other destination stands where it stood.
+    #[test]
+    fn a_workload_estate_has_every_primary_destination_but_presets() {
+        assert_eq!(View::primary(false), View::PRIMARY);
+        let workload = View::primary(true);
+        assert!(!workload.contains(&View::Presets));
+        let rest: Vec<View> = View::PRIMARY
+            .into_iter()
+            .filter(|v| *v != View::Presets)
+            .collect();
+        assert_eq!(workload, rest);
+        assert_eq!(View::Presets.label(), "Presets");
     }
 }
