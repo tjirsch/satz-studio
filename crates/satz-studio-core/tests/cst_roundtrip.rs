@@ -188,8 +188,20 @@ fn differential(name: &str, cst: &Cst, file: &File) {
     let mut got: Vec<(usize, String)> = cst
         .nodes()
         .filter_map(|(_, n)| match &n.kind {
-            NodeKind::Attr { key, .. } | NodeKind::Block { key, .. } => {
-                Some((n.line as usize, cst_key(cst.slice(*key))))
+            // an entry under a condition carries it: the tree and satz agree on which
+            // entries have one, and on what it says
+            NodeKind::Attr { key, when, .. } | NodeKind::Block { key, when, .. } => {
+                let cond = when.map_or(String::new(), |w| {
+                    format!(
+                        " when {}{}",
+                        if w.negated { "not " } else { "" },
+                        cst.slice(w.name)
+                    )
+                });
+                Some((
+                    n.line as usize,
+                    format!("{}{cond}", cst_key(cst.slice(*key))),
+                ))
             }
             NodeKind::Use { path, .. } => Some((n.line as usize, cst_key(cst.slice(*path)))),
             _ => None,
@@ -254,6 +266,18 @@ fn walk_entries(entries: &[Entry], out: &mut Vec<(usize, String)>) {
             }
             // the tree keeps an `each` whole, as it keeps a statement
             Entry::Each { .. } => {}
+            // the entry under the condition, marked with it
+            Entry::When { cond, entry, .. } => {
+                let at = out.len();
+                walk_entries(std::slice::from_ref(entry.as_ref()), out);
+                if let Some((_, key)) = out.get_mut(at) {
+                    key.push_str(&format!(
+                        " when {}{}",
+                        if cond.not { "not " } else { "" },
+                        cond.name
+                    ));
+                }
+            }
         }
     }
 }

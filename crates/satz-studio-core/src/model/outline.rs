@@ -14,7 +14,7 @@ use satz_core::pipeline::Env;
 
 use super::value::{decode, mode_of};
 use super::{AttrRow, ModelError, ResourceKind, ResourceNode, StrPart, decode_string};
-use crate::cst::{Cst, NodeId, NodeKind, Span, UseLine, ValueKind};
+use crate::cst::{Cond, Cst, NodeId, NodeKind, Span, UseLine, ValueKind};
 use crate::schema::{AttrType, BlockSchema, ResourceRegistry, ResourceSchema};
 
 /// The top-level keys satz's resolver calls configuration, never a resource type.
@@ -175,6 +175,7 @@ struct BlockRef {
     id: NodeId,
     key: Span,
     name: Option<Span>,
+    when: Option<Cond>,
     open: Span,
     close: Span,
     line: u32,
@@ -188,18 +189,25 @@ struct Walker<'a> {
 }
 
 impl Walker<'_> {
+    /// A condition as it stands in the file, `when [not] NAME`.
+    fn written(&self, when: Option<Cond>) -> Option<String> {
+        when.map(|w| self.cst.slice(w.span).to_string())
+    }
+
     fn block(&self, id: NodeId) -> Option<BlockRef> {
         let node = self.cst.node(id);
         match node.kind {
             NodeKind::Block {
                 key,
                 name,
+                when,
                 open,
                 close,
             } => Some(BlockRef {
                 id,
                 key,
                 name,
+                when,
                 open,
                 close,
                 line: node.line,
@@ -380,7 +388,7 @@ impl Walker<'_> {
     /// The grant as a node of its own: the member is the key, the one row is its roles.
     fn member_grant(&self, id: NodeId, tf_type: &str) -> Result<Option<ResourceNode>, ModelError> {
         let node = self.cst.node(id);
-        let NodeKind::Attr { key, .. } = node.kind else {
+        let NodeKind::Attr { key, when, .. } = node.kind else {
             return Ok(None);
         };
         let Some(row) = self.row(id, &Shape::None, true)? else {
@@ -395,6 +403,7 @@ impl Walker<'_> {
             label: None,
             label_parts: None,
             tf_type: Some(tf_type.to_string()),
+            when: self.written(when),
             line: node.line,
             attrs: vec![row],
             children: Vec::new(),
@@ -430,7 +439,10 @@ impl Walker<'_> {
         block_editable: bool,
     ) -> Result<Option<AttrRow>, ModelError> {
         let node = self.cst.node(id);
-        let NodeKind::Attr { key, value, .. } = node.kind else {
+        let NodeKind::Attr {
+            key, value, when, ..
+        } = node.kind
+        else {
             return Ok(None);
         };
         let Some(v) = decode(self.cst, value, self.env)? else {
@@ -443,6 +455,7 @@ impl Walker<'_> {
         Ok(Some(AttrRow {
             id,
             key,
+            when: self.written(when),
             mode: mode_of(&v),
             value: v,
             typed: f.typed,
@@ -495,6 +508,7 @@ impl Walker<'_> {
         Ok(ResourceNode {
             id: b.id,
             kind,
+            when: self.written(b.when),
             key,
             key_parts,
             label,

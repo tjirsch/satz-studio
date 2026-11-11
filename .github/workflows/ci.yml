@@ -22,7 +22,10 @@ name: ci
 # seen the day it ships rather than on the next pull request: every run installs the
 # newest satz release, and so does this one. A scheduled run that fails also fails
 # `report`, which opens an issue — or comments on the one still open — with the run's
-# link; it is the only job that writes, and only to issues.
+# link; it is the only job that writes, and only to issues. The scheduled run also reads
+# the newest satz release's own files through the grammar and the document layer
+# (scripts/check-newest-satz.sh): the tests read the pinned satz, which a new language
+# form reaches only when the pin moves.
 #
 # macOS is Apple silicon alone, here and in release.yml (decided 2026-09-18, ADR 0016):
 # nothing in this app is architecture-dependent — the webview and the satz binary are
@@ -68,6 +71,13 @@ jobs:
         run: cargo test --workspace --locked --no-fail-fast
       - name: the verification harness (docs/verification.md)
         run: bash scripts/e2e.sh --ci
+      # The tests above read vendor/satz, the PINNED satz, so a form the newest release
+      # added to the language shows there only when the pin moves. Once a day the newest
+      # release's own files go through the grammar and the document layer too: a failure
+      # says the app is behind the language while its tests are green.
+      - name: the newest satz release's files through the grammar and the document layer
+        if: github.event_name == 'schedule'
+        run: bash scripts/check-newest-satz.sh
       - name: build the app
         run: cargo build -p satz-studio --locked
       # cargo-about at the exact version the script names: a different one can read a

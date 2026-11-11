@@ -346,8 +346,19 @@ fn signature(cst: &Cst, id: NodeId) -> String {
                 when.map(s)
             )
         }
-        NodeKind::Block { key, name, .. } => format!("block {} {:?}", s(*key), name.map(s)),
-        NodeKind::Attr { key, .. } => format!("attr {}", s(*key)),
+        // a condition is part of what the node is: an edit that moved or dropped one
+        // changed the document beyond its target
+        NodeKind::Block {
+            key, name, when, ..
+        } => format!(
+            "block {} {:?} {:?}",
+            s(*key),
+            name.map(s),
+            when.map(|w| s(w.span))
+        ),
+        NodeKind::Attr { key, when, .. } => {
+            format!("attr {} {:?}", s(*key), when.map(|w| s(w.span)))
+        }
         NodeKind::Value(ValueKind::List) => "list".to_string(),
         NodeKind::Value(ValueKind::Obj) => "obj".to_string(),
         NodeKind::Value(kind) => format!("{kind:?} {}", s(n.span)),
@@ -736,6 +747,46 @@ mod tests {
         assert_eq!(
             out,
             SRC.replace("  b = 1\n}\n", "  b = 2\n}\n\nuse \"p.satz\"\n")
+        );
+    }
+
+    /// A value beside a condition is edited in its span, and the condition stays the
+    /// entry's: the proof compares it, so a rendering that swallowed it would be refused.
+    #[test]
+    fn a_value_under_a_condition_is_replaced_and_the_condition_stays() {
+        let src = "estate e\n\nblock k {\n  attr = 1 when gate\n  inner when not gate {\n    deep = \"a\"\n  }\n}\n";
+        let cst = Cst::parse(src).unwrap();
+        let attr = cst
+            .nodes()
+            .find_map(|(id, n)| match &n.kind {
+                NodeKind::Attr { key, .. } if cst.slice(*key) == "attr" => Some(id),
+                _ => None,
+            })
+            .unwrap();
+        let out = apply(
+            &cst,
+            &[Edit::ReplaceValue {
+                node: attr,
+                value: TypedValue::Num("2".into()),
+            }],
+        )
+        .unwrap();
+        assert_eq!(out, src.replace("attr = 1 when gate", "attr = 2 when gate"));
+
+        // a raw value that takes the condition's place changes the node, and is refused
+        let swallowed = apply(
+            &cst,
+            &[Edit::ReplaceValue {
+                node: attr,
+                value: TypedValue::Raw("2 when other".into()),
+            }],
+        );
+        assert!(
+            matches!(
+                swallowed,
+                Err(EditError::ChangedElsewhere { .. } | EditError::Syntax { .. })
+            ),
+            "{swallowed:?}"
         );
     }
 }

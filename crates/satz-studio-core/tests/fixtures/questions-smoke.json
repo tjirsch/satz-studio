@@ -354,6 +354,7 @@
       "blocking": false,
       "shape": "string",
       "pack_description": "Organization-wide audit log sink into a GCS bucket — the compliance archive.",
+      "empty": "the organisation itself; the project is created directly under it",
       "from": "presets/monitoring/organization-audit-logsink.satz",
       "pack": "monitoring.organization_audit_logsink"
     },

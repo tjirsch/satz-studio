@@ -223,9 +223,16 @@ fn NodeItem(
     let missing = node.missing_required.len();
     let label = label_of(&node);
     let supporting = supporting_of(&node);
-    let trailing = (missing > 0).then(|| {
+    // a condition satz writes the block under, as it stands in the file: read, never edited
+    let when = node.when.clone();
+    let trailing = (missing > 0 || when.is_some()).then(|| {
         rsx! {
-            Chip { kind: ChipKind::Assist, icon: "warning", label: format!("{missing} required missing"), error: true, class: "resources__missing-chip" }
+            if let Some(when) = when.clone() {
+                Chip { kind: ChipKind::Assist, icon: "rule", label: when }
+            }
+            if missing > 0 {
+                Chip { kind: ChipKind::Assist, icon: "warning", label: format!("{missing} required missing"), error: true, class: "resources__missing-chip" }
+            }
         }
     });
     if is_branch {
@@ -362,6 +369,10 @@ fn AttrRowView(
                 if !flags.is_empty() {
                     span { class: "attr-row__flags", {flags.join(" · ")} }
                 }
+                // a condition satz writes the attribute under: read here, edited in the file
+                if let Some(when) = row.when.clone() {
+                    Chip { kind: ChipKind::Assist, icon: "rule", label: when }
+                }
             }
             div { class: "attr-row__field",
                 if locked {
@@ -451,6 +462,7 @@ mod tests {
     fn attr(id: NodeId, key: &str, line: u32) -> AttrRow {
         AttrRow {
             id,
+            when: None,
             key: key.to_string(),
             value: SourceValue::Str {
                 raw: String::new(),
@@ -475,6 +487,7 @@ mod tests {
     ) -> ResourceNode {
         ResourceNode {
             id,
+            when: None,
             kind: ResourceKind::Resource,
             key: key.to_string(),
             key_parts: vec![StrPart::Lit(key.to_string())],
