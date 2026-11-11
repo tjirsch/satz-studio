@@ -18,7 +18,7 @@
       "kind": "pack",
       "file": "/e/packs/team-access.satz",
       "line": 5,
-      "message": "version 0.1 has no row in tests/fixtures/smoke/../../../vendor/satz/presets/CHANGELOG.md's `## Changelog` — a version nobody can read the history of is a version nobody can adopt"
+      "message": "version 0.1 has no row in vendor/satz/presets/CHANGELOG.md's `## Changelog` — a version nobody can read the history of is a version nobody can adopt"
     },
     {
       "severity": "error",

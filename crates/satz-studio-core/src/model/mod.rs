@@ -61,6 +61,9 @@ pub struct ResourceNode {
     pub label_parts: Option<Vec<StrPart>>,
     /// the Terraform type of a `ResourceMap`, a `Resource` or a `MemberGrant`
     pub tf_type: Option<String>,
+    /// the block's condition as written, `when use_key` or `when not each.email`: satz
+    /// writes the block only where it holds
+    pub when: Option<String>,
     pub line: u32,
     pub attrs: Vec<AttrRow>,
     pub children: Vec<ResourceNode>,
@@ -135,6 +138,9 @@ pub struct AttrRow {
     /// `Unknown` block
     pub editable: bool,
     pub mode: EditMode,
+    /// the attribute's condition as written, `when use_key`: satz writes the attribute
+    /// only where it holds. The value is edited as any other; the condition is read
+    pub when: Option<String>,
     pub line: u32,
 }
 

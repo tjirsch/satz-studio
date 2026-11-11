@@ -44,6 +44,17 @@ pub enum ValueKind {
     Obj,
 }
 
+/// `when [not] NAME` on an attribute or a block: satz writes what it stands on only
+/// where NAME — a param, or inside an `each` a field of the entry, `each.<field>` —
+/// carries a value; with `not`, where it carries none. The app reads it and never edits it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Cond {
+    /// from `when` to the end of the name
+    pub span: Span,
+    pub name: Span,
+    pub negated: bool,
+}
+
 /// What a node is. Ids are assigned in pre-order, so a parent's id is smaller than its
 /// children's and the node vector is in document order. Keywords and punctuation are not
 /// nodes; where a node needs one (`=`, `{`, `}`) it carries the span.
@@ -67,16 +78,22 @@ pub enum NodeKind {
         as_key: Option<Span>,
         when: Option<Span>,
     },
-    /// `KEY [NAME] { … }` — a resource map, a named entry, a nested mapping; the body's
-    /// entries are the children
+    /// `KEY [NAME] [when [not] NAME] { … }` — a resource map, a named entry, a nested
+    /// mapping; the body's entries are the children
     Block {
         key: Span,
         name: Option<Span>,
+        when: Option<Cond>,
         open: Span,
         close: Span,
     },
-    /// `key = value` inside a block
-    Attr { key: Span, eq: Span, value: NodeId },
+    /// `key = value [when [not] NAME]` inside a block
+    Attr {
+        key: Span,
+        eq: Span,
+        value: NodeId,
+        when: Option<Cond>,
+    },
     /// a list's items and an object's entries are the children; the scalars are leaves
     Value(ValueKind),
     /// `claim`, `question`, `action`, `notice`, `offers`, `export`, `interface`,

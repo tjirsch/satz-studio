@@ -111,6 +111,7 @@ fn a_block_carries_key_name_and_braces_and_its_entries_are_children() {
         name,
         open,
         close,
+        ..
     } = cst.node(block).kind
     else {
         panic!()
@@ -123,7 +124,7 @@ fn a_block_carries_key_name_and_braces_and_its_entries_are_children() {
     assert_eq!(labels(&cst, block), ["Attr", "Use", "Block"]);
 
     let attr = child(&cst, block, 0);
-    let NodeKind::Attr { key, eq, value } = cst.node(attr).kind else {
+    let NodeKind::Attr { key, eq, value, .. } = cst.node(attr).kind else {
         panic!()
     };
     assert_eq!(cst.slice(key), "display_name");
@@ -523,4 +524,50 @@ fn a_claim_with_its_measure_is_kept_whole() {
             assert!(claim.contains(key), "`{key}` inside {claim}");
         }
     }
+}
+
+/// `key = value when [not] NAME` and `key [name] when [not] NAME { … }`: the condition is
+/// the entry's, with its span, its name and whether it is negated; an entry without one
+/// has none, and a map keyed `when` is a block like any other.
+#[test]
+fn a_condition_is_the_entrys_and_a_key_named_when_is_a_key() {
+    let src = "estate e\n\ngoogle_storage_bucket {\n  b {\n    name = \"n\"\n    force_destroy = true when not keep\n    encryption when use_key {\n      default_kms_key_name = key\n    }\n  }\n  extra when want {\n    name = \"x\"\n  }\n}\n\nblock {\n  a = 1\n  when x {\n    b = 2\n  }\n}\n";
+    let cst = Cst::parse(src).unwrap();
+    assert!(
+        cst.nodes()
+            .all(|(_, n)| !matches!(n.kind, NodeKind::Error { .. })),
+        "the grammar reads both forms"
+    );
+    let conds: Vec<(String, Option<(String, bool)>)> = cst
+        .nodes()
+        .filter_map(|(_, n)| match &n.kind {
+            NodeKind::Attr { key, when, .. } | NodeKind::Block { key, when, .. } => Some((
+                cst.slice(*key).to_string(),
+                when.map(|w| (cst.slice(w.name).to_string(), w.negated)),
+            )),
+            _ => None,
+        })
+        .collect();
+    let of = |key: &str| {
+        conds
+            .iter()
+            .find(|(k, _)| k == key)
+            .unwrap_or_else(|| panic!("no entry `{key}`: {conds:?}"))
+            .1
+            .clone()
+    };
+    assert_eq!(of("name"), None);
+    assert_eq!(of("force_destroy"), Some(("keep".to_string(), true)));
+    assert_eq!(of("encryption"), Some(("use_key".to_string(), false)));
+    assert_eq!(of("extra"), Some(("want".to_string(), false)));
+    assert_eq!(of("a"), None, "`when x {{` after a value is the next entry");
+    assert_eq!(of("when"), None);
+    let span = cst
+        .nodes()
+        .find_map(|(_, n)| match &n.kind {
+            NodeKind::Attr { when: Some(w), .. } => Some(w.span),
+            _ => None,
+        })
+        .unwrap();
+    assert_eq!(cst.slice(span), "when not keep");
 }

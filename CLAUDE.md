@@ -42,7 +42,12 @@ the rules that apply to every change, whoever or whatever makes it.
   (`crates/satz-studio-core/src/satz/binary.rs`) may sit below it, and a test holds it at
   or below. Moving the pin is one pull request that moves the submodule, the recorded
   reports (`crates/satz-studio-core/tests/fixtures/*.json`) and, when satz's `NOTICE` changed, its verbatim copy at
-  the end of `NOTICE` (`tests/notice.rs` holds the two together), and leaves `MIN_SATZ` alone. `MIN_SATZ` rises only when
+  the end of `NOTICE` (`tests/notice.rs` holds the two together), and leaves `MIN_SATZ` alone. `scripts/move-pin.sh <tag>`
+  is that move: the submodule, the vendored grammar at the commit that satz names
+  (`tests/grammar_pin.rs` holds the two together) and the recorded reports one satz command
+  writes. The daily run reads the NEWEST release's own files through the grammar and the
+  document layer (`scripts/check-newest-satz.sh`), so a form satz adds to the language is
+  an issue the day it ships, not a failure at the next pin move. `MIN_SATZ` rises only when
   a satz release breaks the app — answered by a satz-studio patch release the same day —
   or when the app starts using something a later satz introduced (a flag, a tool, a report
   field), whose tests are what make that version the requirement (ADR 0014). There is no

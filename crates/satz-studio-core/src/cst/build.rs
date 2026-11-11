@@ -7,7 +7,7 @@
 
 use tree_sitter::Node as Ts;
 
-use super::{CstError, Node, NodeId, NodeKind, Span, ValueKind};
+use super::{Cond, CstError, Node, NodeId, NodeKind, Span, ValueKind};
 
 /// The node vector for `text`, whose tree-sitter root is `root`. Refuses a node kind
 /// the grammar produces and this walk does not map: that is a disagreement between the
@@ -234,6 +234,7 @@ impl<'t> Builder<'t> {
                 key: span(key),
                 eq: span(*eq),
                 value: 0,
+                when: cond(n),
             }
         };
         let id = self.push_at(kind, n);
@@ -313,6 +314,7 @@ impl<'t> Builder<'t> {
         let kind = NodeKind::Block {
             key: span(key),
             name,
+            when: cond(n),
             open: span(*open),
             close: span(*close),
         };
@@ -384,4 +386,17 @@ impl<'t> Builder<'t> {
         self.set_children(id, out);
         id
     }
+}
+
+/// The condition of an attribute or a block, the grammar's `when` field: `when [not]
+/// NAME`. A condition the grammar could not finish has no name and is no condition here;
+/// its error node is the entry's.
+fn cond(n: Ts<'_>) -> Option<Cond> {
+    let c = n.child_by_field_name("when")?;
+    let name = c.child_by_field_name("name")?;
+    Some(Cond {
+        span: span(c),
+        name: span(name),
+        negated: c.child_by_field_name("negation").is_some(),
+    })
 }
