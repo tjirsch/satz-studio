@@ -779,6 +779,7 @@ mod tests {
             packs,
             unmanaged: Vec::new(),
             interfaces: Vec::new(),
+            works_in: satz_studio_core::satz::reports::EstateMode::Organisation,
             findings: Vec::new(),
         }
     }

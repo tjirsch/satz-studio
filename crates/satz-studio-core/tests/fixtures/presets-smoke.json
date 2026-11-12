@@ -1,5 +1,6 @@
 {
   "estate": "vendor/satz/tests/smoke/yaml/smoke.satz",
+  "works_in": "organisation",
   "packs": [
     {
       "path": "presets/estate-core.satz",
@@ -25,6 +26,7 @@
         "presets/billing-export.satz",
         "presets/project-workload.satz",
         "presets/folder-workload.satz",
+        "presets/delegated-budget-role.satz",
         "presets/shared-network.satz",
         "presets/security-audit/sa-security-audit.satz",
         "presets/scc/scc-service-enablement.satz",
@@ -253,6 +255,30 @@
           ],
           "params": [
             "use_folder_workload"
+          ],
+          "met": false
+        }
+      ],
+      "required_by": [],
+      "excludes": [],
+      "findings": []
+    },
+    {
+      "path": "presets/delegated-budget-role.satz",
+      "role": "pack",
+      "gate": "use_delegated_budgets",
+      "gate_declared_in": "presets/estate-map.satz",
+      "default": "false",
+      "line": "absent",
+      "deploys": false,
+      "requires": [
+        {
+          "kind": "gate",
+          "any_of": [
+            "presets/estate-map.satz"
+          ],
+          "params": [
+            "use_delegated_budgets"
           ],
           "met": false
         }

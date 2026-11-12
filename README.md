@@ -64,7 +64,10 @@ reload, "Switch estate" — the Start screen with your estates listed — and "C
 every satz command the app runs is one keystroke away in the commands palette (⌘K,
 Ctrl+K on Windows and Linux, or that footer button). What a command prints lands in the
 log in the form satz writes for a person — text, or markdown for the evidence report;
-`json` is a format you pick when you want the file. Estate's fourth tab is the estate's workload packs: the ones the repository wrote
+`json` is a format you pick when you want the file. satz says what an estate works in — the organisation, a delegated folder or a delegated
+project — and the window follows it: an organisation's estate has the Presets destination
+and its library; an estate in a delegated place has workload packs instead, each row saying
+which delegated values the pack reads. The Overview names the mode. There, Estate's fourth tab is the estate's workload packs: the ones the repository wrote
 itself and the ones `satz get-pack` fetched, listed against the satz repository or a
 folder you choose, each fetched, updated, kept as your own or added to the estate from
 its row.
@@ -110,7 +113,7 @@ that holds them up — in front of apply and bootstrap, which satz refuses.
 
 ## What it needs
 
-- **`satz` 0.97.0 or newer.** `MIN_SATZ` in `crates/satz-studio-core/src/satz/binary.rs`
+- **`satz` 0.99.0 or newer.** `MIN_SATZ` in `crates/satz-studio-core/src/satz/binary.rs`
   names the oldest satz this build works with. It rises when a satz release breaks the
   app or the app starts using something a later satz introduced, not with every satz
   release. Install satz with its installer or bring it up to date with `satz

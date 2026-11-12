@@ -1,6 +1,6 @@
 # 0024 — workload packs are a tab of Estate, and a workload estate has no Presets destination
 
-- **Status:** accepted
+- **Status:** accepted; the rule that recognises a workload estate superseded by [ADR 0025](0025-an-estate-works-in-one-of-three-modes-and-satz-says-which.md)
 - **Date:** 2026-11-11
 - **Deciders:** the maintainer
 

@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use dioxus::prelude::*;
 use satz_studio_core::edit::Edit;
 use satz_studio_core::satz::reports::{
-    PackState, UpdateAction, UpdatedPack, WorkloadPackRow, WorkloadPacksReport,
+    PackNeed, PackState, UpdateAction, UpdatedPack, WorkloadPackRow, WorkloadPacksReport,
 };
 use satz_studio_core::satz::workload::{PackSource, Which};
 
@@ -18,6 +18,20 @@ use crate::components::{
     Button, ButtonVariant, Card, CardVariant, Chip, ChipKind, Dialog, Icon, LinearProgress,
 };
 use crate::state::{AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt, PackOp};
+
+/// Which delegated values a pack reads, in the words its row shows; none for a pack that
+/// reads neither. Each is the default of a param of the pack: an estate that was not
+/// delegated that value answers the param itself, so no pack is left out for it.
+fn needs_text(needs: &[PackNeed]) -> Option<String> {
+    let words: Vec<&str> = needs
+        .iter()
+        .map(|n| match n {
+            PackNeed::Folder => "the delegated folder",
+            PackNeed::Project => "the delegated project",
+        })
+        .collect();
+    (!words.is_empty()).then(|| format!("reads {}", words.join(" and ")))
+}
 
 /// The word and the icon of a pack's state chip.
 fn state_chip(state: PackState) -> (&'static str, &'static str) {
@@ -307,6 +321,9 @@ fn PackLine(
                 code { class: "interfaces__export-name", "{row.id}" }
                 span { class: "interfaces__supporting", {versions(&row)} }
                 Chip { kind: ChipKind::Assist, icon, label: word }
+                if let Some(needs) = needs_text(&row.needs) {
+                    Chip { kind: ChipKind::Assist, icon: "rule", label: needs }
+                }
                 if in_use {
                     Chip { kind: ChipKind::Assist, icon: "link", label: "used by the estate" }
                 }
@@ -389,6 +406,19 @@ fn PackLine(
 mod tests {
     use super::*;
 
+    #[test]
+    fn a_packs_needs_are_said_in_words() {
+        assert_eq!(
+            needs_text(&[PackNeed::Project]).as_deref(),
+            Some("reads the delegated project")
+        );
+        assert_eq!(
+            needs_text(&[PackNeed::Folder, PackNeed::Project]).as_deref(),
+            Some("reads the delegated folder and the delegated project")
+        );
+        assert_eq!(needs_text(&[]), None);
+    }
+
     fn row(state: PackState, version: Option<&str>, upstream: Option<&str>) -> WorkloadPackRow {
         WorkloadPackRow {
             id: "demo".into(),
@@ -397,6 +427,7 @@ mod tests {
             upstream_version: upstream.map(str::to_string),
             source: None,
             use_line: None,
+            needs: Vec::new(),
         }
     }
 

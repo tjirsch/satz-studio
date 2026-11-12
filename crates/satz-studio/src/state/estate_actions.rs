@@ -1519,9 +1519,9 @@ async fn reload_with(session: &Arc<EstateSession>, app: Store<AppStore>, carried
         Some(Ok((model, cst))) => {
             built_ok = true;
             diagnostics = model.diagnostics.clone();
-            // a workload estate has no Presets destination: a window standing there
-            // when the estate turns out to be one goes to the Overview
-            if model.packs.workload_estate() && app.nav().cloned() == View::Presets {
+            // an estate without presets has no Presets destination: a window standing
+            // there when the estate turns out to be one goes to the Overview
+            if !model.packs.has_presets() && app.nav().cloned() == View::Presets {
                 app.nav().set(View::Overview);
             }
             estate.model().set(Some(Arc::new(model)));

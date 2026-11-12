@@ -45,15 +45,16 @@ pub fn NavigationRail() -> Element {
     } else {
         0
     };
-    // a workload estate has no preset library, and no Presets destination
-    let workload_estate = app
+    // an estate in a delegated folder or project has no preset library, and no Presets
+    // destination; until the model is read the rail shows every destination
+    let presets = app
         .estate()
         .model()
         .read()
         .as_deref()
-        .is_some_and(|m| m.packs.workload_estate());
+        .is_none_or(|m| m.packs.has_presets());
     let primary: Vec<View> = if has_estate {
-        View::primary(workload_estate)
+        View::primary(presets)
     } else {
         Vec::new()
     };
