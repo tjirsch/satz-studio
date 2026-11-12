@@ -1603,8 +1603,7 @@ mod tests {
             "an organisation's estate without presets yet keeps the destination"
         );
 
-        value["interfaces"] =
-            serde_json::json!([{"path": "vendor/rag/rag/satz/interface.satz", "at": 57}]);
+        value["interfaces"] = serde_json::json!([{"path": "interfaces/incoming/rag/rag/satz/interface.satz", "at": 57}]);
         for (word, mode) in [
             ("project", EstateMode::Project),
             ("folder", EstateMode::Folder),

@@ -27,8 +27,10 @@ blocks are neither added nor removed.
   command's report into `reports_dir()` (read into the log and removed), and satz's
   verified installer script into a temporary directory of its own (`satz::install`).
 - **The app never touches `hcl_dir` or `interfaces_dir`.** The generated HCL and the
-  interfaces satz writes for the projects beside the estate are satz's output; the app
-  reads the estate's `config.toml` to learn where they are and leaves them alone.
+  interfaces satz writes for the projects beside the estate (`interfaces/outgoing/`, since
+  satz 0.100.0) are satz's output, and the copies an estate was given
+  (`interfaces/incoming/`) are the estate's; the app reads the estate's `config.toml` to
+  learn where they are and leaves both alone.
 - **One identity per estate.** Every open estate has its own `satz mcp` child; the
   identity its live tools run as is what `satz_open` returned (`runs_as`), shown in the
   Overview's identity card and configured nowhere.

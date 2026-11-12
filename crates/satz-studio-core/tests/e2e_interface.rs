@@ -1,9 +1,9 @@
 //! A central estate's interfaces and a project estate that reads one, over satz's own
-//! smoke files. `satz transpile` of the showcase writes `interfaces/` beside `hcl/`: every
+//! smoke files. `satz transpile` of the showcase writes `interfaces/outgoing/` beside `hcl/`: every
 //! file satz generates there is a tree that is the file, with the `interface "<name>"`
 //! header and nothing satz refuses, and discovery walks past the folder as it walks past
-//! `hcl/`. The smoke project takes the showcase's `interfaces/archive/` whole as
-//! `vendor/archive/`, as satz's smoke matrix does: `satz_presets` names its interface file
+//! `hcl/`. The smoke project takes the showcase's `interfaces/outgoing/archive/` whole as
+//! `interfaces/incoming/archive/`, as satz's smoke matrix does: `satz_presets` names its interface file
 //! as an interface and not as a file the graph does not know, the model builds with the
 //! `${{interface.<export>}}` strings as the values they are, and the app's writer moves
 //! one reference to another export and back through satz's check, while a reference to an
@@ -25,7 +25,7 @@ use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
 /// The interface file the smoke project `use`s, relative to its root.
-const INTERFACE: &str = "vendor/archive/archive/satz/interface.satz";
+const INTERFACE: &str = "interfaces/incoming/archive/archive/satz/interface.satz";
 
 /// Every `.satz` file below `dir`.
 fn satz_files(dir: &Path, out: &mut Vec<PathBuf>) {
@@ -53,7 +53,7 @@ fn copy_dir(from: &Path, to: &Path) {
 }
 
 /// `satz --config <dir> transpile showcase.satz` through the app's CLI runner, which
-/// writes `hcl/` and `interfaces/` into the copy.
+/// writes `hcl/` and `interfaces/outgoing/` into the copy.
 async fn transpile(session: &EstateSession) {
     let args = vec!["transpile".to_string(), session.main.display().to_string()];
     let (tx, mut rx) = mpsc::channel(1024);
@@ -73,7 +73,7 @@ async fn transpile(session: &EstateSession) {
 
 /// The smoke project beside `central`: `satz/archive.satz` from the pinned submodule, a
 /// `config.toml` naming the schema and the presets of `vendor/satz` by absolute path, and
-/// the central estate's `interfaces/archive/` copied whole to `vendor/archive/`.
+/// the central estate's `interfaces/outgoing/archive/` copied whole to `interfaces/incoming/archive/`.
 fn project_beside(central: &Path) -> (tempfile::TempDir, PathBuf) {
     let dir = support::scratch();
     let root = dir.path().canonicalize().unwrap();
@@ -95,8 +95,8 @@ fn project_beside(central: &Path) -> (tempfile::TempDir, PathBuf) {
     )
     .unwrap();
     copy_dir(
-        &central.join("interfaces").join("archive"),
-        &root.join("vendor").join("archive"),
+        &central.join("interfaces").join("outgoing").join("archive"),
+        &root.join("interfaces").join("incoming").join("archive"),
     );
     (dir, root)
 }
@@ -128,7 +128,7 @@ async fn the_generated_interfaces_parse_and_a_project_reads_one() {
     let central = support::copy_smoke();
     let session = central.open("showcase.satz").await;
     transpile(&session).await;
-    let interfaces = central.root.join("interfaces");
+    let interfaces = central.root.join("interfaces").join("outgoing");
     let mut files = Vec::new();
     satz_files(&interfaces, &mut files);
     files.sort();

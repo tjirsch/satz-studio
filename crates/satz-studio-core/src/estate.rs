@@ -423,22 +423,25 @@ mod tests {
         assert_eq!(found, vec![fixture().join("config.toml")]);
     }
 
-    /// `interfaces/` is satz's output like `hcl/`: a generated interface folder is never
-    /// walked for an estate, whatever it holds.
+    /// `interfaces/` holds interface folders alone — the ones satz writes under `outgoing/`
+    /// and the copies an estate was given under `incoming/`: neither is walked for an
+    /// estate, whatever it holds.
     #[test]
     fn discover_skips_the_interfaces_satz_generates() {
         let tmp = tempfile::tempdir().unwrap();
         let estate = tmp.path().join("central");
         for d in [
             "hcl",
-            "interfaces/common/audit",
-            "interfaces/archive/archive/satz",
+            "interfaces/outgoing/common/audit",
+            "interfaces/outgoing/archive/archive/satz",
+            "interfaces/incoming/org/org/satz",
         ] {
             std::fs::create_dir_all(estate.join(d)).unwrap();
         }
         std::fs::write(estate.join("config.toml"), "").unwrap();
         std::fs::write(estate.join("hcl/config.toml"), "").unwrap();
-        std::fs::write(estate.join("interfaces/archive/config.toml"), "").unwrap();
+        std::fs::write(estate.join("interfaces/outgoing/archive/config.toml"), "").unwrap();
+        std::fs::write(estate.join("interfaces/incoming/org/config.toml"), "").unwrap();
         assert_eq!(
             EstateDir::discover(tmp.path()),
             vec![estate.join("config.toml")]
