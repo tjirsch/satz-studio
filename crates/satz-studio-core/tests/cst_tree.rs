@@ -399,7 +399,7 @@ fn use_interface_attach_and_all_stay_inside_their_statements() {
     cst.lower().expect("satz-core parses it");
 }
 
-/// The file satz v0.85.0 generates for a project, `interfaces/<project>/<name>/satz/
+/// The file satz v0.85.0 generates for a project, `interfaces/outgoing/<project>/<name>/satz/
 /// interface.satz`: the header `interface "<name>"` alone on its line and nothing but
 /// `central`, `output`, `lookup` and `managed` blocks. The tree is the file, the header
 /// names the interface without its quotes and carries no value — satz wrote the name,
@@ -460,7 +460,7 @@ fn a_common_interface_and_an_interface_reference_round_trip() {
             .any(|i| i.name == "audit" && i.common)
     );
 
-    let project = "estate archive_project\n\nuse \"vendor/archive/archive/satz/interface.satz\"\n\ngoogle_project {\n  archive_work {\n    name      = \"acme-archive-work\"\n    folder_id = \"${{interface.infra_folder}}\"\n    labels = {\n      central = \"${{interface.customer_domain}}\"\n    }\n  }\n}\n";
+    let project = "estate archive_project\n\nuse \"interfaces/incoming/archive/archive/satz/interface.satz\"\n\ngoogle_project {\n  archive_work {\n    name      = \"acme-archive-work\"\n    folder_id = \"${{interface.infra_folder}}\"\n    labels = {\n      central = \"${{interface.customer_domain}}\"\n    }\n  }\n}\n";
     let cst = Cst::parse(project).unwrap();
     assert_eq!(cst.text(), project);
     assert!(
@@ -470,7 +470,10 @@ fn a_common_interface_and_an_interface_reference_round_trip() {
     );
     let uses = satz_studio_core::cst::scan_uses(&cst);
     assert_eq!(uses.len(), 1);
-    assert_eq!(uses[0].path, "vendor/archive/archive/satz/interface.satz");
+    assert_eq!(
+        uses[0].path,
+        "interfaces/incoming/archive/archive/satz/interface.satz"
+    );
     let strings: Vec<&str> = cst
         .nodes()
         .filter(|(_, n)| n.kind == NodeKind::Value(ValueKind::Str))
