@@ -22,7 +22,7 @@
 //! testable without a window.
 
 use dioxus::prelude::*;
-use satz_studio_core::diag::Diagnostic;
+use satz_studio_core::diag::{Diagnostic, Severity};
 use satz_studio_core::estate::HclState;
 use satz_studio_core::git::WorkTree;
 use satz_studio_core::model::{EstateModel, ParamRow, SchemaStatus, SourceValue, StrPart};
@@ -291,15 +291,17 @@ pub fn owed(f: &Facts) -> Vec<Owed> {
         });
     }
 
+    // A note of this kind owes nothing: satz says what it could not check (a type its
+    // table has no row for), and no command closes it.
     if f.diagnostics
         .iter()
-        .any(|d| d.kind.as_deref() == Some("prerequisites"))
+        .any(|d| d.kind.as_deref() == Some("prerequisites") && d.severity != Severity::Info)
     {
         out.push(Owed {
             id: "prerequisites",
             icon: "admin_panel_settings",
             title: "The prerequisites are not declared".to_string(),
-            detail: "The compile found roles this estate's own resource types need and its IaC service account is not granted, or APIs a project its resources' calls are billed to does not enable. The drawer carries each of them; `satz update-prerequisites` writes them into the file.".to_string(),
+            detail: "The compile found roles this estate's own resource types need and its IaC service account is not granted, or APIs a project its resources' calls are billed to does not enable. The drawer carries each of them; `satz update-prerequisites` writes them into the file. In a workload's estate satz writes nothing at the organisation: each line says what to ask the organisation's estate for, or what the estate grants its own account on its project.".to_string(),
             remedies: vec![Remedy::Go(View::Checks)],
         });
     }
@@ -1417,6 +1419,19 @@ mod tests {
         ));
         assert_eq!(ids(&rows), ["prerequisites"]);
         assert_eq!(rows[0].remedies, [Remedy::Go(View::Checks)]);
+        // a note of the kind — a type satz has no row for — owes nothing
+        let mut note = d.clone();
+        note.severity = Severity::Info;
+        assert!(
+            owed(&facts(
+                None,
+                hcl,
+                Some(&q),
+                Some(&m),
+                std::slice::from_ref(&note)
+            ))
+            .is_empty()
+        );
         d.kind = Some("missing-required".to_string());
         assert!(
             owed(&facts(

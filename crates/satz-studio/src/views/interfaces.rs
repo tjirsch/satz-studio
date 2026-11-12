@@ -59,7 +59,7 @@ pub fn InterfacesPane() -> Element {
         div { class: "pane interfaces",
             div { class: "interfaces__head",
                 p { class: "view__lead",
-                    "What the estate publishes to the projects that read it, as satz interfaces reports it: the core exports every interface carries, then each interface with what it uses and what it exports. satz transpile writes each one to interfaces/<name>/. A project is onboarded by an entry of projects in presets/project-onboarding.satz."
+                    "What the estate publishes to the projects that read it, as satz interfaces reports it: the core exports every interface carries, then each interface with what it uses and what it exports. satz transpile writes each one to interfaces/<name>/. A project is created by an entry of project_workload_projects in presets/project-workload.satz."
                 }
             }
             {body}

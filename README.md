@@ -56,7 +56,7 @@ carries, then each interface with the interfaces it uses and its own exports, an
 where the estate declares `request` statements — what projects may request: each list a
 project may add entries to, the field that keys an entry and the fields an entry
 carries, each with the pattern its value must match. A project is onboarded by an entry
-of `projects` in satz's `presets/project-onboarding.satz`, which writes its interface
+of `project_workload_projects` in satz's `presets/project-workload.satz`, which writes its interface
 with the rest; **Checks**, what judges it, from the compile
 to the compliance catalogs; **Deploy**, what hands it off. Agent and Settings sit at the
 foot of the rail, with Commands between them. Beside the estate the top bar names sit
@@ -110,7 +110,7 @@ that holds them up — in front of apply and bootstrap, which satz refuses.
 
 ## What it needs
 
-- **`satz` 0.95.1 or newer.** `MIN_SATZ` in `crates/satz-studio-core/src/satz/binary.rs`
+- **`satz` 0.97.0 or newer.** `MIN_SATZ` in `crates/satz-studio-core/src/satz/binary.rs`
   names the oldest satz this build works with. It rises when a satz release breaks the
   app or the app starts using something a later satz introduced, not with every satz
   release. Install satz with its installer or bring it up to date with `satz
