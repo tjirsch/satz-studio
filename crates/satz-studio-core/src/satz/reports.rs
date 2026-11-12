@@ -1630,21 +1630,27 @@ mod tests {
     }
 
     /// What `satz packs`, `get-pack`, `update-pack` and `detach-pack` print with
-    /// `--format json`, as satz v0.95.0 wrote them over a folder source.
+    /// `--format json`, as satz v0.99.0 writes them over a folder source.
     #[test]
     fn the_workload_pack_reports_are_read() {
         let list: WorkloadPacksReport = serde_json::from_str(
             r#"{"packs_dir":"packs","source":"../up","packs":[
-                {"id":"demo","state":"edited","version":"1.1","upstream_version":"1.2","source":"dir","use_line":"use \"packs/demo.satz\""},
-                {"id":"own","state":"own","version":"9.0","upstream_version":null,"source":null,"use_line":"use \"packs/own.satz\""},
-                {"id":"sub/nested","state":"available","version":null,"upstream_version":"0.3","source":"dir","use_line":null},
-                {"id":"elsewhere","state":"not-checked","version":"1.0","upstream_version":null,"source":"github:acme/packs","use_line":null}]}"#,
+                {"id":"demo","state":"edited","version":"1.1","upstream_version":"1.2","source":"dir","use_line":"use \"packs/demo.satz\"","needs":["project"]},
+                {"id":"own","state":"own","version":"9.0","upstream_version":null,"source":null,"use_line":"use \"packs/own.satz\"","needs":[]},
+                {"id":"sub/nested","state":"available","version":null,"upstream_version":"0.3","source":"dir","use_line":null,"needs":["folder","project"]},
+                {"id":"elsewhere","state":"not-checked","version":"1.0","upstream_version":null,"source":"github:acme/packs","use_line":null,"needs":[]}]}"#,
         )
         .unwrap();
         assert_eq!(list.packs[0].state, PackState::Edited);
         assert_eq!(list.packs[0].use_path(), Some("packs/demo.satz"));
         assert_eq!(list.packs[2].use_path(), None);
         assert_eq!(list.packs[3].state, PackState::NotChecked);
+        assert_eq!(list.packs[0].needs, vec![PackNeed::Project]);
+        assert_eq!(
+            list.packs[2].needs,
+            vec![PackNeed::Folder, PackNeed::Project]
+        );
+        assert!(list.packs[1].needs.is_empty());
 
         let got: GetPackReport = serde_json::from_str(
             r#"{"source":"../up","installed":[{"id":"demo","version":"1.0","path":"packs/demo.satz","use_line":"use \"packs/demo.satz\""}],"present":[]}"#,

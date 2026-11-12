@@ -406,18 +406,6 @@ fn PackLine(
 mod tests {
     use super::*;
 
-    fn needing(id: &str, needs: &[PackNeed]) -> WorkloadPackRow {
-        WorkloadPackRow {
-            id: id.into(),
-            state: PackState::Available,
-            version: None,
-            upstream_version: Some("1.0".into()),
-            source: Some("github:example/satz".into()),
-            use_line: None,
-            needs: needs.to_vec(),
-        }
-    }
-
     #[test]
     fn a_packs_needs_are_said_in_words() {
         assert_eq!(
