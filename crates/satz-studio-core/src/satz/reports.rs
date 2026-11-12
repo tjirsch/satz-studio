@@ -464,10 +464,71 @@ pub struct Unmanaged {
     pub at_line: u32,
 }
 
+/// What an estate works in, as satz's presets report says it (`works_in`): the
+/// organisation itself, or a place its account was delegated access to. satz reads it from
+/// the interface files the estate uses; the app derives none of it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum EstateMode {
+    /// it uses no interface file: an organisation's estate, whose optional components are
+    /// the preset library's packs
+    Organisation,
+    /// an interface it uses publishes a delegated folder
+    Folder,
+    /// it uses an interface and none publishes a delegated folder: a delegated project
+    Project,
+}
+
+impl EstateMode {
+    /// The mode in the words the window shows.
+    pub fn label(self) -> &'static str {
+        match self {
+            EstateMode::Organisation => "Organisation",
+            EstateMode::Folder => "Delegated folder",
+            EstateMode::Project => "Delegated project",
+        }
+    }
+
+    /// The Material Symbols name that stands for it.
+    pub fn icon(self) -> &'static str {
+        match self {
+            EstateMode::Organisation => "corporate_fare",
+            EstateMode::Folder => "folder_shared",
+            EstateMode::Project => "deployed_code",
+        }
+    }
+
+    /// Whether an estate in this mode has a use for a workload pack with these needs. An
+    /// organisation's estate has none: its components are the library's. An estate in a
+    /// delegated folder can create a project there, so it takes a pack that needs a
+    /// folder and one that needs only a project. An estate in a delegated project takes
+    /// what needs a project, or nothing.
+    pub fn offers(self, needs: &[PackNeed]) -> bool {
+        match self {
+            EstateMode::Organisation => false,
+            EstateMode::Folder => true,
+            EstateMode::Project => !needs.contains(&PackNeed::Folder),
+        }
+    }
+}
+
+/// What a workload pack needs of the estate that uses it, as `satz packs` derives it from
+/// the interface values the pack reads.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum PackNeed {
+    /// it reads the delegated folder
+    Folder,
+    /// it reads the delegated project
+    Project,
+}
+
 /// What `satz_presets` returns: every pack the pack graph offers, as this estate has it.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct PacksReport {
     pub estate: String,
+    /// what the estate works in: the organisation, a delegated folder or a delegated project
+    pub works_in: EstateMode,
     /// why the report has no packs: the presets carry no pack graph
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
@@ -482,11 +543,12 @@ pub struct PacksReport {
 }
 
 impl PacksReport {
-    /// A workload estate: it reads an organisation's interface and has no preset
-    /// library — no pack graph in its `presets_dir`, so the report knows no pack. The
-    /// library is the organisation's estate's; this one's packs are workload packs.
-    pub fn workload_estate(&self) -> bool {
-        !self.interfaces.is_empty() && self.packs.is_empty()
+    /// Whether the estate has a Presets destination: an organisation's estate, and any
+    /// estate with a preset library in its `presets_dir`. An estate that works in a
+    /// delegated folder or project and holds no library has none — the library is the
+    /// organisation's estate's, and this one's components are workload packs.
+    pub fn has_presets(&self) -> bool {
+        self.works_in == EstateMode::Organisation || !self.packs.is_empty()
     }
 
     /// The map row, when the graph has one.
@@ -938,6 +1000,9 @@ pub struct WorkloadPackRow {
     /// the pack's path under `packs/`, without `.satz`
     pub id: String,
     pub state: PackState,
+    /// what the pack needs of the estate that uses it; empty for a pack that reads
+    /// neither a delegated folder nor a delegated project
+    pub needs: Vec<PackNeed>,
     /// the version the local file states; none for a pack that is only available
     pub version: Option<String>,
     /// the version the source's file states, where the source holds the pack
@@ -1534,33 +1599,71 @@ mod tests {
         );
     }
 
-    /// An estate that reads an organisation's interface and has no pack graph is a
-    /// workload estate; one with a library is not, whatever else it reads.
+    /// The mode is satz's word (`works_in`), and the Presets destination follows it: an
+    /// organisation's estate has it, an estate in a delegated place has it only when it
+    /// holds a library of its own.
     #[test]
-    fn a_workload_estate_reads_an_interface_and_has_no_library() {
+    fn the_mode_is_read_from_the_report_and_decides_the_presets_destination() {
         let library: PacksReport = serde_json::from_str(PACKS).unwrap();
-        assert!(!library.workload_estate());
+        assert_eq!(library.works_in, EstateMode::Organisation);
+        assert!(library.has_presets());
 
         let mut value: serde_json::Value = serde_json::from_str(PACKS).unwrap();
         value["packs"] = serde_json::json!([]);
         let bare: PacksReport = serde_json::from_value(value.clone()).unwrap();
         assert!(
-            !bare.workload_estate(),
-            "no library and no interface: an estate without presets yet"
+            bare.has_presets(),
+            "an organisation's estate without presets yet keeps the destination"
         );
 
         value["interfaces"] =
-            serde_json::json!([{"path": "vendor/common/core/satz/interface.satz", "at": 57}]);
-        let workload: PacksReport = serde_json::from_value(value.clone()).unwrap();
-        assert!(workload.workload_estate());
+            serde_json::json!([{"path": "vendor/rag/rag/satz/interface.satz", "at": 57}]);
+        for (word, mode) in [
+            ("project", EstateMode::Project),
+            ("folder", EstateMode::Folder),
+        ] {
+            value["works_in"] = serde_json::json!(word);
+            let delegated: PacksReport = serde_json::from_value(value.clone()).unwrap();
+            assert_eq!(delegated.works_in, mode);
+            assert!(!delegated.has_presets(), "{word}: no library, no Presets");
+        }
 
         let mut both: serde_json::Value = serde_json::from_str(PACKS).unwrap();
-        both["interfaces"] = value["interfaces"].clone();
+        both["works_in"] = serde_json::json!("folder");
         let both: PacksReport = serde_json::from_value(both).unwrap();
         assert!(
-            !both.workload_estate(),
+            both.has_presets(),
             "an estate with a library keeps its presets"
         );
+
+        // a report without the field is an older satz's: refused, never guessed
+        let mut old: serde_json::Value = serde_json::from_str(PACKS).unwrap();
+        old.as_object_mut().unwrap().remove("works_in");
+        assert!(serde_json::from_value::<PacksReport>(old).is_err());
+    }
+
+    /// What each mode has a use for among the workload packs.
+    #[test]
+    fn a_mode_offers_the_packs_it_can_use() {
+        let folder = [PackNeed::Folder];
+        let project = [PackNeed::Project];
+        for needs in [&folder[..], &project[..], &[][..]] {
+            assert!(
+                !EstateMode::Organisation.offers(needs),
+                "an organisation's components are the library's"
+            );
+            assert!(
+                EstateMode::Folder.offers(needs),
+                "a delegated folder takes every workload pack"
+            );
+        }
+        assert!(EstateMode::Project.offers(&project));
+        assert!(EstateMode::Project.offers(&[]));
+        assert!(
+            !EstateMode::Project.offers(&folder),
+            "a delegated project has no folder to give"
+        );
+        assert_eq!(EstateMode::Project.label(), "Delegated project");
     }
 
     /// What `satz packs`, `get-pack`, `update-pack` and `detach-pack` print with

@@ -44,6 +44,11 @@ pub fn EstateView() -> Element {
         return rsx! {};
     };
     let model = app.estate().model().cloned();
+    // An organisation's components are the preset library's packs, in Presets; workload
+    // packs are for an estate in a delegated folder or project.
+    let workload_packs = model.as_deref().is_some_and(|m| {
+        m.packs.works_in != satz_studio_core::satz::reports::EstateMode::Organisation
+    });
     let (params, resources) = model
         .as_deref()
         .map(|m| (m.params.len(), m.outline.len()))
@@ -93,18 +98,22 @@ pub fn EstateView() -> Element {
                     selected: pane() == Pane::Interfaces,
                     onclick: move |_| pane.set(Pane::Interfaces),
                 }
-                Tab {
-                    label: format!("Workload packs ({packs})"),
-                    icon: "inventory",
-                    selected: pane() == Pane::WorkloadPacks,
-                    onclick: move |_| pane.set(Pane::WorkloadPacks),
+                if workload_packs {
+                    Tab {
+                        label: format!("Workload packs ({packs})"),
+                        icon: "inventory",
+                        selected: pane() == Pane::WorkloadPacks,
+                        onclick: move |_| pane.set(Pane::WorkloadPacks),
+                    }
                 }
             }
             match pane() {
                 Pane::Params => rsx! { ParamsPane {} },
                 Pane::Resources => rsx! { ResourcesPane {} },
                 Pane::Interfaces => rsx! { InterfacesPane {} },
-                Pane::WorkloadPacks => rsx! { WorkloadPacksPane {} },
+                Pane::WorkloadPacks if workload_packs => rsx! { WorkloadPacksPane {} },
+                // the tab is not this estate's: an organisation's estate that stood on it
+                Pane::WorkloadPacks => rsx! { ParamsPane {} },
             }
         }
     }

@@ -137,15 +137,15 @@ impl View {
         View::Deploy,
     ];
 
-    /// The primary destinations of the open estate. A workload estate — one that reads
-    /// an organisation's interface and has no preset library, as satz's presets report
-    /// says ([`PacksReport::workload_estate`]) — has no Presets destination: the library
-    /// belongs to the organisation's estate, and its packs are the Estate destination's
+    /// The primary destinations of the open estate. An estate that works in a delegated
+    /// folder or project and holds no preset library, as satz's presets report says
+    /// ([`PacksReport::has_presets`]), has no Presets destination: the library belongs to
+    /// the organisation's estate, and its components are the Estate destination's
     /// Workload packs tab.
-    pub fn primary(workload_estate: bool) -> Vec<View> {
+    pub fn primary(presets: bool) -> Vec<View> {
         View::PRIMARY
             .into_iter()
-            .filter(|v| !(workload_estate && *v == View::Presets))
+            .filter(|v| presets || *v != View::Presets)
             .collect()
     }
 
@@ -641,12 +641,12 @@ mod tests {
         assert_eq!(icons.len(), all.len());
     }
 
-    /// A workload estate has no preset library, so its rail has no Presets destination;
-    /// every other destination stands where it stood.
+    /// An estate in a delegated folder or project has no preset library, so its rail has no
+    /// Presets destination; every other destination stands where it stood.
     #[test]
-    fn a_workload_estate_has_every_primary_destination_but_presets() {
-        assert_eq!(View::primary(false), View::PRIMARY);
-        let workload = View::primary(true);
+    fn an_estate_without_presets_has_every_primary_destination_but_presets() {
+        assert_eq!(View::primary(true), View::PRIMARY);
+        let workload = View::primary(false);
         assert!(!workload.contains(&View::Presets));
         let rest: Vec<View> = View::PRIMARY
             .into_iter()

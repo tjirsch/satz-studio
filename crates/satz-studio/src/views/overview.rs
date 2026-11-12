@@ -26,6 +26,7 @@ use satz_studio_core::diag::{Diagnostic, Severity};
 use satz_studio_core::estate::HclState;
 use satz_studio_core::git::WorkTree;
 use satz_studio_core::model::{EstateModel, ParamRow, SchemaStatus, SourceValue, StrPart};
+use satz_studio_core::satz::reports::EstateMode;
 use satz_studio_core::satz::reports::{PackLine, QuestionRow, QuestionState, QuestionsReport};
 
 use crate::components::{Button, ButtonVariant, Card, CardVariant, Chip, ChipKind, Icon};
@@ -95,10 +96,15 @@ pub fn owed(f: &Facts) -> Vec<Owed> {
     // in place and asks git whether that edit can be taken back; outside a work tree, or
     // with no git to ask, it refuses. `satz init` makes no repository, so this is owed
     // from the first minute and would otherwise surface at the first preset update.
-    // A workload estate has no preset library to update, so it owes no repository for it.
-    let workload_estate = f.model.is_some_and(|m| m.packs.workload_estate());
+    // An estate without a preset library has none to update, so it owes no repository for it.
+    let no_presets = f.model.is_some_and(|m| !m.packs.has_presets());
+    // What the estate works in. Until the model is read it is taken for an organisation's.
+    let mode = f
+        .model
+        .map(|m| m.packs.works_in)
+        .unwrap_or(EstateMode::Organisation);
     match f.work_tree {
-        _ if workload_estate => {}
+        _ if no_presets => {}
         Some(WorkTree::Outside(said)) => out.push(Owed {
             id: "repository",
             icon: "commit",
@@ -123,7 +129,11 @@ pub fn owed(f: &Facts) -> Vec<Owed> {
     // Day 0. The app cannot see a live organisation without calling one, so this rests
     // on what is here: a cloud estate keeps its state in the bucket `bootstrap`
     // creates, and an HCL directory that was never initialised has never reached it.
-    if f.deployment_mode == Some("cloud") && !f.hcl.initialised {
+    // Day 0 is an organisation's: `satz bootstrap` creates its folder, its infrastructure
+    // project and its account. An estate in a delegated folder or project was handed all
+    // three by the organisation's estate, and has no day 0 of its own.
+    if mode == EstateMode::Organisation && f.deployment_mode == Some("cloud") && !f.hcl.initialised
+    {
         out.push(Owed {
             id: "bootstrap",
             icon: "foundation",
@@ -201,8 +211,8 @@ pub fn owed(f: &Facts) -> Vec<Owed> {
                     n => format!("The pack graph has {n} findings"),
                 },
                 detail: first.message.clone(),
-                // a workload estate has no Presets destination to go to
-                remedies: if workload_estate {
+                // an estate without presets has no Presets destination to go to
+                remedies: if no_presets {
                     Vec::new()
                 } else {
                     vec![Remedy::Go(View::Presets)]
@@ -725,6 +735,20 @@ fn IdentityCard(facts: Vec<Fact>) -> Element {
                         }
                     }
                 }
+                dt { "Works in" }
+                    dd {
+                        match model.as_deref().map(|m| m.packs.works_in) {
+                            Some(mode) => rsx! {
+                                Chip { kind: ChipKind::Assist, icon: mode.icon(), label: mode.label().to_string() }
+                                {match mode {
+                                    EstateMode::Organisation => " — the organisation itself; its optional components are the preset library's packs",
+                                    EstateMode::Folder => " — a folder the organisation delegated access to; its components are workload packs",
+                                    EstateMode::Project => " — a project the organisation delegated access to; its components are workload packs that need a project",
+                                }}
+                            },
+                            None => rsx! { span { class: "overview__unanswered", "not read yet" } },
+                        }
+                    }
                 dt { "Runs as" }
                     dd {
                         match runs_as_row(open.runs_as.as_deref(), open.deployment_mode.as_deref()) {
@@ -1111,6 +1135,7 @@ mod tests {
             }],
             unmanaged: Vec::new(),
             interfaces: Vec::new(),
+            works_in: satz_studio_core::satz::reports::EstateMode::Organisation,
             findings: (0..findings)
                 .map(|i| Finding {
                     severity: FindingSeverity::Warning,

@@ -217,10 +217,16 @@ the Start screen. Presets stands before Decisions because a pack is what DECLARE
 question: a pack switched on in Presets opens the questions it asks, so the questions
 Decisions lists are what Presets has just let in. An estate created here
 lands on Decisions rather than Overview — a skeleton has nothing else yet — and every
-other door lands on Overview; the rail's order is the same for all of them. A workload
-estate — one that reads an organisation's interface and has no preset library, as
-satz's presets report says — has no Presets destination: its rail reads Overview,
-Decisions, Estate, Checks, Deploy ([ADR 0024](adr/0024-workload-packs-are-a-tab-of-estate-and-a-workload-estate-has-no-presets-destination.md)).
+other door lands on Overview; the rail's order is the same for all of them. An estate
+works in one of three modes, which satz's presets report names (`works_in`): the
+organisation, a delegated folder or a delegated project ([ADR 0025](adr/0025-an-estate-works-in-one-of-three-modes-and-satz-says-which.md)).
+An estate in a delegated place that holds no preset library has no Presets destination:
+its rail reads Overview, Decisions, Estate, Checks, Deploy. The mode is a row of the
+Overview's identity card, "Works in", an assist chip with the mode's icon
+(`corporate_fare`, `folder_shared`, `deployed_code`) and a sentence that says what it
+means. An organisation's Estate has three tabs, without Workload packs; in a delegated
+project that tab lists the packs that need a project or nothing and counts the rest in
+one line; a pack's row says what it needs in an assist chip.
 
 **Decisions and Presets/Estate are not duplicates, and this is the rule that says so:**
 Decisions is the WORKLIST — what the estate has not decided yet, one question at a time,
@@ -369,8 +375,8 @@ and the door card on the Start screen, and their classes live in `views.css`, so
   destination is a navigation drawer's — not a smaller font, not a denser rail, not an
   eighth icon — which is why the Interfaces view and the workload packs are tabs of
   Estate ([ADR 0023](adr/0023-the-interfaces-tab-reads-and-writes-through-the-cli.md),
-  [ADR 0024](adr/0024-workload-packs-are-a-tab-of-estate-and-a-workload-estate-has-no-presets-destination.md)). A workload estate's rail holds five: it has no Presets
-  destination.
+  [ADR 0024](adr/0024-workload-packs-are-a-tab-of-estate-and-a-workload-estate-has-no-presets-destination.md)). The rail of an estate in a delegated place without a library
+  holds five: it has no Presets destination ([ADR 0025](adr/0025-an-estate-works-in-one-of-three-modes-and-satz-says-which.md)).
   `crates/satz-studio/src/state/mod.rs` holds `View::PRIMARY` and a test that fails
   outside three to six.
 - **Top bar:** the estate's file name and directory, and beside them — in the
