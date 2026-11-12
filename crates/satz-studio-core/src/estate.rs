@@ -371,7 +371,7 @@ mod tests {
     }
 
     #[test]
-    fn the_smoke_directory_holds_three_estates_and_three_packs() {
+    fn the_smoke_directory_holds_four_estates_and_three_packs() {
         let e = EstateDir::open(&fixture()).unwrap();
         let names: Vec<String> = e
             .estates()
@@ -379,7 +379,15 @@ mod tests {
             .iter()
             .map(|p| p.file_name().unwrap().to_string_lossy().into_owned())
             .collect();
-        assert_eq!(names, ["greenfield.satz", "showcase.satz", "smoke.satz"]);
+        assert_eq!(
+            names,
+            [
+                "folder-parent.satz",
+                "greenfield.satz",
+                "showcase.satz",
+                "smoke.satz"
+            ]
+        );
     }
 
     #[test]

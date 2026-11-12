@@ -23,8 +23,8 @@
         "presets/billing-account-permissions.satz",
         "presets/organization-budget.satz",
         "presets/billing-export.satz",
-        "presets/project-onboarding.satz",
-        "presets/workload-deployer.satz",
+        "presets/project-workload.satz",
+        "presets/folder-workload.satz",
         "presets/shared-network.satz",
         "presets/security-audit/sa-security-audit.satz",
         "presets/scc/scc-service-enablement.satz",
@@ -214,9 +214,9 @@
       "findings": []
     },
     {
-      "path": "presets/project-onboarding.satz",
+      "path": "presets/project-workload.satz",
       "role": "pack",
-      "gate": "use_project_onboarding",
+      "gate": "use_project_workload",
       "gate_declared_in": "presets/estate-map.satz",
       "default": "false",
       "line": "absent",
@@ -228,7 +228,7 @@
             "presets/estate-map.satz"
           ],
           "params": [
-            "use_project_onboarding"
+            "use_project_workload"
           ],
           "met": false
         }
@@ -238,9 +238,9 @@
       "findings": []
     },
     {
-      "path": "presets/workload-deployer.satz",
+      "path": "presets/folder-workload.satz",
       "role": "pack",
-      "gate": "use_workload_deployer",
+      "gate": "use_folder_workload",
       "gate_declared_in": "presets/estate-map.satz",
       "default": "false",
       "line": "absent",
@@ -252,7 +252,7 @@
             "presets/estate-map.satz"
           ],
           "params": [
-            "use_workload_deployer"
+            "use_folder_workload"
           ],
           "met": false
         }

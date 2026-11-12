@@ -1422,7 +1422,16 @@ mod tests {
         // a note of the kind — a type satz has no row for — owes nothing
         let mut note = d.clone();
         note.severity = Severity::Info;
-        assert!(owed(&facts(None, hcl, Some(&q), Some(&m), std::slice::from_ref(&note))).is_empty());
+        assert!(
+            owed(&facts(
+                None,
+                hcl,
+                Some(&q),
+                Some(&m),
+                std::slice::from_ref(&note)
+            ))
+            .is_empty()
+        );
         d.kind = Some("missing-required".to_string());
         assert!(
             owed(&facts(
