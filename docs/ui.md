@@ -225,8 +225,8 @@ its rail reads Overview, Decisions, Estate, Checks, Deploy. The mode is a row of
 Overview's identity card, "Works in", an assist chip with the mode's icon
 (`corporate_fare`, `folder_shared`, `deployed_code`) and a sentence that says what it
 means. An organisation's Estate has three tabs, without Workload packs; in a delegated
-project that tab lists the packs that need a project or nothing and counts the rest in
-one line; a pack's row says what it needs in an assist chip.
+folder or project that tab lists every pack of the source, and a pack's row says which
+delegated values it reads in an assist chip.
 
 **Decisions and Presets/Estate are not duplicates, and this is the rule that says so:**
 Decisions is the WORKLIST — what the estate has not decided yet, one question at a time,

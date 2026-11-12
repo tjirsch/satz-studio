@@ -66,9 +66,8 @@ Ctrl+K on Windows and Linux, or that footer button). What a command prints lands
 log in the form satz writes for a person — text, or markdown for the evidence report;
 `json` is a format you pick when you want the file. satz says what an estate works in — the organisation, a delegated folder or a delegated
 project — and the window follows it: an organisation's estate has the Presets destination
-and its library; an estate in a delegated place has workload packs instead, and is offered
-the ones it can use (a pack that needs a folder is not listed in a delegated project). The
-Overview names the mode. There, Estate's fourth tab is the estate's workload packs: the ones the repository wrote
+and its library; an estate in a delegated place has workload packs instead, each row saying
+which delegated values the pack reads. The Overview names the mode. There, Estate's fourth tab is the estate's workload packs: the ones the repository wrote
 itself and the ones `satz get-pack` fetched, listed against the satz repository or a
 folder you choose, each fetched, updated, kept as your own or added to the estate from
 its row.

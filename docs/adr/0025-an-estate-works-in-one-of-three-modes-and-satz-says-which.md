@@ -17,9 +17,10 @@ satz 0.99.0 names three places an estate works in, and reports them:
 - `satz packs` carries, per workload pack, `needs`: `folder`, `project`, both or nothing,
   derived from the delegated values the pack reads.
 
-A workload pack that creates a project needs a folder to put it in; one that fills a
-project needs that project. An estate in a delegated project has no folder to give, and
-the window listed it every pack of the source all the same.
+What a pack reports as a need is the default of one of its params: the pack that creates
+a project puts it in `${{interface.delegated_folder}}` unless the estate says otherwise.
+An estate that was not delegated that value answers the param itself — a pack that creates
+projects can be used from a delegated project, with the folder named by hand.
 
 ## Options
 
@@ -31,9 +32,12 @@ the window listed it every pack of the source all the same.
 
 **What an estate is shown of packs it cannot use**
 
-1. Every pack, the unusable ones marked. Cost: a list whose rows are mostly not for this
-   estate, each with a Fetch that leads to a refusal at the compile.
-2. Only what the mode has a use for, and one line that counts the rest.
+1. Only what the mode has a use for, and one line that counts the rest. Cost: it hides
+   packs the estate can use by answering a param, and it makes the window a second judge
+   of what an account may do, beside satz's check of the delegated rights.
+2. Every pack to every estate in a delegated place, each row saying which delegated values
+   the pack reads. Cost: a pack whose value was not delegated is fetched and then asks for
+   it — as a param to answer, and as satz's finding when the account lacks the right.
 
 **Where the mode is said**
 
@@ -49,12 +53,11 @@ the window listed it every pack of the source all the same.
 - **Organisation:** the Presets destination, as before; Estate has three tabs — an
   organisation's optional components are the library's presets, and the Workload packs tab
   is not shown.
-- **Delegated folder:** no Presets destination unless the estate holds a library of its
-  own; the Workload packs tab offers every pack of the source — an estate in a folder can
-  create a project there.
-- **Delegated project:** as the folder, and the tab offers the packs that need a project
-  or nothing. Packs that need a folder are counted in one line, not listed.
-- **A pack's row says what it needs** in an assist chip, "needs a delegated project".
+- **Delegated folder and delegated project:** no Presets destination unless the estate
+  holds a library of its own; the Workload packs tab offers every pack of the source. The
+  two modes differ in what the Overview says, not in what is offered.
+- **A pack's row says which delegated values it reads** in an assist chip, "reads the
+  delegated project". No pack is left out for it: the value is a param's default.
 - **The mode is a row of the Overview's identity card**, with a sentence that says what it
   means for the estate. The Overview's day-0 row (`bootstrap`) is an organisation's alone.
 - ADR 0024 stands in everything else; its two-way rule is superseded by this one.
@@ -64,7 +67,7 @@ the window listed it every pack of the source all the same.
 - `MIN_SATZ` is 0.99.0.
 - The rail shows six primary destinations for an organisation's estate and five for an
   estate in a delegated place without a library.
-- A pack that needs a scope it does not read is offered where it cannot work. satz derives
-  the need and declares none; the remedy is satz's.
+- Whether an account may do what a pack declares is satz's check of the delegated rights,
+  shown with every other finding; the window judges nothing.
 - An organisation's estate that wants a workload pack fetches it from the commands
   palette; the window gives it no tab.

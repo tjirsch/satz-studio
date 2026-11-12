@@ -743,7 +743,7 @@ fn IdentityCard(facts: Vec<Fact>) -> Element {
                                 {match mode {
                                     EstateMode::Organisation => " — the organisation itself; its optional components are the preset library's packs",
                                     EstateMode::Folder => " — a folder the organisation delegated access to; its components are workload packs",
-                                    EstateMode::Project => " — a project the organisation delegated access to; its components are workload packs that need a project",
+                                    EstateMode::Project => " — a project the organisation delegated access to; its components are workload packs",
                                 }}
                             },
                             None => rsx! { span { class: "overview__unanswered", "not read yet" } },

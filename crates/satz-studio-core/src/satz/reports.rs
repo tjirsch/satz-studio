@@ -497,23 +497,10 @@ impl EstateMode {
             EstateMode::Project => "deployed_code",
         }
     }
-
-    /// Whether an estate in this mode has a use for a workload pack with these needs. An
-    /// organisation's estate has none: its components are the library's. An estate in a
-    /// delegated folder can create a project there, so it takes a pack that needs a
-    /// folder and one that needs only a project. An estate in a delegated project takes
-    /// what needs a project, or nothing.
-    pub fn offers(self, needs: &[PackNeed]) -> bool {
-        match self {
-            EstateMode::Organisation => false,
-            EstateMode::Folder => true,
-            EstateMode::Project => !needs.contains(&PackNeed::Folder),
-        }
-    }
 }
 
-/// What a workload pack needs of the estate that uses it, as `satz packs` derives it from
-/// the interface values the pack reads.
+/// A delegated value a workload pack reads, as `satz packs` derives it. It is the default
+/// of a param of the pack; an estate without that value answers the param itself.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum PackNeed {
@@ -1640,30 +1627,6 @@ mod tests {
         let mut old: serde_json::Value = serde_json::from_str(PACKS).unwrap();
         old.as_object_mut().unwrap().remove("works_in");
         assert!(serde_json::from_value::<PacksReport>(old).is_err());
-    }
-
-    /// What each mode has a use for among the workload packs.
-    #[test]
-    fn a_mode_offers_the_packs_it_can_use() {
-        let folder = [PackNeed::Folder];
-        let project = [PackNeed::Project];
-        for needs in [&folder[..], &project[..], &[][..]] {
-            assert!(
-                !EstateMode::Organisation.offers(needs),
-                "an organisation's components are the library's"
-            );
-            assert!(
-                EstateMode::Folder.offers(needs),
-                "a delegated folder takes every workload pack"
-            );
-        }
-        assert!(EstateMode::Project.offers(&project));
-        assert!(EstateMode::Project.offers(&[]));
-        assert!(
-            !EstateMode::Project.offers(&folder),
-            "a delegated project has no folder to give"
-        );
-        assert_eq!(EstateMode::Project.label(), "Delegated project");
     }
 
     /// What `satz packs`, `get-pack`, `update-pack` and `detach-pack` print with

@@ -10,8 +10,7 @@ use std::path::PathBuf;
 use dioxus::prelude::*;
 use satz_studio_core::edit::Edit;
 use satz_studio_core::satz::reports::{
-    EstateMode, PackNeed, PackState, UpdateAction, UpdatedPack, WorkloadPackRow,
-    WorkloadPacksReport,
+    PackNeed, PackState, UpdateAction, UpdatedPack, WorkloadPackRow, WorkloadPacksReport,
 };
 use satz_studio_core::satz::workload::{PackSource, Which};
 
@@ -20,23 +19,18 @@ use crate::components::{
 };
 use crate::state::{AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt, PackOp};
 
-/// What a pack needs, in the words its row shows; none for a pack that needs neither.
+/// Which delegated values a pack reads, in the words its row shows; none for a pack that
+/// reads neither. Each is the default of a param of the pack: an estate that was not
+/// delegated that value answers the param itself, so no pack is left out for it.
 fn needs_text(needs: &[PackNeed]) -> Option<String> {
     let words: Vec<&str> = needs
         .iter()
         .map(|n| match n {
-            PackNeed::Folder => "a delegated folder",
-            PackNeed::Project => "a delegated project",
+            PackNeed::Folder => "the delegated folder",
+            PackNeed::Project => "the delegated project",
         })
         .collect();
-    (!words.is_empty()).then(|| format!("needs {}", words.join(" and ")))
-}
-
-/// The packs the source offers that this estate has a use for, and how many it has none
-/// for. What is already here is the estate's and is never left out.
-fn offered(available: Vec<WorkloadPackRow>, mode: EstateMode) -> (Vec<WorkloadPackRow>, usize) {
-    let (fits, rest): (Vec<_>, Vec<_>) = available.into_iter().partition(|p| mode.offers(&p.needs));
-    (fits, rest.len())
+    (!words.is_empty()).then(|| format!("reads {}", words.join(" and ")))
 }
 
 /// The word and the icon of a pack's state chip.
@@ -127,14 +121,6 @@ pub fn WorkloadPacksPane() -> Element {
         })
         .unwrap_or_default();
     let mut confirm = use_signal(|| None::<Confirm>);
-    // what the estate works in decides which of the source's packs it is offered
-    let mode = app
-        .estate()
-        .model()
-        .read()
-        .as_deref()
-        .map(|m| m.packs.works_in)
-        .unwrap_or(EstateMode::Organisation);
     let folder_start = match &source {
         Some(PackSource::Folder(dir)) => Some(dir.clone()),
         _ => None,
@@ -157,7 +143,7 @@ pub fn WorkloadPacksPane() -> Element {
             }
         },
         Some(Ok(report)) => rsx! {
-            PackCards { report, used, update, busy, confirm, mode }
+            PackCards { report, used, update, busy, confirm }
         },
     };
 
@@ -246,7 +232,6 @@ fn PackCards(
     update: Option<satz_studio_core::satz::reports::UpdatePackReport>,
     busy: bool,
     confirm: Signal<Option<Confirm>>,
-    mode: EstateMode,
 ) -> Element {
     let handle = use_coroutine_handle::<EstateAction>();
     if report.packs.is_empty() {
@@ -262,7 +247,6 @@ fn PackCards(
         .iter()
         .cloned()
         .partition(|p| p.state != PackState::Available);
-    let (available, not_offered) = offered(available, mode);
     let behind = here.iter().any(|p| p.state == PackState::Behind);
     let updated = |id: &str| -> Option<UpdatedPack> {
         update
@@ -313,16 +297,6 @@ fn PackCards(
                 for row in available {
                     PackLine { key: "{row.id}", row: row.clone(), in_use: false, edited: None, busy, confirm }
                 }
-            }
-        }
-        if not_offered > 0 {
-            p { class: "interfaces__supporting",
-                {match (not_offered, mode) {
-                    (1, EstateMode::Project) => "1 pack of the source needs a delegated folder and is not shown: this estate works in a delegated project.".to_string(),
-                    (n, EstateMode::Project) => format!("{n} packs of the source need a delegated folder and are not shown: this estate works in a delegated project."),
-                    (1, _) => "1 pack of the source is not for this estate and is not shown.".to_string(),
-                    (n, _) => format!("{n} packs of the source are not for this estate and are not shown."),
-                }}
             }
         }
     }
@@ -444,49 +418,15 @@ mod tests {
         }
     }
 
-    /// The source's packs an estate is offered follow what it works in; what it has no use
-    /// for is counted, not listed.
-    #[test]
-    fn the_offered_packs_follow_the_estates_mode() {
-        let source = || {
-            vec![
-                needing("workload-project", &[PackNeed::Folder]),
-                needing("project-budget", &[PackNeed::Project]),
-                needing("plain", &[]),
-            ]
-        };
-        let ids = |rows: &[WorkloadPackRow]| rows.iter().map(|r| r.id.clone()).collect::<Vec<_>>();
-        let (fits, rest) = offered(source(), EstateMode::Folder);
-        assert_eq!(
-            (ids(&fits), rest),
-            (
-                vec![
-                    "workload-project".to_string(),
-                    "project-budget".to_string(),
-                    "plain".to_string()
-                ],
-                0
-            )
-        );
-        let (fits, rest) = offered(source(), EstateMode::Project);
-        assert_eq!(
-            (ids(&fits), rest),
-            (vec!["project-budget".to_string(), "plain".to_string()], 1)
-        );
-        let (fits, rest) = offered(source(), EstateMode::Organisation);
-        assert!(fits.is_empty());
-        assert_eq!(rest, 3);
-    }
-
     #[test]
     fn a_packs_needs_are_said_in_words() {
         assert_eq!(
             needs_text(&[PackNeed::Project]).as_deref(),
-            Some("needs a delegated project")
+            Some("reads the delegated project")
         );
         assert_eq!(
             needs_text(&[PackNeed::Folder, PackNeed::Project]).as_deref(),
-            Some("needs a delegated folder and a delegated project")
+            Some("reads the delegated folder and the delegated project")
         );
         assert_eq!(needs_text(&[]), None);
     }
