@@ -24,7 +24,8 @@ impl ButtonVariant {
     }
 }
 
-/// A common button: 40px high, full shape at rest, medium shape while pressed.
+/// A common button in Material 3 Expressive's extra-small size: 32px high, 12px beside
+/// the label, full shape at rest, medium shape while pressed.
 #[component]
 pub fn Button(
     #[props(default)] variant: ButtonVariant,

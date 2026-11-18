@@ -286,7 +286,9 @@ at <https://m3.material.io>. What follows is what is followed and what deviates.
   title, body, label, each large, medium and small — as `--md-sys-typescale-*` and as
   `.md-*` classes; the emphasized variant is `.md-emphasized` (weight 700, tracking
   −0.01em). The typeface stack is Roboto, Inter, then the system face; no font is
-  bundled for text.
+  bundled for text. Content sits on the compact end of the scale ([ADR 0026](adr/0026-the-content-uses-the-compact-end-of-the-scale.md)):
+  a question's title is title-medium in the emphasized weight, running text body-medium
+  or body-small, and only a view's own heading is headline-small.
 - **Shape.** The corner scale of
   <https://m3.material.io/styles/shape/corner-radius-scale>: none, extra-small 4,
   small 8, medium 12, large 16, large-increased 20, extra-large 28, extra-large-increased
@@ -316,7 +318,7 @@ works offline.
 
 | component | class | spec page | deviations |
 |---|---|---|---|
-| `Button` (filled, tonal, outlined, text, elevated) | `.m-button` | <https://m3.material.io/components/buttons/specs> | one size (40 px); the shape morphs from full to medium while pressed |
+| `Button` (filled, tonal, outlined, text, elevated) | `.m-button` | <https://m3.material.io/components/buttons/specs> | one size, Material 3 Expressive's extra small: 32 px high, 12 px beside the label, 8 px beside an icon ([ADR 0026](adr/0026-the-content-uses-the-compact-end-of-the-scale.md)); the shape morphs from full to medium while pressed |
 | `ButtonGroup` (`connected`) | `.m-button-group` | <https://m3.material.io/components/button-groups/specs> | the connected group has fixed 2 px gaps and no pressed-neighbour spread |
 | `IconButton` (standard, filled, tonal, outlined; `selected`) | `.m-icon-button` | <https://m3.material.io/components/icon-buttons/specs> | one size (40 px) |
 | `Fab` (small, medium, large, extended) | `.m-fab` | <https://m3.material.io/components/floating-action-button/specs> | primary-container colour only; no FAB menu |
@@ -326,10 +328,10 @@ works offline.
 | `Switch` | `.m-switch` | <https://m3.material.io/components/switch/specs> | — |
 | `Checkbox` | `.m-checkbox` | <https://m3.material.io/components/checkbox/specs> | no indeterminate state |
 | `Radio` | `.m-radio` | <https://m3.material.io/components/radio-button/specs> | — |
-| `SegmentedButton` | `.m-segmented` | <https://m3.material.io/components/segmented-buttons/specs> | single-select only |
+| `SegmentedButton` | `.m-segmented` | <https://m3.material.io/components/segmented-buttons/specs> | single-select only; items 32 px high |
 | `Tabs`, `Tab` | `.m-tabs`, `.m-tab` | <https://m3.material.io/components/tabs/specs> | primary tabs only; fixed tabs, no scrollable row, no swipe |
 | `Dialog` | `.m-dialog` | <https://m3.material.io/components/dialogs/specs> | basic dialog only; no full-screen dialog; a `class` prop styles one whose body needs it (the commands palette, the notice dialog) |
-| `List`, `ListItem` | `.m-list`, `.m-list-item` | <https://m3.material.io/components/lists/specs> | one- and two-line items; no three-line item, no dividers |
+| `List`, `ListItem` | `.m-list`, `.m-list-item` | <https://m3.material.io/components/lists/specs> | one- and two-line items, at least 48 px high, 14 px over 12 px; no three-line item, no dividers |
 | `Tree`, `TreeItem` | `.m-tree` | — (not a Material 3 component) | a nested list with a disclosure per branch, styled with list-item tokens; a `trailing` slot at the row's end |
 | `ConnectorTree`, `ConnectorBranch` (`ConnectorLine::Solid`, `Dashed`; `error`, `trunk_error`, `label`) | `.m-connector-tree` | — (not a Material 3 component; the anatomy is the indented tree of a file explorer, with boxes for rows) | boxes joined by right-angle connectors: a root box, then per branch a vertical trunk from the parent and a horizontal branch into the child box, recursing through `branches`. The connectors are 2 px borders on the tree's own elements in `outline`, the error variant in `error` — nested lists and absolutely placed spans, no SVG and no measuring, so a tree cannot cross itself and follows every resize and zoom. The branch meets its box 32 px below the box's top, the centre of a card's head row under its padding; a head that wraps meets the connector above its centre. A `label` is one line of 20 px above the box, cut with an ellipsis. No disclosure: every branch is shown |
 | `ChipList` | `.chip-list` (in `views.css`) | — (input chips over a text field) | the values of a list as removable input chips, a field that adds one on Enter or blur, several with commas |
