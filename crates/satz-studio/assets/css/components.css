@@ -422,10 +422,12 @@
   position: relative;
   display: flex;
   align-items: center;
-  height: 56px;
+  /* The dense text field of Material's density scale, 40 px, where the standard one is
+     56 px: the app's content is dense (ADR 0026). */
+  height: 40px;
   border: 1px solid var(--_outline);
   border-radius: var(--md-sys-shape-corner-extra-small);
-  padding: 0 16px;
+  padding: 0 12px;
   background: transparent;
   transition: border-color var(--md-sys-motion-duration-effects-fast) var(--md-sys-motion-easing-effects);
 }
@@ -437,7 +439,7 @@
 
 .m-text-field:focus-within .m-text-field__outline {
   border-width: 2px;
-  padding: 0 15px;
+  padding: 0 11px;
 }
 
 .m-text-field--error {
@@ -462,14 +464,14 @@
   border: 0;
   outline: 0;
   background: transparent;
-  font: var(--md-sys-typescale-body-large);
+  font: var(--md-sys-typescale-body-medium);
   color: var(--md-sys-color-on-surface);
   padding: 0;
 }
 
 .m-text-field__input--mono {
   font-family: var(--md-ref-typeface-mono);
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .m-text-field__input::placeholder {
@@ -487,10 +489,10 @@
 
 .m-text-field__label {
   position: absolute;
-  left: 16px;
+  left: 12px;
   top: 50%;
   transform: translateY(-50%);
-  font: var(--md-sys-typescale-body-large);
+  font: var(--md-sys-typescale-body-medium);
   color: var(--_label);
   background: transparent;
   padding: 0 4px;
@@ -503,13 +505,13 @@
 }
 
 .m-text-field--with-icon .m-text-field__label {
-  left: 48px;
+  left: 44px;
 }
 
 .m-text-field--populated .m-text-field__label,
 .m-text-field:focus-within .m-text-field__label {
   top: 0;
-  left: 16px;
+  left: 12px;
   font: var(--md-sys-typescale-body-small);
   background: var(--md-sys-color-surface);
 }
@@ -522,7 +524,7 @@
 .m-text-field__supporting {
   font: var(--md-sys-typescale-body-small);
   color: var(--_label);
-  padding: 0 16px;
+  padding: 0 12px;
 }
 
 /* ---- switch ------------------------------------------------------------------- */

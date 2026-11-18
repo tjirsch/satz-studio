@@ -325,7 +325,7 @@ works offline.
 | `Fab` (small, medium, large, extended) | `.m-fab` | <https://m3.material.io/components/floating-action-button/specs> | primary-container colour only; no FAB menu |
 | `Chip` (assist, filter, input; `error`) | `.m-chip` | <https://m3.material.io/components/chips/specs> | no suggestion chip; the `error` colouring is the app's own, for a status a chip states |
 | `Card` (elevated, filled, outlined) | `.m-card` | <https://m3.material.io/components/cards/specs> | — |
-| `TextField` (outlined) | `.m-text-field` | <https://m3.material.io/components/text-fields/specs> | outlined only, no filled variant; no trailing icon, prefix or suffix, no character counter; `onenter` and `onblur` are what a field commits on |
+| `TextField` (outlined) | `.m-text-field` | <https://m3.material.io/components/text-fields/specs> | outlined only, no filled variant; 40 px high with 12 px beside the text — the dense field of Material's density scale, where the standard one is 56 px ([ADR 0026](adr/0026-the-content-uses-the-compact-end-of-the-scale.md)); in a row that names its value (`.param-row`, `.attr-row`) the label is kept for a screen reader and not drawn; no trailing icon, prefix or suffix, no character counter; `onenter` and `onblur` are what a field commits on |
 | `Switch` | `.m-switch` | <https://m3.material.io/components/switch/specs> | — |
 | `Checkbox` | `.m-checkbox` | <https://m3.material.io/components/checkbox/specs> | no indeterminate state |
 | `Radio` | `.m-radio` | <https://m3.material.io/components/radio-button/specs> | — |
