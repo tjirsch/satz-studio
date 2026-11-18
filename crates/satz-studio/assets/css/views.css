@@ -1209,7 +1209,9 @@
 
 .interview__walk {
   display: grid;
-  grid-template-columns: minmax(360px, 880px) minmax(280px, 420px);
+  /* the question takes three quarters of the width and the list one, at every width
+     above the narrow layout */
+  grid-template-columns: minmax(360px, 3fr) minmax(280px, 1fr);
   /* one row exactly the walk's height, so each column can scroll inside it */
   grid-template-rows: minmax(0, 1fr);
   gap: 16px;
@@ -1284,7 +1286,7 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
-  max-width: 880px;
+  min-width: 0;
 }
 
 /* the pack header and the card: the part of the question that scrolls */
@@ -1339,6 +1341,13 @@
 .interview__prompt {
   font: var(--md-sys-typescale-title-medium);
   font-weight: var(--md-sys-typescale-emphasized-weight);
+}
+
+/* the card grows with the window; a line of running text does not grow past what reads */
+.interview__prompt,
+.interview__why,
+.interview__pack-description {
+  max-width: 100ch;
 }
 
 .interview__why {
