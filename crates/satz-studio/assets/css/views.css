@@ -1209,9 +1209,9 @@
 
 .interview__walk {
   display: grid;
-  /* the question takes three quarters of the width and the list one, at every width
-     above the narrow layout */
-  grid-template-columns: minmax(360px, 3fr) minmax(280px, 1fr);
+  /* the question takes two thirds of the width and the list one, at every width above
+     the narrow layout */
+  grid-template-columns: minmax(360px, 2fr) minmax(280px, 1fr);
   /* one row exactly the walk's height, so each column can scroll inside it */
   grid-template-rows: minmax(0, 1fr);
   gap: 16px;
