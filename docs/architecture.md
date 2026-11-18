@@ -146,8 +146,12 @@ satz-core reads a doubled `}` as one brace.
 ### `crates/satz-studio`: the window
 
 Dioxus 0.7 on the webview renderer
-([ADR 0001](adr/0001-dioxus-desktop-on-the-webview-renderer.md)); `docs/ui.md` is the
-window's own page. `src/main.rs` opens the window; `src/app.rs` loads `Settings` (a
+([ADR 0001](adr/0001-dioxus-desktop-on-the-webview-renderer.md)), built from the Dioxus
+component library
+([ADR 0028](adr/0028-the-window-is-built-from-the-dioxus-component-library.md)):
+`src/components/` is the library's own code, copied in by `dx components add`,
+`src/widgets/` holds the app's own parts built from it, and `assets/app.css` lays them
+out; `docs/ui.md` is the window's own page. `src/main.rs` opens the window; `src/app.rs` loads `Settings` (a
 file that does not parse is the `Fatal` page), provides the `AppStore` and starts the
 app coroutine. State is one `#[derive(Store)]` root in `src/state/mod.rs`, `AppStore`,
 with six stores nested in it — `EstateStore`, reset when an estate opens or closes,
@@ -204,11 +208,11 @@ file recorded before and checked after — followed by a reload.
 separate palette entry that creates nothing and runs in the app, which is what the
 Overview's day-0 row offers.
 
-The shell (`src/shell/`) is the navigation rail with its badges, the top bar with the
+The shell (`src/shell/`) is the sidebar with its counts, the top bar with the
 estate's name and directory, the actions beside them (reload, switch, close) and the
 drawer toggle at its end, the `SatzBanner` while satz is missing, too old or does not run, and as a notice while it is
 newer than the build, the diagnostics drawer, the commands palette, the notice
-dialog and the snackbar host.
+dialog and the toasts.
 
 The Start screen is the way in, and the only one: a row of doors (`state::Door`) over
 the pane the chosen door opens. **Create** (`src/views/create.rs`) is the `satz init`
@@ -219,7 +223,7 @@ view's `match`, so another way in joins by being added in those three places.
 
 With an estate open the window is ordered by the job: **Overview**, **Presets**,
 **Decisions**, **Estate**, **Checks**, **Deploy**, then Agent and Settings at the foot of
-the rail — Presets before Decisions, because a pack is what declares a question. Overview
+the sidebar — Presets before Decisions, because a pack is what declares a question. Overview
 (`src/views/overview.rs`) says which estate this is — the short name, the customer, the
 customer id and the organisation id from the file's own `params { }` block (the model's
 `params`), then the answers its other `estate_core` questions carry (`identity()` over
@@ -243,8 +247,8 @@ and Deploy each gather their own and the palette over the window (⌘K) holds th
 Presets carries the pack review (`src/views/review.rs`): `satz review-preset` over a pack
 file the operator chooses, its findings in the drawer and beside the pack's text, and
 the two places a reviewed pack goes — upstream by a pull request the card describes,
-private as a `.local.satz` in the estate's library. The Gallery is behind `SATZ_STUDIO_DEBUG`. `docs/ui.md` is the whole map, including why
-seven primary destinations is the limit of the navigation-rail pattern.
+private as a `.local.satz` in the estate's library. `docs/ui.md` is the whole map, and says
+how the component library is used.
 
 ## 4. Runtime views
 
@@ -570,8 +574,8 @@ estate and starts it; nothing is remembered between sessions.
 
 ## 5. Deployment and CI
 
-`Dioxus.toml` names the bundle identity and the five files every bundle carries,
-`LICENSE`, `NOTICE`, `THIRD-PARTY-LICENSES.md` (the licence text of every crate the app is compiled from), `LICENSE-MaterialSymbols` (the icon font's) and `LICENSE-satz-tree-sitter` (the vendored grammar's) (`bundle.resources`, which dx resolves against the directory it runs in — the
+`Dioxus.toml` names the bundle identity and the six files every bundle carries,
+`LICENSE`, `NOTICE`, `THIRD-PARTY-LICENSES.md` (the licence text of every crate the app is compiled from), `LICENSE-Geist` (the typeface's), `LICENSE-dioxus-components` (the component library's) and `LICENSE-satz-tree-sitter` (the vendored grammar's) (`bundle.resources`, which dx resolves against the directory it runs in — the
 repository root — and copies under the file name alone, so no two may share one); `dx bundle --release --platform desktop` produces the
 bundle per OS, and `.github/workflows/release.yml` runs it on a release tag (the README's
 Release section). The webview is a runtime dependency: WebView2 on Windows,
@@ -623,7 +627,7 @@ the tree and over the commits a pull request adds, or the push to `main` that me
 
 | record | decision |
 |---|---|
-| [0001](adr/0001-dioxus-desktop-on-the-webview-renderer.md) | Dioxus 0.7 desktop on the webview renderer |
+| [0001](adr/0001-dioxus-desktop-on-the-webview-renderer.md) | Dioxus 0.7 desktop on the webview renderer — its Material 3 part superseded by 0028 |
 | [0002](adr/0002-a-separate-repository-with-satz-pinned-once.md) | a separate repository; satz pinned once, as the submodule; the binary required at `MIN_SATZ` |
 | [0003](adr/0003-the-document-layer-is-the-tree-sitter-grammar.md) | the document layer is the tree-sitter grammar, vendored and compiled in; satz-core stays the authority on meaning |
 | [0004](adr/0004-claude-natively-other-providers-adapt-into-its-message-model.md) | Claude natively: the Messages API wire types are the app's message model; other providers adapt into it — superseded by 0020 |
@@ -647,6 +651,7 @@ the tree and over the commits a pull request adds, or the push to `main` that me
 | [0022](adr/0022-the-mcp-root-is-the-one-satz-mcp-config-renders.md) | the root of the app's own `satz mcp` is the one `satz mcp-config` renders — the estate's config directory — for the window and every client alike |
 | [0023](adr/0023-the-interfaces-tab-reads-and-writes-through-the-cli.md) | the Interfaces tab reads `satz interfaces` through the CLI; the interface plane's MCP tools are paused. Its write half, `satz add-project`, went with the command (satz ADR 0075) |
 | [0024](adr/0024-workload-packs-are-a-tab-of-estate-and-a-workload-estate-has-no-presets-destination.md) | the destination is Presets; workload packs are the fourth tab of Estate, read through the CLI against a source the operator names and never unasked; the `use` line is `Edit::AddUse`; a workload estate — satz's presets report names an interface and holds no pack — has no Presets destination |
+| [0028](adr/0028-the-window-is-built-from-the-dioxus-component-library.md) | the window is built from the Dioxus component library and takes its look: its components copied in by `dx components add`, its theme, Lucide icons and the Geist typeface; `app.css` lays out and never restyles; what the library lacks is the app's own, built from library parts — superseding the Material 3 part of 0001, and 0026 |
 
 ## 7. Not built, and why
 

@@ -488,15 +488,6 @@ impl EstateMode {
             EstateMode::Project => "Delegated project",
         }
     }
-
-    /// The Material Symbols name that stands for it.
-    pub fn icon(self) -> &'static str {
-        match self {
-            EstateMode::Organisation => "corporate_fare",
-            EstateMode::Folder => "folder_shared",
-            EstateMode::Project => "deployed_code",
-        }
-    }
 }
 
 /// A delegated value a workload pack reads, as `satz packs` derives it. It is the default

@@ -4,16 +4,20 @@
 //! `Edit::ReplaceParam` through the app's own writer.
 
 use dioxus::prelude::*;
+use dioxus_icons::lucide::{
+    Boxes, CircleQuestionMark, Code, DoorOpen, FileText, SlidersHorizontal, TextAlignStart,
+};
 use satz_studio_core::cst::TypedValue;
 use satz_studio_core::edit::Edit;
 use satz_studio_core::model::{EditMode, ParamRow};
 
-use crate::components::{
-    Card, CardVariant, Chip, ChipKind, Draft, FieldKind, Icon, IconButton, SourceChips, TextField,
-    Tooltip, TypedField,
-};
+use crate::components::badge::{Badge, BadgeVariant};
+use crate::components::button::{Button, ButtonSize, ButtonVariant};
+use crate::components::card::{Card, CardContent};
+use crate::components::tooltip::{Tooltip, TooltipContent, TooltipTrigger};
 use crate::state::{AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt};
 use crate::views::{line_text, value_source};
+use crate::widgets::{Draft, Field, FieldKind, SourceTags, TypedField};
 
 /// The group a row belongs to: the pack whose question asks for it, else the estate.
 pub const ESTATE_GROUP: &str = "estate";
@@ -45,9 +49,11 @@ pub fn ParamsPane() -> Element {
     let (Some(model), Some(cst)) = (model, cst) else {
         return rsx! {
             div { class: "pane params",
-                Card { variant: CardVariant::Filled, class: "params__empty",
-                    Icon { name: "tune", size: 48, class: "placeholder__icon" }
-                    p { "The estate model is not available — the drawer says why." }
+                Card { class: "params__empty",
+                    CardContent {
+                        SlidersHorizontal { size: 48, class: "placeholder__icon" }
+                        p { "The estate model is not available — the drawer says why." }
+                    }
                 }
             }
         };
@@ -56,27 +62,35 @@ pub fn ParamsPane() -> Element {
     rsx! {
         div { class: "pane params",
             if groups.is_empty() {
-                Card { variant: CardVariant::Filled, class: "params__empty",
-                    Icon { name: "tune", size: 48, class: "placeholder__icon" }
-                    p { "The estate binds no param that is not a pack choice; the Presets destination has those." }
+                Card { class: "params__empty",
+                    CardContent {
+                        SlidersHorizontal { size: 48, class: "placeholder__icon" }
+                        p { "The estate binds no param that is not a pack choice; the Presets destination has those." }
+                    }
                 }
             }
             for (group, rows) in groups {
                 section { key: "{group}", class: "params__group",
                     header { class: "params__group-head",
-                        Icon { name: if group == ESTATE_GROUP { "description" } else { "inventory_2" }, size: 20 }
+                        if group == ESTATE_GROUP {
+                            FileText { size: 20 }
+                        } else {
+                            Boxes { size: 20 }
+                        }
                         h2 { class: "params__group-title", "{group}" }
                         if let Some(d) = rows.iter().find_map(|r| r.question.as_ref()).map(|q| q.pack_description.clone()) {
                             span { class: "params__group-description", "{d}" }
                         }
                     }
-                    Card { variant: CardVariant::Outlined, class: "params__table",
-                        for row in rows {
-                            {
-                                let source = value_source(&cst, row.id).unwrap_or_default();
-                                let line = line_text(&cst, row.line);
-                                rsx! {
-                                    ParamRowView { key: "{row.name}:{source}", row, source, line, loading }
+                    Card { class: "params__table",
+                        CardContent {
+                            for row in rows {
+                                {
+                                    let source = value_source(&cst, row.id).unwrap_or_default();
+                                    let line = line_text(&cst, row.line);
+                                    rsx! {
+                                        ParamRowView { key: "{row.name}:{source}", row, source, line, loading }
+                                    }
                                 }
                             }
                         }
@@ -121,13 +135,16 @@ fn ParamRowView(row: ParamRow, source: String, line: String, loading: bool) -> E
                 code { "{row.name}" }
                 span { class: "param-row__line", "line {row.line}" }
                 if row.one_way_door {
-                    Chip { kind: ChipKind::Assist, icon: "door_front", label: "one-way door", error: true, class: "param-row__door" }
+                    Badge { variant: BadgeVariant::Destructive, class: "param-row__door",
+                        DoorOpen { size: 12 }
+                        "one-way door"
+                    }
                 }
             }
             div { class: "param-row__field",
                 if in_source {
-                    div { class: "param-row__chips", SourceChips { value: row.value.clone() } }
-                    TextField {
+                    div { class: "param-row__chips", SourceTags { value: row.value.clone() } }
+                    Field {
                         label: "Satz source",
                         value: raw(),
                         monospace: true,
@@ -163,24 +180,33 @@ fn ParamRowView(row: ParamRow, source: String, line: String, loading: bool) -> E
             }
             div { class: "param-row__tools",
                 if let Some(why) = why {
-                    Tooltip { text: why,
-                        Icon { name: "help", size: 20, class: "param-row__help" }
+                    Tooltip {
+                        TooltipTrigger {
+                            CircleQuestionMark { size: 20, class: "param-row__help" }
+                        }
+                        TooltipContent { "{why}" }
                     }
                 }
-                IconButton {
-                    icon: "code",
-                    label: if in_source { "Edit as a value" } else { "Edit the Satz source" },
-                    selected: in_source,
+                Button {
+                    variant: if in_source { ButtonVariant::Secondary } else { ButtonVariant::Ghost },
+                    size: ButtonSize::Icon,
+                    title: if in_source { "Edit as a value" } else { "Edit the Satz source" },
+                    "aria-label": if in_source { "Edit as a value" } else { "Edit the Satz source" },
+                    "aria-pressed": if in_source { "true" } else { "false" },
                     disabled: value_draft.is_none(),
                     onclick: move |_| {
                         mode.set(if mode() == EditMode::Source { EditMode::Value } else { EditMode::Source });
                     },
+                    Code { size: 16 }
                 }
-                IconButton {
-                    icon: "subject",
-                    label: "Show the line",
-                    selected: show_raw(),
+                Button {
+                    variant: if show_raw() { ButtonVariant::Secondary } else { ButtonVariant::Ghost },
+                    size: ButtonSize::Icon,
+                    title: "Show the line",
+                    "aria-label": "Show the line",
+                    "aria-pressed": if show_raw() { "true" } else { "false" },
                     onclick: move |_| show_raw.toggle(),
+                    TextAlignStart { size: 16 }
                 }
             }
         }

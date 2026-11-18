@@ -11,7 +11,6 @@ pub mod documents;
 pub mod estate;
 pub mod estates;
 pub mod export;
-pub mod gallery;
 pub mod import;
 pub mod interfaces;
 pub mod interview;

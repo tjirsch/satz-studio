@@ -10,7 +10,10 @@
 
 use dioxus::prelude::*;
 
-use crate::components::{Button, ButtonVariant, Card, CardVariant, Icon};
+use dioxus_icons::lucide::{NotebookPen, ShieldUser};
+
+use crate::components::button::Button;
+use crate::components::card::{Card, CardContent, CardHeader};
 use crate::state::{AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt};
 use crate::views::commands::{CHECKS, CommandDeck};
 
@@ -31,22 +34,25 @@ pub fn ChecksView() -> Element {
             h1 { class: "view__title", "Checks" }
             p { class: "view__lead", "Every reload compiles the estate in memory and puts what it found in the drawer. These are the checks that go further — and the two of them that call Google." }
             if !prerequisites.is_empty() {
-                Card { variant: CardVariant::Outlined, class: "checks__prerequisites",
-                    header { class: "checks__head",
-                        Icon { name: "admin_panel_settings", size: 22 }
-                        h2 { class: "checks__title", "The prerequisites are not declared" }
+                Card { class: "checks__prerequisites",
+                    CardHeader {
+                        header { class: "checks__head",
+                            ShieldUser { size: 22 }
+                            h2 { class: "checks__title", "The prerequisites are not declared" }
+                        }
                     }
-                    for (i, message) in prerequisites.iter().enumerate() {
-                        p { key: "{i}", class: "checks__finding", "{message}" }
-                    }
-                    p { class: "checks__note", "Writing them binds the roles on the estate's IaC service account and each API on the project its calls are billed to — the infrastructure project, or the project a resource sits inside — in the estate file; an API for a project a pack declares is named, not written. satz works both out offline, from the resource types this estate emits; the write goes through the same check and rollback as an answer." }
-                    div { class: "checks__actions",
-                        Button {
-                            variant: ButtonVariant::Filled,
-                            icon: "edit_note",
-                            disabled: loading,
-                            onclick: move |_| handle.send(EstateAction::WritePrerequisites),
-                            "Write them into the estate"
+                    CardContent {
+                        for (i, message) in prerequisites.iter().enumerate() {
+                            p { key: "{i}", class: "checks__finding", "{message}" }
+                        }
+                        p { class: "checks__note", "Writing them binds the roles on the estate's IaC service account and each API on the project its calls are billed to — the infrastructure project, or the project a resource sits inside — in the estate file; an API for a project a pack declares is named, not written. satz works both out offline, from the resource types this estate emits; the write goes through the same check and rollback as an answer." }
+                        div { class: "checks__actions",
+                            Button {
+                                disabled: loading,
+                                onclick: move |_| handle.send(EstateAction::WritePrerequisites),
+                                NotebookPen { size: 16 }
+                                "Write them into the estate"
+                            }
                         }
                     }
                 }

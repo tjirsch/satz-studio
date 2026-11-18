@@ -17,15 +17,25 @@ This product bundles material from other works, each under its own licence.
 A redistribution of the source tree or of a built bundle carries them along
 with it. The Rust crates the app is compiled from are not listed here: their
 licence texts are THIRD-PARTY-LICENSES.md, generated from Cargo.lock. Every
-bundle carries that file and the two licence texts named below beside this one.
+bundle carries that file and the three licence texts named below beside this one.
 
 
-Material Symbols Rounded
-  crates/satz-studio/assets/fonts/MaterialSymbolsRounded.woff2
+Geist
+  crates/satz-studio/assets/fonts/Geist-Variable.ttf
 
-  The variable icon font the window draws its glyphs from, from the Material
-  Symbols icon set. Licensed under the Apache License, Version 2.0; its licence
-  text is crates/satz-studio/assets/fonts/LICENSE-MaterialSymbols.
+  The variable typeface the window is set in. Licensed under the SIL Open Font
+  License, Version 1.1; its licence text is
+  crates/satz-studio/assets/fonts/LICENSE-Geist.
+
+
+The Dioxus component library
+  crates/satz-studio/src/components/, crates/satz-studio/assets/dx-components-theme.css
+
+  The styled components and the theme the window is built from, copied by
+  `dx components add` from <https://github.com/DioxusLabs/components> at the commit
+  the root Cargo.toml pins `dioxus-primitives` to. Licensed under the MIT Licence or
+  the Apache License, Version 2.0, at the user's choice; the MIT text is
+  crates/satz-studio/LICENSE-dioxus-components.
 
 
 The tree-sitter grammar for Satz

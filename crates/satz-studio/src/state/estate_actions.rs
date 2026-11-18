@@ -1700,7 +1700,7 @@ mod tests {
         assert_eq!(switched(&nothing), "already on — nothing to write");
     }
 
-    /// satz's verdict decides the chip: `attention` is what makes `satz merge-presets`
+    /// satz's verdict decides the badge: `attention` is what makes `satz merge-presets`
     /// exit non-zero, so it is a failed outcome; without it the merge is ok.
     #[test]
     fn a_merge_that_needs_attention_is_a_failed_outcome() {

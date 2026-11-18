@@ -12,23 +12,30 @@
 //! an administrator's address. Those lines are shown while the window holds them and are
 //! written into the estate satz created, nowhere else.
 
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use dioxus::prelude::*;
+use dioxus_icons::lucide::{
+    CircleAlert, CircleCheck, CircleQuestionMark, FileText, FolderOpen, FunnelX, Inbox, Info,
+    ListChecks, Lock, NotepadText, Paperclip, ScrollText, Square, Terminal, TriangleAlert,
+};
 use satz_studio_core::satz::import::{ImportPlan, OnCollision};
 use satz_studio_core::satz::{
     CliLine, ImportOptions, ImportReport, ImportShape, InitOptions, SatzError,
 };
 
-use crate::components::{
-    Button, ButtonVariant, Card, CardVariant, Chip, ChipKind, ChipList, Icon, LinearProgress,
-    Segment, SegmentedButton, Switch, TextField,
-};
+use crate::components::badge::{Badge, BadgeVariant};
+use crate::components::button::{Button, ButtonVariant};
+use crate::components::card::{Card, CardContent, CardDescription, CardHeader};
+use crate::components::progress::Progress;
+use crate::components::toggle_group::{ToggleGroup, ToggleItem};
 use crate::state::{
     AppAction, AppStore, AppStoreStoreExt, CommandOutcome, EstateAction, ImportStoreStoreExt,
     ToastKind, View, run_line, toast,
 };
 use crate::views::commands::{one_click, spec_of};
+use crate::widgets::{Field, SwitchRow, TagList};
 
 /// The provider set `satz init --defaults` knows; it expands to `google` and
 /// `google-beta` and fetches the schema of each with the Terraform tool.
@@ -57,11 +64,25 @@ fn source_supporting(shape: ImportShape) -> &'static str {
     }
 }
 
-fn shape_segments() -> Vec<Segment> {
+/// The shapes the source row offers, each as the value the options parse back and the
+/// words on its button.
+fn shape_segments() -> Vec<(&'static str, &'static str)> {
     vec![
-        Segment::new(ImportShape::State.as_str(), "State document"),
-        Segment::new(ImportShape::Live.as_str(), "Live scope"),
-        Segment::new(ImportShape::Hcl.as_str(), "Terraform HCL"),
+        (ImportShape::State.as_str(), "State document"),
+        (ImportShape::Live.as_str(), "Live scope"),
+        (ImportShape::Hcl.as_str(), "Terraform HCL"),
+    ]
+}
+
+/// The Terraform tools `satz init --tf-tool` takes.
+const TF_TOOLS: [&str; 2] = ["tofu", "terraform"];
+
+/// What the collision row offers, each as the `--on-collision` value and the words on
+/// its button.
+fn collision_segments() -> [(&'static str, &'static str); 2] {
+    [
+        (OnCollision::Error.as_arg(), "refuse, naming them"),
+        (OnCollision::Counter.as_arg(), "number them"),
     ]
 }
 
@@ -153,140 +174,172 @@ pub fn ImportEstate() -> Element {
     let import_line = run_line(Path::new(&dir), &options().argv());
     let init_line = run_line(Path::new(&dir), &init().argv());
     let google = init().defaults.iter().any(|d| d == GOOGLE_SET);
+    let shapes = shape_segments();
+    let shape_pressed: HashSet<usize> = shapes
+        .iter()
+        .position(|(value, _)| *value == shape.as_str())
+        .into_iter()
+        .collect();
+    let tool_pressed: HashSet<usize> = TF_TOOLS
+        .iter()
+        .position(|tool| *tool == init().tf_tool)
+        .into_iter()
+        .collect();
 
     rsx! {
         div { class: "import",
-            Card { variant: CardVariant::Outlined, class: "import__form",
-                h2 { class: "import__heading", Icon { name: "move_to_inbox", size: 22 } "Import an estate" }
-                p { class: "import__description",
-                    "satz import writes a Satz estate out of infrastructure that already exists. It imports INTO a project: a folder that is not an estate yet gets satz init first, and this form says which of the two it will do."
-                }
-
-                div { class: "import__folder",
-                    TextField {
-                        label: "Folder",
-                        value: target(),
-                        leading_icon: "folder",
-                        class: "import__folder-field",
-                        supporting: problem.clone().unwrap_or_else(|| "The folder the import runs in: an estate, or an empty folder that becomes one.".to_string()),
-                        error: problem.is_some(),
-                        disabled: running,
-                        oninput: move |v| target.set(v),
-                    }
-                    Button {
-                        icon: "folder_open",
-                        variant: ButtonVariant::Tonal,
-                        disabled: running,
-                        onclick: move |_| pick_target(target),
-                        "Choose folder"
+            Card { class: "import__form",
+                CardHeader {
+                    h2 { class: "import__heading", Inbox { size: 22 } "Import an estate" }
+                    CardDescription { class: "import__description",
+                        "satz import writes a Satz estate out of infrastructure that already exists. It imports INTO a project: a folder that is not an estate yet gets satz init first, and this form says which of the two it will do."
                     }
                 }
-                match &plan {
-                    Some(Ok(ImportPlan::Import)) => rsx! {
-                        p { class: "import__plan",
-                            Icon { name: "check_circle", size: 18 }
-                            "This folder holds a config.toml: satz import runs in it, and the estate it writes joins the ones already there."
-                        }
-                    },
-                    Some(Ok(ImportPlan::InitThenImport)) => rsx! {
-                        p { class: "import__plan",
-                            Icon { name: "info", size: 18 }
-                            "This folder holds no config.toml, so satz import would refuse it. satz init runs first and writes config.toml, satz/, hcl/, schemas/ and .gitignore; the import then fills them. With credentials that name an organisation, init also writes an estate file of its own — the one the import writes is the one that opens."
-                        }
-                    },
-                    _ => rsx! {},
-                }
-
-                h3 { class: "import__subheading", "What to import from" }
-                p { class: "import__label", "Source" }
-                SegmentedButton {
-                    options: shape_segments(),
-                    selected: shape.as_str().to_string(),
-                    onselect: move |v: String| {
-                        // the segments are ImportShape::ALL, so nothing else arrives
-                        if let Some(shape) = ImportShape::parse(&v) {
-                            let mut o = options.write();
-                            o.shape = shape;
-                            o.source = String::new();
-                        }
-                    },
-                }
-                div { class: "import__source",
-                    TextField {
-                        label: source_label(shape),
-                        value: options().source,
-                        monospace: true,
-                        class: "import__source-field",
-                        supporting: source_problem.clone().unwrap_or_else(|| source_supporting(shape).to_string()),
-                        error: source_problem.is_some(),
-                        disabled: running,
-                        oninput: move |v: String| options.write().source = v,
-                    }
-                    if needs_source {
-                        Button {
-                            icon: "attach_file",
-                            variant: ButtonVariant::Tonal,
+                CardContent {
+                    div { class: "import__folder",
+                        Field {
+                            label: "Folder",
+                            value: target(),
+                            class: "import__folder-field",
+                            supporting: problem.clone().unwrap_or_else(|| "The folder the import runs in: an estate, or an empty folder that becomes one.".to_string()),
+                            error: problem.is_some(),
                             disabled: running,
-                            onclick: move |_| pick_source(options, shape),
-                            "Choose"
+                            oninput: move |v| target.set(v),
+                        }
+                        Button {
+                            variant: ButtonVariant::Secondary,
+                            disabled: running,
+                            onclick: move |_| pick_target(target),
+                            FolderOpen { size: 16 }
+                            "Choose folder"
                         }
                     }
-                }
-
-                ShapeOptions { options, running }
-
-                if two_step {
-                    h3 { class: "import__subheading", "The folder is not an estate yet" }
-                    p { class: "import__note",
-                        "These two belong to the satz init that runs first. Everything else about that estate — the customer, the billing account, the region — satz derives from your credentials or the Create door asks for."
-                    }
-                    p { class: "import__label", "Terraform tool" }
-                    SegmentedButton {
-                        options: vec![Segment::new("tofu", "tofu"), Segment::new("terraform", "terraform")],
-                        selected: init().tf_tool,
-                        onselect: move |v: String| init.write().tf_tool = v,
-                    }
-                    Switch {
-                        label: "Fetch the Google provider schema now",
-                        checked: google,
-                        disabled: running,
-                        onchange: move |on: bool| {
-                            let mut o = init.write();
-                            o.defaults = if on { vec![GOOGLE_SET.to_string()] } else { Vec::new() };
+                    match &plan {
+                        Some(Ok(ImportPlan::Import)) => rsx! {
+                            p { class: "import__plan",
+                                CircleCheck { size: 18 }
+                                "This folder holds a config.toml: satz import runs in it, and the estate it writes joins the ones already there."
+                            }
                         },
+                        Some(Ok(ImportPlan::InitThenImport)) => rsx! {
+                            p { class: "import__plan",
+                                Info { size: 18 }
+                                "This folder holds no config.toml, so satz import would refuse it. satz init runs first and writes config.toml, satz/, hcl/, schemas/ and .gitignore; the import then fills them. With credentials that name an organisation, init also writes an estate file of its own — the one the import writes is the one that opens."
+                            }
+                        },
+                        _ => rsx! {},
                     }
-                    p { class: "import__note",
-                        "--defaults google runs the Terraform tool for each provider's schema, so that tool has to be installed. The Terraform HCL shape needs that schema to translate anything: without it every block is carried verbatim inside `hcl trust`, and the import says so, per block."
-                    }
-                }
 
-                code { class: "import__preview",
+                    h3 { class: "import__subheading", "What to import from" }
+                    p { class: "import__label", "Source" }
+                    ToggleGroup {
+                        horizontal: true,
+                        pressed: Some(shape_pressed.clone()),
+                        on_pressed_change: {
+                            let shapes = shapes.clone();
+                            move |now: HashSet<usize>| {
+                                // a click on the pressed one leaves it pressed; the buttons are
+                                // ImportShape::ALL, so nothing else arrives
+                                if let Some(shape) = now
+                                    .difference(&shape_pressed)
+                                    .next()
+                                    .and_then(|i| shapes.get(*i))
+                                    .and_then(|(value, _)| ImportShape::parse(value))
+                                {
+                                    let mut o = options.write();
+                                    o.shape = shape;
+                                    o.source = String::new();
+                                }
+                            }
+                        },
+                        for (i, (value, label)) in shapes.iter().enumerate() {
+                            ToggleItem { key: "{value}", index: i, "{label}" }
+                        }
+                    }
+                    div { class: "import__source",
+                        Field {
+                            label: source_label(shape),
+                            value: options().source,
+                            monospace: true,
+                            class: "import__source-field",
+                            supporting: source_problem.clone().unwrap_or_else(|| source_supporting(shape).to_string()),
+                            error: source_problem.is_some(),
+                            disabled: running,
+                            oninput: move |v: String| options.write().source = v,
+                        }
+                        if needs_source {
+                            Button {
+                                variant: ButtonVariant::Secondary,
+                                disabled: running,
+                                onclick: move |_| pick_source(options, shape),
+                                Paperclip { size: 16 }
+                                "Choose"
+                            }
+                        }
+                    }
+
+                    ShapeOptions { options, running }
+
                     if two_step {
-                        "{init_line}\n{import_line}"
-                    } else {
-                        "{import_line}"
+                        h3 { class: "import__subheading", "The folder is not an estate yet" }
+                        p { class: "import__note",
+                            "These two belong to the satz init that runs first. Everything else about that estate — the customer, the billing account, the region — satz derives from your credentials or the Create door asks for."
+                        }
+                        p { class: "import__label", "Terraform tool" }
+                        ToggleGroup {
+                            horizontal: true,
+                            pressed: Some(tool_pressed.clone()),
+                            on_pressed_change: move |now: HashSet<usize>| {
+                                // a click on the pressed one leaves it pressed
+                                if let Some(tool) = now.difference(&tool_pressed).next().and_then(|i| TF_TOOLS.get(*i)) {
+                                    init.write().tf_tool = (*tool).to_string();
+                                }
+                            },
+                            for (i, tool) in TF_TOOLS.iter().enumerate() {
+                                ToggleItem { key: "{tool}", index: i, "{tool}" }
+                            }
+                        }
+                        SwitchRow {
+                            label: "Fetch the Google provider schema now",
+                            checked: google,
+                            disabled: running,
+                            onchange: move |on: bool| {
+                                let mut o = init.write();
+                                o.defaults = if on { vec![GOOGLE_SET.to_string()] } else { Vec::new() };
+                            },
+                        }
+                        p { class: "import__note",
+                            "--defaults google runs the Terraform tool for each provider's schema, so that tool has to be installed. The Terraform HCL shape needs that schema to translate anything: without it every block is carried verbatim inside `hcl trust`, and the import says so, per block."
+                        }
                     }
-                }
-                div { class: "import__actions",
-                    Button {
-                        variant: ButtonVariant::Filled,
-                        icon: "move_to_inbox",
-                        disabled: !ready,
-                        onclick: move |_| {
-                            handle.send(AppAction::ImportEstate {
-                                dir: PathBuf::from(&dir),
-                                options: options(),
-                                init: init(),
-                            });
-                        },
-                        "Import"
+
+                    code { class: "import__preview",
+                        if two_step {
+                            "{init_line}\n{import_line}"
+                        } else {
+                            "{import_line}"
+                        }
                     }
-                    Button {
-                        variant: ButtonVariant::Outlined,
-                        icon: "stop",
-                        disabled: !running,
-                        onclick: move |_| handle.send(AppAction::CancelImport),
-                        "Cancel"
+                    div { class: "import__actions",
+                        Button {
+                            disabled: !ready,
+                            onclick: move |_| {
+                                handle.send(AppAction::ImportEstate {
+                                    dir: PathBuf::from(&dir),
+                                    options: options(),
+                                    init: init(),
+                                });
+                            },
+                            Inbox { size: 16 }
+                            "Import"
+                        }
+                        Button {
+                            variant: ButtonVariant::Outline,
+                            disabled: !running,
+                            onclick: move |_| handle.send(AppAction::CancelImport),
+                            Square { size: 16 }
+                            "Cancel"
+                        }
                     }
                 }
             }
@@ -295,30 +348,35 @@ pub fn ImportEstate() -> Element {
                 if !report.is_empty() || outcome.is_some() {
                     ImportReportCard { report: report.clone(), outcome: outcome.clone() }
                 }
-                Card { variant: CardVariant::Filled, class: "import__log-card",
-                    div { class: "import__log-header",
-                        Icon { name: "terminal", size: 20 }
-                        code { class: "import__log-title", {last.unwrap_or_else(|| "nothing imported yet".to_string())} }
-                        span { class: "grow" }
-                        if let Some(o) = &outcome {
-                            Chip { kind: ChipKind::Assist, icon: if o.ok { "check_circle" } else { "error" }, label: o.text.clone(), error: !o.ok }
+                Card { class: "import__log-card",
+                    CardContent {
+                        div { class: "import__log-header",
+                            Terminal { size: 20 }
+                            code { class: "import__log-title", {last.unwrap_or_else(|| "nothing imported yet".to_string())} }
+                            span { class: "grow" }
+                            if let Some(o) = &outcome {
+                                Badge { variant: if o.ok { BadgeVariant::Outline } else { BadgeVariant::Destructive },
+                                    if o.ok { CircleCheck { size: 12 } } else { CircleAlert { size: 12 } }
+                                    "{o.text}"
+                                }
+                            }
                         }
-                    }
-                    if running {
-                        LinearProgress {}
-                    }
-                    p { class: "import__privacy",
-                        Icon { name: "lock", size: 18 }
-                        "A live import prints what it read from your credentials — an organisation id, a billing account, an administrator's address. It is written into the estate satz created; this app keeps none of it, not in its settings and not in a file of its own."
-                    }
-                    pre { class: "log",
-                        for (i, line) in log.iter().enumerate() {
-                            {
-                                let (class, text) = match line {
-                                    CliLine::Stdout(s) => ("log__line", s),
-                                    CliLine::Stderr(s) => ("log__line log__line--stderr", s),
-                                };
-                                rsx! { span { key: "{i}", class: "{class}", "{text}\n" } }
+                        if running {
+                            Progress { value: None::<f64>, "aria-label": "working" }
+                        }
+                        p { class: "import__privacy",
+                            Lock { size: 18 }
+                            "A live import prints what it read from your credentials — an organisation id, a billing account, an administrator's address. It is written into the estate satz created; this app keeps none of it, not in its settings and not in a file of its own."
+                        }
+                        pre { class: "log",
+                            for (i, line) in log.iter().enumerate() {
+                                {
+                                    let (class, text) = match line {
+                                        CliLine::Stdout(s) => ("log__line", s),
+                                        CliLine::Stderr(s) => ("log__line log__line--stderr", s),
+                                    };
+                                    rsx! { span { key: "{i}", class: "{class}", "{text}\n" } }
+                                }
                             }
                         }
                     }
@@ -332,24 +390,30 @@ pub fn ImportEstate() -> Element {
 #[component]
 fn ShapeOptions(options: Signal<ImportOptions>, running: bool) -> Element {
     let current = options();
+    let collisions = collision_segments();
+    let collision_pressed: HashSet<usize> = collisions
+        .iter()
+        .position(|(value, _)| *value == current.on_collision.as_arg())
+        .into_iter()
+        .collect();
     match current.shape {
         ImportShape::State | ImportShape::Live => rsx! {
             h3 { class: "import__subheading", "What to take, and what to call it" }
-            ChipList {
+            TagList {
                 label: "Only these types",
                 items: current.only.clone(),
                 disabled: running,
                 supporting: "--only, over the types the import config marks import: true",
                 onchange: move |v: Vec<String>| options.write().only = v,
             }
-            ChipList {
+            TagList {
                 label: "Leave these types out",
                 items: current.exclude.clone(),
                 disabled: running,
                 supporting: "--exclude; a * wildcard is allowed, as in google_*_iam_member",
                 onchange: move |v: Vec<String>| options.write().exclude = v,
             }
-            Switch {
+            SwitchRow {
                 label: "Every type the source can deliver",
                 checked: current.all,
                 disabled: running,
@@ -359,22 +423,28 @@ fn ShapeOptions(options: Signal<ImportOptions>, running: bool) -> Element {
                 "--all takes every type instead of the rows marked import: true — from a state document every row, live every row with a Cloud Asset Inventory name."
             }
             p { class: "import__label", "One principal, a grant on two containers" }
-            SegmentedButton {
-                options: vec![
-                    Segment::new(OnCollision::Error.as_arg(), "refuse, naming them"),
-                    Segment::new(OnCollision::Counter.as_arg(), "number them"),
-                ],
-                selected: current.on_collision.as_arg().to_string(),
-                onselect: move |v: String| {
-                    if let Some(on_collision) = OnCollision::parse(&v) {
+            ToggleGroup {
+                horizontal: true,
+                pressed: Some(collision_pressed.clone()),
+                on_pressed_change: move |now: HashSet<usize>| {
+                    // a click on the pressed one leaves it pressed
+                    if let Some(on_collision) = now
+                        .difference(&collision_pressed)
+                        .next()
+                        .and_then(|i| collisions.get(*i))
+                        .and_then(|(value, _)| OnCollision::parse(value))
+                    {
                         options.write().on_collision = on_collision;
                     }
                 },
+                for (i, (value, label)) in collisions.iter().enumerate() {
+                    ToggleItem { key: "{value}", index: i, "{label}" }
+                }
             }
             p { class: "import__note",
                 "--on-collision. The map form emits one address per member and role, so a grant one principal holds on two folders or two projects collides; counter writes the second and later as labelled resources with a running number, and says which."
             }
-            TextField {
+            Field {
                 label: "Customer shortname",
                 value: current.customer_shortname.clone(),
                 placeholder: "acme",
@@ -384,7 +454,7 @@ fn ShapeOptions(options: Signal<ImportOptions>, running: bool) -> Element {
                 oninput: move |v: String| options.write().customer_shortname = v,
             }
             if current.shape == ImportShape::State {
-                TextField {
+                Field {
                     label: "Organization",
                     value: current.organization.clone(),
                     placeholder: "123456789012",
@@ -394,7 +464,7 @@ fn ShapeOptions(options: Signal<ImportOptions>, running: bool) -> Element {
                     oninput: move |v: String| options.write().organization = v,
                 }
             }
-            TextField {
+            Field {
                 label: "Output file",
                 value: current.output.clone(),
                 placeholder: "discovered.satz",
@@ -403,7 +473,7 @@ fn ShapeOptions(options: Signal<ImportOptions>, running: bool) -> Element {
                 supporting: "--output, inside yaml_dir. Left blank, satz writes discovered.satz.",
                 oninput: move |v: String| options.write().output = v,
             }
-            Switch {
+            SwitchRow {
                 label: "List every skipped resource",
                 checked: current.verbose,
                 disabled: running,
@@ -414,7 +484,7 @@ fn ShapeOptions(options: Signal<ImportOptions>, running: bool) -> Element {
             }
         },
         ImportShape::Hcl => rsx! {
-            TextField {
+            Field {
                 label: "Organization",
                 value: current.organization.clone(),
                 placeholder: "123456789012",
@@ -424,7 +494,7 @@ fn ShapeOptions(options: Signal<ImportOptions>, running: bool) -> Element {
                 oninput: move |v: String| options.write().organization = v,
             }
             h3 { class: "import__subheading", "How much to translate" }
-            Switch {
+            SwitchRow {
                 label: "Carry every block verbatim",
                 checked: current.wrap_all,
                 disabled: running,
@@ -448,63 +518,66 @@ fn ImportReportCard(report: ImportReport, outcome: Option<CommandOutcome>) -> El
     let estate = try_use_context::<Coroutine<EstateAction>>();
     let ok = outcome.as_ref().is_some_and(|o| o.ok);
     rsx! {
-        Card { variant: CardVariant::Outlined, class: "import__report",
-            h3 { class: "import__heading", Icon { name: "summarize", size: 22 } "What satz reported" }
-            if report.is_empty() {
-                p { class: "import__note", "satz printed no import report. The log below is what it said." }
+        Card { class: "import__report",
+            CardHeader {
+                h3 { class: "import__heading", ScrollText { size: 22 } "What satz reported" }
             }
-            ReportSection {
-                title: "Wrote",
-                icon: "description",
-                lines: report.wrote.clone(),
-                kind: "wrote",
-            }
-            ReportSection {
-                title: "Skipped",
-                icon: "filter_alt_off",
-                lines: report.skipped.clone(),
-                kind: "skipped",
-            }
-            ReportSection {
-                title: "Params satz could not derive",
-                icon: "help",
-                lines: report.not_derivable.clone(),
-                kind: "not-derivable",
-            }
-            ReportSection {
-                title: "Warnings",
-                icon: "warning",
-                lines: report.warnings.clone(),
-                kind: "warning",
-            }
-            ReportSection {
-                title: "The rest of the report",
-                icon: "notes",
-                lines: report.rest.clone(),
-                kind: "rest",
-            }
-            if let (true, Some(handle)) = (ok, estate) {
-                div { class: "import__next",
-                    p { class: "import__note",
-                        "satz says it itself: review the file, then transpile and plan. The check is one click and its output is in Checks, where the compile and the catalogs live; the plan is in Deploy."
-                    }
-                    Button {
-                        variant: ButtonVariant::Filled,
-                        icon: "fact_check",
-                        onclick: move |_| {
-                            // the estate the import opened: `transpile --check` on it, as
-                            // the Checks deck runs it, with satz's text in the log
-                            let Some(open) = app.open().cloned() else {
-                                toast(app, ToastKind::Error, "no estate is open to check");
-                                return;
-                            };
-                            match spec_of("transpile-check").ok_or_else(|| "the palette has no transpile-check".to_string()).and_then(|s| one_click(s, &open.name)) {
-                                Ok(args) => handle.send(EstateAction::RunCommand(args)),
-                                Err(e) => toast(app, ToastKind::Error, e),
-                            }
-                            app.nav().set(View::Checks);
-                        },
-                        "Check it compiles"
+            CardContent {
+                if report.is_empty() {
+                    p { class: "import__note", "satz printed no import report. The log below is what it said." }
+                }
+                ReportSection {
+                    title: "Wrote",
+                    icon: rsx! { FileText { size: 18 } },
+                    lines: report.wrote.clone(),
+                    kind: "wrote",
+                }
+                ReportSection {
+                    title: "Skipped",
+                    icon: rsx! { FunnelX { size: 18 } },
+                    lines: report.skipped.clone(),
+                    kind: "skipped",
+                }
+                ReportSection {
+                    title: "Params satz could not derive",
+                    icon: rsx! { CircleQuestionMark { size: 18 } },
+                    lines: report.not_derivable.clone(),
+                    kind: "not-derivable",
+                }
+                ReportSection {
+                    title: "Warnings",
+                    icon: rsx! { TriangleAlert { size: 18 } },
+                    lines: report.warnings.clone(),
+                    kind: "warning",
+                }
+                ReportSection {
+                    title: "The rest of the report",
+                    icon: rsx! { NotepadText { size: 18 } },
+                    lines: report.rest.clone(),
+                    kind: "rest",
+                }
+                if let (true, Some(handle)) = (ok, estate) {
+                    div { class: "import__next",
+                        p { class: "import__note",
+                            "satz says it itself: review the file, then transpile and plan. The check is one click and its output is in Checks, where the compile and the catalogs live; the plan is in Deploy."
+                        }
+                        Button {
+                            onclick: move |_| {
+                                // the estate the import opened: `transpile --check` on it, as
+                                // the Checks deck runs it, with satz's text in the log
+                                let Some(open) = app.open().cloned() else {
+                                    toast(app, ToastKind::Error, "no estate is open to check");
+                                    return;
+                                };
+                                match spec_of("transpile-check").ok_or_else(|| "the palette has no transpile-check".to_string()).and_then(|s| one_click(s, &open.name)) {
+                                    Ok(args) => handle.send(EstateAction::RunCommand(args)),
+                                    Err(e) => toast(app, ToastKind::Error, e),
+                                }
+                                app.nav().set(View::Checks);
+                            },
+                            ListChecks { size: 16 }
+                            "Check it compiles"
+                        }
                     }
                 }
             }
@@ -514,13 +587,13 @@ fn ImportReportCard(report: ImportReport, outcome: Option<CommandOutcome>) -> El
 
 /// One section of the report, absent when satz printed nothing for it.
 #[component]
-fn ReportSection(title: String, icon: String, lines: Vec<String>, kind: String) -> Element {
+fn ReportSection(title: String, icon: Element, lines: Vec<String>, kind: String) -> Element {
     if lines.is_empty() {
         return rsx! {};
     }
     rsx! {
         div { class: "import__section import__section--{kind}",
-            h4 { class: "import__section-title", Icon { name: icon, size: 18 } "{title}" }
+            h4 { class: "import__section-title", {icon} "{title}" }
             pre { class: "import__section-lines",
                 for (i, line) in lines.iter().enumerate() {
                     span { key: "{i}", class: "log__line", "{line}\n" }
@@ -580,17 +653,14 @@ mod tests {
     fn the_row_offers_every_shape_and_each_asks_for_its_own_source() {
         let segments = shape_segments();
         assert_eq!(
-            segments
-                .iter()
-                .map(|s| s.value.as_str())
-                .collect::<Vec<_>>(),
+            segments.iter().map(|(value, _)| *value).collect::<Vec<_>>(),
             ImportShape::ALL
                 .iter()
                 .map(|s| s.as_str())
                 .collect::<Vec<_>>()
         );
         for segment in &segments {
-            assert!(ImportShape::parse(&segment.value).is_some(), "{segment:?}");
+            assert!(ImportShape::parse(segment.0).is_some(), "{segment:?}");
         }
         let labels: Vec<&str> = ImportShape::ALL.iter().map(|s| source_label(*s)).collect();
         assert_eq!(labels.len(), 3);

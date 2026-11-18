@@ -19,7 +19,13 @@ use dioxus::prelude::*;
 use satz_studio_core::agent;
 use satz_studio_core::satz::mcp_config::{self, Client, OnDisk, Printed, Run, Written};
 
-use crate::components::{Button, ButtonVariant, Card, CardVariant, Chip, ChipKind, Icon};
+use dioxus_icons::lucide::{
+    Bot, Cog, Copy as CopyIcon, File as FileIcon, Monitor, Play, SaveAll, Shield, Terminal,
+};
+
+use crate::components::badge::{Badge, BadgeVariant};
+use crate::components::button::{Button, ButtonVariant};
+use crate::components::card::{Card, CardContent, CardDescription, CardHeader};
 use crate::state::{AppStore, AppStoreStoreExt, ToastKind, toast};
 use crate::views::commands::copy_to_clipboard;
 
@@ -45,13 +51,18 @@ pub fn AgentView() -> Element {
     rsx! {
         div { class: "view agent",
             h1 { class: "view__title", "Agent" }
-            Card { variant: CardVariant::Filled, class: "agent__lead",
-                Icon { name: "smart_toy", size: 22 }
-                p {
-                    "satz-studio runs no model. It configures an agentic client on this estate and starts it: satz prints the block the client reads and writes it into the client's own file, with the capability ceiling Settings holds. The ceiling bounds the satz server only: an agent with a shell can run satz commands directly. The estate is re-read when this window comes back to the front."
+            Card { class: "agent__lead",
+                CardContent {
+                    Bot { size: 22 }
+                    p {
+                        "satz-studio runs no model. It configures an agentic client on this estate and starts it: satz prints the block the client reads and writes it into the client's own file, with the capability ceiling Settings holds. The ceiling bounds the satz server only: an agent with a shell can run satz commands directly. The estate is re-read when this window comes back to the front."
+                    }
+                    span { class: "grow" }
+                    Badge { variant: BadgeVariant::Outline,
+                        Shield { size: 12 }
+                        "Settings: {settings.mcp_allow}"
+                    }
                 }
-                span { class: "grow" }
-                Chip { kind: ChipKind::Assist, icon: "shield", label: "Settings: {settings.mcp_allow}" }
             }
             for client in Client::ALL {
                 ClientCard { key: "{client.as_arg()}", client }
@@ -138,67 +149,69 @@ fn ClientCard(client: Client) -> Element {
     };
 
     rsx! {
-        Card { variant: CardVariant::Outlined, class: "agent__card",
-            h2 { class: "agent__heading",
-                Icon { name: icon(client), size: 20 }
-                "{client.label()}"
-            }
-            p { class: "agent__text", {blurb(client)} }
-            DiskState { disk: disk(), setting: app.settings().read().mcp_allow.as_arg().to_string(), onreplace: move |_| write.call(Run::Replace) }
-            match shown() {
-                None => rsx! { p { class: "agent__text", "satz is rendering the configuration…" } },
-                Some(Ok(printed)) => rsx! {
-                    pre { class: "agent__config", "{printed.stdout}" }
-                    pre { class: "agent__notes", "{printed.stderr.trim_end()}" }
-                },
-                Some(Err(e)) => rsx! {
-                    div { class: "agent__refusal",
-                        pre { "{e}" }
-                    }
-                },
-            }
-            div { class: "agent__actions",
-                Button {
-                    variant: ButtonVariant::Filled,
-                    icon: "settings_applications",
-                    onclick: move |_| write.call(Run::Write),
-                    "Configure {client.label()}"
+        Card { class: "agent__card",
+            CardHeader {
+                h2 { class: "agent__heading",
+                    {icon(client, 20)}
+                    "{client.label()}"
                 }
-                Button {
-                    variant: ButtonVariant::Tonal,
-                    icon: "content_copy",
-                    disabled: block.is_none(),
-                    onclick: {
-                        let block = block.clone();
-                        move |_| {
-                            if let Some(block) = &block {
-                                copy_to_clipboard(app, block);
-                            }
+                CardDescription { {blurb(client)} }
+            }
+            CardContent {
+                DiskState { disk: disk(), setting: app.settings().read().mcp_allow.as_arg().to_string(), onreplace: move |_| write.call(Run::Replace) }
+                match shown() {
+                    None => rsx! { p { class: "agent__text", "satz is rendering the configuration…" } },
+                    Some(Ok(printed)) => rsx! {
+                        pre { class: "agent__config", "{printed.stdout}" }
+                        pre { class: "agent__notes", "{printed.stderr.trim_end()}" }
+                    },
+                    Some(Err(e)) => rsx! {
+                        div { class: "agent__refusal",
+                            pre { "{e}" }
                         }
                     },
-                    "Copy"
+                }
+                div { class: "agent__actions",
+                    Button {
+                        onclick: move |_| write.call(Run::Write),
+                        Cog { size: 16 }
+                        "Configure {client.label()}"
+                    }
+                    Button {
+                        variant: ButtonVariant::Secondary,
+                        disabled: block.is_none(),
+                        onclick: {
+                            let block = block.clone();
+                            move |_| {
+                                if let Some(block) = &block {
+                                    copy_to_clipboard(app, block);
+                                }
+                            }
+                        },
+                        CopyIcon { size: 16 }
+                        "Copy"
+                    }
+                    if client == Client::ClaudeCode {
+                        span { class: "grow" }
+                        OpenInClient {}
+                    }
                 }
                 if client == Client::ClaudeCode {
-                    span { class: "grow" }
-                    OpenInClient {}
+                    p { class: "agent__text", {open_sentence(&app.settings().read().agent_command)} }
                 }
-            }
-            if client == Client::ClaudeCode {
-                p { class: "agent__text", {open_sentence(&app.settings().read().agent_command)} }
-            }
-            if let Some(said) = said() {
-                if said.ok {
-                    pre { class: "agent__notes", "{said.text}" }
-                } else {
-                    div { class: "agent__refusal",
-                        pre { "{said.text}" }
-                        if said.offer_force && !differs {
-                            div { class: "agent__actions",
-                                Button {
-                                    variant: ButtonVariant::Filled,
-                                    icon: "save_as",
-                                    onclick: move |_| write.call(Run::Replace),
-                                    "Replace it"
+                if let Some(said) = said() {
+                    if said.ok {
+                        pre { class: "agent__notes", "{said.text}" }
+                    } else {
+                        div { class: "agent__refusal",
+                            pre { "{said.text}" }
+                            if said.offer_force && !differs {
+                                div { class: "agent__actions",
+                                    Button {
+                                        onclick: move |_| write.call(Run::Replace),
+                                        SaveAll { size: 16 }
+                                        "Replace it"
+                                    }
                                 }
                             }
                         }
@@ -240,26 +253,35 @@ fn DiskState(
     match written.on_disk {
         OnDisk::Absent => rsx! {
             div { class: "agent__state",
-                Chip { kind: ChipKind::Assist, icon: "draft", label: "not configured" }
+                Badge { variant: BadgeVariant::Outline,
+                    FileIcon { size: 12 }
+                    "not configured"
+                }
                 p { class: "agent__text", "{file} holds no server {key} yet." }
             }
         },
         OnDisk::Same { allow } => rsx! {
             div { class: "agent__state",
-                Chip { kind: ChipKind::Assist, icon: "shield", label: "configured: {ceiling(&allow)}" }
+                Badge { variant: BadgeVariant::Outline,
+                    Shield { size: 12 }
+                    "configured: {ceiling(&allow)}"
+                }
                 p { class: "agent__text", "{file} holds this block under {key}." }
             }
         },
         OnDisk::Differs { allow } => rsx! {
             div { class: "agent__differs",
                 div { class: "agent__state",
-                    Chip { kind: ChipKind::Assist, icon: "shield", label: "configured: {ceiling(&allow)}" }
+                    Badge { variant: BadgeVariant::Outline,
+                    Shield { size: 12 }
+                    "configured: {ceiling(&allow)}"
+                }
                     p { class: "agent__text",
                         "{file} holds another entry under {key}: the agent runs at {ceiling(&allow)}, and Settings holds {setting}. Replace writes the block above over it."
                     }
                 }
                 div { class: "agent__actions",
-                    Button { variant: ButtonVariant::Filled, icon: "save_as", onclick: move |e| onreplace.call(e), "Replace it" }
+                    Button { onclick: move |e| onreplace.call(e), SaveAll { size: 16 } "Replace it" }
                 }
             }
         },
@@ -293,8 +315,7 @@ fn OpenInClient() -> Element {
 
     rsx! {
         Button {
-            variant: ButtonVariant::Tonal,
-            icon: "play_arrow",
+            variant: ButtonVariant::Secondary,
             disabled: program.is_none(),
             onclick: {
                 let command = command.clone();
@@ -308,6 +329,7 @@ fn OpenInClient() -> Element {
                     Err(e) => toast(app, ToastKind::Error, e.to_string()),
                 }
             },
+            Play { size: 16 }
             match &program {
                 Some(p) => format!("Open in {p}"),
                 None => "No agent configured".to_string(),
@@ -329,10 +351,11 @@ fn open_sentence(command: &str) -> String {
     }
 }
 
-fn icon(client: Client) -> &'static str {
+/// The icon of a client's card.
+fn icon(client: Client, size: u32) -> Element {
     match client {
-        Client::ClaudeCode => "terminal",
-        Client::ClaudeDesktop => "desktop_windows",
+        Client::ClaudeCode => rsx! { Terminal { size } },
+        Client::ClaudeDesktop => rsx! { Monitor { size } },
     }
 }
 

@@ -18,7 +18,10 @@
 use dioxus::prelude::*;
 use satz_studio_core::satz::reports::NoticeRow;
 
-use crate::components::{Button, ButtonVariant, Dialog};
+use dioxus_icons::lucide::{Check, ExternalLink, Play};
+
+use crate::components::button::{Button, ButtonVariant};
+use crate::components::dialog::{Dialog, DialogTitle};
 use crate::state::{AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt, View};
 use crate::views::commands::runs_in_terminal;
 
@@ -93,61 +96,72 @@ pub fn NoticeDialog() -> Element {
     rsx! {
         Dialog {
             open,
-            title,
-            icon: "assignment_late",
+            on_open_change: move |now: bool| {
+                if !now {
+                    app.estate().notices_open().set(false);
+                }
+            },
             class: "notice-dialog",
-            ondismiss: move |_| app.estate().notices_open().set(false),
-            actions: rsx! {
+            DialogTitle { "{title}" }
+            div { class: "dialog-body",
+                p { class: "notice-dialog__pack", code { "{notice.pack}" } }
+                p { "{notice.text}" }
+                pre { class: "notice-dialog__command", code { "{notice.run}" } }
+                if let Err(why) = &command {
+                    p { class: "notice-dialog__refusal", "{why}" }
+                }
+                p { class: "notice-dialog__consequence", {consequence(&notice)} }
+            }
+            div { class: "dialog-actions",
                 Button {
-                    variant: ButtonVariant::Text,
+                    variant: ButtonVariant::Ghost,
                     onclick: move |_| app.estate().notices_open().set(false),
                     "Later"
                 }
                 if let Ok(args) = command.clone() {
-                    Button {
-                        variant: ButtonVariant::Tonal,
-                        icon: if runs_in_terminal(&args) { "open_in_new" } else { "play_arrow" },
-                        onclick: move |_| {
-                            app.estate().notices_open().set(false);
-                            if runs_in_terminal(&args) {
-                                handle.send(EstateAction::OpenInTerminal(args.clone()));
-                            } else {
-                                // the command streams into the estate's log, and the
-                                // Overview is where that log stands beside the notice's
-                                // own row: a live run nobody can watch is worse than a
-                                // destination the operator did not ask for
-                                app.nav().set(View::Overview);
-                                handle.send(EstateAction::RunNoticeCommand(args.clone()));
+                    {
+                        let in_terminal = runs_in_terminal(&args);
+                        rsx! {
+                            Button {
+                                variant: ButtonVariant::Secondary,
+                                onclick: move |_| {
+                                    app.estate().notices_open().set(false);
+                                    if in_terminal {
+                                        handle.send(EstateAction::OpenInTerminal(args.clone()));
+                                    } else {
+                                        // the command streams into the estate's log, and the
+                                        // Overview is where that log stands beside the notice's
+                                        // own row: a live run nobody can watch is worse than a
+                                        // destination the operator did not ask for
+                                        app.nav().set(View::Overview);
+                                        handle.send(EstateAction::RunNoticeCommand(args.clone()));
+                                    }
+                                },
+                                if in_terminal {
+                                    ExternalLink { size: 16 }
+                                } else {
+                                    Play { size: 16 }
+                                }
+                                "Run it"
                             }
-                        },
-                        "Run it"
+                        }
                     }
                 }
                 Button {
-                    variant: ButtonVariant::Filled,
-                    icon: "check",
                     onclick: move |_| {
                         handle.send(EstateAction::Answer {
                             subject: param.clone(),
                             value: serde_json::Value::Bool(true),
                         });
                     },
+                    Check { size: 16 }
                     "I ran it"
                 }
-            },
-            p { class: "notice-dialog__pack", code { "{notice.pack}" } }
-            p { "{notice.text}" }
-            pre { class: "notice-dialog__command", code { "{notice.run}" } }
-            if let Err(why) = &command {
-                p { class: "notice-dialog__refusal", "{why}" }
             }
-            p { class: "notice-dialog__consequence", {consequence(&notice)} }
         }
     }
 }
 
-/// The pack as the dialog's headline names it: the file name without its directories
-/// and its extension, which is the pack an operator switched on.
 fn short_pack(pack: &str) -> String {
     pack.rsplit('/')
         .next()

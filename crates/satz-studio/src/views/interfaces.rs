@@ -9,19 +9,26 @@ use satz_studio_core::satz::reports::{
     ExportHow, ExportRow, InterfaceRow, InterfacesReport, RequestRow,
 };
 
-use crate::components::{Card, CardVariant, Chip, ChipKind, Icon, LinearProgress};
+use dioxus_icons::lucide::{
+    Braces, CircleAlert, Globe, Inbox, Key as KeyIcon, Link as LinkIcon, Package, Search,
+    Type as TypeIcon, Waypoints,
+};
+
+use crate::components::badge::{Badge, BadgeVariant};
+use crate::components::card::{Card, CardContent, CardHeader};
+use crate::components::progress::Progress;
 use crate::state::{AppStore, AppStoreStoreExt, EstateStoreStoreExt};
 
-/// The icon of an export's `how` chip.
-fn how_icon(how: ExportHow) -> &'static str {
+/// The icon of an export's `how` badge.
+fn how_icon(how: ExportHow, size: u32) -> Element {
     match how {
-        ExportHow::Static => "text_fields",
-        ExportHow::Lookup => "search",
-        ExportHow::Map => "data_object",
+        ExportHow::Static => rsx! { TypeIcon { size } },
+        ExportHow::Lookup => rsx! { Search { size } },
+        ExportHow::Map => rsx! { Braces { size } },
     }
 }
 
-/// The label of an export's `how` chip: the word satz writes, and the type of an `all` map.
+/// The label of an export's `how` badge: the word satz writes, and the type of an `all` map.
 fn how_label(row: &ExportRow) -> String {
     match &row.all {
         Some(t) => format!("{} · {t}", row.how.as_str()),
@@ -36,14 +43,16 @@ pub fn InterfacesPane() -> Element {
 
     let body = match interfaces {
         None => rsx! {
-            Card { variant: CardVariant::Filled, class: "interfaces__empty",
-                LinearProgress {}
-                p { "Reading what the estate publishes…" }
+            Card { class: "interfaces__empty",
+                CardContent {
+                    Progress { value: None::<f64>, "aria-label": "working" }
+                    p { "Reading what the estate publishes…" }
+                }
             }
         },
         Some(Err(e)) => rsx! {
             div { class: "interfaces__error",
-                Icon { name: "error", size: 20 }
+                CircleAlert { size: 20 }
                 div {
                     p { "satz interfaces could not say what the estate publishes:" }
                     pre { "{e}" }
@@ -72,25 +81,31 @@ pub fn InterfacesPane() -> Element {
 fn ReportCards(report: InterfacesReport) -> Element {
     if report.exports.is_empty() && report.interfaces.is_empty() {
         return rsx! {
-            Card { variant: CardVariant::Filled, class: "interfaces__empty",
-                Icon { name: "hub", size: 48, class: "placeholder__icon" }
-                p { "The estate publishes nothing to a project: it declares no export and no interface." }
+            Card { class: "interfaces__empty",
+                CardContent {
+                    Waypoints { size: 48, class: "placeholder__icon" }
+                    p { "The estate publishes nothing to a project: it declares no export and no interface." }
+                }
             }
         };
     }
     let core: Vec<ExportRow> = report.core().cloned().collect();
     rsx! {
-        Card { variant: CardVariant::Outlined, class: "interfaces__card",
-            div { class: "interfaces__card-head",
-                Icon { name: "deployed_code", size: 22 }
-                h2 { class: "interfaces__name", "core" }
-                span { class: "interfaces__supporting", "every interface carries these" }
+        Card { class: "interfaces__card",
+            CardHeader {
+                div { class: "interfaces__card-head",
+                    Package { size: 22 }
+                    h2 { class: "interfaces__name", "core" }
+                    span { class: "interfaces__supporting", "every interface carries these" }
+                }
             }
-            if core.is_empty() {
-                p { class: "interfaces__supporting", "No core export." }
-            }
-            for row in core {
-                ExportLine { key: "{row.name}", row: row.clone() }
+            CardContent {
+                if core.is_empty() {
+                    p { class: "interfaces__supporting", "No core export." }
+                }
+                for row in core {
+                    ExportLine { key: "{row.name}", row: row.clone() }
+                }
             }
         }
         for iface in report.interfaces.clone() {
@@ -112,31 +127,38 @@ fn ReportCards(report: InterfacesReport) -> Element {
 #[component]
 fn RequestsCard(requests: Vec<RequestRow>) -> Element {
     rsx! {
-        Card { variant: CardVariant::Outlined, class: "interfaces__card",
-            div { class: "interfaces__card-head",
-                Icon { name: "move_to_inbox", size: 22 }
-                h2 { class: "interfaces__name", "What projects may request" }
+        Card { class: "interfaces__card",
+            CardHeader {
+                div { class: "interfaces__card-head",
+                    Inbox { size: 22 }
+                    h2 { class: "interfaces__name", "What projects may request" }
+                }
             }
-            p { class: "interfaces__supporting",
-                "A project adds entries to one of these lists in a pack of its own, "
-                code { "contributes_<list>" }
-                ", checked with "
-                code { "satz check-request" }
-                " and handed to the estate by pull request."
-            }
-            for r in requests {
-                div { key: "{r.param}", class: "interfaces__export",
-                    div { class: "interfaces__export-head",
-                        code { class: "interfaces__export-name", "{r.param}" }
-                        Chip { kind: ChipKind::Assist, icon: "key", label: format!("key {}", r.key) }
-                        span { class: "interfaces__supporting",
-                            {format!("{} entr{}", r.entries, if r.entries == 1 { "y" } else { "ies" })}
+            CardContent {
+                p { class: "interfaces__supporting",
+                    "A project adds entries to one of these lists in a pack of its own, "
+                    code { "contributes_<list>" }
+                    ", checked with "
+                    code { "satz check-request" }
+                    " and handed to the estate by pull request."
+                }
+                for r in requests {
+                    div { key: "{r.param}", class: "interfaces__export",
+                        div { class: "interfaces__export-head",
+                            code { class: "interfaces__export-name", "{r.param}" }
+                            Badge { variant: BadgeVariant::Outline,
+                                KeyIcon { size: 12 }
+                                "key {r.key}"
+                            }
+                            span { class: "interfaces__supporting",
+                                {format!("{} entr{}", r.entries, if r.entries == 1 { "y" } else { "ies" })}
+                            }
+                            code { class: "interfaces__at", "{r.file}:{r.line}" }
                         }
-                        code { class: "interfaces__at", "{r.file}:{r.line}" }
-                    }
-                    code { class: "interfaces__value", {r.fields_shown()} }
-                    if let Some(d) = r.description.clone() {
-                        p { class: "interfaces__supporting", "{d}" }
+                        code { class: "interfaces__value", {r.fields_shown()} }
+                        if let Some(d) = r.description.clone() {
+                            p { class: "interfaces__supporting", "{d}" }
+                        }
                     }
                 }
             }
@@ -147,36 +169,46 @@ fn RequestsCard(requests: Vec<RequestRow>) -> Element {
 #[component]
 fn InterfaceCard(iface: InterfaceRow, rows: Vec<ExportRow>) -> Element {
     rsx! {
-        Card { variant: CardVariant::Outlined, class: "interfaces__card",
-            div { class: "interfaces__card-head",
-                Icon { name: "hub", size: 22 }
-                h2 { class: "interfaces__name", "{iface.name}" }
+        Card { class: "interfaces__card",
+            CardHeader {
+                div { class: "interfaces__card-head",
+                    Waypoints { size: 22 }
+                    h2 { class: "interfaces__name", "{iface.name}" }
+                    if iface.common {
+                        Badge { variant: BadgeVariant::Outline, class: "interfaces__common",
+                            Globe { size: 12 }
+                            "common"
+                        }
+                    }
+                    span { class: "grow" }
+                    code { class: "interfaces__at", "{iface.file}:{iface.line}" }
+                }
+            }
+            CardContent {
                 if iface.common {
-                    Chip { kind: ChipKind::Assist, icon: "public", label: "common", class: "interfaces__common" }
-                }
-                span { class: "grow" }
-                code { class: "interfaces__at", "{iface.file}:{iface.line}" }
-            }
-            if iface.common {
-                p { class: "interfaces__supporting",
-                    "In the library every project's folder carries."
-                }
-            }
-            if !iface.uses.is_empty() {
-                div { class: "interfaces__uses",
-                    span { class: "interfaces__supporting", "uses" }
-                    for u in iface.uses.clone() {
-                        Chip { key: "{u}", kind: ChipKind::Assist, icon: "hub", label: u.clone() }
+                    p { class: "interfaces__supporting",
+                        "In the library every project's folder carries."
                     }
                 }
-            }
-            if rows.is_empty() {
-                p { class: "interfaces__supporting",
-                    "Declares no export of its own: it carries the core exports and those of the interfaces it uses."
+                if !iface.uses.is_empty() {
+                    div { class: "interfaces__uses",
+                        span { class: "interfaces__supporting", "uses" }
+                        for u in iface.uses.clone() {
+                            Badge { key: "{u}", variant: BadgeVariant::Outline,
+                                Waypoints { size: 12 }
+                                "{u}"
+                            }
+                        }
+                    }
                 }
-            }
-            for row in rows {
-                ExportLine { key: "{row.name}", row: row.clone() }
+                if rows.is_empty() {
+                    p { class: "interfaces__supporting",
+                        "Declares no export of its own: it carries the core exports and those of the interfaces it uses."
+                    }
+                }
+                for row in rows {
+                    ExportLine { key: "{row.name}", row: row.clone() }
+                }
             }
         }
     }
@@ -190,9 +222,15 @@ fn ExportLine(row: ExportRow) -> Element {
         div { class: "interfaces__export",
             div { class: "interfaces__export-head",
                 code { class: "interfaces__export-name", "{row.name}" }
-                Chip { kind: ChipKind::Assist, icon: how_icon(row.how), label: how_label(&row) }
+                Badge { variant: BadgeVariant::Outline,
+                    {how_icon(row.how, 12)}
+                    {how_label(&row)}
+                }
                 for a in row.attach.clone() {
-                    Chip { key: "{a}", kind: ChipKind::Assist, icon: "link", label: format!("attach {a}") }
+                    Badge { key: "{a}", variant: BadgeVariant::Outline,
+                        LinkIcon { size: 12 }
+                        "attach {a}"
+                    }
                 }
                 span { class: "grow" }
                 code { class: "interfaces__at", "{row.file}:{row.line}" }

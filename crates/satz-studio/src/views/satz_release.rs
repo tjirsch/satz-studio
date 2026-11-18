@@ -8,7 +8,10 @@ use dioxus::prelude::*;
 use satz_studio_core::github::StudioUpdate;
 use satz_studio_core::satz::CliLine;
 
-use crate::components::{Button, ButtonVariant, Card, CardVariant};
+use dioxus_icons::lucide::{Download, ExternalLink, Telescope};
+
+use crate::components::button::{Button, ButtonVariant};
+use crate::components::card::{Card, CardContent};
 use crate::state::{
     AppAction, AppStore, AppStoreStoreExt, CommandOutcome, InstallStoreStoreExt, SatzStatus,
     StudioLookStoreStoreExt, ToastKind, UpdateStoreStoreExt, install_offer, satz_release_sentence,
@@ -55,21 +58,21 @@ pub fn SatzReleaseActions() -> Element {
         }
         div { class: "settings__row",
             Button {
-                variant: ButtonVariant::Text,
-                icon: "travel_explore",
+                variant: ButtonVariant::Ghost,
                 disabled: looking,
                 onclick: move |_| handle.send(AppAction::LookForStudioUpdate),
+                Telescope { size: 16 }
                 if looking { "Looking…" } else { "Look for a satz-studio update" }
             }
             if let Some((version, page)) = release_page {
                 Button {
-                    variant: ButtonVariant::Text,
-                    icon: "open_in_new",
+                    variant: ButtonVariant::Ghost,
                     onclick: move |_| {
                         if let Err(e) = open::that(&page) {
                             toast(app, ToastKind::Error, format!("{page}: {e}"));
                         }
                     },
+                    ExternalLink { size: 16 }
                     "Open satz-studio {version}"
                 }
             }
@@ -83,14 +86,14 @@ pub fn SatzReleaseActions() -> Element {
             if offer.offered() {
                 div { class: "settings__row",
                     Button {
-                        variant: ButtonVariant::Tonal,
-                        icon: "download",
+                        variant: ButtonVariant::Secondary,
                         disabled: installing,
                         onclick: move |_| handle.send(AppAction::InstallSatz),
+                        Download { size: 16 }
                         if installing { "Installing satz…" } else { "Install satz" }
                     }
                     if installing {
-                        Button { variant: ButtonVariant::Text, onclick: move |_| handle.send(AppAction::CancelInstall), "Cancel" }
+                        Button { variant: ButtonVariant::Ghost, onclick: move |_| handle.send(AppAction::CancelInstall), "Cancel" }
                     }
                 }
             }
@@ -103,26 +106,28 @@ pub fn SatzReleaseActions() -> Element {
     }
 }
 
-/// One streamed run in a filled card: the command, how it ended, and its lines.
+/// One streamed run in a card: the command, how it ended, and its lines.
 #[component]
 fn RunLog(command: String, outcome: Option<CommandOutcome>, log: Vec<CliLine>) -> Element {
     rsx! {
-        Card { variant: CardVariant::Filled, class: "settings__log-card",
-            code { class: "settings__log-title", "{command}" }
-            if let Some(outcome) = outcome {
-                p {
-                    class: if outcome.ok { "settings__log-outcome" } else { "settings__log-outcome settings__log-outcome--error" },
-                    "{outcome.text}"
+        Card { class: "settings__log-card",
+            CardContent {
+                code { class: "settings__log-title", "{command}" }
+                if let Some(outcome) = outcome {
+                    p {
+                        class: if outcome.ok { "settings__log-outcome" } else { "settings__log-outcome settings__log-outcome--error" },
+                        "{outcome.text}"
+                    }
                 }
-            }
-            pre { class: "log",
-                for (i, line) in log.iter().enumerate() {
-                    {
-                        let (class, text) = match line {
-                            CliLine::Stdout(s) => ("log__line", s),
-                            CliLine::Stderr(s) => ("log__line log__line--stderr", s),
-                        };
-                        rsx! { span { key: "{i}", class: "{class}", "{text}\n" } }
+                pre { class: "log",
+                    for (i, line) in log.iter().enumerate() {
+                        {
+                            let (class, text) = match line {
+                                CliLine::Stdout(s) => ("log__line", s),
+                                CliLine::Stderr(s) => ("log__line log__line--stderr", s),
+                            };
+                            rsx! { span { key: "{i}", class: "{class}", "{text}\n" } }
+                        }
                     }
                 }
             }

@@ -9,7 +9,10 @@
 
 use dioxus::prelude::*;
 
-use crate::components::{Card, CardVariant, Chip, ChipKind, Icon};
+use dioxus_icons::lucide::{CircleCheck, CircleEllipsis, FolderHeart};
+
+use crate::components::badge::{Badge, BadgeVariant};
+use crate::components::card::{Card, CardContent};
 use crate::state::{AppStore, AppStoreStoreExt, EstateStoreStoreExt};
 use crate::views::commands::{CommandDeck, DEPLOY};
 
@@ -26,19 +29,29 @@ pub fn DeployView() -> Element {
     rsx! {
         div { class: "view deploy",
             h1 { class: "view__title", "Deploy" }
-            Card { variant: CardVariant::Filled, class: "deploy__state",
-                Icon { name: "folder_special", size: 22 }
-                code { class: "deploy__dir", "{dir.display()}" }
-                span { class: "grow" }
-                Chip {
-                    kind: ChipKind::Assist,
-                    icon: if hcl.transpiled { "check_circle" } else { "pending" },
-                    label: if hcl.transpiled { "main.tf written" } else { "nothing emitted" },
-                }
-                Chip {
-                    kind: ChipKind::Assist,
-                    icon: if hcl.initialised { "check_circle" } else { "pending" },
-                    label: if hcl.initialised { "initialised" } else { "not initialised" },
+            Card { class: "deploy__state",
+                CardContent {
+                    FolderHeart { size: 22 }
+                    code { class: "deploy__dir", "{dir.display()}" }
+                    span { class: "grow" }
+                    Badge { variant: BadgeVariant::Outline,
+                        if hcl.transpiled {
+                            CircleCheck { size: 12 }
+                            "main.tf written"
+                        } else {
+                            CircleEllipsis { size: 12 }
+                            "nothing emitted"
+                        }
+                    }
+                    Badge { variant: BadgeVariant::Outline,
+                        if hcl.initialised {
+                            CircleCheck { size: 12 }
+                            "initialised"
+                        } else {
+                            CircleEllipsis { size: 12 }
+                            "not initialised"
+                        }
+                    }
                 }
             }
             CommandDeck { ids: DEPLOY.to_vec() }

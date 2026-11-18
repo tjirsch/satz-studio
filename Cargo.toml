@@ -42,6 +42,14 @@ cc = "1.4.2"
 
 dioxus = { version = "0.7.10", features = ["desktop"] }
 dioxus-stores = "0.7.10"
+# The Dioxus component library: its unstyled building blocks come from Dioxus's own
+# repository (not published to crates.io; pinned to one commit), its icons are Lucide.
+# The styled components are copied into crates/satz-studio/src/components by
+# `dx components add`, and updated with `dx components update`.
+dioxus-primitives = { git = "https://github.com/DioxusLabs/components", rev = "9a758255ea26e2b20c8cecf4c1c946feb9e71da7", default-features = false }
+dioxus-icons = { version = "0.1.0", default-features = false }
+# Only for the tests the copied components bring with them, which render to a string.
+dioxus-ssr = "0.7.10"
 rfd = "0.17.2"
 open = "5.4.4"
 

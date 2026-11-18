@@ -601,7 +601,7 @@ fn create_estate(
             create.log().push(clean);
         }
         let ended = join.await;
-        // a cancel is what the user asked for, so it is the outcome chip and not a toast
+        // a cancel is what the user asked for, so it is the outcome badge and not a toast
         let cancelled = matches!(ended, Ok(Err(SatzError::Cancelled)));
         let outcome = match ended {
             // satz said why on its own stderr; a status line alone would replace that
@@ -672,8 +672,8 @@ async fn created(app: Store<AppStore>, dir: &Path) -> CommandOutcome {
             open_estate(app, estate_dir.config_path.clone(), estate.clone()).await;
             // A created estate is a skeleton: every question of its own is open and it
             // owes them all, so it lands on Decisions rather than on an Overview that
-            // would only say so. The rail keeps one order for every estate — where the
-            // window LANDS is what the door decides, not what the rail reads.
+            // would only say so. The sidebar keeps one order for every estate — where the
+            // window LANDS is what the door decides, not what the sidebar reads.
             if app.open().read().is_some() {
                 app.nav().set(View::Decisions);
             }
@@ -771,7 +771,7 @@ pub fn import_estate(
     let child = token.clone();
     spawn(async move {
         let (outcome, cancelled) = run_import(app, satz, dir, plan, init, options, child).await;
-        // a cancel is what the user asked for, so it is the outcome chip and not a toast
+        // a cancel is what the user asked for, so it is the outcome badge and not a toast
         if !outcome.ok && !cancelled {
             toast(app, ToastKind::Error, outcome.text.clone());
         }

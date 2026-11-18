@@ -16,12 +16,17 @@ use satz_studio_core::satz::reports::{
     RemovePackArgs, Requirement, RequirementKind,
 };
 
-use crate::components::{
-    Button, ButtonVariant, Card, CardVariant, Chip, ChipKind, ConnectorBranch, ConnectorLine,
-    ConnectorTree, Icon, Switch,
+use dioxus_icons::lucide::{
+    Circle, CircleAlert, CircleCheck, CircleCheckBig, ClipboardX, Link as LinkIcon, Map as MapIcon,
+    Merge, Puzzle, ToggleRight, Unplug,
 };
+
+use crate::components::badge::{Badge, BadgeVariant};
+use crate::components::button::{Button, ButtonVariant};
+use crate::components::card::{Card, CardContent, CardHeader};
 use crate::state::{AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt};
 use crate::views::review::PackReviewCard;
+use crate::widgets::{ConnectorBranch, ConnectorLine, ConnectorTree, SwitchRow};
 
 /// The header of the section for packs the file has no line for.
 pub const ABSENT_HEADER: &str = "Not in this file";
@@ -291,9 +296,11 @@ pub fn PresetsView() -> Element {
         return rsx! {
             div { class: "view packs",
                 h1 { class: "view__title", "Presets" }
-                Card { variant: CardVariant::Filled, class: "map__empty",
-                    Icon { name: "map", size: 48, class: "placeholder__icon" }
-                    p { "The estate model is not available — the drawer says why." }
+                Card { class: "map__empty",
+                    CardContent {
+                        MapIcon { size: 48, class: "placeholder__icon" }
+                        p { "The estate model is not available — the drawer says why." }
+                    }
                 }
                 PackReviewCard {}
             }
@@ -309,46 +316,49 @@ pub fn PresetsView() -> Element {
         div { class: "view packs",
             h1 { class: "view__title", "Presets" }
             if let Some(note) = &report.note {
-                Card { variant: CardVariant::Filled, class: "map__map-card",
-                    Icon { name: "map", size: 32, class: "placeholder__icon" }
-                    p { class: "grow", "{note}" }
+                Card { class: "map__map-card",
+                    CardContent {
+                        MapIcon { size: 32, class: "placeholder__icon" }
+                        p { class: "grow", "{note}" }
+                    }
                 }
             }
             if let Some(map) = map_row {
                 if map.deploys {
                     div { class: "map__map-on",
-                        Chip { kind: ChipKind::Assist, icon: "check_circle", label: "map on" }
+                        Badge { variant: BadgeVariant::Outline, CircleCheck { size: 12 } "map on" }
                         span { "{map.path}" if let Some(l) = map.at_line { ", line {l}" } }
                         span { class: "grow" }
                         Button {
-                            variant: ButtonVariant::Tonal,
-                            icon: "merge",
+                            variant: ButtonVariant::Secondary,
                             disabled: loading,
                             onclick: move |_| handle.send(EstateAction::MergePresets),
+                            Merge { size: 16 }
                             "Run merge-presets"
                         }
                     }
                 } else {
-                    Card { variant: CardVariant::Filled, class: "map__map-card",
-                        Icon { name: "map", size: 32, class: "placeholder__icon" }
-                        div { class: "grow",
-                            if map.line == PackLine::Absent {
-                                h2 { class: "map__map-title", "This estate has no map line." }
-                                p { "The map declares the choices every other pack hangs from. Switching it on writes " code { "use \"{map.path}\"" } " where the pack graph places it." }
-                            } else {
-                                h2 { class: "map__map-title", "The map declares the choices; switch it on to answer them." }
-                                p { code { "use \"{map.path}\"" } " is {map.line.word()}" if let Some(l) = map.at_line { " on line {l}" } ". While it is, no pack question is asked and no pack the map gates deploys." }
+                    Card { class: "map__map-card",
+                        CardContent {
+                            MapIcon { size: 32, class: "placeholder__icon" }
+                            div { class: "grow",
+                                if map.line == PackLine::Absent {
+                                    h2 { class: "map__map-title", "This estate has no map line." }
+                                    p { "The map declares the choices every other pack hangs from. Switching it on writes " code { "use \"{map.path}\"" } " where the pack graph places it." }
+                                } else {
+                                    h2 { class: "map__map-title", "The map declares the choices; switch it on to answer them." }
+                                    p { code { "use \"{map.path}\"" } " is {map.line.word()}" if let Some(l) = map.at_line { " on line {l}" } ". While it is, no pack question is asked and no pack the map gates deploys." }
+                                }
                             }
-                        }
-                        Button {
-                            variant: ButtonVariant::Filled,
-                            icon: "toggle_on",
-                            disabled: loading,
-                            onclick: {
-                                let path = map.path.clone();
-                                move |_| handle.send(EstateAction::AddPack(AddPackArgs { pack: path.clone(), with_requirements: false }))
-                            },
-                            "Switch the map on"
+                            Button {
+                                disabled: loading,
+                                onclick: {
+                                    let path = map.path.clone();
+                                    move |_| handle.send(EstateAction::AddPack(AddPackArgs { pack: path.clone(), with_requirements: false }))
+                                },
+                                ToggleRight { size: 16 }
+                                "Switch the map on"
+                            }
                         }
                     }
                 }
@@ -357,7 +367,7 @@ pub fn PresetsView() -> Element {
             PackReviewCard {}
             for (i, f) in loose.iter().enumerate() {
                 div { key: "loose-{i}", class: "pack-card__diag",
-                    Icon { name: "error", size: 18 }
+                    CircleAlert { size: 18 }
                     span { "{f.message}" }
                 }
             }
@@ -383,14 +393,18 @@ pub fn PresetsView() -> Element {
                     h2 { class: "map__section-title", "Not in the pack graph" }
                     div { class: "map__cards",
                         for u in unmanaged {
-                            Card { key: "{u.path}-{u.at_line}", variant: CardVariant::Outlined, class: "pack-card",
-                                div { class: "pack-card__head",
-                                    Icon { name: "extension_off", size: 20 }
-                                    code { class: "pack-card__path", "{u.path}" }
-                                    span { class: "grow" }
-                                    Chip { kind: ChipKind::Assist, icon: "check_circle", label: "line {u.at_line}" }
+                            Card { key: "{u.path}-{u.at_line}", class: "pack-card",
+                                CardHeader {
+                                    div { class: "pack-card__head",
+                                        Unplug { size: 20 }
+                                        code { class: "pack-card__path", "{u.path}" }
+                                        span { class: "grow" }
+                                        Badge { variant: BadgeVariant::Outline, CircleCheck { size: 12 } "line {u.at_line}" }
+                                    }
                                 }
-                                p { class: "pack-card__why", "The pack graph does not know this file, so no switch here changes its line: it is the estate's own." }
+                                CardContent {
+                                    p { class: "pack-card__why", "The pack graph does not know this file, so no switch here changes its line: it is the estate's own." }
+                                }
                             }
                         }
                     }
@@ -444,7 +458,7 @@ fn PackBranch(
         rsx! {
             if warn {
                 span { class: "pack-tree__warn",
-                    Icon { name: "error", size: 16 }
+                    CircleAlert { size: 16 }
                     "deploys while " code { "{parent}" } " is off"
                 }
             }
@@ -452,7 +466,7 @@ fn PackBranch(
                 span {
                     class: "pack-tree__reads",
                     title: "It reads params the pack above declares.",
-                    Icon { name: "link", size: 16 }
+                    LinkIcon { size: 16 }
                     "reads " code { "{reads}" }
                 }
             }
@@ -480,7 +494,7 @@ fn PackBranch(
     }
 }
 
-/// The word a line state reads as on a chip and in a sentence.
+/// The word a line state reads as on a badge and in a sentence.
 trait Word {
     fn word(self) -> &'static str;
 }
@@ -498,23 +512,23 @@ impl Word for PackLine {
     }
 }
 
-fn line_chip(row: &PackRow) -> Element {
-    let icon = if row.deploys {
-        "check_circle"
-    } else {
-        "radio_button_unchecked"
-    };
+fn line_badge(row: &PackRow) -> Element {
     let error = matches!(row.line, PackLine::Ungated | PackLine::Misplaced);
     let label = match row.at_line {
         Some(at) => format!("{} · line {at}", row.line.word()),
         None => row.line.word().to_string(),
     };
-    rsx! { Chip { kind: ChipKind::Assist, icon, label, error } }
+    rsx! {
+        Badge { variant: if error { BadgeVariant::Destructive } else { BadgeVariant::Outline },
+            if row.deploys { CircleCheck { size: 12 } } else { Circle { size: 12 } }
+            "{label}"
+        }
+    }
 }
 
-/// What a line state the chip marks in the error colour means, and the edit that answers
-/// it: a sentence for `ungated` and for `misplaced`, `None` for every other state, which
-/// the chip says in full.
+/// What a line state the badge marks as an error means, and the edit that answers it: a
+/// sentence for `ungated` and for `misplaced`, `None` for every other state, which the
+/// badge says in full.
 ///
 /// satz says this itself where it can — the `ungated-pack` finding, which the card shows
 /// with satz's own `fix:` — and it can only where the file declaring the gate deploys, so
@@ -601,108 +615,112 @@ fn PackCard(
     let switchable = row.role == PackRole::Pack && row.by_hand.is_none();
     let path = row.path.clone();
     rsx! {
-        Card { variant: CardVariant::Outlined, class: "pack-card",
-            div { class: "pack-card__head",
-                Icon { name: "extension", size: 20 }
-                code { class: "pack-card__path", "{row.path}" }
-                span { class: "grow" }
-                {line_chip(&row)}
-            }
-            if let Some((prompt, why)) = &prompt {
-                p { class: "pack-card__prompt", "{prompt}" }
-                if let Some(why) = why {
-                    p { class: "pack-card__why", "{why}" }
+        Card { class: "pack-card",
+            CardHeader {
+                div { class: "pack-card__head",
+                    Puzzle { size: 20 }
+                    code { class: "pack-card__path", "{row.path}" }
+                    span { class: "grow" }
+                    {line_badge(&row)}
                 }
             }
-            if let Some(gate) = &gate {
-                p { class: "pack-card__note", code { "{gate}" } }
-            }
-            if let Some(written) = &row.written {
-                p { class: "pack-card__note", "The line names " code { "{written}" } "." }
-            }
-            if let Some(on) = &row.gated_on {
-                p { class: "pack-card__note", "The line is gated on " code { "{on}" } ", not on the pack's own gate." }
-            }
-            if row.role == PackRole::Core {
-                p { class: "pack-card__why", "The day-0 pack every estate starts with: satz does not switch it." }
-            }
-            if let Some(why) = &row.by_hand {
-                p { class: "pack-card__why", "Its line is written by hand, never by satz: {why}." }
-            }
-            if switchable {
-                div { class: "pack-card__control",
-                    Switch {
-                        label,
-                        checked: row.deploys,
-                        disabled: loading,
-                        onchange: move |on: bool| {
-                            let pack = path.clone();
-                            handle.send(if on {
-                                EstateAction::AddPack(AddPackArgs { pack, with_requirements: false })
+            CardContent {
+                if let Some((prompt, why)) = &prompt {
+                    p { class: "pack-card__prompt", "{prompt}" }
+                    if let Some(why) = why {
+                        p { class: "pack-card__why", "{why}" }
+                    }
+                }
+                if let Some(gate) = &gate {
+                    p { class: "pack-card__note", code { "{gate}" } }
+                }
+                if let Some(written) = &row.written {
+                    p { class: "pack-card__note", "The line names " code { "{written}" } "." }
+                }
+                if let Some(on) = &row.gated_on {
+                    p { class: "pack-card__note", "The line is gated on " code { "{on}" } ", not on the pack's own gate." }
+                }
+                if row.role == PackRole::Core {
+                    p { class: "pack-card__why", "The day-0 pack every estate starts with: satz does not switch it." }
+                }
+                if let Some(why) = &row.by_hand {
+                    p { class: "pack-card__why", "Its line is written by hand, never by satz: {why}." }
+                }
+                if switchable {
+                    div { class: "pack-card__control",
+                        SwitchRow {
+                            label,
+                            checked: row.deploys,
+                            disabled: loading,
+                            onchange: move |on: bool| {
+                                let pack = path.clone();
+                                handle.send(if on {
+                                    EstateAction::AddPack(AddPackArgs { pack, with_requirements: false })
+                                } else {
+                                    EstateAction::RemovePack(RemovePackArgs { pack, cascade: false })
+                                })
+                            },
+                        }
+                        span { class: "pack-card__note",
+                            if row.deploys {
+                                "On. Off binds the gate false and leaves the line: a gated line with a false gate deploys nothing."
                             } else {
-                                EstateAction::RemovePack(RemovePackArgs { pack, cascade: false })
-                            })
-                        },
-                    }
-                    span { class: "pack-card__note",
-                        if row.deploys {
-                            "On. Off binds the gate false and leaves the line: a gated line with a false gate deploys nothing."
-                        } else {
-                            "Off. On binds the gate true and makes the line active where the pack graph places it."
+                                "Off. On binds the gate true and makes the line active where the pack graph places it."
+                            }
                         }
                     }
                 }
-            }
-            if !requirements.is_empty() {
-                ul { class: "pack-card__lines",
-                    for (i, (met, any_of, reads, one)) in requirements.into_iter().enumerate() {
-                        li { key: "{i}", class: "pack-card__line",
-                            Icon { name: if met { "check_circle" } else { "error" }, size: 18 }
-                            span { class: "grow",
-                                "needs " code { "{any_of}" }
-                                if let Some(reads) = reads {
-                                    " (reads " code { "{reads}" } ")"
+                if !requirements.is_empty() {
+                    ul { class: "pack-card__lines",
+                        for (i, (met, any_of, reads, one)) in requirements.into_iter().enumerate() {
+                            li { key: "{i}", class: "pack-card__line",
+                                if met { CircleCheck { size: 18 } } else { CircleAlert { size: 18 } }
+                                span { class: "grow",
+                                    "needs " code { "{any_of}" }
+                                    if let Some(reads) = reads {
+                                        " (reads " code { "{reads}" } ")"
+                                    }
                                 }
-                            }
-                            if let Some(one) = one {
-                                Button {
-                                    variant: ButtonVariant::Text,
-                                    icon: "toggle_on",
-                                    disabled: loading,
-                                    onclick: move |_| handle.send(EstateAction::AddPack(AddPackArgs { pack: one.clone(), with_requirements: false })),
-                                    "Switch on"
+                                if let Some(one) = one {
+                                    Button {
+                                        variant: ButtonVariant::Ghost,
+                                        disabled: loading,
+                                        onclick: move |_| handle.send(EstateAction::AddPack(AddPackArgs { pack: one.clone(), with_requirements: false })),
+                                        ToggleRight { size: 16 }
+                                        "Switch on"
+                                    }
                                 }
                             }
                         }
                     }
                 }
-            }
-            if row.role == PackRole::Pack && !row.required_by.is_empty() {
-                p { class: "pack-card__note", "Needed by " code { "{required_by}" } "." }
-            }
-            if !row.excludes.is_empty() {
-                p { class: "pack-card__note", "Excludes " code { "{excludes}" } "." }
-            }
-            for n in row.notices.iter() {
-                div { key: "{n.param}", class: "pack-card__remedy",
-                    Icon { name: if n.acknowledged { "task_alt" } else { "assignment_late" }, size: 20 }
-                    span {
-                        if n.acknowledged { "Ran " } else if row.deploys { "Run " } else { "Once on, run " }
-                        code { "{n.run}" } ", then bind " code { "{n.param} = true" } "."
+                if row.role == PackRole::Pack && !row.required_by.is_empty() {
+                    p { class: "pack-card__note", "Needed by " code { "{required_by}" } "." }
+                }
+                if !row.excludes.is_empty() {
+                    p { class: "pack-card__note", "Excludes " code { "{excludes}" } "." }
+                }
+                for n in row.notices.iter() {
+                    div { key: "{n.param}", class: "pack-card__remedy",
+                        if n.acknowledged { CircleCheckBig { size: 20 } } else { ClipboardX { size: 20 } }
+                        span {
+                            if n.acknowledged { "Ran " } else if row.deploys { "Run " } else { "Once on, run " }
+                            code { "{n.run}" } ", then bind " code { "{n.param} = true" } "."
+                        }
                     }
                 }
-            }
-            if let Some(note) = &note {
-                p { class: "pack-card__why", "{note}" }
-            }
-            for (i, (message, fix)) in findings.iter().enumerate() {
-                div { key: "{i}", class: "pack-card__diag",
-                    Icon { name: "error", size: 18 }
-                    span {
-                        "{message}"
-                        if let Some(fix) = fix {
-                            br {}
-                            code { "{fix}" }
+                if let Some(note) = &note {
+                    p { class: "pack-card__why", "{note}" }
+                }
+                for (i, (message, fix)) in findings.iter().enumerate() {
+                    div { key: "{i}", class: "pack-card__diag",
+                        CircleAlert { size: 18 }
+                        span {
+                            "{message}"
+                            if let Some(fix) = fix {
+                                br {}
+                                code { "{fix}" }
+                            }
                         }
                     }
                 }
@@ -1100,7 +1118,7 @@ mod tests {
             "a misplaced line carries a note"
         );
 
-        // every other state is what the chip says
+        // every other state is what the badge says
         budget.line = PackLine::Active;
         assert_eq!(line_note(&budget), None);
 

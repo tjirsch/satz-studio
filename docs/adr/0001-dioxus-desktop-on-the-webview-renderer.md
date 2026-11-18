@@ -1,6 +1,6 @@
 # 0001 — Dioxus desktop on the webview renderer
 
-- **Status:** accepted
+- **Status:** accepted; its Material 3 part superseded by 0028
 - **Date:** 2026-09-13
 - **Deciders:** the maintainer
 

@@ -4,22 +4,33 @@
 //! There is no credential here and no engine to choose: satz-studio runs no model
 //! ([ADR 0020](../../../../docs/adr/0020-the-agent-is-an-external-client-that-studio-configures-and-starts.md)).
 
+use std::collections::HashSet;
 use std::path::PathBuf;
 
 use dioxus::prelude::*;
+use dioxus_icons::lucide::{
+    Bot, Contrast, Eye, FolderOpen, Moon, Pencil, Save, Sun, SunMoon, Terminal, Zap,
+};
 use satz_studio_core::agent::{self, AgentError, DEFAULT_AGENT_COMMAND};
 use satz_studio_core::satz::Allow;
 use satz_studio_core::settings::{Theme, settings_path};
 
-use crate::components::{
-    Button, ButtonVariant, Card, CardVariant, Icon, Segment, SegmentedButton, TextField,
-};
+use crate::components::button::{Button, ButtonVariant};
+use crate::components::card::{Card, CardContent, CardHeader};
+use crate::components::toggle_group::{ToggleGroup, ToggleItem};
 use crate::state::{
     AppAction, AppStore, AppStoreStoreExt, SatzStatus, ToastKind, UpdateStoreStoreExt,
     ahead_sentence, toast,
 };
 use crate::views::satz_release::SatzReleaseActions;
+use crate::widgets::Field;
 use satz_studio_core::satz::CliLine;
+
+/// The capability ceilings, in the order their buttons stand.
+const ALLOWS: [Allow; 3] = [Allow::Read, Allow::ReadWrite, Allow::ReadWriteExec];
+
+/// The themes, in the order their buttons stand.
+const THEMES: [Theme; 3] = [Theme::System, Theme::Light, Theme::Dark];
 
 #[component]
 pub fn SettingsView() -> Element {
@@ -75,130 +86,136 @@ pub fn SettingsView() -> Element {
     // window is open is found by the next press. What the field says is what is there now
     let (agent_text, agent_error) = agent_status(&draft().agent_command);
 
-    let allow_value = draft().mcp_allow.as_arg().to_string();
-    let theme_value = match draft().theme {
-        Theme::System => "system",
-        Theme::Light => "light",
-        Theme::Dark => "dark",
-    }
-    .to_string();
+    let allow_index = ALLOWS.iter().position(|allow| *allow == draft().mcp_allow);
+    let allow_pressed: HashSet<usize> = allow_index.into_iter().collect();
+    let theme_index = THEMES.iter().position(|theme| *theme == draft().theme);
+    let theme_pressed: HashSet<usize> = theme_index.into_iter().collect();
 
     rsx! {
         div { class: "view settings",
             h1 { class: "view__title", "Settings" }
             div { class: "settings__grid",
-                Card { variant: CardVariant::Outlined, class: "settings__card",
-                    h2 { class: "settings__heading", Icon { name: "terminal", size: 20 } "satz" }
-                    TextField {
-                        label: "satz binary",
-                        value: draft().satz_binary.map(|p| p.display().to_string()).unwrap_or_default(),
-                        placeholder: "on PATH, then ~/.local/bin/satz",
-                        monospace: true,
-                        supporting: satz_text,
-                        error: satz_error,
-                        oninput: move |v: String| draft.write().satz_binary = if v.trim().is_empty() { None } else { Some(PathBuf::from(v.trim())) },
+                Card { class: "settings__card",
+                    CardHeader {
+                        h2 { class: "settings__heading", Terminal { size: 20 } "satz" }
                     }
-                    // satz owns its own updater, so the app runs it rather than fetching
-                    // anything: this is the same command the terminal instruction used to
-                    // name, with the browser it would otherwise open turned off.
-                    if satz_updatable {
-                        div { class: "settings__row",
-                            Button {
-                                variant: ButtonVariant::Tonal,
-                                disabled: satz_updating,
-                                onclick: move |_| handle.send(AppAction::UpdateSatz { check_only: false }),
-                                if satz_updating { "Updating satz…" } else { "Update satz" }
-                            }
-                            Button {
-                                variant: ButtonVariant::Text,
-                                disabled: satz_updating,
-                                onclick: move |_| handle.send(AppAction::UpdateSatz { check_only: true }),
-                                "Check only"
-                            }
-                            if satz_updating {
-                                Button { variant: ButtonVariant::Text, onclick: move |_| handle.send(AppAction::CancelUpdate), "Cancel" }
-                            }
+                    CardContent {
+                        Field {
+                            label: "satz binary",
+                            value: draft().satz_binary.map(|p| p.display().to_string()).unwrap_or_default(),
+                            placeholder: "on PATH, then ~/.local/bin/satz",
+                            monospace: true,
+                            supporting: satz_text,
+                            error: satz_error,
+                            oninput: move |v: String| draft.write().satz_binary = if v.trim().is_empty() { None } else { Some(PathBuf::from(v.trim())) },
                         }
-                        if let Some(command) = update_command {
-                            Card { variant: CardVariant::Filled, class: "settings__log-card",
-                                code { class: "settings__log-title", "{command}" }
-                                if let Some(outcome) = update_outcome {
-                                    p {
-                                        class: if outcome.ok { "settings__log-outcome" } else { "settings__log-outcome settings__log-outcome--error" },
-                                        "{outcome.text}"
-                                    }
+                        // satz owns its own updater, so the app runs it rather than fetching
+                        // anything: this is the command a terminal would run, with the browser
+                        // it would otherwise open turned off.
+                        if satz_updatable {
+                            div { class: "settings__row",
+                                Button {
+                                    variant: ButtonVariant::Secondary,
+                                    disabled: satz_updating,
+                                    onclick: move |_| handle.send(AppAction::UpdateSatz { check_only: false }),
+                                    if satz_updating { "Updating satz…" } else { "Update satz" }
                                 }
-                                pre { class: "log",
-                                    for (i, line) in update_log.iter().enumerate() {
-                                        {
-                                            let (class, text) = match line {
-                                                CliLine::Stdout(s) => ("log__line", s),
-                                                CliLine::Stderr(s) => ("log__line log__line--stderr", s),
-                                            };
-                                            rsx! { span { key: "{i}", class: "{class}", "{text}\n" } }
+                                Button {
+                                    variant: ButtonVariant::Ghost,
+                                    disabled: satz_updating,
+                                    onclick: move |_| handle.send(AppAction::UpdateSatz { check_only: true }),
+                                    "Check only"
+                                }
+                                if satz_updating {
+                                    Button { variant: ButtonVariant::Ghost, onclick: move |_| handle.send(AppAction::CancelUpdate), "Cancel" }
+                                }
+                            }
+                            if let Some(command) = update_command {
+                                Card { class: "settings__log-card",
+                                    CardContent {
+                                        code { class: "settings__log-title", "{command}" }
+                                        if let Some(outcome) = update_outcome {
+                                            p {
+                                                class: if outcome.ok { "settings__log-outcome" } else { "settings__log-outcome settings__log-outcome--error" },
+                                                "{outcome.text}"
+                                            }
+                                        }
+                                        pre { class: "log",
+                                            for (i, line) in update_log.iter().enumerate() {
+                                                {
+                                                    let (class, text) = match line {
+                                                        CliLine::Stdout(s) => ("log__line", s),
+                                                        CliLine::Stderr(s) => ("log__line log__line--stderr", s),
+                                                    };
+                                                    rsx! { span { key: "{i}", class: "{class}", "{text}\n" } }
+                                                }
+                                            }
                                         }
                                     }
                                 }
                             }
                         }
+                        SatzReleaseActions {}
+                        p { class: "settings__label", "Capability ceiling of the agent's satz MCP server" }
+                        ToggleGroup {
+                            horizontal: true,
+                            pressed: Some(allow_pressed.clone()),
+                            on_pressed_change: move |now: HashSet<usize>| {
+                                // a click on the pressed one leaves it pressed
+                                if let Some(allow) = now.difference(&allow_pressed).next().and_then(|i| ALLOWS.get(*i)) {
+                                    draft.write().mcp_allow = *allow;
+                                }
+                            },
+                            ToggleItem { index: 0usize, Eye { size: 16 } "read" }
+                            ToggleItem { index: 1usize, Pencil { size: 16 } "read, write" }
+                            ToggleItem { index: 2usize, Zap { size: 16 } "read, write, exec" }
+                        }
+                        p { class: "settings__label", "The ceiling of the satz MCP server an agent is configured with, written into the client's configuration when you press Configure on the Agent page. It bounds the satz server only: an agent with a shell can run satz commands directly." }
                     }
-                    SatzReleaseActions {}
-                    p { class: "settings__label", "Capability ceiling of the agent's satz MCP server" }
-                    SegmentedButton {
-                        options: vec![
-                            Segment::new("read", "read").with_icon("visibility"),
-                            Segment::new("read,write", "read, write").with_icon("edit"),
-                            Segment::new("read,write,exec", "read, write, exec").with_icon("bolt"),
-                        ],
-                        selected: allow_value,
-                        onselect: move |v: String| {
-                            draft.write().mcp_allow = match v.as_str() {
-                                "read" => Allow::Read,
-                                "read,write,exec" => Allow::ReadWriteExec,
-                                _ => Allow::ReadWrite,
-                            };
-                        },
-                    }
-                    p { class: "settings__label", "The ceiling of the satz MCP server an agent is configured with, written into the client's configuration when you press Configure on the Agent page. It bounds the satz server only: an agent with a shell can run satz commands directly." }
                 }
-                Card { variant: CardVariant::Outlined, class: "settings__card",
-                    h2 { class: "settings__heading", Icon { name: "smart_toy", size: 20 } "Agent" }
-                    TextField {
-                        label: "Agent command",
-                        value: draft().agent_command,
-                        placeholder: DEFAULT_AGENT_COMMAND,
-                        monospace: true,
-                        supporting: agent_text,
-                        error: agent_error,
-                        oninput: move |v: String| draft.write().agent_command = v,
+                Card { class: "settings__card",
+                    CardHeader {
+                        h2 { class: "settings__heading", Bot { size: 20 } "Agent" }
                     }
-                    p { class: "settings__label", "The agentic client the Agent destination starts in the estate's directory, as a command line. satz-studio runs no model of its own: the agent is that client, driven by the satz MCP server the Agent destination configures for the open estate." }
+                    CardContent {
+                        Field {
+                            label: "Agent command",
+                            value: draft().agent_command,
+                            placeholder: DEFAULT_AGENT_COMMAND,
+                            monospace: true,
+                            supporting: agent_text,
+                            error: agent_error,
+                            oninput: move |v: String| draft.write().agent_command = v,
+                        }
+                        p { class: "settings__label", "The agentic client the Agent destination starts in the estate's directory, as a command line. satz-studio runs no model of its own: the agent is that client, driven by the satz MCP server the Agent destination configures for the open estate." }
+                    }
                 }
-                Card { variant: CardVariant::Outlined, class: "settings__card",
-                    h2 { class: "settings__heading", Icon { name: "contrast", size: 20 } "Appearance" }
-                    p { class: "settings__label", "Theme" }
-                    SegmentedButton {
-                        options: vec![
-                            Segment::new("system", "System").with_icon("brightness_auto"),
-                            Segment::new("light", "Light").with_icon("light_mode"),
-                            Segment::new("dark", "Dark").with_icon("dark_mode"),
-                        ],
-                        selected: theme_value,
-                        onselect: move |v: String| {
-                            draft.write().theme = match v.as_str() {
-                                "light" => Theme::Light,
-                                "dark" => Theme::Dark,
-                                _ => Theme::System,
-                            };
-                        },
+                Card { class: "settings__card",
+                    CardHeader {
+                        h2 { class: "settings__heading", Contrast { size: 20 } "Appearance" }
+                    }
+                    CardContent {
+                        p { class: "settings__label", "Theme" }
+                        ToggleGroup {
+                            horizontal: true,
+                            pressed: Some(theme_pressed.clone()),
+                            on_pressed_change: move |now: HashSet<usize>| {
+                                // a click on the pressed one leaves it pressed
+                                if let Some(theme) = now.difference(&theme_pressed).next().and_then(|i| THEMES.get(*i)) {
+                                    draft.write().theme = *theme;
+                                }
+                            },
+                            ToggleItem { index: 0usize, SunMoon { size: 16 } "System" }
+                            ToggleItem { index: 1usize, Sun { size: 16 } "Light" }
+                            ToggleItem { index: 2usize, Moon { size: 16 } "Dark" }
+                        }
                     }
                 }
             }
             div { class: "settings__actions",
                 span { class: "settings__file", "{file}" }
                 Button {
-                    variant: ButtonVariant::Text,
-                    icon: "folder_open",
+                    variant: ButtonVariant::Ghost,
                     onclick: move |_| {
                         let dir = settings_path().ok().and_then(|p| p.parent().map(std::path::Path::to_path_buf));
                         match dir {
@@ -210,11 +227,12 @@ pub fn SettingsView() -> Element {
                             None => toast(app, ToastKind::Error, "no configuration directory on this system"),
                         }
                     },
+                    FolderOpen { size: 16 }
                     "Show file"
                 }
                 span { class: "grow" }
-                Button { variant: ButtonVariant::Text, disabled: !dirty, onclick: move |_| draft.set(app.settings().cloned()), "Discard" }
-                Button { variant: ButtonVariant::Filled, icon: "save", disabled: !dirty, onclick: move |_| handle.send(AppAction::SaveSettings(draft())), "Save" }
+                Button { variant: ButtonVariant::Ghost, disabled: !dirty, onclick: move |_| draft.set(app.settings().cloned()), "Discard" }
+                Button { disabled: !dirty, onclick: move |_| handle.send(AppAction::SaveSettings(draft())), Save { size: 16 } "Save" }
             }
         }
     }

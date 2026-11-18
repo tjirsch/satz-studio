@@ -14,9 +14,17 @@ use satz_studio_core::satz::reports::{
 };
 use satz_studio_core::satz::workload::{PackSource, Which};
 
-use crate::components::{
-    Button, ButtonVariant, Card, CardVariant, Chip, ChipKind, Dialog, Icon, LinearProgress,
+use dioxus_icons::lucide::{
+    Boxes, CircleAlert, CircleArrowUp, CircleCheck, CircleQuestionMark, ClipboardList, CloudCog,
+    CloudDownload, CloudOff, Diff, Download, FilePen, FolderOpen, Link as LinkIcon, Link2,
+    ListTodo, Pencil, Unlink,
 };
+
+use crate::components::badge::{Badge, BadgeVariant};
+use crate::components::button::{Button, ButtonVariant};
+use crate::components::card::{Card, CardContent, CardHeader};
+use crate::components::dialog::{Dialog, DialogTitle};
+use crate::components::progress::Progress;
 use crate::state::{AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt, PackOp};
 
 /// Which delegated values a pack reads, in the words its row shows; none for a pack that
@@ -33,16 +41,29 @@ fn needs_text(needs: &[PackNeed]) -> Option<String> {
     (!words.is_empty()).then(|| format!("reads {}", words.join(" and ")))
 }
 
-/// The word and the icon of a pack's state chip.
-fn state_chip(state: PackState) -> (&'static str, &'static str) {
+/// The word of a pack's state badge.
+fn state_word(state: PackState) -> &'static str {
     match state {
-        PackState::Own => ("own", "edit_document"),
-        PackState::Current => ("current", "check_circle"),
-        PackState::Behind => ("behind", "update"),
-        PackState::Edited => ("edited", "edit"),
-        PackState::Gone => ("gone from the source", "cloud_off"),
-        PackState::NotChecked => ("not checked", "help"),
-        PackState::Available => ("available", "cloud_download"),
+        PackState::Own => "own",
+        PackState::Current => "current",
+        PackState::Behind => "behind",
+        PackState::Edited => "edited",
+        PackState::Gone => "gone from the source",
+        PackState::NotChecked => "not checked",
+        PackState::Available => "available",
+    }
+}
+
+/// The icon of a pack's state badge.
+fn state_icon(state: PackState, size: u32) -> Element {
+    match state {
+        PackState::Own => rsx! { FilePen { size } },
+        PackState::Current => rsx! { CircleCheck { size } },
+        PackState::Behind => rsx! { CircleArrowUp { size } },
+        PackState::Edited => rsx! { Pencil { size } },
+        PackState::Gone => rsx! { CloudOff { size } },
+        PackState::NotChecked => rsx! { CircleQuestionMark { size } },
+        PackState::Available => rsx! { CloudDownload { size } },
     }
 }
 
@@ -128,14 +149,16 @@ pub fn WorkloadPacksPane() -> Element {
 
     let body = match report {
         None => rsx! {
-            Card { variant: CardVariant::Filled, class: "interfaces__empty",
-                Icon { name: "inventory", size: 48, class: "placeholder__icon" }
-                p { "Nothing has been read yet. Reading the satz repository is a network read, so it happens when you ask for it." }
+            Card { class: "interfaces__empty",
+                CardContent {
+                    ClipboardList { size: 48, class: "placeholder__icon" }
+                    p { "Nothing has been read yet. Reading the satz repository is a network read, so it happens when you ask for it." }
+                }
             }
         },
         Some(Err(e)) => rsx! {
             div { class: "interfaces__error",
-                Icon { name: "error", size: 20 }
+                CircleAlert { size: 20 }
                 div {
                     p { "satz packs could not list the packs:" }
                     pre { "{e}" }
@@ -155,20 +178,20 @@ pub fn WorkloadPacksPane() -> Element {
                 }
                 div { class: "wpacks__sources",
                     Button {
-                        variant: ButtonVariant::Tonal,
-                        icon: "cloud_sync",
+                        variant: ButtonVariant::Secondary,
                         disabled: busy,
                         onclick: move |_| handle.send(EstateAction::Packs(PackOp::List(PackSource::Repository))),
+                        CloudCog { size: 16 }
                         "Read the satz repository"
                     }
                     Button {
-                        variant: ButtonVariant::Outlined,
-                        icon: "folder_open",
+                        variant: ButtonVariant::Outline,
                         disabled: busy,
                         onclick: {
                             let start = folder_start.clone();
                             move |_| choose_folder(handle, start.clone())
                         },
+                        FolderOpen { size: 16 }
                         "Read a folder…"
                     }
                     if let Some(source) = &source {
@@ -176,24 +199,39 @@ pub fn WorkloadPacksPane() -> Element {
                     }
                 }
                 if busy {
-                    LinearProgress {}
+                    Progress { value: None::<f64>, "aria-label": "working" }
                 }
             }
             {body}
         }
         Dialog {
             open: confirm().is_some(),
-            title: match confirm() {
-                Some(Confirm::TakeUpstream(_)) => "Overwrite your changes?".to_string(),
-                Some(Confirm::Detach(_)) => "Keep it as your own pack?".to_string(),
-                None => String::new(),
+            on_open_change: move |now: bool| {
+                if !now {
+                    confirm.set(None);
+                }
             },
-            icon: "warning",
-            ondismiss: move |_| confirm.set(None),
-            actions: rsx! {
-                Button { variant: ButtonVariant::Text, onclick: move |_| confirm.set(None), "Cancel" }
+            DialogTitle {
+                match confirm() {
+                    Some(Confirm::TakeUpstream(_)) => "Overwrite your changes?",
+                    Some(Confirm::Detach(_)) => "Keep it as your own pack?",
+                    None => "",
+                }
+            }
+            div { class: "dialog-body",
+                match confirm() {
+                    Some(Confirm::TakeUpstream(id)) => rsx! {
+                        p { "satz update-pack " code { "{id}" } " --take-upstream replaces the file with the source's. What you changed in it since it was fetched is gone; git is the way back." }
+                    },
+                    Some(Confirm::Detach(id)) => rsx! {
+                        p { "satz detach-pack " code { "{id}" } " removes its row from origin.toml. The file stays as it is, and from then on no update writes it or tells you the source moved." }
+                    },
+                    None => rsx! {},
+                }
+            }
+            div { class: "dialog-actions",
+                Button { variant: ButtonVariant::Ghost, onclick: move |_| confirm.set(None), "Cancel" }
                 Button {
-                    variant: ButtonVariant::Filled,
                     onclick: move |_| {
                         match confirm() {
                             Some(Confirm::TakeUpstream(id)) => handle.send(EstateAction::Packs(PackOp::Update {
@@ -210,15 +248,6 @@ pub fn WorkloadPacksPane() -> Element {
                         _ => "Keep as own",
                     }
                 }
-            },
-            match confirm() {
-                Some(Confirm::TakeUpstream(id)) => rsx! {
-                    p { "satz update-pack " code { "{id}" } " --take-upstream replaces the file with the source's. What you changed in it since it was fetched is gone; git is the way back." }
-                },
-                Some(Confirm::Detach(id)) => rsx! {
-                    p { "satz detach-pack " code { "{id}" } " removes its row from origin.toml. The file stays as it is, and from then on no update writes it or tells you the source moved." }
-                },
-                None => rsx! {},
             }
         }
     }
@@ -236,9 +265,11 @@ fn PackCards(
     let handle = use_coroutine_handle::<EstateAction>();
     if report.packs.is_empty() {
         return rsx! {
-            Card { variant: CardVariant::Filled, class: "interfaces__empty",
-                Icon { name: "inventory", size: 48, class: "placeholder__icon" }
-                p { "No workload pack is here, and " code { "{report.source}" } " holds none." }
+            Card { class: "interfaces__empty",
+                CardContent {
+                    ClipboardList { size: 48, class: "placeholder__icon" }
+                    p { "No workload pack is here, and " code { "{report.source}" } " holds none." }
+                }
             }
         };
     }
@@ -257,45 +288,53 @@ fn PackCards(
             .cloned()
     };
     rsx! {
-        Card { variant: CardVariant::Outlined, class: "interfaces__card",
-            div { class: "interfaces__card-head",
-                Icon { name: "inventory_2", size: 22 }
-                h2 { class: "interfaces__name", "In this estate" }
-                code { class: "interfaces__at", "{report.packs_dir}" }
-                span { class: "grow" }
-                if behind {
-                    Button {
-                        variant: ButtonVariant::Tonal,
-                        icon: "update",
-                        disabled: busy,
-                        onclick: move |_| handle.send(EstateAction::Packs(PackOp::Update { which: Which::All, take_upstream: false })),
-                        "Update all"
+        Card { class: "interfaces__card",
+            CardHeader {
+                div { class: "interfaces__card-head",
+                    Boxes { size: 22 }
+                    h2 { class: "interfaces__name", "In this estate" }
+                    code { class: "interfaces__at", "{report.packs_dir}" }
+                    span { class: "grow" }
+                    if behind {
+                        Button {
+                            variant: ButtonVariant::Secondary,
+                            disabled: busy,
+                            onclick: move |_| handle.send(EstateAction::Packs(PackOp::Update { which: Which::All, take_upstream: false })),
+                            CircleArrowUp { size: 16 }
+                            "Update all"
+                        }
                     }
                 }
             }
-            if here.is_empty() {
-                p { class: "interfaces__supporting", "No workload pack is here yet." }
-            }
-            for row in here {
-                PackLine {
-                    key: "{row.id}",
-                    in_use: row.use_path().is_some_and(|p| used.iter().any(|u| u == p)),
-                    edited: updated(&row.id),
-                    row: row.clone(),
-                    busy,
-                    confirm,
+            CardContent {
+                if here.is_empty() {
+                    p { class: "interfaces__supporting", "No workload pack is here yet." }
+                }
+                for row in here {
+                    PackLine {
+                        key: "{row.id}",
+                        in_use: row.use_path().is_some_and(|p| used.iter().any(|u| u == p)),
+                        edited: updated(&row.id),
+                        row: row.clone(),
+                        busy,
+                        confirm,
+                    }
                 }
             }
         }
         if !available.is_empty() {
-            Card { variant: CardVariant::Outlined, class: "interfaces__card",
-                div { class: "interfaces__card-head",
-                    Icon { name: "cloud_download", size: 22 }
-                    h2 { class: "interfaces__name", "Available" }
-                    code { class: "interfaces__at", "{report.source}" }
+            Card { class: "interfaces__card",
+                CardHeader {
+                    div { class: "interfaces__card-head",
+                        CloudDownload { size: 22 }
+                        h2 { class: "interfaces__name", "Available" }
+                        code { class: "interfaces__at", "{report.source}" }
+                    }
                 }
-                for row in available {
-                    PackLine { key: "{row.id}", row: row.clone(), in_use: false, edited: None, busy, confirm }
+                CardContent {
+                    for row in available {
+                        PackLine { key: "{row.id}", row: row.clone(), in_use: false, edited: None, busy, confirm }
+                    }
                 }
             }
         }
@@ -312,7 +351,6 @@ fn PackLine(
     confirm: Signal<Option<Confirm>>,
 ) -> Element {
     let handle = use_coroutine_handle::<EstateAction>();
-    let (word, icon) = state_chip(row.state);
     let id = row.id.clone();
     let use_path = row.use_path().map(str::to_string);
     rsx! {
@@ -320,12 +358,21 @@ fn PackLine(
             div { class: "interfaces__export-head",
                 code { class: "interfaces__export-name", "{row.id}" }
                 span { class: "interfaces__supporting", {versions(&row)} }
-                Chip { kind: ChipKind::Assist, icon, label: word }
+                Badge { variant: BadgeVariant::Outline,
+                    {state_icon(row.state, 12)}
+                    {state_word(row.state)}
+                }
                 if let Some(needs) = needs_text(&row.needs) {
-                    Chip { kind: ChipKind::Assist, icon: "rule", label: needs }
+                    Badge { variant: BadgeVariant::Outline,
+                        ListTodo { size: 12 }
+                        "{needs}"
+                    }
                 }
                 if in_use {
-                    Chip { kind: ChipKind::Assist, icon: "link", label: "used by the estate" }
+                    Badge { variant: BadgeVariant::Outline,
+                        LinkIcon { size: 12 }
+                        "used by the estate"
+                    }
                 }
                 span { class: "grow" }
                 if let Some(source) = &row.source {
@@ -345,54 +392,53 @@ fn PackLine(
             div { class: "wpacks__actions",
                 if row.state == PackState::Available {
                     Button {
-                        variant: ButtonVariant::Tonal,
-                        icon: "download",
+                        variant: ButtonVariant::Secondary,
                         disabled: busy,
                         onclick: { let id = id.clone(); move |_| handle.send(EstateAction::Packs(PackOp::Get(Which::One(id.clone())))) },
+                        Download { size: 16 }
                         "Fetch"
                     }
                 }
                 if row.state == PackState::Behind {
                     Button {
-                        variant: ButtonVariant::Tonal,
-                        icon: "update",
+                        variant: ButtonVariant::Secondary,
                         disabled: busy,
                         onclick: { let id = id.clone(); move |_| handle.send(EstateAction::Packs(PackOp::Update { which: Which::One(id.clone()), take_upstream: false })) },
+                        CircleArrowUp { size: 16 }
                         "Update"
                     }
                 }
                 if row.state == PackState::Edited {
                     Button {
-                        variant: ButtonVariant::Outlined,
-                        icon: "difference",
+                        variant: ButtonVariant::Outline,
                         disabled: busy,
                         onclick: { let id = id.clone(); move |_| handle.send(EstateAction::Packs(PackOp::Update { which: Which::One(id.clone()), take_upstream: false })) },
+                        Diff { size: 16 }
                         "Show the difference"
                     }
                     Button {
-                        variant: ButtonVariant::Outlined,
-                        icon: "cloud_download",
+                        variant: ButtonVariant::Outline,
                         disabled: busy,
                         onclick: { let id = id.clone(); move |_| confirm.set(Some(Confirm::TakeUpstream(id.clone()))) },
+                        CloudDownload { size: 16 }
                         "Take the source's file…"
                     }
                 }
                 if matches!(row.state, PackState::Edited | PackState::Gone | PackState::Current | PackState::Behind | PackState::NotChecked) {
                     Button {
-                        variant: ButtonVariant::Text,
-                        icon: "link_off",
+                        variant: ButtonVariant::Ghost,
                         disabled: busy,
                         onclick: { let id = id.clone(); move |_| confirm.set(Some(Confirm::Detach(id.clone()))) },
+                        Unlink { size: 16 }
                         "Keep as own…"
                     }
                 }
                 if let Some(path) = use_path {
                     if !in_use {
                         Button {
-                            variant: ButtonVariant::Filled,
-                            icon: "add_link",
                             disabled: busy,
                             onclick: move |_| handle.send(EstateAction::CommitEdit(Edit::AddUse { path: path.clone() })),
+                            Link2 { size: 16 }
                             "Add to the estate"
                         }
                     }
@@ -449,7 +495,7 @@ mod tests {
     }
 
     #[test]
-    fn every_state_has_a_word_an_icon_and_a_sentence() {
+    fn every_state_has_a_word_and_a_sentence() {
         for state in [
             PackState::Own,
             PackState::Current,
@@ -459,8 +505,7 @@ mod tests {
             PackState::NotChecked,
             PackState::Available,
         ] {
-            let (word, icon) = state_chip(state);
-            assert!(!word.is_empty() && !icon.is_empty() && !meaning(state).is_empty());
+            assert!(!state_word(state).is_empty() && !meaning(state).is_empty());
         }
     }
 }
