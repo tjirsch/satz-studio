@@ -17,13 +17,16 @@
 //! estate's write lock and is followed by a reload, like every other write.
 
 use dioxus::prelude::*;
+use satz_studio_core::agent;
 use satz_studio_core::diag::Severity;
 use satz_studio_core::satz::reports::WhoamiReport;
 
 use crate::components::{
     Button, ButtonVariant, Card, CardVariant, Chip, ChipKind, Icon, LinearProgress,
 };
-use crate::state::{AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt, SignIn, View};
+use crate::state::{
+    AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt, SignIn, ToastKind, View, toast,
+};
 use crate::views::commands::{APPLY, CommandDeck};
 use crate::views::path::NextStep;
 
@@ -151,9 +154,23 @@ pub fn ApplyView() -> Element {
                     Some(SignIn::Refused(text)) => rsx! {
                         p { class: "apply__line apply__line--error", "{text}" }
                         p { class: "apply__note",
-                            "The steps that call Google will fail until you are signed in. In a terminal: "
+                            "The steps that call Google will fail until you are signed in. \"Sign in\" runs "
                             code { "{SIGN_IN}" }
-                            " — then \"Check again\"."
+                            " in your terminal, which opens the browser; when it has finished, \"Check again\"."
+                        }
+                        div { class: "apply__actions",
+                            Button {
+                                variant: ButtonVariant::Filled,
+                                icon: "login",
+                                onclick: {
+                                    let dir = open.dir.clone();
+                                    move |_| match agent::start(SIGN_IN, &dir) {
+                                        Ok(_) => toast(app, ToastKind::Info, format!("{SIGN_IN} started in your terminal")),
+                                        Err(e) => toast(app, ToastKind::Error, e.to_string()),
+                                    }
+                                },
+                                "Sign in"
+                            }
                         }
                     },
                     Some(SignIn::Known(report)) => rsx! {

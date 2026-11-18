@@ -72,7 +72,10 @@ security review)
   --dry-run`, `bootstrap`, `transpile`, `hcl-init`, `plan`, `apply`, `migrate`.
 - **The sign-in check is `satz_whoami`, online**, sent when Apply is entered and no
   answer is held for the estate, and by "Check again". Its report is shown as satz gives
-  it; its refusal is shown in satz's words with the sign-in command. While the last
+  it; its refusal is shown in satz's words with the sign-in command, and a button,
+  "Sign in", runs that command — `gcloud auth application-default login` — in the OS
+  terminal, the hand-off the agent is started with. The app holds no credential and
+  reads nothing back: "Check again" asks satz afresh. While the last
   check is a refusal, every command deck says so above its command line.
 - **The compliance commands are a deck of Documents.**
 - **The agent's documents are cards of Documents**: each starts the client Settings
