@@ -114,6 +114,8 @@ pub enum View {
     Checks,
     /// what hands it off: the HCL directory, the plan, the apply, the state migration
     Deploy,
+    /// what the estate hands to people as a file: the decisions sheet
+    Documents,
     /// setting an external agent up on this estate, and starting it
     Agent,
     Settings,
@@ -126,15 +128,17 @@ impl View {
     /// from what the estate HAS to what it still has to decide. A pack is what declares a
     /// question, and `merge-presets` — the command that brings new pack lines in — is in
     /// Packs, so Packs is where the questions in Decisions come from and it stands before
-    /// them. Six, and Material 3 allows three to seven — `docs/ui.md` says what a seventh
-    /// would cost.
-    pub const PRIMARY: [View; 6] = [
+    /// them. Documents stands last: it is what is handed to people once the rest is settled.
+    /// Seven, which is as many as Material 3 puts in a navigation rail — the rail is full
+    /// (ADR 0027).
+    pub const PRIMARY: [View; 7] = [
         View::Overview,
         View::Presets,
         View::Decisions,
         View::Estate,
         View::Checks,
         View::Deploy,
+        View::Documents,
     ];
 
     /// The primary destinations of the open estate. An estate that works in a delegated
@@ -163,6 +167,7 @@ impl View {
             View::Estate => "Estate",
             View::Checks => "Checks",
             View::Deploy => "Deploy",
+            View::Documents => "Documents",
             View::Agent => "Agent",
             View::Settings => "Settings",
             View::Gallery => "Gallery",
@@ -179,6 +184,7 @@ impl View {
             View::Estate => "description",
             View::Checks => "fact_check",
             View::Deploy => "rocket_launch",
+            View::Documents => "article",
             View::Agent => "smart_toy",
             View::Settings => "settings",
             View::Gallery => "palette",
@@ -195,6 +201,7 @@ impl View {
                 | View::Estate
                 | View::Checks
                 | View::Deploy
+                | View::Documents
                 | View::Agent
         )
     }
@@ -579,15 +586,15 @@ pub fn toast(app: Store<AppStore>, kind: ToastKind, text: impl Into<String>) {
 mod tests {
     use super::*;
 
-    /// Material 3 puts three to seven destinations in a navigation rail, and six is this
-    /// app's limit: six primary ones and a bottom-aligned footer of two secondary ones is
-    /// inside the pattern because the footer's are not peers of the six; a seventh PRIMARY
-    /// destination is a navigation drawer's, not a smaller font's (`docs/ui.md`), so the
-    /// Interfaces view is a tab of Estate and not a destination (ADR 0023).
+    /// Material 3 puts three to seven destinations in a navigation rail, and the app uses
+    /// all seven (ADR 0027): seven primary ones and a bottom-aligned footer of two secondary
+    /// ones is inside the pattern because the footer's are not peers of the seven. An eighth
+    /// PRIMARY destination is a navigation drawer's, not a smaller font's (`docs/ui.md`), so
+    /// the Interfaces view is a tab of Estate and not a destination (ADR 0023).
     #[test]
     fn the_rail_stays_inside_the_navigation_rail_pattern() {
         assert!(
-            (3..=6).contains(&View::PRIMARY.len()),
+            (3..=7).contains(&View::PRIMARY.len()),
             "{} primary destinations",
             View::PRIMARY.len()
         );
@@ -627,6 +634,7 @@ mod tests {
             View::Estate,
             View::Checks,
             View::Deploy,
+            View::Documents,
             View::Agent,
             View::Settings,
             View::Gallery,

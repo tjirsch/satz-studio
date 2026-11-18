@@ -58,7 +58,7 @@ project may add entries to, the field that keys an entry and the fields an entry
 carries, each with the pattern its value must match. Access to a project is delegated to a team by an entry
 of `project_workload_projects` in satz's `presets/project-workload.satz`, which writes its interface
 with the rest; **Checks**, what judges it, from the compile
-to the compliance catalogs; **Deploy**, what hands it off. Agent and Settings sit at the
+to the compliance catalogs; **Deploy**, what hands it off; **Documents**, what goes to people as a file. Agent and Settings sit at the
 foot of the rail, with Commands between them. Beside the estate the top bar names sit
 reload, "Switch estate" — the Start screen with your estates listed — and "Close estate";
 every satz command the app runs is one keystroke away in the commands palette (⌘K,
@@ -92,8 +92,8 @@ The two documents a customer receives are `satz questions` in two renderings: th
 **decisions sheet** — every decision the estate rests on, what it is set to, whether it
 was chosen or taken as offered, and what changing it later costs — and the
 **workbook**, the same catalog as a spreadsheet the customer fills in and sends back.
-Decisions carries them as the sign-off sheet, read before an organisation is touched,
-and the Overview as the handover record after the rollout. Pick a format, choose where
+**Documents**, the last destination of the rail, carries them as one card: the sheet is
+signed before an organisation is touched and kept as the record after the rollout. Pick a format, choose where
 the file goes, and satz writes it (`satz questions <estate> --format <format> --out
 <file>`); the app opens it once it is there. The formats are the ones the installed satz
 lists in `satz questions --help`, so the picker offers exactly what satz can produce. The
