@@ -232,7 +232,7 @@ holds the estate file's directory is read at every reload (`WorkTree::read`) and
 estate outside a repository owes one from its first minute, with `InitRepository` —
 `git init -b main`, `git add -A`, one commit, streamed — as the button that makes it.
 The app runs git only when that button is pressed, and sets no identity for the
-commit. Decisions and the Overview each carry the export card (`src/views/export.rs`):
+commit. The Documents destination carries the export card (`src/views/export.rs`), once:
 the decisions sheet or the workbook, written by `satz questions --format <format> --out
 <file>` as an `Export` action of the estate coroutine, which runs it like any command
 into the shared log, then checks the file is there and not empty and opens it. The
@@ -244,7 +244,7 @@ Presets carries the pack review (`src/views/review.rs`): `satz review-preset` ov
 file the operator chooses, its findings in the drawer and beside the pack's text, and
 the two places a reviewed pack goes — upstream by a pull request the card describes,
 private as a `.local.satz` in the estate's library. The Gallery is behind `SATZ_STUDIO_DEBUG`. `docs/ui.md` is the whole map, including why
-six primary destinations is the limit of the navigation-rail pattern.
+seven primary destinations is the limit of the navigation-rail pattern.
 
 ## 4. Runtime views
 

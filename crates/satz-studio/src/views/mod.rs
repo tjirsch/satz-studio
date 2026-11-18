@@ -7,6 +7,7 @@ pub mod checks;
 pub mod commands;
 pub mod create;
 pub mod deploy;
+pub mod documents;
 pub mod estate;
 pub mod estates;
 pub mod export;

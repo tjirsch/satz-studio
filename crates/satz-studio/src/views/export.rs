@@ -1,10 +1,10 @@
 //! The export card: the decisions sheet and the workbook, the two documents a customer
 //! receives, written by `satz questions <estate> --format <format> --out <file>`.
 //!
-//! The card stands at the two moments the sheet is read — in Decisions, as the sign-off
-//! page before anything is touched, and in the Overview, as the handover record after
-//! the rollout — and it is the same card at both: a format, a destination, and the
-//! document opened once satz has written it. The formats are the ones the installed satz
+//! The card stands in the Documents destination, once: the sheet is read at two moments —
+//! as the sign-off page before anything is touched and as the handover record after the
+//! rollout — and it is one document at both. A format, a destination, and the document
+//! opened once satz has written it. The formats are the ones the installed satz
 //! lists in `satz questions --help`, read when the session opens
 //! ([`satz_studio_core::satz::export::formats`]); the card offers exactly those and
 //! renders nothing satz cannot produce. The sheet is derived from the estate, so after an
@@ -19,41 +19,10 @@ use satz_studio_core::satz::export;
 use crate::components::{Button, ButtonVariant, Card, CardVariant, Icon, Segment, SegmentedButton};
 use crate::state::{AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt};
 
-/// Where the card stands, which decides only what it says.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Moment {
-    /// in Decisions, once the packs are chosen: the page the customer signs
-    SignOff,
-    /// in the Overview, after the rollout: the record the customer keeps
-    Handover,
-}
-
-impl Moment {
-    pub fn title(self) -> &'static str {
-        match self {
-            Moment::SignOff => "Sign-off sheet",
-            Moment::Handover => "Handover record",
-        }
-    }
-
-    pub fn icon(self) -> &'static str {
-        match self {
-            Moment::SignOff => "assignment_turned_in",
-            Moment::Handover => "inventory",
-        }
-    }
-
-    pub fn text(self) -> &'static str {
-        match self {
-            Moment::SignOff => {
-                "Every decision this estate rests on — what it is set to, whether it was chosen or taken as offered, and what changing it later costs — as the sheet the customer signs before an organisation is touched, or the workbook they fill in and send back."
-            }
-            Moment::Handover => {
-                "The decisions the estate is rolled out with, as the record the customer keeps. The sheet is derived from the estate: export it again after any change."
-            }
-        }
-    }
-}
+/// The card's title, icon and explanation.
+const TITLE: &str = "Decisions sheet";
+const ICON: &str = "assignment_turned_in";
+const TEXT: &str = "Every decision this estate rests on — what it is set to, whether it was chosen or taken as offered, and what changing it later costs. Before an organisation is touched it is the sheet the customer signs, or the workbook they fill in and send back; after the rollout it is the record the customer keeps.";
 
 /// The format the card starts on: the decisions sheet, `markdown`, when satz offers it;
 /// otherwise none, and Export waits for a choice.
@@ -91,7 +60,7 @@ fn choose_and_export(
 }
 
 #[component]
-pub fn ExportCard(moment: Moment) -> Element {
+pub fn ExportCard() -> Element {
     let app = use_context::<Store<AppStore>>();
     let handle = use_coroutine_handle::<EstateAction>();
     let formats = app.estate().export_formats().cloned();
@@ -167,10 +136,10 @@ pub fn ExportCard(moment: Moment) -> Element {
     rsx! {
         Card { variant: CardVariant::Outlined, class: "export",
             header { class: "export__head",
-                Icon { name: moment.icon(), size: 22 }
-                h2 { class: "export__title", "{moment.title()}" }
+                Icon { name: ICON, size: 22 }
+                h2 { class: "export__title", "{TITLE}" }
             }
-            p { class: "export__text", "{moment.text()}" }
+            p { class: "export__text", "{TEXT}" }
             {body}
         }
     }
