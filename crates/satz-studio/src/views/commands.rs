@@ -7,9 +7,9 @@
 //! a person reads — `text` where satz offers it, `markdown` where it does not — and
 //! `json` stays a choice in the format picker for whoever wants the file.
 //!
-//! The commands are grouped by the job: [`CHECKS`] is what judges the estate and
-//! [`DEPLOY`] is what hands it off, each a destination of its own. The palette holds
-//! every entry, including the ones neither destination gathers, and opens on ⌘K /
+//! The commands are grouped by the job: [`APPLY`] is the estate's way to the organisation,
+//! in the order it is walked, and [`COMPLIANCE`] is what the Documents destination runs
+//! for a report. The palette holds every entry, including the ones neither gathers, and opens on ⌘K /
 //! Ctrl+K. `apply`, `bootstrap` and `migrate` are command lines to copy or to open in
 //! the OS terminal ([ADR 0006](../../../../docs/adr/0006-apply-and-bootstrap-run-in-the-users-terminal.md),
 //! [ADR 0012](../../../../docs/adr/0012-migrate-hands-off-to-the-terminal.md)).
@@ -495,24 +495,24 @@ pub const PALETTE: &[CommandSpec] = &[
     },
 ];
 
-/// The palette entries the Checks destination gathers: what judges the estate.
-pub const CHECKS: &[&str] = &[
+/// The palette entries the Apply destination gathers, in the order they are walked: the
+/// checks that go further than the compile, day 0 and its dry run, the generated code,
+/// its directory, the plan, the apply, and the state's move to the other backend.
+pub const APPLY: &[&str] = &[
     "transpile-check",
     "update-prerequisites",
-    "require",
-    "report-compliance",
     "bootstrap-check",
-];
-
-/// The palette entries the Deploy destination gathers: what hands the estate off.
-pub const DEPLOY: &[&str] = &[
+    "bootstrap",
     "transpile",
     "hcl-init",
     "plan",
     "apply",
     "migrate",
-    "bootstrap",
 ];
+
+/// The palette entries the Documents destination gathers: the goal view against a
+/// catalog and the evidence report, whose result is a document.
+pub const COMPLIANCE: &[&str] = &["require", "report-compliance"];
 
 /// The spec an id names.
 pub fn spec_of(id: &str) -> Option<&'static CommandSpec> {
@@ -664,8 +664,8 @@ pub fn build_args(
 }
 
 /// One group of palette entries: the list of them, the argument form of the chosen
-/// one, its command line as it will run, and the shared log. Checks and Deploy are two
-/// of these over their own ids; the palette is one over every id.
+/// one, its command line as it will run, and the shared log. Apply and Documents each
+/// hold one over their own ids; the palette is one over every id.
 #[component]
 pub fn CommandDeck(ids: Vec<&'static str>, #[props(default)] tools: bool) -> Element {
     let app = use_context::<Store<AppStore>>();
@@ -679,6 +679,12 @@ pub fn CommandDeck(ids: Vec<&'static str>, #[props(default)] tools: bool) -> Ele
         return rsx! {};
     };
     let running = app.estate().running().cloned();
+    // the sign-in check's refusal, once Apply has asked: said on every command, since
+    // the app does not know which of them call Google
+    let not_signed_in = matches!(
+        app.estate().sign_in().cloned(),
+        Some(crate::state::SignIn::Refused(_))
+    );
     let built = build_args(spec, &open.name, &values(), &report_path(spec, &values()));
     let preview = built
         .as_ref()
@@ -737,6 +743,12 @@ pub fn CommandDeck(ids: Vec<&'static str>, #[props(default)] tools: bool) -> Ele
                                     TextField { key: "{key}", label: label.to_string(), value: current, placeholder: placeholder.to_string(), monospace: true, oninput: move |v: String| { values.write().insert(key.clone(), v); } }
                                 },
                             }
+                        }
+                    }
+                    if not_signed_in {
+                        p { class: "commands__warning",
+                            Icon { name: "no_accounts", size: 18 }
+                            "Not signed in: a command that calls Google will fail. Apply says how to sign in."
                         }
                     }
                     code { class: "commands__preview", "{preview}" }
@@ -1042,7 +1054,7 @@ mod tests {
     /// neither destination is still one keystroke away.
     #[test]
     fn the_destinations_name_entries_that_exist() {
-        for id in CHECKS.iter().chain(DEPLOY.iter()) {
+        for id in APPLY.iter().chain(COMPLIANCE.iter()) {
             assert!(spec_of(id).is_some(), "{id}");
         }
         assert!(spec_of("no-such-command").is_none());

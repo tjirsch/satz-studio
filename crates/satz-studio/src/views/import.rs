@@ -502,7 +502,7 @@ fn ImportReportCard(report: ImportReport, outcome: Option<CommandOutcome>) -> El
                                 Ok(args) => handle.send(EstateAction::RunCommand(args)),
                                 Err(e) => toast(app, ToastKind::Error, e),
                             }
-                            app.nav().set(View::Checks);
+                            app.nav().set(View::Apply);
                         },
                         "Check it compiles"
                     }

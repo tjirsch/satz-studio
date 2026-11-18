@@ -819,6 +819,14 @@
   color: var(--md-sys-color-on-surface-variant);
 }
 
+.commands__warning {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font: var(--md-sys-typescale-body-small);
+  color: var(--md-sys-color-error);
+}
+
 .commands__preview {
   display: block;
   padding: 12px 16px;
@@ -1861,6 +1869,20 @@
 
 /* ---- export ------------------------------------------------------------------- */
 
+/* the Documents destination: a heading per kind of document, and the agent's two side by
+   side where there is room */
+.documents__section {
+  font: var(--md-sys-typescale-title-small);
+  color: var(--md-sys-color-primary);
+  padding-top: 8px;
+}
+
+.documents__agent {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 16px;
+}
+
 .export {
   display: flex;
   flex-direction: column;
@@ -2125,48 +2147,70 @@
   height: 100%;
 }
 
-.checks__prerequisites {
+.apply__signin,
+.apply__prerequisites {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
-.checks__head {
+.apply__head {
   display: flex;
   align-items: center;
   gap: 12px;
 }
 
-.checks__title {
-  font: var(--md-sys-typescale-title-medium);
+.apply__title {
+  font: var(--md-sys-typescale-title-small);
 }
 
-.checks__finding {
+.apply__title--error {
+  color: var(--md-sys-color-error);
+}
+
+/* one thing the sign-in check found: an icon and a sentence */
+.apply__line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font: var(--md-sys-typescale-body-medium);
+  user-select: text;
+}
+
+.apply__line--error {
+  color: var(--md-sys-color-error);
+}
+
+.apply__finding {
   font: var(--md-sys-typescale-body-medium);
   white-space: pre-wrap;
   user-select: text;
 }
 
-.checks__note {
-  font: var(--md-sys-typescale-body-medium);
+.apply__note {
+  font: var(--md-sys-typescale-body-small);
   color: var(--md-sys-color-on-surface-variant);
-  max-width: 90ch;
 }
 
-.checks__actions {
+.apply__note code {
+  user-select: text;
+}
+
+.apply__actions {
   display: flex;
   gap: 8px;
   padding-top: 8px;
 }
 
-.deploy__state {
+.apply__state {
   display: flex;
+  flex-direction: row;
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
 }
 
-.deploy__dir {
+.apply__dir {
   font-family: var(--md-ref-typeface-mono);
   color: var(--md-sys-color-on-surface-variant);
   user-select: text;
@@ -2193,7 +2237,7 @@
 /* ---- agent -------------------------------------------------------------------- */
 
 /* The Agent destination: one card per client. `.agent__lead` takes the anatomy
-   `.deploy__state` uses — a filled card as one row with an icon — and each client card is
+   `.apply__state` uses — a filled card as one row with an icon — and each client card is
    an outlined card with the block satz printed, the notes under it and a row of
    buttons. */
 .agent {

@@ -3,10 +3,9 @@
 //! line's text, sliced from the document tree the reload keeps in the store.
 
 pub mod agent;
-pub mod checks;
+pub mod apply;
 pub mod commands;
 pub mod create;
-pub mod deploy;
 pub mod documents;
 pub mod estate;
 pub mod estates;

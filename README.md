@@ -57,8 +57,10 @@ where the estate declares `request` statements — what projects may request: ea
 project may add entries to, the field that keys an entry and the fields an entry
 carries, each with the pattern its value must match. Access to a project is delegated to a team by an entry
 of `project_workload_projects` in satz's `presets/project-workload.satz`, which writes its interface
-with the rest; **Checks**, what judges it, from the compile
-to the compliance catalogs; **Deploy**, what hands it off; **Documents**, what goes to people as a file. Agent and Settings sit at the
+with the rest; **Apply**, its way to the organisation — who is signed in, what state the estate is in,
+then the checks, day 0, the generated code, the plan and the apply, in that order;
+**Documents**, what goes to people as a file: the decisions sheet, the compliance reports,
+and the documents an agent writes, each started in the client Settings names. Agent and Settings sit at the
 foot of the rail, with Commands between them. Beside the estate the top bar names sit
 reload, "Switch estate" — the Start screen with your estates listed — and "Close estate";
 every satz command the app runs is one keystroke away in the commands palette (⌘K,

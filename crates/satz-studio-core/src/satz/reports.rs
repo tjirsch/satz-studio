@@ -1088,6 +1088,99 @@ pub struct DetachedPack {
     pub source: String,
 }
 
+/// What `satz_whoami` returns: who the credentials on this machine are, and what the
+/// open estate's live commands run as. Online it is also a check — whether the
+/// credential may become the estate's account, whether the project its calls are billed
+/// to is reachable, and whether the account holds what the estate's resource types need.
+/// A credential that mints no token is satz's refusal, not a report.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct WhoamiReport {
+    pub adc: WhoamiCredential,
+    /// what the estate runs as; absent when satz was asked about no estate
+    pub estate: Option<WhoamiEstate>,
+    pub quota_project: Option<WhoamiQuotaProject>,
+    /// the answer came from the credentials file alone: nothing was checked
+    pub offline: bool,
+    pub note: Option<String>,
+    /// the permissions the estate's resource types need, tested as the identity its
+    /// live commands run as; absent offline and for an estate that does not compile
+    #[serde(default)]
+    pub permissions: Option<WhoamiPermissions>,
+}
+
+/// The Application Default Credentials.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct WhoamiCredential {
+    /// absent for a user's credentials file read offline: the file stores no identity
+    pub account: Option<String>,
+    /// `user-adc`, `impersonated-sa`, `sa-key` or `unknown`
+    pub kind: String,
+    pub file: Option<String>,
+}
+
+/// What the estate declares about the identity its live calls use, and whether this
+/// credential may use it.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct WhoamiEstate {
+    pub path: String,
+    /// `cloud` or `local`
+    pub deployment_mode: String,
+    /// the account the estate declares, when it declares one
+    pub service_account: Option<String>,
+    /// live calls run as `service_account`; otherwise as the credentials themselves
+    pub impersonated: bool,
+    /// `None` when not checked: offline, or nothing is impersonated
+    pub may_impersonate: Option<bool>,
+    pub error: Option<String>,
+}
+
+/// The project every call is billed to.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct WhoamiQuotaProject {
+    pub id: String,
+    /// `None` when not checked (offline)
+    pub reachable: Option<bool>,
+    pub error: Option<String>,
+}
+
+/// The permission test. A missing permission is counted here; what it is and how to
+/// close it is the rights check's finding in the drawer.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct WhoamiPermissions {
+    pub tested: usize,
+    pub missing: Vec<serde_json::Value>,
+    pub not_tested: Vec<String>,
+}
+
+impl WhoamiReport {
+    /// Whether everything that was checked holds: the credential may become the
+    /// estate's account, and the project the calls are billed to is reachable. `None`
+    /// for an offline answer, which checked nothing.
+    pub fn ready(&self) -> Option<bool> {
+        if self.offline {
+            return None;
+        }
+        let account = self
+            .estate
+            .as_ref()
+            .is_none_or(|e| e.may_impersonate != Some(false) && e.error.is_none());
+        let quota = self
+            .quota_project
+            .as_ref()
+            .is_none_or(|q| q.reachable != Some(false));
+        Some(account && quota)
+    }
+
+    /// The identity the estate's live commands run as: its account when it is
+    /// impersonated, else the credentials' own.
+    pub fn runs_as(&self) -> Option<&str> {
+        match &self.estate {
+            Some(e) if e.impersonated => e.service_account.as_deref(),
+            _ => self.adc.account.as_deref(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1672,5 +1765,56 @@ mod tests {
 
         // a state satz grows is refused, never read as another
         assert!(serde_json::from_str::<PackState>(r#""sideways""#).is_err());
+    }
+    /// `satz_whoami` as satz v0.100.0 returns it for an estate in cloud mode, online.
+    #[test]
+    fn the_identity_report_is_read_and_says_whether_the_estate_can_run() {
+        let online = serde_json::json!({
+            "adc": {"account": "operator@example.com", "kind": "user-adc", "file": "/home/op/.config/gcloud/application_default_credentials.json"},
+            "estate": {"path": "C0example.satz", "deployment_mode": "cloud", "service_account": "svc-iac@acme-infra-001.iam.gserviceaccount.com", "impersonated": true, "may_impersonate": true, "error": null},
+            "quota_project": {"id": "acme-infra-001", "reachable": true, "error": null},
+            "offline": false,
+            "note": null,
+            "permissions": {"tested": 12, "missing": [], "not_tested": []}
+        });
+        let report: WhoamiReport = serde_json::from_value(online.clone()).unwrap();
+        assert_eq!(report.ready(), Some(true));
+        assert_eq!(
+            report.runs_as(),
+            Some("svc-iac@acme-infra-001.iam.gserviceaccount.com")
+        );
+
+        let mut refused = online.clone();
+        refused["estate"]["may_impersonate"] = serde_json::json!(false);
+        refused["estate"]["error"] = serde_json::json!("permission denied");
+        assert_eq!(
+            serde_json::from_value::<WhoamiReport>(refused)
+                .unwrap()
+                .ready(),
+            Some(false)
+        );
+
+        let mut unreachable = online.clone();
+        unreachable["quota_project"]["reachable"] = serde_json::json!(false);
+        assert_eq!(
+            serde_json::from_value::<WhoamiReport>(unreachable)
+                .unwrap()
+                .ready(),
+            Some(false)
+        );
+
+        // offline nothing is checked, and a user's credentials file names no account
+        let offline = serde_json::json!({
+            "adc": {"account": null, "kind": "user-adc", "file": null},
+            "estate": null, "quota_project": null, "offline": true, "note": "a user ADC file stores no identity"
+        });
+        let report: WhoamiReport = serde_json::from_value(offline).unwrap();
+        assert_eq!(report.ready(), None);
+        assert_eq!(report.runs_as(), None);
+
+        // a report without the credentials is another shape: refused, never guessed
+        let mut broken = online;
+        broken.as_object_mut().unwrap().remove("adc");
+        assert!(serde_json::from_value::<WhoamiReport>(broken).is_err());
     }
 }

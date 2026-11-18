@@ -37,6 +37,7 @@ use satz_studio_core::satz::{CliLine, EstateSession, SatzError, ToolOutcome, exp
 use satz_studio_core::schema::{ResourceRegistry, SchemaError};
 use tokio_util::sync::CancellationToken;
 
+use super::SignIn;
 use super::View;
 use super::app_actions::close_estate;
 use super::{
@@ -101,6 +102,9 @@ pub enum EstateAction {
     /// a workload-pack command on the estate's `packs_dir`: `satz packs`, `get-pack`,
     /// `update-pack` or `detach-pack`, then the list read again from the same source
     Packs(PackOp),
+    /// `satz_whoami`, online: who is signed in, what the estate runs as, and whether
+    /// that works — asked by the Apply destination, never unasked
+    CheckSignIn,
     /// `git init -b main`, `git add -A` and one commit in the estate directory, streamed
     /// into the log: the repository `satz merge-presets` needs for its undo
     InitRepository,
@@ -221,6 +225,17 @@ pub async fn estate_coroutine(
                 if wrote {
                     reload(&session, app).await;
                 }
+            }
+            EstateAction::CheckSignIn => {
+                if app.estate().sign_in().cloned() == Some(SignIn::Checking) {
+                    continue;
+                }
+                app.estate().sign_in().set(Some(SignIn::Checking));
+                let session = Arc::clone(&session);
+                spawn(async move {
+                    let found = check_sign_in(&session).await;
+                    app.estate().sign_in().set(Some(found));
+                });
             }
             EstateAction::InitRepository => running.started(init_repository(&session, app)),
             EstateAction::Close => close_estate(app),
@@ -1257,6 +1272,22 @@ fn open_in_terminal(session: &Arc<EstateSession>, app: Store<AppStore>, args: &[
 
 async fn reload(session: &Arc<EstateSession>, app: Store<AppStore>) {
     reload_with(session, app, Carried::default()).await;
+}
+
+/// The sign-in check: `satz_whoami` on the open estate, online. A credential that mints
+/// no token is satz's refusal, and its text names the command that signs in.
+async fn check_sign_in(session: &Arc<EstateSession>) -> SignIn {
+    let outcome = match session.tool("satz_whoami", serde_json::Map::new()).await {
+        Ok(o) => o,
+        Err(e) => return SignIn::Refused(e.to_string()),
+    };
+    if outcome.is_error {
+        return SignIn::Refused(outcome.text.clone());
+    }
+    match outcome.typed::<satz_studio_core::satz::reports::WhoamiReport>("satz_whoami") {
+        Ok(report) => SignIn::Known(Box::new(report)),
+        Err(e) => SignIn::Refused(e.to_string()),
+    }
 }
 
 /// One workload-pack operation, and the list read again from the same source after it.
