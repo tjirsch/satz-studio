@@ -1343,13 +1343,6 @@
   font-weight: var(--md-sys-typescale-emphasized-weight);
 }
 
-/* the card grows with the window; a line of running text does not grow past what reads */
-.interview__prompt,
-.interview__why,
-.interview__pack-description {
-  max-width: 100ch;
-}
-
 .interview__why {
   font: var(--md-sys-typescale-body-medium);
   color: var(--md-sys-color-on-surface-variant);
