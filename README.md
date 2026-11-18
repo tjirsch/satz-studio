@@ -173,7 +173,6 @@ git clone --recurse-submodules https://github.com/tjirsch/satz-studio.git
 cd satz-studio
 cargo install dioxus-cli@0.7.10       # or: cargo binstall dioxus-cli@0.7.10
 dx serve --package satz-studio        # the app, with hot reload
-cargo run -p satz-studio              # the app, plain cargo
 cargo test -p satz-studio-core        # the headless tests: no window, no network
 ```
 

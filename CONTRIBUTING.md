@@ -72,7 +72,7 @@ below).
    `cargo install dioxus-cli@0.7.10` or `cargo binstall dioxus-cli@0.7.10`. Then
    `dx serve --package satz-studio` runs the app with hot reload and
    `dx bundle --package satz-studio --platform desktop --release`, run from the
-   repository root, builds this machine's bundle with `LICENSE`, `NOTICE`, `THIRD-PARTY-LICENSES.md` and the licence texts of the font, the component library and the grammar in it. `cargo run -p satz-studio` runs the app without it.
+   repository root, builds this machine's bundle with `LICENSE`, `NOTICE`, `THIRD-PARTY-LICENSES.md` and the licence texts of the font, the component library and the grammar in it. The app is run through `dx`: it is what builds the component library's stylesheets into the app, and a plain `cargo run -p satz-studio` opens a window without them.
 5. **The platform's webview.** Windows 10 and 11 ship WebView2. Linux needs
    `webkit2gtk-4.1`, and the build needs
    `libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev`

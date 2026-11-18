@@ -66,6 +66,8 @@ of Material 3's scale: the library's controls are compact as published.
   taken together with `dx components update`.
 - The copied component code lives in this repository under its own licence, named in
   `NOTICE`.
+- The app is run and bundled through `dx`, which builds the components' stylesheets
+  into it; a plain `cargo run` opens a window without them.
 - The window has no brand colour: the theme is grey, with blue for focus and red, amber
   and green for state. A colour is set through the theme's own variables in `app.css`
   when one is wanted.
