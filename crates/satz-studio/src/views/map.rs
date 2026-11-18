@@ -20,7 +20,8 @@ use crate::components::{
     Button, ButtonVariant, Card, CardVariant, Chip, ChipKind, ConnectorBranch, ConnectorLine,
     ConnectorTree, Icon, Switch,
 };
-use crate::state::{AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt};
+use crate::state::{AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt, View};
+use crate::views::path::NextStep;
 use crate::views::review::PackReviewCard;
 
 /// The header of the section for packs the file has no line for.
@@ -396,6 +397,7 @@ pub fn PresetsView() -> Element {
                     }
                 }
             }
+            NextStep { from: View::Presets }
         }
     }
 }

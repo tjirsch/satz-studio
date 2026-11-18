@@ -127,16 +127,18 @@ impl View {
     /// from what the estate HAS to what it still has to decide. A pack is what declares a
     /// question, and `merge-presets` — the command that brings new pack lines in — is in
     /// Packs, so Packs is where the questions in Decisions come from and it stands before
-    /// them. Apply is the estate's way to the organisation, and Documents stands last: it is
-    /// what is handed to people once the rest is settled. Six; Material 3 puts up to seven
+    /// them. Apply is the estate's way to the organisation, and Documents is what is handed
+    /// to people once the rest is settled. Those five are the path, each ending with a
+    /// bar that leads to the next (`views/path.rs`); Estate stands after them, because
+    /// the estate file itself is not a step of the walk. Six; Material 3 puts up to seven
     /// in a navigation rail (ADR 0027, ADR 0028).
     pub const PRIMARY: [View; 6] = [
         View::Overview,
         View::Presets,
         View::Decisions,
-        View::Estate,
         View::Apply,
         View::Documents,
+        View::Estate,
     ];
 
     /// The primary destinations of the open estate. An estate that works in a delegated

@@ -23,8 +23,9 @@ use satz_studio_core::satz::reports::WhoamiReport;
 use crate::components::{
     Button, ButtonVariant, Card, CardVariant, Chip, ChipKind, Icon, LinearProgress,
 };
-use crate::state::{AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt, SignIn};
+use crate::state::{AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt, SignIn, View};
 use crate::views::commands::{APPLY, CommandDeck};
+use crate::views::path::NextStep;
 
 /// The command that signs in, as satz's own refusal names it.
 const SIGN_IN: &str = "gcloud auth application-default login";
@@ -219,6 +220,7 @@ pub fn ApplyView() -> Element {
             }
 
             CommandDeck { ids: APPLY.to_vec() }
+            NextStep { from: View::Apply }
         }
     }
 }

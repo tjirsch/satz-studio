@@ -211,7 +211,7 @@ where it concerns the estate, a diagnostic in the drawer or an outcome under the
 ### Views
 
 The window is ordered by the job. With an estate open the
-rail reads **Overview, Presets, Decisions, Estate, Apply, Documents**, then Agent and
+rail reads **Overview, Presets, Decisions, Apply, Documents, Estate**, then Agent and
 Settings at its foot; with none open it carries Settings alone and the window stands on
 the Start screen. Presets stands before Decisions because a pack is what DECLARES a
 question: a pack switched on in Presets opens the questions it asks, so the questions
@@ -221,7 +221,7 @@ other door lands on Overview; the rail's order is the same for all of them. An e
 works in one of three modes, which satz's presets report names (`works_in`): the
 organisation, a delegated folder or a delegated project ([ADR 0025](adr/0025-an-estate-works-in-one-of-three-modes-and-satz-says-which.md)).
 An estate in a delegated place that holds no preset library has no Presets destination:
-its rail reads Overview, Decisions, Estate, Apply, Documents. The mode is a row of the
+its rail reads Overview, Decisions, Apply, Documents, Estate. The first five of the rail are the path through an estate, and each of their views ends with the next-step bar (`NextStep` in `src/views/path.rs`, `.next-step`: a filled `Card` as one row — the next step's icon, one sentence on what it is for, and a filled button "Next: <step>"); Estate stands after them and has none ([ADR 0028](adr/0028-apply-is-one-destination-and-starts-with-who-is-signed-in.md)). The mode is a row of the
 Overview's identity card, "Works in", an assist chip with the mode's icon
 (`corporate_fare`, `folder_shared`, `deployed_code`) and a sentence that says what it
 means. An organisation's Estate has three tabs, without Workload packs; in a delegated
@@ -360,8 +360,8 @@ and the door card on the Start screen, and their classes live in `views.css`, so
 ### Shell
 
 - **Navigation rail:** six primary destinations in the order the work happens —
-  Overview `dashboard`, Presets `inventory_2`, Decisions `quiz`, Estate `description`,
-  Apply `rocket_launch`, Documents `article` — and, in the rail's footer slot, two
+  Overview `dashboard`, Presets `inventory_2`, Decisions `quiz`, Apply `rocket_launch`,
+  Documents `article`, Estate `description` — and, in the rail's footer slot, two
   bottom-aligned secondary destinations, Agent `smart_toy` and Settings `settings`, with
   the Commands button between them. Overview carries the count of what the estate owes
   and Decisions the count of unanswered questions. With no estate open the primary group

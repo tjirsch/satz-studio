@@ -31,8 +31,15 @@ their questions, apply, hand over the documents.
 
 1. Keep Checks and Deploy. Cost: two menus for one walk, and no place for its state.
 2. **One destination, Apply**, with the commands in the order they are walked.
-3. A wizard that leads from step to step. Cost: an estate is revisited far more often
-   than it is first rolled out, and a wizard is in the way every time after the first.
+3. A wizard that leads from step to step and shows nothing else. Cost: an estate is
+   revisited far more often than it is first rolled out, and a wizard is in the way
+   every time after the first.
+
+**Leading from step to step**
+
+1. The rail's order alone. Cost: nothing says "this is done, that is next".
+2. **A bar at the end of each step's view** that names the next step and goes there.
+   The rail stays free: any step is one click away at any time.
 
 **The sign-in check**
 
@@ -72,8 +79,12 @@ security review)
   names with the skill as its opening instruction (`<client> "/<skill>"`), in the OS
   terminal, as the Agent destination starts it. The app does not check that the skill is
   installed, and reads nothing back.
-- The rail holds six primary destinations: Overview, Presets, Decisions, Estate, Apply,
-  Documents. One of Material 3's seven is free again
+- **The path is five steps, and each ends with a bar to the next**: Overview, Presets,
+  Decisions, Apply, Documents (`views/path.rs`). The bar says what the next step is for
+  and carries one filled button, "Next: <step>". An estate without a Presets
+  destination goes from the Overview to Decisions.
+- The rail holds six primary destinations in that order, and Estate after them: the
+  estate file itself is where a value is changed that no question asks for, not a step. One of Material 3's seven is free again
   ([ADR 0027](0027-documents-is-a-destination-of-its-own.md)).
 
 ## Consequences

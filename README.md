@@ -57,7 +57,9 @@ where the estate declares `request` statements — what projects may request: ea
 project may add entries to, the field that keys an entry and the fields an entry
 carries, each with the pattern its value must match. Access to a project is delegated to a team by an entry
 of `project_workload_projects` in satz's `presets/project-workload.satz`, which writes its interface
-with the rest; **Apply**, its way to the organisation — who is signed in, what state the estate is in,
+with the rest. Five of the six are a path, and each ends with a button to the next:
+what the estate is, its components, their questions, its way to the organisation, its
+documents; Estate stands after them in the rail. **Apply**, its way to the organisation — who is signed in, what state the estate is in,
 then the checks, day 0, the generated code, the plan and the apply, in that order;
 **Documents**, what goes to people as a file: the decisions sheet, the compliance reports,
 and the documents an agent writes, each started in the client Settings names. Agent and Settings sit at the
