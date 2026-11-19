@@ -206,7 +206,7 @@ pub fn ApplyView() -> Element {
                 Chip {
                     kind: ChipKind::Assist,
                     icon: if compiles { "check_circle" } else { "error" },
-                    label: if compiles { "compiles" } else { "does not compile" },
+                    label: if compiles { "transpiles" } else { "does not transpile" },
                     error: !compiles,
                 }
                 Chip {

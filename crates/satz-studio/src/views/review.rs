@@ -272,7 +272,7 @@ fn Upstream(reviewed: ReviewedPack) -> Element {
                 Icon { name: "publish", size: 24 }
                 h3 { class: "review__destination-title", "Upstream" }
             }
-            p { "The pack joins satz's library, for every estate. The hand-over is manual until satz ships contribute-pack: a pull request to the satz repository with" }
+            p { "The pack joins satz's library, for every estate. Sending it is manual until satz ships contribute-pack: a pull request to the satz repository with" }
             ul { class: "review__steps",
                 li {
                     Icon { name: "description", size: 18 }

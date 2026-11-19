@@ -309,7 +309,7 @@ fn a_request_statement_is_kept_whole() {
 /// its child, and satz-core parses it.
 #[test]
 fn request_patterns_and_a_top_level_each_of_interfaces_are_kept_whole() {
-    let text = "pack onboarding version \"1.0\"\n\nparams {\n  projects = []\n}\n\nrequest projects {\n  key      = \"name\"\n  fields   = [\"name\", \"owner_group\"]\n  patterns = { name = \"[a-z][a-z0-9-]*\" owner_group = \"[^@: ]+@[^@: ]+\" }\n}\n\neach projects by name {\n  // one interface per project\n  interface \"{each.name}\" {\n    export \"project_id\" = \"${{google_project.{each.name}.project_id}}\" description \"The project\"\n  }\n}\n";
+    let text = "pack intake version \"1.0\"\n\nparams {\n  projects = []\n}\n\nrequest projects {\n  key      = \"name\"\n  fields   = [\"name\", \"owner_group\"]\n  patterns = { name = \"[a-z][a-z0-9-]*\" owner_group = \"[^@: ]+@[^@: ]+\" }\n}\n\neach projects by name {\n  // one interface per project\n  interface \"{each.name}\" {\n    export \"project_id\" = \"${{google_project.{each.name}.project_id}}\" description \"The project\"\n  }\n}\n";
     let cst = Cst::parse(text).unwrap();
     assert_eq!(cst.text(), text);
     assert_eq!(
@@ -438,7 +438,7 @@ fn a_generated_interface_file_is_its_header_and_four_kinds_of_block() {
 }
 
 /// `interface "x" common { … }` is an interface statement kept whole, and the two sides
-/// of a project estate — its `use` of a generated interface file and its
+/// of a workload estate — its `use` of a generated interface file and its
 /// `${{interface.<export>}}` strings — are an ordinary use line and ordinary string
 /// values: the tree is the file, the reference is the value's own text, and satz-core
 /// parses both files.
@@ -453,7 +453,7 @@ fn a_common_interface_and_an_interface_reference_round_trip() {
         cst.slice(cst.node(audit).span)
             .starts_with("interface \"audit\" common {")
     );
-    let file = cst.lower().expect("satz-core parses the central estate");
+    let file = cst.lower().expect("satz-core parses the organisation's estate");
     assert!(
         file.interfaces
             .iter()
@@ -487,7 +487,7 @@ fn a_common_interface_and_an_interface_reference_round_trip() {
         strings.contains(&"\"${{interface.customer_domain}}\""),
         "{strings:?}"
     );
-    cst.lower().expect("satz-core parses the project estate");
+    cst.lower().expect("satz-core parses the workload estate");
 }
 
 /// A claim carrying its measure (`gcloud`, `gcloud_check`, `risk`) is one opaque statement

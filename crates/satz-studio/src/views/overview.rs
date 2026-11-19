@@ -175,7 +175,7 @@ pub fn owed(f: &Facts) -> Vec<Owed> {
             detail: match blocking {
                 0 => "Every one of them offers a default, so they can be bound in one pass.".to_string(),
                 n => format!(
-                    "{n} of them have no usable default: a value has to be typed before the estate compiles.",
+                    "{n} of them have no usable default: a value has to be typed before the estate transpiles.",
                 ),
             },
             remedies: vec![Remedy::Go(View::Decisions)],
@@ -366,11 +366,11 @@ const CORE_ORDER: [(&str, &str); 12] = [
     ("first_admin", "First admin"),
     ("billing_account_infra", "Billing account"),
     ("infra_folder_name", "Infrastructure folder"),
-    ("workload_folder_name", "Workload folder"),
+    ("workload_folder_name", "Workloads folder (Google Cloud)"),
     ("infra_project_name", "Infrastructure project"),
     ("infra_bucket_name", "State bucket"),
     ("svc_iac_account", "IaC service account"),
-    ("svc_iac_users_group", "IaC users group"),
+    ("svc_iac_users_group", "Account group"),
     ("deployment_engine", "Engine"),
     ("default_region", "Region"),
     ("default_zone", "Zone"),
@@ -518,8 +518,8 @@ fn json_line(v: &serde_json::Value) -> String {
     }
 }
 
-/// A label for a core subject the list above does not name: `svc_iac_users_group` reads
-/// "Svc iac users group", which is worse than a written label and better than nothing.
+/// A label for a core subject the list above does not name: `infra_bucket_name` reads
+/// "Infra bucket name", which is worse than a written label and better than nothing.
 fn label_for(subject: &str) -> String {
     let spaced = subject.replace('_', " ");
     let mut chars = spaced.chars();
@@ -773,9 +773,9 @@ fn IdentityCard(facts: Vec<Fact>) -> Element {
                             Some(mode) => rsx! {
                                 Chip { kind: ChipKind::Assist, icon: mode.icon(), label: mode.label().to_string() }
                                 {match mode {
-                                    EstateMode::Organisation => " — the organisation itself; its optional components are the preset library's packs",
-                                    EstateMode::Folder => " — a folder the organisation delegated access to; its components are workload packs",
-                                    EstateMode::Project => " — a project the organisation delegated access to; its components are workload packs",
+                                    EstateMode::Organisation => " — the organisation itself; it is built from presets and may take workload packs",
+                                    EstateMode::Folder => " — a folder the organisation delegated access to; it is built from workload packs",
+                                    EstateMode::Project => " — a project the organisation delegated access to; it is built from workload packs",
                                 }}
                             },
                             None => rsx! { span { class: "overview__unanswered", "not read yet" } },
@@ -1050,7 +1050,7 @@ mod tests {
         folder.empty = Some("the organisation".to_string());
         let r = report(vec![folder]);
         let facts = identity(Some(&[]), Some(&r));
-        assert_eq!(labels(answered_rows(&facts)), ["Workload folder"]);
+        assert_eq!(labels(answered_rows(&facts)), ["Workloads folder (Google Cloud)"]);
         assert_eq!(
             answered_rows(&facts)[0].reading,
             value("\"\" (the organisation)")

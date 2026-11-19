@@ -23,7 +23,7 @@ use crate::state::{AppAction, AppStore, AppStoreStoreExt, CreateStoreStoreExt, r
 /// `google-beta` and fetches the schema of each with the tf tool.
 const GOOGLE_SET: &str = "google";
 
-/// The OS dialog for the interface folders a team's estate is written from: one or more
+/// The OS dialog for the interface folders a workload estate is written from: one or more
 /// folders, added to the ones already chosen.
 fn pick_interface_folders(mut options: Signal<InitOptions>) {
     spawn(async move {
@@ -68,7 +68,7 @@ pub fn CreateEstate() -> Element {
         ..Default::default()
     });
 
-    // an organisation's estate, or a team's from the interface folders it was given
+    // an organisation's estate, or a workload estate from the interface folders it was given
     let mut team = use_signal(|| false);
     let running = app.create().running().cloned();
     let log = app.create().log().cloned();
@@ -117,7 +117,7 @@ pub fn CreateEstate() -> Element {
 
                 p { class: "create__label", "What the estate is for" }
                 SegmentedButton {
-                    options: vec![Segment::new("organisation", "An organisation"), Segment::new("team", "A team, from interface folders")],
+                    options: vec![Segment::new("organisation", "An organisation"), Segment::new("team", "A workload, from interface folders")],
                     selected: if team() { "team".to_string() } else { "organisation".to_string() },
                     onselect: move |v: String| {
                         team.set(v == "team");
@@ -130,7 +130,7 @@ pub fn CreateEstate() -> Element {
                 }
                 if team() {
                     p { class: "create__note",
-                        "A team's estate is written from the folders an organisation's estate wrote for a delegation, under its interfaces/outgoing/: the delegation's own, delegation-<name>, and that of the folder or project this estate works in. satz copies them into interfaces/incoming/ here and writes an estate that runs as the delegation's account."
+                        "A workload estate is written from the folders an organisation's estate wrote for a delegation, under its interfaces/outgoing/: the delegation's own, delegation-<name>, and that of the folder or project this estate works in. satz copies them into interfaces/incoming/ here and writes an estate that runs as the delegation's account."
                     }
                     ChipList {
                         label: "Interface folders",
@@ -178,7 +178,7 @@ pub fn CreateEstate() -> Element {
                     oninput: move |v: String| options.write().default_region = v,
                 }
                 TextField {
-                    label: "Workload folder",
+                    label: "Workloads folder (Google Cloud)",
                     value: options().workload_folder_name,
                     placeholder: "Workloads",
                     disabled: running,

@@ -504,7 +504,7 @@ fn ImportReportCard(report: ImportReport, outcome: Option<CommandOutcome>) -> El
                             }
                             app.nav().set(View::Apply);
                         },
-                        "Check it compiles"
+                        "Check it transpiles"
                     }
                 }
             }

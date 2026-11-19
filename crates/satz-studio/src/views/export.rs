@@ -2,7 +2,7 @@
 //! receives, written by `satz questions <estate> --format <format> --out <file>`.
 //!
 //! The card stands in the Documents destination, once: the sheet is read at two moments —
-//! as the sign-off page before anything is touched and as the handover record after the
+//! as the sign-off page before anything is touched and as the record after the
 //! rollout — and it is one document at both. A format, a destination, and the document
 //! opened once satz has written it. The formats are the ones the installed satz
 //! lists in `satz questions --help`, read when the session opens

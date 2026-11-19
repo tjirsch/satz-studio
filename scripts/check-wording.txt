@@ -1,0 +1,11 @@
+# One line per wording that names a second thing: an extended regex (case-insensitive),
+# a tab, and what to say. docs/glossary.md is the reference; scripts/check-wording.sh
+# reads this file.
+hand-?over (folder|record|card)s?|handover|the hand-over	interface folder (or: the documents; "hand over" is a verb only)
+vendor(ed)? folder	interface folder
+team'?s estates?|team estates?|project estates?	workload estate
+team'?s (own )?repositor(y|ies)	workload repository
+central estates?|org estates?	the organisation's estate
+onboarding	delegated access
+deploy project|infra project	the delegation's infrastructure project / infrastructure project
+owner group|IaC users group	account group

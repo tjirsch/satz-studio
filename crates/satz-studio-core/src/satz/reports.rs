@@ -455,7 +455,7 @@ pub struct Contributed {
 }
 
 /// A `use` of a file the pack graph does not know: an estate's own file, or the
-/// interface file of a central estate.
+/// interface file of an organisation's estate.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Unmanaged {
     pub path: String,
@@ -523,7 +523,7 @@ pub struct PacksReport {
     pub packs: Vec<PackRow>,
     pub unmanaged: Vec<Unmanaged>,
     /// the `use` lines of generated interface files (`interface "<name>"` as their
-    /// header) — central estates' interfaces a project estate reads, no pack
+    /// header) — interfaces of an organisation's estate that a workload estate reads, no pack
     pub interfaces: Vec<Unmanaged>,
     /// per used interface file, who delegated and what it carries
     pub delegated_by: Vec<DelegatedBy>,
@@ -539,13 +539,13 @@ pub struct DelegatedBy {
     pub path: String,
     /// the interface's name
     pub interface: String,
-    /// the name of the central estate that wrote the file
+    /// the name of the organisation's estate that wrote the file
     pub estate: String,
     /// the organisations that estate manages, `organizations/<id>`
     pub organizations: Vec<String>,
     #[serde(default)]
     pub customer_shortname: Option<String>,
-    /// the account the team's estates run as
+    /// the account the workload estates run as
     #[serde(default)]
     pub account: Option<String>,
     /// the group whose members may act as that account

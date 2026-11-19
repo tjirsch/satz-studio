@@ -65,7 +65,8 @@ the rules that apply to every change, whoever or whatever makes it.
   reaches into `vendor/satz`, which is satz's checkout and satz's formatting.
 - **Clippy denies warnings:** `cargo clippy --workspace --all-targets --locked -- -D
   warnings`. A warning is a failure, in CI and before a commit. The rest of the gate is
-  `cargo test --workspace --locked`, `bash scripts/e2e.sh`, `bash scripts/check-names.sh`
+  `cargo test --workspace --locked`, `bash scripts/e2e.sh`, `bash scripts/check-names.sh`,
+  `bash scripts/check-wording.sh`
   and `bash scripts/update-third-party-licenses.sh --check`. CI runs it once per commit —
   on a pull request, on the push to `main` that merges it, on a release tag and by hand,
   and once a day on `main` against the newest satz release, a failed daily run opening an
@@ -127,6 +128,13 @@ the rules that apply to every change, whoever or whatever makes it.
   notarized; `docs/verification.md` is what is checked before a release.
 - **`Satz` is the language; `satz` is the tool and its repository; `satz-studio` is
   this app.** "an estate written in Satz", "the satz binary", "satz-studio opens it".
+- **One word for one thing.** The words of satz's glossary (`vendor/satz/docs/glossary.md`)
+  are used for their defined purpose and meaning — in labels, messages, documentation
+  and comments: an interface folder, a workload estate, the organisation's estate, a
+  delegated resource, presets and packs as two things, transpile and HCL code. A thing
+  the app adds gets one word, proposed for the glossary in the satz repository.
+  `scripts/check-wording.sh` reports a wording that names a second thing; its list,
+  `scripts/check-wording.txt`, is satz's.
 - **The window follows Material 3 Expressive.** The tokens and anatomies are
   `crates/satz-studio/assets/css/`; `docs/ui.md` says how far each component follows
   the guidelines and where it departs. A new component states which anatomy it is.

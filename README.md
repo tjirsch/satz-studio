@@ -91,7 +91,7 @@ which deploys its pack whatever the estate answers, no provider
 schema, a pack whose notice is open, prerequisites the compile found undeclared, raw HCL
 nobody has reviewed, an HCL directory nothing has planned against. Every row is derived from the estate as it is on
 the screen, so it cannot go stale, and the card reads "Nothing left to do" when there is
-nothing in it. The handover card exports the decisions sheet or the workbook, below.
+nothing in it. Documents exports the decisions sheet or the workbook, below.
 Nothing about how an estate reached the app is remembered: created, imported and opened
 estates show the same list, because the same facts are true of them.
 

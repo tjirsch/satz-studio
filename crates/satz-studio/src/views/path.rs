@@ -34,7 +34,7 @@ pub fn purpose(step: View) -> &'static str {
     match step {
         View::Presets => "Choose the presets this organisation is built from.",
         View::Packs => "Take the packs this estate is built from.",
-        View::Decisions => "Answer what the estate and its components ask.",
+        View::Decisions => "Answer what the estate's presets and packs ask.",
         View::Apply => "Check who is signed in, then check, plan and apply.",
         View::Documents => "Make the documents that are handed over.",
         _ => "",

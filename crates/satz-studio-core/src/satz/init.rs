@@ -54,9 +54,9 @@ pub struct InitOptions {
     pub defaults: Vec<String>,
     /// `--providers`: provider names to include beside the sets.
     pub providers: Vec<String>,
-    /// `--from`: the interface folders a central estate wrote for a delegation — its own,
+    /// `--from`: the interface folders an organisation's estate wrote for a delegation — its own,
     /// `delegation-<name>`, and that of the place the estate works in. With any, satz
-    /// writes a TEAM's estate from them and the organisation's flags are not sent.
+    /// writes a WORKLOAD estate from them and the organisation's flags are not sent.
     pub from: Vec<String>,
     /// `--name`, with `--from`: the estate's name. Left empty it is the delegation's.
     pub name: String,
@@ -286,7 +286,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         assert!(matches!(created(tmp.path()), Err(EstateError::NoConfig(_))));
     }
-    /// A team's estate: the interface folders after `--from`, the name, and none of the
+    /// A workload estate: the interface folders after `--from`, the name, and none of the
     /// organisation's flags — whatever the form still holds of them.
     #[test]
     fn a_teams_estate_is_written_from_its_interface_folders() {

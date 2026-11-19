@@ -1,4 +1,4 @@
-# 0029 — presets and packs are two destinations, entries are added from their declaration, and a team's estate starts from its interface folders
+# 0029 — presets and packs are two destinations, entries are added from their declaration, and a workload estate starts from its interface folders
 
 - **Status:** accepted
 - **Date:** 2026-11-19
@@ -19,12 +19,12 @@ place ([ADR 0024](0024-workload-packs-are-a-tab-of-estate-and-a-workload-estate-
 [ADR 0025](0025-an-estate-works-in-one-of-three-modes-and-satz-says-which.md)). So the
 path through an estate ([ADR 0028](0028-apply-is-one-destination-and-starts-with-who-is-signed-in.md))
 had no step for packs, an organisation could not take one in the window at all, and the
-packs of a team's estate stood under the view that is not a step.
+packs of a workload estate stood under the view that is not a step.
 
 Since the same satz release, delegated access is a base and its targets, each an entry
 of a list a preset declares with `request`; `satz add-entry` writes such an entry;
-`satz init --from` writes a team's estate from the interface folders it was given; and
-`satz presets` reports who delegated. Delegating access and starting a team's estate were
+`satz init --from` writes a workload estate from the interface folders it was given; and
+`satz presets` reports who delegated. Delegating access and starting a workload estate were
 edits of a file and a command line the window did not offer.
 
 Apply offered every estate an organisation's commands, and Documents the compliance
@@ -64,7 +64,7 @@ commands, which are made from the catalogs of the preset library.
   satz (`satz_add_entry`) under the delegated-write discipline; what was left as its
   default is not sent. Each published interface has "Show folder", which opens what the
   last transpile wrote for it under `interfaces/outgoing/`.
-- **A team's estate starts from its interface folders.** The Create door has a second
+- **A workload estate starts from its interface folders.** The Create door has a second
   form, "A team, from interface folders": the folders, an optional name, and the same
   target folder; it runs `satz init --from`.
 - **The Overview says who delegated**: one sentence per interface file the estate reads,

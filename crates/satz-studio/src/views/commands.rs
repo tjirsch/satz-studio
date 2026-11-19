@@ -811,7 +811,7 @@ pub fn CommandDeck(ids: Vec<&'static str>, #[props(default)] tools: bool) -> Ele
                 if tools {
                     Card { variant: CardVariant::Outlined, class: "commands__tools",
                         h2 { class: "commands__heading", Icon { name: "handyman", size: 22 } "One click" }
-                        p { class: "commands__description", "Who the estate runs as, whether it compiles, and what its packs ask: satz's own answer, in the log." }
+                        p { class: "commands__description", "Who the estate runs as, whether it transpiles, and what its packs ask: satz's own answer, in the log." }
                         div { class: "commands__actions commands__actions--start",
                             for s in ONE_CLICK.iter().filter_map(|id| spec_of(id)) {
                                 {
