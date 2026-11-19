@@ -26,7 +26,7 @@ use satz_studio_core::diag::{Diagnostic, Severity};
 use satz_studio_core::estate::HclState;
 use satz_studio_core::git::WorkTree;
 use satz_studio_core::model::{EstateModel, ParamRow, SchemaStatus, SourceValue, StrPart};
-use satz_studio_core::satz::reports::EstateMode;
+use satz_studio_core::satz::reports::{DelegatedBy, EstateMode};
 use satz_studio_core::satz::reports::{PackLine, QuestionRow, QuestionState, QuestionsReport};
 
 use crate::components::{Button, ButtonVariant, Card, CardVariant, Chip, ChipKind, Icon};
@@ -189,14 +189,14 @@ pub fn owed(f: &Facts) -> Vec<Owed> {
                 icon: "inventory_2",
                 title: "The pack map is switched off".to_string(),
                 detail: "`use \"presets/estate-map.satz\"` is commented out, so no pack asks this estate anything. Switching it on is what opens the questions the library declares.".to_string(),
-                remedies: vec![Remedy::Go(View::Components)],
+                remedies: vec![Remedy::Go(View::Presets)],
             }),
             Some(PackLine::Absent) => out.push(Owed {
                 id: "map-absent",
                 icon: "inventory_2",
                 title: "The estate has no pack map".to_string(),
                 detail: "The file carries no line for `presets/estate-map.satz`, the map of pack choices every other question hangs from. Switching it on in Presets writes the line where the pack graph places it.".to_string(),
-                remedies: vec![Remedy::Go(View::Components)],
+                remedies: vec![Remedy::Go(View::Presets)],
             }),
             _ => {}
         }
@@ -215,7 +215,7 @@ pub fn owed(f: &Facts) -> Vec<Owed> {
                 remedies: if no_presets {
                     Vec::new()
                 } else {
-                    vec![Remedy::Go(View::Components)]
+                    vec![Remedy::Go(View::Presets)]
                 },
             });
         }
@@ -239,7 +239,7 @@ pub fn owed(f: &Facts) -> Vec<Owed> {
                     n => format!("{n} pack lines have no gate"),
                 },
                 detail: "A `use` line without its `when <gate>` deploys the pack whatever this estate answers, so no question switches it off. Presets names the gate each of them needs.".to_string(),
-                remedies: vec![Remedy::Go(View::Components)],
+                remedies: vec![Remedy::Go(View::Presets)],
             });
         }
 
@@ -529,6 +529,38 @@ fn label_for(subject: &str) -> String {
     }
 }
 
+/// Who delegated, in sentences: one per interface file the estate reads, as satz's presets
+/// report gives them. The delegation's own file names the organisation's estate, the
+/// account and who may act as it; a place's file names the project or says it is a folder.
+pub fn delegated_by_lines(by: &[DelegatedBy]) -> Vec<String> {
+    by.iter()
+        .map(|d| {
+            let whose = match (&d.customer_shortname, d.organizations.as_slice()) {
+                (Some(short), _) => format!("the estate {} of {}", d.estate, short),
+                (None, [org, ..]) => format!("the estate {} of {}", d.estate, org),
+                (None, []) => format!("the estate {}", d.estate),
+            };
+            match (&d.account, &d.project, d.folder) {
+                (Some(account), _, _) => {
+                    let mut s = format!("{whose}: the account {account}");
+                    if let Some(group) = &d.account_group {
+                        s.push_str(&format!(", which the members of {group} may act as"));
+                    }
+                    if let Some(project) = &d.deploy_project {
+                        s.push_str(&format!("; calls are billed to {project}"));
+                    }
+                    s
+                }
+                (None, Some(project), _) => {
+                    format!("{whose}: the project {project} ({})", d.interface)
+                }
+                (None, None, true) => format!("{whose}: the folder {}", d.interface),
+                (None, None, false) => format!("{whose}: {}", d.interface),
+            }
+        })
+        .collect()
+}
+
 /// Whom the estate's live calls run as, as `satz whoami` tells the cases apart — from
 /// what `satz_open` reported, which is enough to tell the ones an open estate can be in.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -745,18 +777,18 @@ fn IdentityCard(facts: Vec<Fact>) -> Element {
                                     EstateMode::Folder => " — a folder the organisation delegated access to; its components are workload packs",
                                     EstateMode::Project => " — a project the organisation delegated access to; its components are workload packs",
                                 }}
-                                if mode != EstateMode::Organisation {
-                                    for i in model.as_deref().map(|m| m.packs.interfaces.clone()).unwrap_or_default() {
-                                        span { key: "{i.path}", class: "overview__delegated",
-                                            " — delegated through "
-                                            code { "{i.path}" }
-                                        }
-                                    }
-                                }
                             },
                             None => rsx! { span { class: "overview__unanswered", "not read yet" } },
                         }
                     }
+                if let Some(lines) = model.as_deref().map(|m| delegated_by_lines(&m.packs.delegated_by)).filter(|l| !l.is_empty()) {
+                    dt { "Delegated by" }
+                    dd { class: "overview__delegated",
+                        for (i, line) in lines.into_iter().enumerate() {
+                            p { key: "{i}", "{line}" }
+                        }
+                    }
+                }
                 dt { "Runs as" }
                     dd {
                         match runs_as_row(open.runs_as.as_deref(), open.deployment_mode.as_deref()) {
@@ -1143,6 +1175,7 @@ mod tests {
             }],
             unmanaged: Vec::new(),
             interfaces: Vec::new(),
+            delegated_by: Vec::new(),
             works_in: satz_studio_core::satz::reports::EstateMode::Organisation,
             findings: (0..findings)
                 .map(|i| Finding {
@@ -1298,7 +1331,7 @@ mod tests {
         assert_eq!(ids(&rows), ["pack-findings"]);
         assert_eq!(rows[0].title, "The pack graph has 2 findings");
         assert_eq!(rows[0].detail, "finding 0");
-        assert_eq!(rows[0].remedies, [Remedy::Go(View::Components)]);
+        assert_eq!(rows[0].remedies, [Remedy::Go(View::Presets)]);
     }
 
     /// satz reports `ungated-pack` only while the file declaring the gate deploys, so the
@@ -1337,7 +1370,7 @@ mod tests {
         let rows = owed(&facts(None, hcl, Some(&q), Some(&m), &[]));
         assert_eq!(ids(&rows), ["map-off", "ungated-lines"]);
         assert_eq!(rows[1].title, "1 pack line has no gate");
-        assert_eq!(rows[1].remedies, [Remedy::Go(View::Components)]);
+        assert_eq!(rows[1].remedies, [Remedy::Go(View::Presets)]);
 
         // satz's own sentence on the row takes the line over
         report.packs[1].findings = vec!["is used without `when use_budget`".to_string()];
@@ -1568,5 +1601,47 @@ mod tests {
         };
         assert!(why.contains("declares no IaC service account"), "{why}");
         assert!(!why.contains("migrate"), "{why}");
+    }
+    /// The delegation's own file names the organisation's estate, the account and who may
+    /// act as it; a place's file names the project, or that it is a folder.
+    #[test]
+    fn who_delegated_is_said_per_interface_file() {
+        let base = DelegatedBy {
+            path: "interfaces/incoming/delegation-shop/delegation-shop/satz/interface.satz".into(),
+            interface: "delegation-shop".into(),
+            estate: "c0example".into(),
+            organizations: vec!["organizations/123456789012".into()],
+            customer_shortname: Some("acme".into()),
+            account: Some("svc-deploy-shop@acme-deploy-shop.iam.gserviceaccount.com".into()),
+            account_group: Some("gcp-shop-admins@example.com".into()),
+            deploy_project: Some("acme-deploy-shop".into()),
+            project: None,
+            folder: false,
+        };
+        let project = DelegatedBy {
+            interface: "shop-backend".into(),
+            account: None,
+            account_group: None,
+            deploy_project: None,
+            project: Some("acme-shop-backend-001".into()),
+            customer_shortname: None,
+            ..base.clone()
+        };
+        let folder = DelegatedBy {
+            interface: "shop".into(),
+            project: None,
+            folder: true,
+            organizations: Vec::new(),
+            ..project.clone()
+        };
+        assert_eq!(
+            delegated_by_lines(&[base, project, folder]),
+            [
+                "the estate c0example of acme: the account svc-deploy-shop@acme-deploy-shop.iam.gserviceaccount.com, which the members of gcp-shop-admins@example.com may act as; calls are billed to acme-deploy-shop",
+                "the estate c0example of organizations/123456789012: the project acme-shop-backend-001 (shop-backend)",
+                "the estate c0example: the folder shop",
+            ]
+        );
+        assert!(delegated_by_lines(&[]).is_empty());
     }
 }

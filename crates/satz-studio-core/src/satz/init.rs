@@ -54,6 +54,12 @@ pub struct InitOptions {
     pub defaults: Vec<String>,
     /// `--providers`: provider names to include beside the sets.
     pub providers: Vec<String>,
+    /// `--from`: the interface folders a central estate wrote for a delegation — its own,
+    /// `delegation-<name>`, and that of the place the estate works in. With any, satz
+    /// writes a TEAM's estate from them and the organisation's flags are not sent.
+    pub from: Vec<String>,
+    /// `--name`, with `--from`: the estate's name. Left empty it is the delegation's.
+    pub name: String,
 }
 
 impl InitOptions {
@@ -61,6 +67,16 @@ impl InitOptions {
     /// value. The order is fixed so the preview a form shows is the command that runs.
     pub fn argv(&self) -> Vec<String> {
         let mut argv = vec!["init".to_string()];
+        let from: Vec<&str> = self
+            .from
+            .iter()
+            .map(|f| f.trim())
+            .filter(|f| !f.is_empty())
+            .collect();
+        if !from.is_empty() {
+            argv.push("--from".to_string());
+            argv.extend(from.iter().map(|f| f.to_string()));
+        }
         let mut flag = |name: &str, value: &str| {
             let value = value.trim();
             if !value.is_empty() {
@@ -68,11 +84,15 @@ impl InitOptions {
                 argv.push(value.to_string());
             }
         };
-        flag("--customer-shortname", &self.customer_shortname);
-        flag("--customer-id", &self.customer_id);
-        flag("--billing-account-infra", &self.billing_account_infra);
-        flag("--default-region", &self.default_region);
-        flag("--workload-folder-name", &self.workload_folder_name);
+        if from.is_empty() {
+            flag("--customer-shortname", &self.customer_shortname);
+            flag("--customer-id", &self.customer_id);
+            flag("--billing-account-infra", &self.billing_account_infra);
+            flag("--default-region", &self.default_region);
+            flag("--workload-folder-name", &self.workload_folder_name);
+        } else {
+            flag("--name", &self.name);
+        }
         flag("--tf-tool", &self.tf_tool);
         for (name, list) in [
             ("--defaults", &self.defaults),
@@ -150,6 +170,8 @@ mod tests {
             tf_tool: "tofu".to_string(),
             defaults: vec!["google".to_string()],
             providers: vec!["google-beta".to_string(), "random".to_string()],
+            from: Vec::new(),
+            name: String::new(),
         };
         assert_eq!(
             options.argv(),
@@ -189,6 +211,8 @@ mod tests {
             tf_tool: String::new(),
             defaults: vec![String::new(), "  ".to_string()],
             providers: Vec::new(),
+            from: Vec::new(),
+            name: String::new(),
         };
         assert_eq!(options.argv(), ["init", "--customer-shortname", "acme"]);
     }
@@ -261,5 +285,44 @@ mod tests {
     fn created_over_a_directory_init_never_touched_is_no_config() {
         let tmp = tempfile::tempdir().unwrap();
         assert!(matches!(created(tmp.path()), Err(EstateError::NoConfig(_))));
+    }
+    /// A team's estate: the interface folders after `--from`, the name, and none of the
+    /// organisation's flags — whatever the form still holds of them.
+    #[test]
+    fn a_teams_estate_is_written_from_its_interface_folders() {
+        let options = InitOptions {
+            customer_shortname: "acme".to_string(),
+            tf_tool: "tofu".to_string(),
+            from: vec![
+                "/org/interfaces/outgoing/delegation-shop".to_string(),
+                " /org/interfaces/outgoing/shop ".to_string(),
+                String::new(),
+            ],
+            name: "shop-dev".to_string(),
+            ..Default::default()
+        };
+        assert_eq!(
+            options.argv(),
+            [
+                "init",
+                "--from",
+                "/org/interfaces/outgoing/delegation-shop",
+                "/org/interfaces/outgoing/shop",
+                "--name",
+                "shop-dev",
+                "--tf-tool",
+                "tofu"
+            ]
+        );
+        // without folders the name is not sent: it belongs to `--from`
+        let organisation = InitOptions {
+            customer_shortname: "acme".to_string(),
+            name: "x".to_string(),
+            ..Default::default()
+        };
+        assert_eq!(
+            organisation.argv(),
+            ["init", "--customer-shortname", "acme"]
+        );
     }
 }

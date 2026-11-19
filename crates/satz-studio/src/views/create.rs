@@ -23,6 +23,26 @@ use crate::state::{AppAction, AppStore, AppStoreStoreExt, CreateStoreStoreExt, r
 /// `google-beta` and fetches the schema of each with the tf tool.
 const GOOGLE_SET: &str = "google";
 
+/// The OS dialog for the interface folders a team's estate is written from: one or more
+/// folders, added to the ones already chosen.
+fn pick_interface_folders(mut options: Signal<InitOptions>) {
+    spawn(async move {
+        let picked = rfd::AsyncFileDialog::new()
+            .set_title("Choose the interface folders")
+            .pick_folders()
+            .await;
+        if let Some(folders) = picked {
+            let mut o = options.write();
+            for f in folders {
+                let path = f.path().display().to_string();
+                if !o.from.contains(&path) {
+                    o.from.push(path);
+                }
+            }
+        }
+    });
+}
+
 /// Open the OS folder picker for the directory the new estate is created in.
 fn pick_target(mut target: Signal<String>) {
     spawn(async move {
@@ -48,6 +68,8 @@ pub fn CreateEstate() -> Element {
         ..Default::default()
     });
 
+    // an organisation's estate, or a team's from the interface folders it was given
+    let mut team = use_signal(|| false);
     let running = app.create().running().cloned();
     let log = app.create().log().cloned();
     let last = app.create().command().cloned();
@@ -60,7 +82,8 @@ pub fn CreateEstate() -> Element {
     } else {
         check_target(Path::new(&dir)).err().map(|e| e.to_string())
     };
-    let ready = !dir.is_empty() && problem.is_none() && !running;
+    let ready =
+        !dir.is_empty() && problem.is_none() && !running && (!team() || !options().from.is_empty());
     let preview = run_line(Path::new(&dir), &options().argv());
     let google = options().defaults.iter().any(|d| d == GOOGLE_SET);
 
@@ -92,6 +115,49 @@ pub fn CreateEstate() -> Element {
                     }
                 }
 
+                p { class: "create__label", "What the estate is for" }
+                SegmentedButton {
+                    options: vec![Segment::new("organisation", "An organisation"), Segment::new("team", "A team, from interface folders")],
+                    selected: if team() { "team".to_string() } else { "organisation".to_string() },
+                    onselect: move |v: String| {
+                        team.set(v == "team");
+                        if v != "team" {
+                            let mut o = options.write();
+                            o.from.clear();
+                            o.name.clear();
+                        }
+                    },
+                }
+                if team() {
+                    p { class: "create__note",
+                        "A team's estate is written from the folders an organisation's estate wrote for a delegation, under its interfaces/outgoing/: the delegation's own, delegation-<name>, and that of the folder or project this estate works in. satz copies them into interfaces/incoming/ here and writes an estate that runs as the delegation's account."
+                    }
+                    ChipList {
+                        label: "Interface folders",
+                        items: options().from,
+                        disabled: running,
+                        supporting: "--from: the delegation's folder and one place",
+                        onchange: move |v: Vec<String>| options.write().from = v,
+                    }
+                    div { class: "create__actions",
+                        Button {
+                            icon: "folder_open",
+                            variant: ButtonVariant::Tonal,
+                            disabled: running,
+                            onclick: move |_| pick_interface_folders(options),
+                            "Add folders…"
+                        }
+                    }
+                    TextField {
+                        label: "Name",
+                        value: options().name,
+                        monospace: true,
+                        disabled: running,
+                        supporting: "--name: the estate's name. Left blank, the delegation's.",
+                        oninput: move |v: String| options.write().name = v,
+                    }
+                }
+                if !team() {
                 h3 { class: "create__subheading", "What satz cannot derive" }
                 TextField {
                     label: "Customer shortname",
@@ -119,6 +185,7 @@ pub fn CreateEstate() -> Element {
                     supporting: "The folder directly under the organisation that holds the customer's and the teams' folders. Left blank, they live at the organisation and no folder is created.",
                     oninput: move |v: String| options.write().workload_folder_name = v,
                 }
+                }
                 p { class: "create__label", "Terraform tool" }
                 SegmentedButton {
                     options: vec![Segment::new("tofu", "tofu"), Segment::new("terraform", "terraform")],
@@ -145,6 +212,7 @@ pub fn CreateEstate() -> Element {
                     onchange: move |v: Vec<String>| options.write().providers = v,
                 }
 
+                if !team() {
                 h3 { class: "create__subheading", "From your credentials, unless you state them" }
                 p { class: "create__note",
                     "Left blank, each of these is read from the credentials you are signed in with. State one to override what the platform answers."
@@ -164,6 +232,7 @@ pub fn CreateEstate() -> Element {
                     disabled: running,
                     supporting: "From billingAccounts.list, when exactly one account is open to you.",
                     oninput: move |v: String| options.write().billing_account_infra = v,
+                }
                 }
 
                 code { class: "create__preview", "{preview}" }

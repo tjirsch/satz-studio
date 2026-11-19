@@ -97,7 +97,7 @@ pub fn destination(d: &Diagnostic, main: Option<&Path>, reviewed: Option<&Path>)
     if Some(file) == main && d.line.is_some() {
         Some(View::Estate)
     } else if Some(file) == reviewed {
-        Some(View::Components)
+        Some(View::Presets)
     } else {
         None
     }
@@ -158,7 +158,7 @@ mod tests {
                 Some(main),
                 Some(pack)
             ),
-            Some(View::Components)
+            Some(View::Presets)
         );
         // a finding about the whole pack still stands in the review
         assert_eq!(
@@ -167,7 +167,7 @@ mod tests {
                 Some(main),
                 Some(pack)
             ),
-            Some(View::Components)
+            Some(View::Presets)
         );
         assert_eq!(
             destination(&at("/e/yaml/C0example.satz", None), Some(main), Some(pack)),

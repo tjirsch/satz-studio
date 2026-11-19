@@ -188,6 +188,7 @@ fn a_reference_takes_the_shape_of_what_it_resolves_to() {
         packs: Vec::new(),
         unmanaged: Vec::new(),
         interfaces: Vec::new(),
+        delegated_by: Vec::new(),
         works_in: satz_studio_core::satz::reports::EstateMode::Organisation,
         findings: Vec::new(),
     };

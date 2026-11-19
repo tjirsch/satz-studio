@@ -5,7 +5,6 @@
 pub mod agent;
 pub mod apply;
 pub mod commands;
-pub mod components;
 pub mod create;
 pub mod documents;
 pub mod estate;
@@ -17,6 +16,7 @@ pub mod interfaces;
 pub mod interview;
 pub mod map;
 pub mod overview;
+pub mod packs;
 pub mod params;
 pub mod path;
 pub mod resources;

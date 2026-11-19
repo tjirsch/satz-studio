@@ -2116,6 +2116,22 @@
   font-family: var(--md-ref-typeface-mono);
 }
 
+/* the entries a declared list holds, as chips, and the dialog that adds one */
+.interfaces__entries {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.interfaces__add {
+  min-width: min(560px, 92vw);
+}
+
+.overview__delegated p {
+  margin: 0;
+  user-select: text;
+}
+
 .interfaces__supporting {
   font: var(--md-sys-typescale-body-small);
   color: var(--md-sys-color-on-surface-variant);

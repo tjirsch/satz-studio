@@ -525,8 +525,61 @@ pub struct PacksReport {
     /// the `use` lines of generated interface files (`interface "<name>"` as their
     /// header) — central estates' interfaces a project estate reads, no pack
     pub interfaces: Vec<Unmanaged>,
+    /// per used interface file, who delegated and what it carries
+    pub delegated_by: Vec<DelegatedBy>,
     /// the compile's pack findings, each with its pack as `subject`
     pub findings: Vec<Finding>,
+}
+
+/// One interface file the estate uses, as satz's presets report reads it: the central
+/// estate that wrote it, and the identity and place it carries. A value the file does not
+/// carry is absent.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct DelegatedBy {
+    pub path: String,
+    /// the interface's name
+    pub interface: String,
+    /// the name of the central estate that wrote the file
+    pub estate: String,
+    /// the organisations that estate manages, `organizations/<id>`
+    pub organizations: Vec<String>,
+    #[serde(default)]
+    pub customer_shortname: Option<String>,
+    /// the account the team's estates run as
+    #[serde(default)]
+    pub account: Option<String>,
+    /// the group whose members may act as that account
+    #[serde(default)]
+    pub account_group: Option<String>,
+    /// the project the team's calls are billed to
+    #[serde(default)]
+    pub deploy_project: Option<String>,
+    /// the delegated project, when the file is one's
+    #[serde(default)]
+    pub project: Option<String>,
+    /// the file is a delegated folder's
+    pub folder: bool,
+}
+
+/// The arguments of `satz_add_entry`, as the app sends them: the list, and the entry's
+/// fields each as text.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct AddEntryArgs {
+    pub list: String,
+    pub fields: BTreeMap<String, String>,
+}
+
+/// What `satz_add_entry` returns.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct EntryAdded {
+    pub estate: String,
+    pub list: String,
+    /// the value of the entry's key field
+    pub key: String,
+    /// the entry as it stands in the file
+    pub entry: String,
+    /// how many entries the list holds now
+    pub entries: usize,
 }
 
 impl PacksReport {
@@ -927,11 +980,63 @@ pub struct RequestRow {
     pub description: Option<String>,
     /// the entries the list holds now
     pub entries: usize,
+    /// those entries, each with its fields — the defaults filled in, contributions
+    /// included
+    pub rows: Vec<serde_json::Value>,
+    /// per field, the value an entry without it takes; satz leaves the key out when the
+    /// request point sets none
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub defaults: BTreeMap<String, serde_json::Value>,
     pub file: String,
     pub line: usize,
 }
 
+/// How a field of an entry is typed in a form, as its default says: a yes or no, a list,
+/// or a text.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EntryField {
+    Bool,
+    List,
+    Text,
+}
+
 impl RequestRow {
+    /// The kind of a field, from the value satz says an entry without it takes.
+    pub fn field_kind(&self, field: &str) -> EntryField {
+        match self.defaults.get(field) {
+            Some(serde_json::Value::Bool(_)) => EntryField::Bool,
+            Some(serde_json::Value::Array(_)) => EntryField::List,
+            _ => EntryField::Text,
+        }
+    }
+
+    /// A field's default as satz's `add-entry` takes a value: a list joined by commas.
+    pub fn default_text(&self, field: &str) -> Option<String> {
+        match self.defaults.get(field)? {
+            serde_json::Value::Array(items) => Some(
+                items
+                    .iter()
+                    .filter_map(|v| v.as_str())
+                    .collect::<Vec<_>>()
+                    .join(","),
+            ),
+            serde_json::Value::String(s) => Some(s.clone()),
+            other => Some(other.to_string()),
+        }
+    }
+
+    /// The key of every entry the list holds, in satz's order.
+    pub fn keys(&self) -> Vec<String> {
+        self.rows
+            .iter()
+            .filter_map(|r| {
+                r.get(&self.key)
+                    .and_then(|v| v.as_str())
+                    .map(str::to_string)
+            })
+            .collect()
+    }
+
     /// The fields in satz's order, each with the pattern its value matches as satz's
     /// text report writes it, `<field> ~ <regex>`, joined by `, `.
     pub fn fields_shown(&self) -> String {

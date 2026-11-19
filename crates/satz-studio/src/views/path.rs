@@ -8,27 +8,32 @@
 use dioxus::prelude::*;
 
 use crate::components::{Button, ButtonVariant, Card, CardVariant, Icon};
-use crate::state::{AppStore, AppStoreStoreExt, View};
+use crate::state::{AppStore, AppStoreStoreExt, EstateStoreStoreExt, View};
 
-/// The steps, in order, for every estate.
-const STEPS: [View; 5] = [
+/// The steps, in order. An estate without a Presets destination skips that one.
+const STEPS: [View; 6] = [
     View::Overview,
-    View::Components,
+    View::Presets,
+    View::Packs,
     View::Decisions,
     View::Apply,
     View::Documents,
 ];
 
 /// The step after `from`, or `None` for the last step and for a view that is not one.
-pub fn next_after(from: View) -> Option<View> {
+pub fn next_after(from: View, presets: bool) -> Option<View> {
     let at = STEPS.iter().position(|v| *v == from)?;
-    STEPS.get(at + 1).copied()
+    STEPS[at + 1..]
+        .iter()
+        .copied()
+        .find(|v| presets || *v != View::Presets)
 }
 
 /// What the next step is for, in one sentence.
 pub fn purpose(step: View) -> &'static str {
     match step {
-        View::Components => "Choose the components this estate is built from.",
+        View::Presets => "Choose the presets this organisation is built from.",
+        View::Packs => "Take the packs this estate is built from.",
         View::Decisions => "Answer what the estate and its components ask.",
         View::Apply => "Check who is signed in, then check, plan and apply.",
         View::Documents => "Make the documents that are handed over.",
@@ -41,7 +46,13 @@ pub fn purpose(step: View) -> &'static str {
 #[component]
 pub fn NextStep(from: View) -> Element {
     let app = use_context::<Store<AppStore>>();
-    let Some(next) = next_after(from) else {
+    let presets = app
+        .estate()
+        .model()
+        .read()
+        .as_deref()
+        .is_none_or(|m| m.packs.has_presets());
+    let Some(next) = next_after(from, presets) else {
         return rsx! {};
     };
     rsx! {
@@ -63,19 +74,33 @@ pub fn NextStep(from: View) -> Element {
 mod tests {
     use super::*;
 
-    /// The walk is the rail's order without Estate, the same for every estate.
+    /// The walk is the rail's order without Estate; an estate without presets goes from
+    /// the Overview to its packs.
     #[test]
-    fn the_steps_follow_each_other() {
-        let mut at = View::Overview;
-        let mut walk = vec![at];
-        while let Some(next) = next_after(at) {
-            walk.push(next);
-            at = next;
-        }
-        assert_eq!(walk, STEPS);
+    fn the_steps_follow_each_other_and_an_estate_without_presets_skips_them() {
+        let walk = |presets: bool| {
+            let mut at = View::Overview;
+            let mut out = vec![at];
+            while let Some(next) = next_after(at, presets) {
+                out.push(next);
+                at = next;
+            }
+            out
+        };
+        assert_eq!(walk(true), STEPS);
+        assert_eq!(
+            walk(false),
+            [
+                View::Overview,
+                View::Packs,
+                View::Decisions,
+                View::Apply,
+                View::Documents
+            ]
+        );
         // not a step, and the last step
-        assert_eq!(next_after(View::Estate), None);
-        assert_eq!(next_after(View::Documents), None);
+        assert_eq!(next_after(View::Estate, true), None);
+        assert_eq!(next_after(View::Documents, true), None);
     }
 
     /// Every step that can be gone to says what it is for, and is a primary destination.

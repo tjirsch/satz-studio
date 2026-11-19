@@ -24,8 +24,9 @@
         "presets/billing-account-permissions.satz",
         "presets/organization-budget.satz",
         "presets/billing-export.satz",
-        "presets/project-workload.satz",
-        "presets/folder-workload.satz",
+        "presets/delegation.satz",
+        "presets/delegated-folders.satz",
+        "presets/delegated-projects.satz",
         "presets/delegated-budget-role.satz",
         "presets/shared-network.satz",
         "presets/security-audit/sa-security-audit.satz",
@@ -216,9 +217,9 @@
       "findings": []
     },
     {
-      "path": "presets/project-workload.satz",
+      "path": "presets/delegation.satz",
       "role": "pack",
-      "gate": "use_project_workload",
+      "gate": "use_delegation",
       "gate_declared_in": "presets/estate-map.satz",
       "default": "false",
       "line": "absent",
@@ -230,7 +231,41 @@
             "presets/estate-map.satz"
           ],
           "params": [
-            "use_project_workload"
+            "use_delegation"
+          ],
+          "met": false
+        }
+      ],
+      "required_by": [
+        "presets/delegated-folders.satz",
+        "presets/delegated-projects.satz"
+      ],
+      "excludes": [],
+      "findings": []
+    },
+    {
+      "path": "presets/delegated-folders.satz",
+      "role": "pack",
+      "gate": "use_delegated_folders",
+      "gate_declared_in": "presets/estate-map.satz",
+      "default": "false",
+      "line": "absent",
+      "deploys": false,
+      "requires": [
+        {
+          "kind": "requires",
+          "any_of": [
+            "presets/delegation.satz"
+          ],
+          "met": false
+        },
+        {
+          "kind": "gate",
+          "any_of": [
+            "presets/estate-map.satz"
+          ],
+          "params": [
+            "use_delegated_folders"
           ],
           "met": false
         }
@@ -240,21 +275,28 @@
       "findings": []
     },
     {
-      "path": "presets/folder-workload.satz",
+      "path": "presets/delegated-projects.satz",
       "role": "pack",
-      "gate": "use_folder_workload",
+      "gate": "use_delegated_projects",
       "gate_declared_in": "presets/estate-map.satz",
       "default": "false",
       "line": "absent",
       "deploys": false,
       "requires": [
         {
+          "kind": "requires",
+          "any_of": [
+            "presets/delegation.satz"
+          ],
+          "met": false
+        },
+        {
           "kind": "gate",
           "any_of": [
             "presets/estate-map.satz"
           ],
           "params": [
-            "use_folder_workload"
+            "use_delegated_projects"
           ],
           "met": false
         }
@@ -1597,6 +1639,7 @@
   ],
   "unmanaged": [],
   "interfaces": [],
+  "delegated_by": [],
   "findings": [
     {
       "severity": "warning",

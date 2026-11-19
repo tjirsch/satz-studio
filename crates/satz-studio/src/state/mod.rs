@@ -105,9 +105,12 @@ pub enum View {
     Overview,
     /// the questions its packs declare and it has not answered
     Decisions,
-    /// what the estate is built from: the preset library's pack lines for an
-    /// organisation's estate, the workload packs for one in a delegated folder or project
-    Components,
+    /// the preset library's pack lines: which are in, which are off, which the file has
+    /// no line for. The destination of an estate that holds the library — an
+    /// organisation's; an estate in a delegated place has none
+    Presets,
+    /// the estate's workload packs: templates taken from a source and adapted here
+    Packs,
     /// the estate file itself: its params and its resource tree
     Estate,
     /// the estate's way to the organisation: who is signed in, what state it is in, and
@@ -132,14 +135,26 @@ impl View {
     /// bar that leads to the next (`views/path.rs`); Estate stands after them, because
     /// the estate file itself is not a step of the walk. Six; Material 3 puts up to seven
     /// in a navigation rail (ADR 0027, ADR 0028).
-    pub const PRIMARY: [View; 6] = [
+    pub const PRIMARY: [View; 7] = [
         View::Overview,
-        View::Components,
+        View::Presets,
+        View::Packs,
         View::Decisions,
         View::Apply,
         View::Documents,
         View::Estate,
     ];
+
+    /// The primary destinations of the open estate. An estate that holds no preset
+    /// library, as satz's presets report says ([`PacksReport::has_presets`]) — one in a
+    /// delegated folder or project — has no Presets destination: the library is the
+    /// organisation's estate's.
+    pub fn primary(presets: bool) -> Vec<View> {
+        View::PRIMARY
+            .into_iter()
+            .filter(|v| presets || *v != View::Presets)
+            .collect()
+    }
 
     /// The secondary group, bottom-aligned in the rail. Agent needs an estate — it
     /// configures an agent for the one that is open; Settings is the one destination
@@ -151,7 +166,8 @@ impl View {
             View::Start => "Estates",
             View::Overview => "Overview",
             View::Decisions => "Decisions",
-            View::Components => "Components",
+            View::Presets => "Presets",
+            View::Packs => "Packs",
             View::Estate => "Estate",
             View::Apply => "Apply",
             View::Documents => "Documents",
@@ -167,7 +183,8 @@ impl View {
             View::Start => "home_storage",
             View::Overview => "dashboard",
             View::Decisions => "quiz",
-            View::Components => "inventory_2",
+            View::Presets => "inventory_2",
+            View::Packs => "package_2",
             View::Estate => "description",
             View::Apply => "rocket_launch",
             View::Documents => "article",
@@ -183,7 +200,8 @@ impl View {
             self,
             View::Overview
                 | View::Decisions
-                | View::Components
+                | View::Presets
+                | View::Packs
                 | View::Estate
                 | View::Apply
                 | View::Documents
@@ -629,7 +647,8 @@ mod tests {
             View::Start,
             View::Overview,
             View::Decisions,
-            View::Components,
+            View::Presets,
+            View::Packs,
             View::Estate,
             View::Apply,
             View::Documents,
@@ -647,11 +666,17 @@ mod tests {
         assert_eq!(icons.len(), all.len());
     }
 
-    /// Every estate has the same rail: what Components shows follows what the estate
-    /// works in, the destination does not.
+    /// An organisation's estate has Presets and Packs; an estate without a preset library
+    /// has every other destination, Packs among them.
     #[test]
-    fn the_components_destination_is_every_estates() {
-        assert!(View::PRIMARY.contains(&View::Components));
-        assert_eq!(View::Components.label(), "Components");
+    fn an_estate_without_presets_has_every_primary_destination_but_presets() {
+        assert_eq!(View::primary(true), View::PRIMARY);
+        let delegated = View::primary(false);
+        assert!(!delegated.contains(&View::Presets) && delegated.contains(&View::Packs));
+        assert_eq!(delegated.len(), View::PRIMARY.len() - 1);
+        assert_eq!(
+            (View::Presets.label(), View::Packs.label()),
+            ("Presets", "Packs")
+        );
     }
 }

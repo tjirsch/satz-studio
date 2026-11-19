@@ -270,6 +270,10 @@ impl EstateDir {
     pub fn hcl_dir(&self) -> PathBuf {
         PathBuf::from(&self.runtime.hcl_dir)
     }
+    /// Where satz writes what the estate publishes: `<interfaces_dir>/outgoing`.
+    pub fn outgoing_dir(&self) -> PathBuf {
+        PathBuf::from(&self.runtime.interfaces_dir).join("outgoing")
+    }
     pub fn yaml_dir(&self) -> PathBuf {
         PathBuf::from(&self.runtime.yaml_dir)
     }

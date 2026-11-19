@@ -247,6 +247,20 @@
       },
       "description": "A Pub/Sub topic in the infrastructure project",
       "entries": 2,
+      "rows": [
+        {
+          "name": "orders",
+          "retention": "86400s",
+          "subscription": "orders-audit"
+        },
+        {
+          "name": "billing",
+          "retention": "604800s"
+        }
+      ],
+      "defaults": {
+        "retention": "604800s"
+      },
       "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
       "line": 241
     }

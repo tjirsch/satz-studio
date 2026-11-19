@@ -45,8 +45,16 @@ pub fn NavigationRail() -> Element {
     } else {
         0
     };
+    // an estate in a delegated folder or project holds no preset library and has no
+    // Presets destination; until the model is read the rail shows every destination
+    let presets = app
+        .estate()
+        .model()
+        .read()
+        .as_deref()
+        .is_none_or(|m| m.packs.has_presets());
     let primary: Vec<View> = if has_estate {
-        View::PRIMARY.to_vec()
+        View::primary(presets)
     } else {
         Vec::new()
     };

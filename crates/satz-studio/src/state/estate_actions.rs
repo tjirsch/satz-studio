@@ -27,9 +27,9 @@ use satz_studio_core::git::{self, WorkTree};
 use satz_studio_core::model::EstateModel;
 use satz_studio_core::satz::project;
 use satz_studio_core::satz::reports::{
-    AddPackArgs, FindingSeverity, InterviewArgs, InterviewReport, MergeReport, NoticeRow,
-    PackChange, PackReview, PacksReport, PrerequisitesResult, QuestionsReport, RemovePackArgs,
-    UpdateAction,
+    AddEntryArgs, AddPackArgs, EntryAdded, FindingSeverity, InterviewArgs, InterviewReport,
+    MergeReport, NoticeRow, PackChange, PackReview, PacksReport, PrerequisitesResult,
+    QuestionsReport, RemovePackArgs, UpdateAction,
 };
 use satz_studio_core::satz::review::{self, PlaceError, Placed};
 use satz_studio_core::satz::workload::{self, PackSource, Which};
@@ -38,6 +38,7 @@ use satz_studio_core::schema::{ResourceRegistry, SchemaError};
 use tokio_util::sync::CancellationToken;
 
 use super::SignIn;
+use super::View;
 use super::app_actions::close_estate;
 use super::{
     AppStore, AppStoreStoreExt, CommandOutcome, Door, EstateStore, EstateStoreStoreExt, Exported,
@@ -85,6 +86,9 @@ pub enum EstateAction {
     AddPack(AddPackArgs),
     /// `satz_remove_preset`: the pack's gate bound false, its line left as it is
     RemovePack(RemovePackArgs),
+    /// `satz_add_entry`: one entry added to a list a pack declares, by satz's own writer —
+    /// a delegation, a delegated folder or project, a subnet
+    AddEntry(AddEntryArgs),
     /// `satz_merge_presets`: the line for a pack the library gained
     MergePresets,
     /// `satz --config <dir> review-preset <pack> [--against <estate>]`: the pack judged
@@ -183,6 +187,7 @@ pub async fn estate_coroutine(
             EstateAction::RemovePack(args) => {
                 switch_pack(&session, app, "satz_remove_preset", &args).await
             }
+            EstateAction::AddEntry(args) => add_entry(&session, app, &args).await,
             EstateAction::MergePresets => {
                 {
                     let _lock = session.write_lock().await;
@@ -433,6 +438,33 @@ async fn switch_pack<A: serde::Serialize>(
             .map_err(|e| format!("{tool}: {e}"))?;
         queue_notices(app, &change.notices);
         Ok(switched(&change))
+    })
+    .await;
+    reload_with(session, app, carried).await;
+}
+
+/// One entry added to a list a pack declares, by satz's own writer: `satz_add_entry` on
+/// the real file, under the delegated-write discipline. satz checks the entry against the
+/// declaration, writes it into the params, compiles the estate and restores it when the
+/// compile refuses; an entry satz refuses wrote nothing and names why.
+async fn add_entry(session: &Arc<EstateSession>, app: Store<AppStore>, args: &AddEntryArgs) {
+    const TOOL: &str = "satz_add_entry";
+    let Some(args) = serde_json::to_value(args)
+        .ok()
+        .and_then(|v| v.as_object().cloned())
+    else {
+        toast(
+            app,
+            ToastKind::Error,
+            format!("{TOOL}: the arguments did not serialise to an object"),
+        );
+        return;
+    };
+    let carried = delegated_write(session, app, TOOL, args, |outcome| {
+        let added = outcome
+            .typed::<EntryAdded>(TOOL)
+            .map_err(|e| format!("{TOOL}: {e}"))?;
+        Ok(format!("{} added to {}", added.key, added.list))
     })
     .await;
     reload_with(session, app, carried).await;
@@ -1549,6 +1581,11 @@ async fn reload_with(session: &Arc<EstateSession>, app: Store<AppStore>, carried
         Some(Ok((model, cst))) => {
             built_ok = true;
             diagnostics = model.diagnostics.clone();
+            // an estate without presets has no Presets destination: a window standing
+            // there when the estate turns out to be one goes to the Overview
+            if !model.packs.has_presets() && app.nav().cloned() == View::Presets {
+                app.nav().set(View::Overview);
+            }
             estate.model().set(Some(Arc::new(model)));
             estate.cst().set(Some(Arc::new(cst)));
         }

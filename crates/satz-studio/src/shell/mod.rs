@@ -26,13 +26,14 @@ use crate::state::{AppStore, AppStoreStoreExt, EstateAction, OpenEstate, View, e
 use crate::views::agent::AgentView;
 use crate::views::apply::ApplyView;
 use crate::views::commands::CommandPalette;
-use crate::views::components::ComponentsView;
 use crate::views::documents::DocumentsView;
 use crate::views::estate::EstateView;
 use crate::views::estates::EstatesView;
 use crate::views::gallery::GalleryView;
 use crate::views::interview::DecisionsView;
+use crate::views::map::PresetsView;
 use crate::views::overview::OverviewView;
+use crate::views::packs::PacksView;
 use crate::views::settings::SettingsView;
 
 #[component]
@@ -100,7 +101,8 @@ fn Content() -> Element {
         View::Start => rsx! { EstatesView {} },
         View::Overview => rsx! { OverviewView {} },
         View::Decisions => rsx! { DecisionsView {} },
-        View::Components => rsx! { ComponentsView {} },
+        View::Presets => rsx! { PresetsView {} },
+        View::Packs => rsx! { PacksView {} },
         View::Estate => rsx! { EstateView {} },
         View::Apply => rsx! { ApplyView {} },
         View::Documents => rsx! { DocumentsView {} },

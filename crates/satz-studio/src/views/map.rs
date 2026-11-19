@@ -291,7 +291,7 @@ pub fn PresetsView() -> Element {
     let Some(model) = model else {
         return rsx! {
             div { class: "view packs",
-                h1 { class: "view__title", "Components" }
+                h1 { class: "view__title", "Presets" }
                 Card { variant: CardVariant::Filled, class: "map__empty",
                     Icon { name: "map", size: 48, class: "placeholder__icon" }
                     p { "The estate model is not available — the drawer says why." }
@@ -308,7 +308,7 @@ pub fn PresetsView() -> Element {
 
     rsx! {
         div { class: "view packs",
-            h1 { class: "view__title", "Components" }
+            h1 { class: "view__title", "Presets" }
             if let Some(note) = &report.note {
                 Card { variant: CardVariant::Filled, class: "map__map-card",
                     Icon { name: "map", size: 32, class: "placeholder__icon" }
@@ -397,7 +397,7 @@ pub fn PresetsView() -> Element {
                     }
                 }
             }
-            NextStep { from: View::Components }
+            NextStep { from: View::Presets }
         }
     }
 }
@@ -781,6 +781,7 @@ mod tests {
             packs,
             unmanaged: Vec::new(),
             interfaces: Vec::new(),
+            delegated_by: Vec::new(),
             works_in: satz_studio_core::satz::reports::EstateMode::Organisation,
             findings: Vec::new(),
         }
