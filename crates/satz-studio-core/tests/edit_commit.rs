@@ -42,7 +42,7 @@ async fn a_no_op_edit_commits_with_the_same_hash_through_both_checkers() {
     }
     assert!(
         !summaries[0].addresses.is_empty(),
-        "the summary lists what the estate emits"
+        "the summary lists the addresses the estate writes"
     );
     assert_eq!(
         summaries[0].addresses, summaries[1].addresses,

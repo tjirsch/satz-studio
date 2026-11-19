@@ -7,8 +7,8 @@
 //! shape are shown: offering `--wrap-all` beside a state file, or `--on-collision`
 //! beside a Terraform directory, would be offering satz something it does not take.
 //!
-//! The live shape reads a Google organisation with the Application Default Credentials
-//! and prints what it derived — an organisation id, a directory id, a billing account,
+//! The live shape reads a Google organization as the signed-in identity
+//! and prints what it derived — an organization id, a directory id, a billing account,
 //! an administrator's address. Those lines are shown while the window holds them and are
 //! written into the estate satz created, nowhere else.
 
@@ -49,7 +49,7 @@ fn source_supporting(shape: ImportShape) -> &'static str {
             "The JSON `tofu show -json` writes — not a raw .tfstate, whatever it is named. Run `tofu show -json > state.json` first; satz tells the two apart by `values.root_module` and refuses the raw form."
         }
         ImportShape::Live => {
-            "organizations/<number>, folders/<number> or projects/<id>. Left blank, satz takes the `root` of its import config. This reads Google with your Application Default Credentials."
+            "organizations/<number>, folders/<number> or projects/<id>. Left blank, satz takes the `root` of its import config. This reads Google as the identity you are signed in as."
         }
         ImportShape::Hcl => {
             "A .tf file, or the directory holding them. What satz cannot express as Satz it carries verbatim inside `hcl trust` and says why, per block."
@@ -191,7 +191,7 @@ pub fn ImportEstate() -> Element {
                     Some(Ok(ImportPlan::InitThenImport)) => rsx! {
                         p { class: "import__plan",
                             Icon { name: "info", size: 18 }
-                            "This folder holds no config.toml, so satz import would refuse it. satz init runs first and writes config.toml, satz/, hcl/, schemas/ and .gitignore; the import then fills them. With credentials that name an organisation, init also writes an estate file of its own — the one the import writes is the one that opens."
+                            "This folder holds no config.toml, so satz import would refuse it. satz init runs first and writes config.toml, satz/, hcl/, schemas/ and .gitignore; the import then fills them. With a sign-in that names an organization, init also writes an estate file of its own — the one the import writes is the one that opens."
                         }
                     },
                     _ => rsx! {},
@@ -238,7 +238,7 @@ pub fn ImportEstate() -> Element {
                 if two_step {
                     h3 { class: "import__subheading", "The folder is not an estate yet" }
                     p { class: "import__note",
-                        "These two belong to the satz init that runs first. Everything else about that estate — the customer, the billing account, the region — satz derives from your credentials or the Create door asks for."
+                        "These two belong to the satz init that runs first. Everything else about that estate — the customer, the billing account, the region — satz derives from your sign-in or the Create door asks for."
                     }
                     p { class: "import__label", "Terraform tool" }
                     SegmentedButton {
@@ -309,7 +309,7 @@ pub fn ImportEstate() -> Element {
                     }
                     p { class: "import__privacy",
                         Icon { name: "lock", size: 18 }
-                        "A live import prints what it read from your credentials — an organisation id, a billing account, an administrator's address. It is written into the estate satz created; this app keeps none of it, not in its settings and not in a file of its own."
+                        "A live import prints what it read through your sign-in — an organization id, a billing account, an administrator's address. It is written into the estate satz created; this app keeps none of it, not in its settings and not in a file of its own."
                     }
                     pre { class: "log",
                         for (i, line) in log.iter().enumerate() {
@@ -372,7 +372,7 @@ fn ShapeOptions(options: Signal<ImportOptions>, running: bool) -> Element {
                 },
             }
             p { class: "import__note",
-                "--on-collision. The map form emits one address per member and role, so a grant one principal holds on two folders or two projects collides; counter writes the second and later as labelled resources with a running number, and says which."
+                "--on-collision. The map form writes one address per member and role, so a grant one principal holds on two folders or two projects collides; counter writes the second and later as labelled resources with a running number, and says which."
             }
             TextField {
                 label: "Customer shortname",
@@ -390,7 +390,7 @@ fn ShapeOptions(options: Signal<ImportOptions>, running: bool) -> Element {
                     placeholder: "123456789012",
                     monospace: true,
                     disabled: running,
-                    supporting: "--organization, the organisation this state belongs to. satz writes no estate from a state that names no organisation unless it is given here; a state that names one is held to it.",
+                    supporting: "--organization, the organization this state belongs to. satz writes no estate from a state that names no organization unless it is given here; a state that names one is held to it.",
                     oninput: move |v: String| options.write().organization = v,
                 }
             }
@@ -420,7 +420,7 @@ fn ShapeOptions(options: Signal<ImportOptions>, running: bool) -> Element {
                 placeholder: "123456789012",
                 monospace: true,
                 disabled: running,
-                supporting: "--organization, the organisation this configuration belongs to. satz writes no estate from a configuration that names no organisation, nor from any --wrap-all import, unless it is given here; a configuration that names one is held to it.",
+                supporting: "--organization, the organization this configuration belongs to. satz writes no estate from a configuration that names no organization, nor from any --wrap-all import, unless it is given here; a configuration that names one is held to it.",
                 oninput: move |v: String| options.write().organization = v,
             }
             h3 { class: "import__subheading", "How much to translate" }
@@ -431,7 +431,7 @@ fn ShapeOptions(options: Signal<ImportOptions>, running: bool) -> Element {
                 onchange: move |on: bool| options.write().wrap_all = on,
             }
             p { class: "import__note",
-                "--wrap-all is the zero-risk form: every block goes inside `hcl trust` and the estate deploys exactly as the source did. Nothing is translated, so the compliance plane cannot see into any of it. Without it satz translates what it can and wraps the rest, saying why per block."
+                "--wrap-all is the zero-risk form: every block goes inside `hcl trust` and the estate applies exactly as the source did. Nothing is translated, so the compliance plane cannot see into any of it. Without it satz translates what it can and wraps the rest, saying why per block."
             }
         },
     }
@@ -486,7 +486,7 @@ fn ImportReportCard(report: ImportReport, outcome: Option<CommandOutcome>) -> El
             if let (true, Some(handle)) = (ok, estate) {
                 div { class: "import__next",
                     p { class: "import__note",
-                        "satz says it itself: review the file, then transpile and plan. The check is one click and its output is in Checks, where the compile and the catalogs live; the plan is in Deploy."
+                        "satz says it itself: review the file, then transpile and plan. The check is one click and its output is in Checks, where the transpile and the catalogs live; the plan is in Apply."
                     }
                     Button {
                         variant: ButtonVariant::Filled,

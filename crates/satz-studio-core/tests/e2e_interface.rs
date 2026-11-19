@@ -1,4 +1,4 @@
-//! The interfaces of an organisation's estate and a workload estate that reads one, over satz's own
+//! The interfaces of an organization's estate and a workload estate that reads one, over satz's own
 //! smoke files. `satz transpile` of the showcase writes `interfaces/outgoing/` beside `hcl/`: every
 //! file satz generates there is a tree that is the file, with the `interface "<name>"`
 //! header and nothing satz refuses, and discovery walks past the folder as it walks past
@@ -71,9 +71,9 @@ async fn transpile(session: &EstateSession) {
     assert!(status.success(), "satz transpile failed: {lines:?}");
 }
 
-/// The smoke project beside `central`: `satz/archive.satz` from the pinned submodule, a
+/// The smoke workload estate that reads `central`: `satz/archive.satz` from the pinned submodule, a
 /// `config.toml` naming the schema and the presets of `vendor/satz` by absolute path, and
-/// `interfaces/outgoing/archive/` of the organisation's estate copied whole to `interfaces/incoming/archive/`.
+/// `interfaces/outgoing/archive/` of the organization's estate copied whole to `interfaces/incoming/archive/`.
 fn project_beside(central: &Path) -> (tempfile::TempDir, PathBuf) {
     let dir = support::scratch();
     let root = dir.path().canonicalize().unwrap();
@@ -124,7 +124,7 @@ fn work_attr(outline: &[ResourceNode], key: &str) -> String {
 
 #[tokio::test]
 async fn the_generated_interfaces_parse_and_a_project_reads_one() {
-    // the organisation's estate: the showcase, transpiled where the test may write
+    // the organization's estate: the showcase, transpiled where the test may write
     let central = support::copy_smoke();
     let session = central.open("showcase.satz").await;
     transpile(&session).await;

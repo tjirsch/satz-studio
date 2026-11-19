@@ -300,7 +300,7 @@ impl Carried {
 /// changed the file. A call that did not land is satz's own sentence, followed by what
 /// became of the file when satz had changed it, in a toast and in the drawer. `landed`
 /// reads the outcome of a call that landed and says what the toast says — `Err` for an
-/// outcome the app could not type, which is a toast in the error colour over a write that
+/// outcome the app could not type, which is a toast in the error color over a write that
 /// is already on disk.
 async fn delegated_write<F>(
     session: &Arc<EstateSession>,
@@ -386,7 +386,7 @@ async fn interview(session: &Arc<EstateSession>, app: Store<AppStore>, args: Int
         toast(
             app,
             ToastKind::Error,
-            "satz_interview: the arguments did not serialise to an object",
+            "satz_interview: the arguments did not serialize to an object",
         );
         return;
     };
@@ -411,8 +411,8 @@ async fn interview(session: &Arc<EstateSession>, app: Store<AppStore>, args: Int
 
 /// One pack switched on or off by satz's own pack logic: `satz_add_preset` or
 /// `satz_remove_preset` on the real file, under the delegated-write discipline. satz binds
-/// the gate, writes or uncomments the line, compiles the estate and restores it when the
-/// compile refuses; a switch satz refuses — a pack it needs is off, a pack that needs it
+/// the gate, writes or uncomments the line, transpiles the estate and restores it when the
+/// transpile refuses; a switch satz refuses — a pack it needs is off, a pack that needs it
 /// is on, a line not gated on its gate — wrote nothing and names why. A switch that
 /// turns a pack on can open its notices, which the window raises as an answer's do.
 async fn switch_pack<A: serde::Serialize>(
@@ -428,7 +428,7 @@ async fn switch_pack<A: serde::Serialize>(
         toast(
             app,
             ToastKind::Error,
-            format!("{tool}: the arguments did not serialise to an object"),
+            format!("{tool}: the arguments did not serialize to an object"),
         );
         return;
     };
@@ -445,8 +445,8 @@ async fn switch_pack<A: serde::Serialize>(
 
 /// One entry added to a list a pack declares, by satz's own writer: `satz_add_entry` on
 /// the real file, under the delegated-write discipline. satz checks the entry against the
-/// declaration, writes it into the params, compiles the estate and restores it when the
-/// compile refuses; an entry satz refuses wrote nothing and names why.
+/// declaration, writes it into the params, transpiles the estate and restores it when the
+/// transpile refuses; an entry satz refuses wrote nothing and names why.
 async fn add_entry(session: &Arc<EstateSession>, app: Store<AppStore>, args: &AddEntryArgs) {
     const TOOL: &str = "satz_add_entry";
     let Some(args) = serde_json::to_value(args)
@@ -456,7 +456,7 @@ async fn add_entry(session: &Arc<EstateSession>, app: Store<AppStore>, args: &Ad
         toast(
             app,
             ToastKind::Error,
-            format!("{TOOL}: the arguments did not serialise to an object"),
+            format!("{TOOL}: the arguments did not serialize to an object"),
         );
         return;
     };
@@ -526,8 +526,8 @@ fn queue_notices(app: Store<AppStore>, opened: &[NoticeRow]) {
     app.estate().notices().set(next);
 }
 
-/// The writing half of `update-prerequisites`: satz works out which roles the IaC
-/// service account lacks and which APIs a project its resources' calls are billed to
+/// The writing half of `update-prerequisites`: satz works out which roles the estate
+/// account lacks and which APIs a project its resources' calls are billed to
 /// does not enable, and writes both into the estate. It is offline and it is satz's own writer, so it goes through
 /// the same discipline as an answer — the write lock, the snapshot, the check on the
 /// real path — rather than a command that rewrites the file under the window.
@@ -550,7 +550,7 @@ async fn write_prerequisites(session: &Arc<EstateSession>, app: Store<AppStore>)
 
 /// The app's writer: open, apply in memory, commit through the temp file and the
 /// check. An edit the document layer refuses wrote nothing; a commit the check
-/// refuses leaves the file as it was and its diagnostics in the drawer.
+/// refuses leaves the file as it was and its findings in the drawer.
 async fn commit_edit(session: &Arc<EstateSession>, app: Store<AppStore>, edit: Edit) {
     let carried = {
         let _lock = session.write_lock().await;
@@ -591,8 +591,8 @@ async fn commit_edit(session: &Arc<EstateSession>, app: Store<AppStore>, edit: E
     reload_with(session, app, Carried::checked(carried)).await;
 }
 
-/// The findings of a check that passed, as diagnostics to carry through the reload: a
-/// warning the compile raised — a required argument the provider wants, a pack the
+/// The findings of a check that passed, to carry through the reload: a
+/// warning the transpile raised — a required argument the provider wants, a pack the
 /// estate asks for and does not use — belongs in the drawer at its line, beside the
 /// write that landed.
 fn carried_findings(committed: &Committed) -> Vec<Diagnostic> {
@@ -609,8 +609,8 @@ fn carried_findings(committed: &Committed) -> Vec<Diagnostic> {
         .collect()
 }
 
-/// A commit that did not land, as a toast, and the diagnostics to carry through the
-/// reload: a check refusal names its first line and keeps every diagnostic; a file
+/// A commit that did not land, as a toast, and the findings to carry through the
+/// reload: a check refusal names its first line and keeps every finding; a file
 /// that changed under the edit says so and is reloaded, nothing kept.
 fn rolled_back(app: Store<AppStore>, e: CommitError) -> Vec<Diagnostic> {
     match e {
@@ -1274,7 +1274,7 @@ async fn place_private(session: &Arc<EstateSession>, app: Store<AppStore>) {
             toast(
                 app,
                 ToastKind::Error,
-                format!("not placed — the estate did not compile with it: {first}"),
+                format!("not placed — the estate did not transpile with it: {first}"),
             );
             app.estate().diagnostics().write().extend(diags);
             app.drawer_open().set(true);
@@ -1305,7 +1305,7 @@ async fn reload(session: &Arc<EstateSession>, app: Store<AppStore>) {
     reload_with(session, app, Carried::default()).await;
 }
 
-/// The sign-in check: `satz_whoami` on the open estate, online. A credential that mints
+/// The sign-in check: `satz_whoami` on the open estate, online. A sign-in that mints
 /// no token is satz's refusal, and its text names the command that signs in.
 async fn check_sign_in(session: &Arc<EstateSession>) -> SignIn {
     let outcome = match session.tool("satz_whoami", serde_json::Map::new()).await {
@@ -1425,8 +1425,8 @@ async fn workload_packs(session: &Arc<EstateSession>, app: Store<AppStore>, op: 
     wrote
 }
 
-/// `satz_transpile_check` on the estate as it stands: the findings of a compile that
-/// passed, the diagnostics of one that refused, or the one error of a checker that
+/// `satz_transpile_check` on the estate as it stands: the findings of a transpile that
+/// passed, the findings of one that refused, or the one error of a checker that
 /// could not run.
 async fn check(session: &Arc<EstateSession>) -> Vec<Diagnostic> {
     let checker = McpChecker {
@@ -1448,8 +1448,8 @@ async fn check(session: &Arc<EstateSession>) -> Vec<Diagnostic> {
 }
 
 /// Questions and packs through the session, then the file, the params and the schema on
-/// a blocking thread, then the model, then the compile's own check. Every failure is a
-/// diagnostic and a toast; the model stays what it was. `carried` — what the write this
+/// a blocking thread, then the model, then the transpile's own check. Every failure is a
+/// finding and a toast; the model stays what it was. `carried` — what the write this
 /// reload follows said — stays in the drawer, at its line in the file as it is: what the
 /// check already said, so the reload does not run it again, and a tool's refusal.
 async fn reload_with(session: &Arc<EstateSession>, app: Store<AppStore>, carried: Carried) {
@@ -1508,7 +1508,7 @@ async fn reload_with(session: &Arc<EstateSession>, app: Store<AppStore>, carried
 
     let main = session.main.clone();
     let dir = session.dir.clone();
-    // The error is boxed: a `Diagnostic` is a path, a message and a source, which is
+    // The error is boxed: a finding is a path, a message and a source, which is
     // large enough that clippy refuses it as the `Err` of a `Result` returned by value.
     let parsed = tokio::task::spawn_blocking(move || {
         let text = std::fs::read_to_string(&main).map_err(|e| {
@@ -1592,7 +1592,7 @@ async fn reload_with(session: &Arc<EstateSession>, app: Store<AppStore>, carried
         Some(Err(d)) => diagnostics.push(*d),
         None => {}
     }
-    // What the compile finds after the front end — a role the IaC service account
+    // What the transpile finds after the front end — a role the estate account
     // lacks, a required argument the provider wants, raw HCL nobody has reviewed — is
     // data the estate carries and the app has no other way to learn. It is read here,
     // once per reload, and only when the front end got as far as a model: a file the

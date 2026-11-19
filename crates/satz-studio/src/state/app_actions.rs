@@ -147,7 +147,7 @@ pub async fn app_coroutine(mut rx: UnboundedReceiver<AppAction>, app: Store<AppS
 /// installer — so the app runs that and shows what it said rather than fetching anything
 /// itself. Two things it must get right. `--no-open-readme`, because without it a
 /// successful update opens the documentation site in a browser behind the operator, which
-/// is satz's right behaviour on a terminal and the wrong one under a window. And the
+/// is satz's right behavior on a terminal and the wrong one under a window. And the
 /// binary it runs is [`SatzStatus::updatable`], which answers for a satz that is TOO OLD
 /// as well as a current one: a too-old satz updating itself is the entire point of the
 /// offer, and the path is the one the refusal carried.
@@ -506,7 +506,7 @@ async fn open_estate(app: Store<AppStore>, config: PathBuf, estate: PathBuf) {
             let dir = session.dir.dir.clone();
             let identity = runs_as
                 .clone()
-                .unwrap_or_else(|| "the ADC identity".to_string());
+                .unwrap_or_else(|| "the signed-in identity".to_string());
             app.open().set(Some(OpenEstate {
                 session: Arc::clone(&session),
                 dir,
@@ -543,7 +543,7 @@ pub fn run_line(dir: &Path, args: &[String]) -> String {
 
 /// `satz init` in `dir`. The target is checked first, the run streams into the create
 /// log, and what it made is READ from the directory afterwards — `init` names the estate
-/// file after a customer id it may have derived from the credentials, so the name is
+/// file after a customer id it may have derived from the sign-in, so the name is
 /// never predicted here.
 ///
 /// Nothing the run derived leaves this function: the lines go into `create.log`, which
@@ -656,7 +656,7 @@ async fn created(app: Store<AppStore>, dir: &Path) -> CommandOutcome {
     };
     match estates.as_slice() {
         // satz writes the directories and the config whatever happens, and the estate
-        // file only once it has a customer id — stated, or derived from the credentials
+        // file only once it has a customer id — stated, or derived from the sign-in
         [] => CommandOutcome {
             ok: false,
             text: format!(
@@ -707,9 +707,9 @@ async fn created(app: Store<AppStore>, dir: &Path) -> CommandOutcome {
 // estate is the estate that opens; none at all is a failure, whatever the exit status
 // said.
 //
-// Nothing the run derived leaves here. A live import prints the organisation id, the
+// Nothing the run derived leaves here. A live import prints the organization id, the
 // customer directory id, the billing account and an administrator's address it read from
-// the credentials: those lines go into the import log, which lives as long as the window
+// the sign-in: those lines go into the import log, which lives as long as the window
 // shows it, and the values themselves are in the estate satz wrote.
 
 /// `satz import` in `dir`, with `satz init` first when `dir` holds no `config.toml`.

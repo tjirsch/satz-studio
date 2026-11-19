@@ -2,13 +2,13 @@
 //!
 //! It runs in a working directory rather than against a `--config`
 //! ([`super::SatzCli::run_in`]) and creates `config.toml`, `satz/`, `hcl/`, `schemas/`,
-//! `.gitignore` and the estate file there. It is a LIVE, credentialed command: what the
-//! command line does not state it derives from the Application Default Credentials —
-//! `customer_domain` and the first admin from the ADC identity, `customer_id` and
+//! `.gitignore` and the estate file there. It is a LIVE command that runs signed in: what the
+//! command line does not state it derives from the sign-in —
+//! `customer_domain` and the first admin from the signed-in identity, `customer_id` and
 //! `customer_organization_id` from an `organizations:search`, `billing_account_infra`
 //! from `billingAccounts.list` — and says of each value where it came from.
 //!
-//! Those derived values are a customer's organisation id, billing account and
+//! Those derived values are a customer's organization id, billing account and
 //! administrator address. They belong in the estate satz writes and nowhere else: this
 //! module renders a command line and reads a directory listing, and neither carries a
 //! value back into settings, a transcript or a log file.
@@ -28,7 +28,7 @@ use crate::estate::{EstateDir, EstateError};
 /// directory that already holds a `config.toml` rather than writing over one
 /// ([`check_target`]); and `--customer-organization-id`, `--customer-domain`,
 /// `--iac-user`, `--infra-project-name` and `--infra-bucket-name`, which the
-/// credentials or the short name answer and `satz interview` edits afterwards.
+/// sign-in or the short name answer and `satz interview` edits afterwards.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct InitOptions {
     /// `--customer-shortname`: the one value nothing on the platform can answer.
@@ -42,11 +42,6 @@ pub struct InitOptions {
     pub billing_account_infra: String,
     /// `--default-region`. Left empty satz writes its own default.
     pub default_region: String,
-    /// `--workload-folder-name`: the display name of the folder directly under the
-    /// organisation that holds the customer's and the teams' folders. Left empty satz
-    /// writes `workload_folder_name = ""` — the organisation itself, for which nothing is
-    /// created.
-    pub workload_folder_name: String,
     /// `--tf-tool`: `tofu` or `terraform`.
     pub tf_tool: String,
     /// `--defaults`: the provider sets to include — `google` is the set satz knows,
@@ -54,9 +49,9 @@ pub struct InitOptions {
     pub defaults: Vec<String>,
     /// `--providers`: provider names to include beside the sets.
     pub providers: Vec<String>,
-    /// `--from`: the interface folders an organisation's estate wrote for a delegation — its own,
-    /// `delegation-<name>`, and that of the place the estate works in. With any, satz
-    /// writes a WORKLOAD estate from them and the organisation's flags are not sent.
+    /// `--from`: the interface folders an organization's estate wrote for a delegation — its own,
+    /// `delegation-<name>`, and that of the delegated resource the estate works in. With any, satz
+    /// writes a WORKLOAD estate from them and the organization's flags are not sent.
     pub from: Vec<String>,
     /// `--name`, with `--from`: the estate's name. Left empty it is the delegation's.
     pub name: String,
@@ -89,7 +84,6 @@ impl InitOptions {
             flag("--customer-id", &self.customer_id);
             flag("--billing-account-infra", &self.billing_account_infra);
             flag("--default-region", &self.default_region);
-            flag("--workload-folder-name", &self.workload_folder_name);
         } else {
             flag("--name", &self.name);
         }
@@ -134,7 +128,7 @@ pub fn check_target(dir: &Path) -> Result<(), super::SatzError> {
 /// files in that directory's `yaml_dir`.
 ///
 /// The estate's file NAME is not knowable before the run — `init` names it after the
-/// customer id, which it reads from the credentials when the command line states none —
+/// customer id, which it reads from the sign-in when the command line states none —
 /// so it is read from the directory rather than predicted. An empty list is not a
 /// failure of this function: `init` writes the directories, `config.toml` and
 /// `.gitignore` whatever happens, and writes an estate file only when a customer id was
@@ -166,7 +160,6 @@ mod tests {
             customer_id: CUSTOMER_ID.to_string(),
             billing_account_infra: "012345-6789AB-CDEF01".to_string(),
             default_region: "europe-west3".to_string(),
-            workload_folder_name: "Workloads".to_string(),
             tf_tool: "tofu".to_string(),
             defaults: vec!["google".to_string()],
             providers: vec!["google-beta".to_string(), "random".to_string()],
@@ -185,8 +178,6 @@ mod tests {
                 "012345-6789AB-CDEF01",
                 "--default-region",
                 "europe-west3",
-                "--workload-folder-name",
-                "Workloads",
                 "--tf-tool",
                 "tofu",
                 "--defaults",
@@ -199,7 +190,7 @@ mod tests {
 
     /// A blank field is the instruction to derive, so it must not reach the command
     /// line as an empty value: `--customer-id ""` states an id, and an absent
-    /// `--customer-id` asks the credentials for one.
+    /// `--customer-id` asks the sign-in for one.
     #[test]
     fn a_blank_or_whitespace_field_is_not_passed_at_all() {
         let options = InitOptions {
@@ -207,7 +198,6 @@ mod tests {
             customer_id: "   ".to_string(),
             billing_account_infra: String::new(),
             default_region: String::new(),
-            workload_folder_name: " ".to_string(),
             tf_tool: String::new(),
             defaults: vec![String::new(), "  ".to_string()],
             providers: Vec::new(),
@@ -287,7 +277,7 @@ mod tests {
         assert!(matches!(created(tmp.path()), Err(EstateError::NoConfig(_))));
     }
     /// A workload estate: the interface folders after `--from`, the name, and none of the
-    /// organisation's flags — whatever the form still holds of them.
+    /// organization's flags — whatever the form still holds of them.
     #[test]
     fn a_teams_estate_is_written_from_its_interface_folders() {
         let options = InitOptions {
@@ -315,13 +305,13 @@ mod tests {
             ]
         );
         // without folders the name is not sent: it belongs to `--from`
-        let organisation = InitOptions {
+        let organization = InitOptions {
             customer_shortname: "acme".to_string(),
             name: "x".to_string(),
             ..Default::default()
         };
         assert_eq!(
-            organisation.argv(),
+            organization.argv(),
             ["init", "--customer-shortname", "acme"]
         );
     }

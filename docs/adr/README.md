@@ -14,7 +14,7 @@ A commit message explains one change to whoever reads that commit. A record answ
 "why is it like this?" months later, when nobody is looking at the commit and the
 alternative has started to look attractive again. satz keeps its records the same way
 and for the same reason; this repository follows its conventions so a reader of one
-recognises the other.
+recognizes the other.
 
 ## Conventions
 
@@ -31,7 +31,7 @@ recognises the other.
   option, the chosen one marked *(chosen)*. Options are written with their real
   trade-offs, including the one that was chosen; a record whose alternatives are
   strawmen documents nothing.
-- Nothing here names a customer, an organisation or a person: this repository goes
+- Nothing here names a customer, an organization or a person: this repository goes
   public, and the privacy gate treats these files like any other.
 - A record that rests on a decision satz made links satz's record
   (`vendor/satz/docs/adr/`) rather than restating it.
@@ -42,7 +42,7 @@ recognises the other.
 |---|---|---|
 | [0001](0001-dioxus-desktop-on-the-webview-renderer.md) | Dioxus 0.7 desktop on the webview renderer | accepted |
 | [0002](0002-a-separate-repository-with-satz-pinned-once.md) | a separate repository, with satz pinned once as a submodule and the binary required at a minimum version | accepted; the minimum's rule superseded by 0014, its Windows half by satz's Windows build |
-| [0003](0003-the-document-layer-is-the-tree-sitter-grammar.md) | the document layer is the tree-sitter grammar of Satz, vendored and compiled in; satz-core stays the authority on meaning | accepted |
+| [0003](0003-the-document-layer-is-the-tree-sitter-grammar.md) | the document layer is the tree-sitter grammar of Satz, vendored and built in; satz-core stays the authority on meaning | accepted |
 | [0004](0004-claude-natively-other-providers-adapt-into-its-message-model.md) | Claude natively: the Messages API wire types are the app's message model, and other providers adapt into it | superseded by 0020 |
 | [0005](0005-tool-approval-by-mcp-annotation-and-the-capability-ceiling.md) | tool approval by the MCP annotations satz declares; the capability ceiling stays satz's | accepted; the approval card superseded by 0020, the ceiling the agent's configuration alone since 0021 |
 | [0006](0006-apply-and-bootstrap-run-in-the-users-terminal.md) | `apply` and `bootstrap` run in the user's terminal, never with `-auto-approve` | accepted |
@@ -50,7 +50,7 @@ recognises the other.
 | [0008](0008-transcripts-live-outside-the-estate.md) | transcripts live under the app's data directory, never inside an estate | superseded by 0020 |
 | [0009](0009-refusal-fallbacks-are-on-by-default.md) | refusal fallbacks are on by default, off by a Settings switch | superseded by 0020 |
 | [0010](0010-claude-code-as-the-subscription-backend.md) | Claude Code as the subscription backend: the installed CLI driven over stdio, the estate's satz MCP server, the app's own approval card | superseded by 0020 |
-| [0011](0011-the-licence-is-apache-2-0.md) | the licence is Apache 2.0: the express patent grant, contribution terms in §5, and a `NOTICE` for the material bundled under other licences | accepted |
+| [0011](0011-the-licence-is-apache-2-0.md) | the license is Apache 2.0: the express patent grant, contribution terms in §5, and a `NOTICE` for the material bundled under other licenses | accepted |
 | [0012](0012-migrate-hands-off-to-the-terminal.md) | `migrate` hands off to the terminal with `apply` and `bootstrap`; `bootstrap --dry-run` is a check that runs in the app | accepted |
 | [0013](0013-the-claude-code-stream-log-is-verbatim-off-by-default-and-bounded.md) | the Claude Code stream log is verbatim, off by default, one file per conversation, and bounded | superseded by 0020 |
 | [0014](0014-a-newer-satz-is-a-notice-and-the-app-looks-for-releases.md) | a satz newer than the build runs and is a notice, not a gate; `MIN_SATZ` is the oldest satz the build works with and rises only for a breakage or a use; the app looks for releases of itself and of satz once per launch and says so in the window title, the banner and Settings | accepted; amended 2026-09-27 — the top bar carries no chips |
@@ -64,8 +64,8 @@ recognises the other.
 | [0022](0022-the-mcp-root-is-the-one-satz-mcp-config-renders.md) | the root of satz-studio's own `satz mcp` is the `--root` `satz mcp-config` renders for the estate, the directory holding `config.toml`; the common-prefix root is gone | accepted |
 | [0023](0023-the-interfaces-tab-reads-and-writes-through-the-cli.md) | the Interfaces tab reads `satz interfaces` and writes with `satz add-project` through the CLI, because the interface plane's MCP tools are paused; the write is satz's own writer inside the delegated-write discipline, and a third tab of Estate rather than a seventh destination | accepted; the write half superseded — satz removed `add-project` (satz ADR 0075) |
 | [0024](0024-workload-packs-are-a-tab-of-estate-and-a-workload-estate-has-no-presets-destination.md) | the destination is Presets; workload packs are the fourth tab of Estate, read through the CLI against a source the operator names and never unasked; the `use` line is the document layer's `Edit::AddUse`; a workload estate has no Presets destination | accepted; its two-way rule superseded by 0025 |
-| [0025](0025-an-estate-works-in-one-of-three-modes-and-satz-says-which.md) | an estate works in one of three modes — organisation, delegated folder, delegated project — read from satz's presets report; an organisation has presets and no Workload packs tab, an estate in a delegated place every workload pack, each row saying which delegated values it reads; the mode is a row of the Overview | accepted |
+| [0025](0025-an-estate-works-in-one-of-three-modes-and-satz-says-which.md) | an estate works in one of three modes — organization, delegated folder, delegated project — read from satz's presets report; an organization has presets and no Workload packs tab, an estate in a delegated place every workload pack, each row saying which delegated values it reads; the mode is a row of the Overview | accepted |
 | [0026](0026-the-content-uses-the-compact-end-of-the-scale.md) | content sits on the compact end of Material 3's type scale at every window size: a question's title 16 px emphasized, running text 14 or 12 px, `Button` in Expressive's extra-small size (32 px), list rows at least 48 px; no density setting and no width-dependent sizes | accepted |
 | [0027](0027-documents-is-a-destination-of-its-own.md) | Documents is the seventh primary destination, last in the rail, and holds the decisions sheet as one card where Decisions and the Overview each carried it under its own title; the rail is full at Material 3's seven; the evidence report stays in Checks | accepted |
-| [0028](0028-apply-is-one-destination-and-starts-with-who-is-signed-in.md) | Apply replaces Checks and Deploy: the sign-in check (`satz_whoami`, online, when the view is entered and on a button), a state line, and the commands in the order they are walked; the compliance commands and the documents an agent writes — started in the configured client on a skill — are Documents'; the rail holds six | accepted |
-| [0029](0029-presets-and-packs-are-two-destinations.md) | Presets, for an estate that holds the library, and Packs, for every estate, are two primary destinations; an entry of a list a preset declares is added from a form built from the declaration, through `satz_add_entry`; a workload estate is created from its interface folders (`satz init --from`); the Overview says who delegated; Apply leaves day 0 to the organisation; `MIN_SATZ` is 0.101.0 | accepted |
+| [0028](0028-apply-is-one-destination-and-starts-with-who-is-signed-in.md) | Apply is the one destination for the checks and the apply: the sign-in check (`satz_whoami`, online, when the view is entered and on a button), a state line, and the commands in the order they are walked; the compliance commands and the documents an agent writes — started in the configured client on a skill — are Documents'; the rail holds six | accepted |
+| [0029](0029-presets-and-packs-are-two-destinations.md) | Presets, for an estate that holds the library, and Packs, for every estate, are two primary destinations; an entry of a list a preset declares is added from a form built from the declaration, through `satz_add_entry`; a workload estate is created from its interface folders (`satz init --from`); the Overview says who delegated; Apply leaves the bootstrap to the organization; `MIN_SATZ` is 0.101.0 | accepted |

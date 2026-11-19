@@ -160,7 +160,7 @@ Arguments:
 Options:
       --format <FORMAT>
           Output format — markdown and pdf are the decisions sheet a human reads before an
-          organisation is touched
+          organization is touched
 
           Possible values:
           - text:     human-readable terminal output

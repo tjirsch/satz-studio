@@ -2,8 +2,8 @@
 //! receives, written by `satz questions <estate> --format <format> --out <file>`.
 //!
 //! The card stands in the Documents destination, once: the sheet is read at two moments —
-//! as the sign-off page before anything is touched and as the record after the
-//! rollout — and it is one document at both. A format, a destination, and the document
+//! as the decisions sheet before anything is touched and as the record after the
+//! apply — and it is one document at both. A format, a destination, and the document
 //! opened once satz has written it. The formats are the ones the installed satz
 //! lists in `satz questions --help`, read when the session opens
 //! ([`satz_studio_core::satz::export::formats`]); the card offers exactly those and
@@ -22,7 +22,7 @@ use crate::state::{AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt
 /// The card's title, icon and explanation.
 const TITLE: &str = "Decisions sheet";
 const ICON: &str = "assignment_turned_in";
-const TEXT: &str = "Every decision this estate rests on — what it is set to, whether it was chosen or taken as offered, and what changing it later costs. Before an organisation is touched it is the sheet the customer signs, or the workbook they fill in and send back; after the rollout it is the record the customer keeps.";
+const TEXT: &str = "Every decision this estate rests on — what it is set to, whether it was chosen or taken as offered, and what changing it later costs. Before an organization is touched it is the sheet the customer signs, or the workbook they fill in and send back; after the apply it is the record the customer keeps.";
 
 /// The format the card starts on: the decisions sheet, `markdown`, when satz offers it;
 /// otherwise none, and Export waits for a choice.

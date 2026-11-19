@@ -7,7 +7,7 @@
 //! a person reads — `text` where satz offers it, `markdown` where it does not — and
 //! `json` stays a choice in the format picker for whoever wants the file.
 //!
-//! The commands are grouped by the job: [`APPLY`] is the estate's way to the organisation,
+//! The commands are grouped by the job: [`APPLY`] is the estate's way to the organization,
 //! in the order it is walked, and [`COMPLIANCE`] is what the Documents destination runs
 //! for a report. The palette holds every entry, including the ones neither gathers, and opens on ⌘K /
 //! Ctrl+K. `apply`, `bootstrap` and `migrate` are command lines to copy or to open in
@@ -113,7 +113,7 @@ pub struct CommandSpec {
 }
 
 /// The palette entries a deck with `tools` offers as one click each, at their default
-/// values: who the estate runs as, whether it compiles, and what its packs ask. Each
+/// values: who the estate runs as, whether it transpiles, and what its packs ask. Each
 /// is satz's own command, so the log holds satz's own text.
 pub const ONE_CLICK: &[&str] = &["whoami", "transpile-check", "questions"];
 
@@ -123,7 +123,7 @@ pub const PALETTE: &[CommandSpec] = &[
         id: "transpile-check",
         label: "transpile --check",
         icon: "fact_check",
-        description: "Compile in memory and write nothing: the estate either transpiles or the error says why.",
+        description: "Transpile in memory and write nothing: the estate either transpiles or the error says why.",
         head: &["transpile"],
         estate: EstateArg::Positional,
         tail: &["--check"],
@@ -135,7 +135,7 @@ pub const PALETTE: &[CommandSpec] = &[
         id: "transpile",
         label: "transpile",
         icon: "build",
-        description: "Compile the estate to HCL in hcl_dir.",
+        description: "Transpile the estate to HCL code in hcl_dir.",
         head: &["transpile"],
         estate: EstateArg::Positional,
         tail: &[],
@@ -214,7 +214,7 @@ pub const PALETTE: &[CommandSpec] = &[
         id: "update-prerequisites",
         label: "update-prerequisites",
         icon: "admin_panel_settings",
-        description: "What the estate's resource types oblige it to declare and does not: the roles its IaC service account is missing, and the APIs a project its resources' calls are billed to does not enable.",
+        description: "What the estate's resource types oblige it to declare and does not: the roles its estate account is missing, and the APIs a project its resources' calls are billed to does not enable.",
         // one of the two commands satz's ADR 0021 leaves on the console: the exit code
         // is the answer and the text is the diagnosis, so it takes no `--out`.
         // `--report-only` is fixed: the command writes the estate file by default, and
@@ -233,14 +233,14 @@ pub const PALETTE: &[CommandSpec] = &[
         id: "whoami",
         label: "whoami",
         icon: "person_search",
-        description: "Who the estate's live commands run as: the credentials, the service account a cloud-mode estate impersonates, and — checked live — whether this credential may, whether the quota project is reachable, and which permissions the estate's resource types need.",
+        description: "Who the estate's live commands run as: the signed-in identity, the estate account a cloud-mode estate impersonates, and — checked live — whether that identity may, whether the quota project is reachable, and which permissions the estate's resource types need.",
         head: &["whoami"],
         estate: EstateArg::Positional,
         tail: &[],
         fields: &[Field::Flag {
             key: "offline",
             flag: "--offline",
-            label: "Read the credentials file only: no network, nothing checked",
+            label: "Read the sign-in file only: no network, nothing checked",
         }],
         reports: false,
         external: false,
@@ -383,7 +383,7 @@ pub const PALETTE: &[CommandSpec] = &[
         estate: EstateArg::None,
         tail: &[],
         // `--force` is not offered: it overwrites the packs the estate uses, which changes
-        // what the estate compiles to under the window with no write lock held and no
+        // what the estate transpiles to under the window with no write lock held and no
         // reload after it. The forced refresh is the terminal's.
         fields: &[Field::Option {
             key: "pristine_dir",
@@ -428,7 +428,7 @@ pub const PALETTE: &[CommandSpec] = &[
         id: "bootstrap-check",
         label: "bootstrap --dry-run",
         icon: "fact_check",
-        description: "Day 0, read-only: the plan satz would carry out, the identity your credentials resolve to, and the permission pre-flight. It creates nothing.",
+        description: "The bootstrap, read-only: the plan satz would carry out, the identity you are signed in as, and the prerequisites. It creates nothing.",
         head: &["bootstrap"],
         estate: EstateArg::Positional,
         tail: &["--dry-run"],
@@ -474,7 +474,7 @@ pub const PALETTE: &[CommandSpec] = &[
         id: "bootstrap",
         label: "bootstrap",
         icon: "foundation",
-        description: "Day 0: folder, project, billing link, core APIs and the state bucket, created as you — in your terminal.",
+        description: "The bootstrap: folder, project, billing link, core APIs and the state bucket, created as you — in your terminal.",
         head: &["bootstrap"],
         estate: EstateArg::Positional,
         tail: &[],
@@ -482,7 +482,7 @@ pub const PALETTE: &[CommandSpec] = &[
             Field::Flag {
                 key: "greenfield",
                 flag: "--greenfield",
-                label: "Greenfield: materialise a not-yet-existing organisation",
+                label: "Greenfield: materialise a not-yet-existing organization",
             },
             Field::Flag {
                 key: "no_default_grants",
@@ -496,7 +496,7 @@ pub const PALETTE: &[CommandSpec] = &[
 ];
 
 /// The palette entries the Apply destination gathers, in the order they are walked: the
-/// checks that go further than the compile, day 0 and its dry run, the generated code,
+/// checks that go further than the transpile, the bootstrap and its dry run, the HCL code,
 /// its directory, the plan, the apply, and the state's move to the other backend.
 pub const APPLY: &[&str] = &[
     "transpile-check",
@@ -510,8 +510,8 @@ pub const APPLY: &[&str] = &[
     "migrate",
 ];
 
-/// The same walk for an estate in a delegated folder or project: day 0 and the state's
-/// move to the other backend are the organisation's, and are not its steps.
+/// The same walk for an estate in a delegated folder or project: the bootstrap and the state's
+/// move to the other backend are the organization's, and are not its steps.
 pub const APPLY_DELEGATED: &[&str] = &[
     "transpile-check",
     "update-prerequisites",
@@ -882,7 +882,7 @@ pub fn CommandLog() -> Element {
 
 /// The command palette: every satz command the app runs, over the window, opened with
 /// ⌘K / Ctrl+K or the top bar's button. It is not a destination — the work happens in
-/// Checks and Deploy — and it is where a command that belongs to neither still lives.
+/// Checks and Apply — and it is where a command that belongs to neither still lives.
 #[component]
 pub fn CommandPalette() -> Element {
     let app = use_context::<Store<AppStore>>();
@@ -1042,9 +1042,9 @@ mod tests {
         );
     }
 
-    /// The three that change a live organisation from a terminal, and the read-only
-    /// day-0 check that does not: `bootstrap --dry-run` is its own entry precisely so
-    /// that checking day 0 is one click in the app and doing it is a hand-off.
+    /// The three that change a live organization from a terminal, and the read-only
+    /// bootstrap check that does not: `bootstrap --dry-run` is its own entry precisely so
+    /// that checking the bootstrap is one click in the app and doing it is a hand-off.
     #[test]
     fn only_apply_migrate_and_bootstrap_run_outside_the_app() {
         let external: Vec<&str> = PALETTE

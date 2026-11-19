@@ -65,6 +65,6 @@ fn resolved_text(resolved: Option<&serde_json::Value>) -> String {
     match resolved {
         Some(serde_json::Value::String(s)) => format!("resolves to \"{s}\""),
         Some(other) => format!("resolves to {other}"),
-        None => "bound nowhere: the compile reports it".to_string(),
+        None => "bound nowhere: the transpile reports it".to_string(),
     }
 }

@@ -6,7 +6,7 @@ use satz_studio_core::diag::{DiagSource, Diagnostic, Severity};
 use crate::components::{Chip, ChipKind, Icon, List, ListItem};
 use crate::state::{AppStore, AppStoreStoreExt, DiagnosticSelection, EstateStoreStoreExt, View};
 
-/// The bottom drawer: the open estate's diagnostics, and the findings of the pack the
+/// The bottom drawer, Findings: the open estate's findings, and those of the pack the
 /// Presets view reviewed, grouped by severity, each with its `file:line`, its source, and —
 /// for one of satz's findings — a chip naming the check that raised it; clicking one sets
 /// [`DiagnosticSelection`] and opens the destination where its line is ([`destination`]).
@@ -30,10 +30,10 @@ pub fn DiagnosticsDrawer() -> Element {
     let selected = (selection.0)();
 
     rsx! {
-        section { class: "drawer", class: if open { "drawer--open" }, "aria-label": "diagnostics",
+        section { class: "drawer", class: if open { "drawer--open" }, "aria-label": "findings",
             header { class: "drawer__header", onclick: move |_| app.drawer_open().toggle(),
                 Icon { name: if open { "expand_more" } else { "expand_less" }, size: 20 }
-                span { class: "drawer__title", "Diagnostics" }
+                span { class: "drawer__title", "Findings" }
                 Chip { kind: ChipKind::Assist, icon: "error", label: format!("{errors} errors"), error: errors > 0 }
                 Chip { kind: ChipKind::Assist, icon: "warning", label: format!("{warnings} warnings") }
                 Chip { kind: ChipKind::Assist, icon: "info", label: format!("{notes} notes") }
@@ -41,7 +41,7 @@ pub fn DiagnosticsDrawer() -> Element {
             if open {
                 div { class: "drawer__body",
                     if diagnostics.is_empty() {
-                        p { class: "drawer__empty", "No diagnostics." }
+                        p { class: "drawer__empty", "No findings." }
                     }
                     for (severity, title, icon) in [(Severity::Error, "Errors", "error"), (Severity::Warning, "Warnings", "warning"), (Severity::Info, "Info", "info")] {
                         {

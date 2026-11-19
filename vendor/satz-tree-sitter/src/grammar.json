@@ -71,7 +71,7 @@
         },
         {
           "type": "SYMBOL",
-          "name": "request"
+          "name": "entries"
         },
         {
           "type": "SYMBOL",
@@ -799,12 +799,12 @@
         }
       ]
     },
-    "request": {
+    "entries": {
       "type": "SEQ",
       "members": [
         {
           "type": "STRING",
-          "value": "request"
+          "value": "entries"
         },
         {
           "type": "FIELD",

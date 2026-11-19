@@ -47,7 +47,7 @@ pub struct ReviewedPack {
 }
 
 impl ReviewedPack {
-    /// Every finding as a diagnostic at its `file:line`, from `satz review-preset`.
+    /// Every finding as a finding at its `file:line`, from `satz review-preset`.
     pub fn diagnostics(&self) -> Vec<Diagnostic> {
         diagnostics(&self.path, &self.review)
     }
@@ -75,7 +75,7 @@ pub fn review_args(pack: &Path, against: Option<&Path>) -> Vec<String> {
 
 /// Review `pack` with the estate's config: its `presets_dir` is the library whose
 /// changelog and adoption rules the pack is held to, its `schema_dir` the provider
-/// schema the fold compiles against. `against` judges the pack inside that estate file
+/// schema the fold transpiles against. `against` judges the pack inside that estate file
 /// instead of a synthesised one.
 ///
 /// Refused: a pack that is not UTF-8 (satz reads no other), a pack that changed while
@@ -170,8 +170,8 @@ pub enum PlaceError {
         #[source]
         source: std::io::Error,
     },
-    /// the estate did not compile with the pack in the library; the file is gone again
-    #[error("not placed: the estate did not compile with it in the library")]
+    /// the estate did not transpile with the pack in the library; the file is gone again
+    #[error("not placed: the estate did not transpile with it in the library")]
     Rollback(Vec<Diagnostic>),
     #[error("not placed: {0}")]
     Satz(SatzError),
@@ -180,7 +180,7 @@ pub enum PlaceError {
 /// What a placement did.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Placed {
-    /// the file is new in the library, and the estate compiles with it there
+    /// the file is new in the library, and the estate transpiles with it there
     Written {
         path: PathBuf,
         summary: CompileSummary,
@@ -329,7 +329,7 @@ mod tests {
         );
     }
 
-    /// Every finding of the recorded review is a diagnostic in the pack's file, at the
+    /// Every finding of the recorded review is a finding in the pack's file, at the
     /// line satz named where it named one, from `satz review-preset`.
     #[test]
     fn the_findings_are_diagnostics_at_file_and_line() {

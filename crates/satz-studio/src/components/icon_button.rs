@@ -23,7 +23,7 @@ impl IconButtonVariant {
 }
 
 /// A 40px icon button; `label` is its accessible name and tooltip; `selected` fills
-/// the glyph and, for the filled and tonal variants, swaps the container colour.
+/// the glyph and, for the filled and tonal variants, swaps the container color.
 #[component]
 pub fn IconButton(
     icon: String,

@@ -264,7 +264,7 @@ async fn every_question_of_every_pack_is_answered_in_the_shape_its_param_is_decl
 /// The defect this guards, end to end on a skeleton with the access-approval pack in:
 /// the question offers nothing and blocks, its field is a list because the fold carries
 /// the pack's `[]`, the answer `satz_interview` receives is a JSON array, and the line
-/// satz writes is a list the compile accepts.
+/// satz writes is a list the transpile accepts.
 #[tokio::test]
 async fn one_address_for_a_list_param_is_written_as_a_list_of_one() {
     const SUBJECT: &str = "access_approval_notification_emails";

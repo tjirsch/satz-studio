@@ -1,9 +1,9 @@
 //! The two checkers: `satz_transpile_check` over the estate's MCP session, and
 //! `satz --config <dir> transpile <file> --check --format json` through the CLI runner.
-//! Both answer with satz's `CompileSummary` — the addresses the estate emits and the
-//! findings the compile reports as data — so the two read one shape and agree by
+//! Both answer with satz's `CompileSummary` — the addresses the estate writes and the
+//! findings the transpile reports as data — so the two read one shape and agree by
 //! construction. A refusal is that summary carrying the findings that refused it. A
-//! failure that never reached the compile (a file that is not there) carries none, and
+//! failure that never reached the transpile (a file that is not there) carries none, and
 //! then its text is what satz said.
 //!
 //! A finding's `file` is relative to the estate's directory — the one `config.toml` is in,
@@ -23,7 +23,7 @@ use crate::satz::{CliLine, EstateSession, SatzCli, SatzError, ToolOutcome};
 
 /// `satz_transpile_check {estate: <path>}` on the session's `satz mcp`. A refusal's
 /// findings are its `structuredContent`; a refusal that carries none is read from the
-/// tool's text. A pass returns the summary, the compile's warnings and infos included.
+/// tool's text. A pass returns the summary, the transpile's warnings and infos included.
 pub struct McpChecker {
     pub session: Arc<EstateSession>,
 }
@@ -56,7 +56,7 @@ impl Checker for McpChecker {
     }
 }
 
-/// The diagnostics of a refused `satz_transpile_check`: the findings its structured
+/// The findings of a refused `satz_transpile_check`: the findings its structured
 /// content carries, each at its own line, else what its text said. A structured
 /// payload of another shape is an error — satz changed, and guessing would hide it.
 fn mcp_refusal(base: &Path, outcome: &ToolOutcome) -> Result<Vec<Diagnostic>, SatzError> {
@@ -154,8 +154,8 @@ fn cli_verdict(
     }
 }
 
-/// One diagnostic per finding, each at its own file and line; without findings, what
-/// satz said in `text`, and when that is empty too, one diagnostic saying so — a refusal
+/// One finding per finding, each at its own file and line; without findings, what
+/// satz said in `text`, and when that is empty too, one finding saying so — a refusal
 /// is never an empty list.
 fn diagnostics(base: &Path, findings: &[Finding], text: &str) -> Vec<Diagnostic> {
     if !findings.is_empty() {
@@ -276,7 +276,7 @@ mod tests {
         assert_eq!(d[0].file.as_deref(), Some(Path::new("/e/yaml/acme.satz")));
         assert_eq!(d[0].kind.as_deref(), Some("missing-required"));
 
-        // a refusal before the compile carries none: the text is what satz said
+        // a refusal before the transpile carries none: the text is what satz said
         let d = mcp_refusal(Path::new(BASE), &outcome(None)).unwrap();
         assert_eq!(d.len(), 1);
         assert_eq!(d[0].message, "/e/yaml/acme.satz: file not found");

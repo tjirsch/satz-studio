@@ -903,16 +903,16 @@ mod tests {
     fn an_empty_field_answers_a_question_that_says_what_empty_means() {
         let kind = FieldKind::Text;
         let empty = Draft::of_json(None, kind);
-        assert!(!held_param(kind, "workload_folder_name", None, false, &empty).valid);
-        let h = held_param(kind, "workload_folder_name", None, true, &empty);
+        assert!(!held_param(kind, "team_folder_name", None, false, &empty).valid);
+        let h = held_param(kind, "team_folder_name", None, true, &empty);
         assert!(h.valid);
         assert_eq!(h.value, json!(""));
-        let mut folder = q("workload_folder_name", QuestionState::Answered);
-        folder.empty = Some("the organisation".into());
+        let mut folder = q("team_folder_name", QuestionState::Answered);
+        folder.empty = Some("no team folder".into());
         folder.current = Some(json!(""));
         assert_eq!(
             listed(&folder),
-            "workload_folder_name · answered: \"\" (the organisation)"
+            "team_folder_name · answered: \"\" (no team folder)"
         );
     }
 

@@ -10,7 +10,7 @@ use super::reports::InterfacesReport;
 use super::{SatzCli, SatzError, ToolOutcome};
 
 /// `satz --config <dir> interfaces <estate> --format json --out <file>`, typed. It
-/// compiles the estate, so an estate satz refuses is an error carrying satz's stderr.
+/// transpiles the estate, so an estate satz refuses is an error carrying satz's stderr.
 pub async fn interfaces(cli: &SatzCli, estate: &Path) -> Result<InterfacesReport, SatzError> {
     cli.json_report(&["interfaces".to_string(), estate.display().to_string()])
         .await

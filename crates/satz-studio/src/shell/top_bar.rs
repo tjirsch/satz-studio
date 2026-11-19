@@ -55,7 +55,7 @@ pub fn TopBar() -> Element {
             Badge { count: diagnostics,
                 IconButton {
                     icon: "troubleshoot",
-                    label: "Diagnostics",
+                    label: "Findings",
                     selected: drawer_open,
                     onclick: move |_| app.drawer_open().toggle(),
                 }

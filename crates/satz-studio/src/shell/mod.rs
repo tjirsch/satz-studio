@@ -1,5 +1,5 @@
 //! The shell around every view: the navigation rail, the top bar, the satz banner,
-//! the diagnostics drawer and the snackbar host. While an estate is open the whole
+//! the Findings drawer and the snackbar host. While an estate is open the whole
 //! frame sits inside [`EstateHost`], which owns that estate's coroutine, so every part
 //! of the shell can reach it through `try_use_context::<Coroutine<EstateAction>>()`.
 

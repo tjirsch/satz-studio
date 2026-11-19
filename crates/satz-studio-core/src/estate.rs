@@ -15,7 +15,7 @@ pub struct ToolConfig {
     pub yaml_dir: String,
     #[serde(default = "default_hcl_dir")]
     pub hcl_dir: String,
-    /// where satz writes the estate's interfaces for the projects beside it — output,
+    /// where satz writes the estate's outgoing interface folders for the estates that read them — output,
     /// like `hcl_dir`, rewritten whole on every transpile
     #[serde(default = "default_interfaces_dir")]
     pub interfaces_dir: String,
@@ -279,10 +279,10 @@ impl EstateDir {
     }
 }
 
-/// How far the generated HCL directory has been taken, read from disk and nothing run.
+/// How far the HCL directory has been taken, read from disk and nothing run.
 /// Two facts, and only what each proves: `main.tf` is there, so the estate has been
 /// transpiled here; `.terraform` is there, so the tool's init has run. A plan needs an
-/// initialised directory, so `initialised == false` proves no plan has run against this
+/// initialized directory, so `initialized == false` proves no plan has run against this
 /// checkout — and `true` proves nothing about a plan, which leaves no trace of its own.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct HclState {

@@ -1,7 +1,7 @@
 //! The Estate destination's Interfaces tab: what the estate publishes to the projects
 //! that read it, as `satz interfaces` reports it — the core exports every interface
 //! carries, then one card per declared interface with what it uses and what it exports,
-//! and what projects may request. The rows are satz's report; the app derives no export
+//! and the list params it declares. The rows are satz's report; the app derives no export
 //! and no interface of its own (ADR 0023).
 
 use dioxus::prelude::*;
@@ -66,7 +66,7 @@ pub fn InterfacesPane() -> Element {
         div { class: "pane interfaces",
             div { class: "interfaces__head",
                 p { class: "view__lead",
-                    "What the estate publishes to the projects that read it, as satz interfaces reports it: the core exports every interface carries, then each interface with what it uses and what it exports. satz transpile writes each one to interfaces/<name>/. Access to a project is delegated to a team by an entry of project_workload_projects in presets/project-workload.satz."
+                    "What the estate publishes for other estates to read, as satz interfaces reports it: the core exports every interface carries, then each interface with what it uses and what it exports. satz transpile writes each one to an interface folder under interfaces/outgoing/. Delegated access is given by an entry of the list param delegations in presets/delegation.satz."
                 }
             }
             {body}
@@ -107,8 +107,8 @@ fn ReportCards(report: InterfacesReport) -> Element {
                 iface: iface.clone(),
             }
         }
-        if !report.requests.is_empty() {
-            RequestsCard { requests: report.requests.clone() }
+        if !report.list_params.is_empty() {
+            RequestsCard { requests: report.list_params.clone() }
         }
     }
 }
@@ -132,7 +132,7 @@ pub fn entry_fields(
         .collect()
 }
 
-/// The lists the estate's packs declare, each with the entries it holds and a form that
+/// The list params the estate's packs declare, each with the entries it holds and a form that
 /// adds one: a delegation, a delegated folder or project, a subnet. The form is built from
 /// the declaration — one field per declared field, its pattern under it, its default as
 /// the value an untouched field keeps — and the entry is written by satz's own writer
@@ -155,8 +155,8 @@ fn RequestsCard(requests: Vec<RequestRow>) -> Element {
             p { class: "interfaces__supporting",
                 "A pack declares what an entry of its list is: delegated access, a subnet, a budget. \"Add\" writes one into this estate ("
                 code { "satz add-entry" }
-                "); a team asks for one in a pack of its own, "
-                code { "contributes_<list>" }
+                "); a workload's team asks for one in a request file, "
+                code { "contributes_<list param>" }
                 ", checked with "
                 code { "satz check-request" }
                 "."
@@ -266,7 +266,7 @@ fn RequestsCard(requests: Vec<RequestRow>) -> Element {
 #[component]
 fn InterfaceCard(iface: InterfaceRow, rows: Vec<ExportRow>) -> Element {
     let app = use_context::<Store<AppStore>>();
-    // the folder the last transpile wrote for this interface: what is handed to a team
+    // the interface folder the last transpile wrote: what a workload's team copies
     let folder = app
         .open()
         .cloned()

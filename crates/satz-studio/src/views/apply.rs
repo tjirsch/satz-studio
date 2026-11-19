@@ -1,12 +1,12 @@
-//! The Apply destination: the estate's way to the organisation, in the order it is
+//! The Apply destination: the estate's way to the organization, in the order it is
 //! walked. Who runs it — the sign-in check, `satz_whoami` — then what state it is in,
-//! then the steps: the checks that go further than the compile every reload runs, day 0,
-//! the generated code, its directory, the plan and the apply
+//! then the steps: the checks that go further than the transpile every reload runs, the
+//! bootstrap, the HCL code, its directory, the plan and the apply
 //! ([ADR 0028](../../../../docs/adr/0028-apply-is-one-destination-and-starts-with-who-is-signed-in.md)).
 //!
 //! `transpile`, `hcl-init` and `plan` run in the app. The three that change a live
-//! organisation run in your terminal: `apply` because the tool's approval prompt is the
-//! safety step, `bootstrap` because it creates day 0 as you, and `migrate` because it
+//! organization run in your terminal: `apply` because the tool's approval prompt is the
+//! safety step, `bootstrap` because it creates the bootstrap's resources as you, and `migrate` because it
 //! rewrites the estate and copies the state to the other backend without asking
 //! ([ADR 0006](../../../../docs/adr/0006-apply-and-bootstrap-run-in-the-users-terminal.md),
 //! [ADR 0012](../../../../docs/adr/0012-migrate-hands-off-to-the-terminal.md)).
@@ -34,7 +34,7 @@ use satz_studio_core::satz::reports::EstateMode;
 /// The command that signs in, as satz's own refusal names it.
 const SIGN_IN: &str = "gcloud auth application-default login";
 
-/// The steps of the walk: an organisation's, or those of an estate in a delegated place.
+/// The steps of the walk: an organization's estate's, or those of a workload estate.
 pub fn steps(delegated: bool) -> &'static [&'static str] {
     if delegated { APPLY_DELEGATED } else { APPLY }
 }
@@ -61,7 +61,7 @@ pub fn sign_in_lines(report: &WhoamiReport) -> Vec<(String, bool)> {
             (Some(account), true) => lines.push((
                 match estate.may_impersonate {
                     Some(false) => format!(
-                        "The estate runs as {account}, and these credentials may not act as it"
+                        "The estate runs as {account}, and you are not signed in as someone who may act as it"
                     ),
                     _ => format!("The estate runs as {account}"),
                 },
@@ -83,7 +83,7 @@ pub fn sign_in_lines(report: &WhoamiReport) -> Vec<(String, bool)> {
         lines.push((
             match quota.reachable {
                 Some(false) => format!(
-                    "Calls are billed to {}, which these credentials cannot reach",
+                    "Calls are billed to {}, which your sign-in cannot reach",
                     quota.id
                 ),
                 _ => format!("Calls are billed to {}", quota.id),
@@ -99,7 +99,7 @@ pub fn sign_in_lines(report: &WhoamiReport) -> Vec<(String, bool)> {
             match p.missing.len() {
                 0 => format!("{} permissions tested, none missing", p.tested),
                 n => format!(
-                    "{} permissions tested, {n} missing — the Diagnostics bar names each",
+                    "{} permissions tested, {n} missing — Findings names each",
                     p.tested
                 ),
             },
@@ -141,12 +141,12 @@ pub fn ApplyView() -> Element {
         .model()
         .read()
         .as_deref()
-        .is_some_and(|m| m.packs.works_in != EstateMode::Organisation);
+        .is_some_and(|m| m.packs.works_in != EstateMode::Organization);
 
     rsx! {
         div { class: "view apply",
             h1 { class: "view__title", "Apply" }
-            p { class: "view__lead", "The estate's way to the organisation: who runs it, what state it is in, and the steps in the order they are walked." }
+            p { class: "view__lead", "The estate's way to the organization: who runs it, what state it is in, and the steps in the order they are walked." }
 
             Card { variant: CardVariant::Outlined, class: "apply__signin",
                 header { class: "apply__head",
@@ -217,12 +217,12 @@ pub fn ApplyView() -> Element {
                 Chip {
                     kind: ChipKind::Assist,
                     icon: if hcl.transpiled { "check_circle" } else { "pending" },
-                    label: if hcl.transpiled { "main.tf written" } else { "nothing emitted" },
+                    label: if hcl.transpiled { "main.tf written" } else { "not transpiled" },
                 }
                 Chip {
                     kind: ChipKind::Assist,
                     icon: if hcl.initialised { "check_circle" } else { "pending" },
-                    label: if hcl.initialised { "initialised" } else { "not initialised" },
+                    label: if hcl.initialised { "initialized" } else { "not initialized" },
                 }
             }
 
@@ -235,7 +235,7 @@ pub fn ApplyView() -> Element {
                     for (i, message) in prerequisites.iter().enumerate() {
                         p { key: "{i}", class: "apply__finding", "{message}" }
                     }
-                    p { class: "apply__note", "Writing them binds the roles on the estate's IaC service account and each API on the project its calls are billed to — the infrastructure project, or the project a resource sits inside — in the estate file; an API for a project a pack declares is named, not written. satz works both out offline, from the resource types this estate emits; the write goes through the same check and rollback as an answer." }
+                    p { class: "apply__note", "Writing them binds the roles on the estate account and each API on the project its calls are billed to — the infrastructure project, or the project a resource sits inside — in the estate file; an API for a project a pack declares is named, not written. satz works both out offline, from the resource types this estate transpiles to; the write goes through the same check and rollback as an answer." }
                     div { class: "apply__actions",
                         Button {
                             variant: ButtonVariant::Filled,
@@ -250,7 +250,7 @@ pub fn ApplyView() -> Element {
 
             if delegated {
                 p { class: "view__lead",
-                    "This estate works in a delegated place: day 0 and the state's move to another backend are the organisation's, and are not offered here."
+                    "This is a workload estate: the bootstrap and the state's move to another backend are the organization's, and are not offered here."
                 }
             }
             CommandDeck { key: "{delegated}", ids: steps(delegated).to_vec() }
@@ -321,10 +321,10 @@ mod tests {
         );
     }
 
-    /// A delegated estate walks the organisation's steps without day 0 and without the
+    /// A delegated estate walks the organization's steps without the bootstrap and without the
     /// state's move, in the same order.
     #[test]
-    fn a_delegated_estate_has_no_day_zero_and_no_migration() {
+    fn a_delegated_estate_has_no_bootstrap_and_no_migration() {
         let delegated = steps(true);
         for id in ["bootstrap", "bootstrap-check", "migrate"] {
             assert!(

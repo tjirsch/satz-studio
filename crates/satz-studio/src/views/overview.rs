@@ -1,7 +1,7 @@
 //! The Overview: which estate this is, and what it still has to do.
 //!
 //! The first card answers "am I in the right estate": first whose estate it is — the
-//! short name, the customer, the customer id and the organisation id, read from the
+//! short name, the customer, the customer id and the organization id, read from the
 //! file's own `params { }` block whether or not it uses the `estate_core` pack — then the
 //! answers the estate gave to the rest of its OWN questions, the ones that pack declares
 //! (the infrastructure it names, the identity it runs as), read from the questions
@@ -10,8 +10,8 @@
 //! not carry is simply not a row.
 //!
 //! The card of owed items is DERIVED from the estate's own state on every render — the
-//! questions report, the pack rows, the schema, the compile's findings, the generated
-//! HCL directory — so it cannot drift from the estate, and it disappears when there is
+//! questions report, the pack rows, the schema, the transpile's findings, the HCL
+//! directory — so it cannot drift from the estate, and it disappears when there is
 //! nothing left in it. Nothing is saved: there is no workflow to resume, no step to be
 //! trapped in, and no record of how the estate reached the app. An estate that was
 //! created, one that was imported and one that was opened show the same list, because
@@ -98,11 +98,11 @@ pub fn owed(f: &Facts) -> Vec<Owed> {
     // from the first minute and would otherwise surface at the first preset update.
     // An estate without a preset library has none to update, so it owes no repository for it.
     let no_presets = f.model.is_some_and(|m| !m.packs.has_presets());
-    // What the estate works in. Until the model is read it is taken for an organisation's.
+    // What the estate works in. Until the model is read it is taken for an organization's.
     let mode = f
         .model
         .map(|m| m.packs.works_in)
-        .unwrap_or(EstateMode::Organisation);
+        .unwrap_or(EstateMode::Organization);
     match f.work_tree {
         _ if no_presets => {}
         Some(WorkTree::Outside(said)) => out.push(Owed {
@@ -126,25 +126,26 @@ pub fn owed(f: &Facts) -> Vec<Owed> {
         Some(WorkTree::Inside) | None => {}
     }
 
-    // Day 0. The app cannot see a live organisation without calling one, so this rests
-    // on what is here: a cloud estate keeps its state in the bucket `bootstrap`
-    // creates, and an HCL directory that was never initialised has never reached it.
-    // Day 0 is an organisation's: `satz bootstrap` creates its folder, its infrastructure
-    // project and its account. An estate in a delegated folder or project was handed all
-    // three by the organisation's estate, and has no day 0 of its own.
-    if mode == EstateMode::Organisation && f.deployment_mode == Some("cloud") && !f.hcl.initialised
+    // The bootstrap. The app cannot see a live organization without calling one, so this
+    // rests on what is here: a cloud estate keeps its state in the bucket `bootstrap`
+    // creates, and an HCL directory that was never initialized has never reached it.
+    // The bootstrap is an organization's: `satz bootstrap` creates its folder, its
+    // infrastructure project and its estate account. An estate in a delegated folder or
+    // project was given all three by the organization's estate, and has no bootstrap of
+    // its own.
+    if mode == EstateMode::Organization && f.deployment_mode == Some("cloud") && !f.hcl.initialised
     {
         out.push(Owed {
             id: "bootstrap",
             icon: "foundation",
-            title: "Day 0 is not confirmed".to_string(),
+            title: "The bootstrap is not confirmed".to_string(),
             detail: format!(
-                "This estate keeps its state in a bucket that `satz bootstrap` creates, together with the folder, the infrastructure project and the billing link. Nothing has been initialised against that bucket from this checkout, so day 0 is either still owed or was done elsewhere. The dry run answers it: it prints the plan, resolves the identity your credentials give and runs the permission pre-flight, and creates nothing. The real run creates that infrastructure as you — the IaC service account does not exist yet — so it stays in your terminal.\nsatz bootstrap {} --dry-run",
+                "This estate keeps its state in a bucket that `satz bootstrap` creates, together with the folder, the infrastructure project and the billing link. Nothing has been initialized against that bucket from this checkout, so the bootstrap is either still owed or was done elsewhere. The dry run answers it: it prints the plan, resolves the identity you are signed in as and checks the prerequisites, and creates nothing. The real run creates that infrastructure as you — the estate account does not exist yet — so it stays in your terminal.\nsatz bootstrap {} --dry-run",
                 f.estate
             ),
             remedies: vec![
                 Remedy::Run {
-                    label: "Check day 0",
+                    label: "Check the bootstrap",
                     icon: "fact_check",
                     args: vec![
                         "bootstrap".to_string(),
@@ -187,14 +188,14 @@ pub fn owed(f: &Facts) -> Vec<Owed> {
             Some(PackLine::Commented) => out.push(Owed {
                 id: "map-off",
                 icon: "inventory_2",
-                title: "The pack map is switched off".to_string(),
+                title: "The estate map is switched off".to_string(),
                 detail: "`use \"presets/estate-map.satz\"` is commented out, so no pack asks this estate anything. Switching it on is what opens the questions the library declares.".to_string(),
                 remedies: vec![Remedy::Go(View::Presets)],
             }),
             Some(PackLine::Absent) => out.push(Owed {
                 id: "map-absent",
                 icon: "inventory_2",
-                title: "The estate has no pack map".to_string(),
+                title: "The estate has no estate map".to_string(),
                 detail: "The file carries no line for `presets/estate-map.satz`, the map of pack choices every other question hangs from. Switching it on in Presets writes the line where the pack graph places it.".to_string(),
                 remedies: vec![Remedy::Go(View::Presets)],
             }),
@@ -220,9 +221,9 @@ pub fn owed(f: &Facts) -> Vec<Owed> {
             });
         }
 
-        // A `use` line without its `when <gate>` deploys its pack whatever the estate
+        // A `use` line without its `when <gate>` applies its pack whatever the estate
         // answers. satz reports that as `ungated-pack` only while the file declaring the
-        // gate deploys, so with the map off the findings row above says nothing about it;
+        // gate is switched on, so with the map off the findings row above says nothing about it;
         // a row satz does speak about is left to satz's own sentence, in Presets.
         let ungated = model
             .packs
@@ -238,7 +239,7 @@ pub fn owed(f: &Facts) -> Vec<Owed> {
                     1 => "1 pack line has no gate".to_string(),
                     n => format!("{n} pack lines have no gate"),
                 },
-                detail: "A `use` line without its `when <gate>` deploys the pack whatever this estate answers, so no question switches it off. Presets names the gate each of them needs.".to_string(),
+                detail: "A `use` line without its `when <gate>` switches the pack on whatever this estate answers, so no question switches it off. Presets names the gate each of them needs.".to_string(),
                 remedies: vec![Remedy::Go(View::Presets)],
             });
         }
@@ -269,13 +270,13 @@ pub fn owed(f: &Facts) -> Vec<Owed> {
                     1 => "1 raw HCL block has not been reviewed".to_string(),
                     n => format!("{n} raw HCL blocks have not been reviewed"),
                 },
-                detail: "An `hcl { … }` block is emitted verbatim and is opaque to the compliance plane: no claim can cover it, and the compile warns on every transpile. Reading it and writing `hcl trust \"<reason>\" { … }` around it settles the debt — the warning becomes a note carrying the reason. Counted here are this estate file's own blocks; the drawer carries the compile's finding for every one in the estate, packs included.".to_string(),
+                detail: "An `hcl { … }` block is written into the HCL code verbatim and is opaque to the compliance plane: no claim can cover it, and satz warns on every transpile. Reading it and writing `hcl trust \"<reason>\" { … }` around it settles the debt — the warning becomes a note carrying the reason. Counted here are this estate file's own blocks; Findings carries the transpile's finding for every one in the estate, packs included.".to_string(),
                 remedies: vec![Remedy::Go(View::Estate)],
             });
         }
     }
 
-    // What a pack asks to be run once it is switched on. The compile raises one finding
+    // What a pack asks to be run once it is switched on. The transpile raises one finding
     // per open notice, so the count is satz's, not the app's; the window holds the ones
     // a write of this session opened and can raise their dialog again.
     let notices = f
@@ -311,20 +312,20 @@ pub fn owed(f: &Facts) -> Vec<Owed> {
             id: "prerequisites",
             icon: "admin_panel_settings",
             title: "The prerequisites are not declared".to_string(),
-            detail: "The compile found roles this estate's own resource types need and its IaC service account is not granted, or APIs a project its resources' calls are billed to does not enable. The drawer carries each of them; `satz update-prerequisites` writes them into the file. In a workload's estate satz writes nothing at the organisation: each line says what to ask the organisation's estate for, or what the estate grants its own account on its project.".to_string(),
+            detail: "The transpile found roles this estate's own resource types need and its estate account is not granted, or APIs a project its resources' calls are billed to does not enable. Findings carries each of them; `satz update-prerequisites` writes them into the file. In a workload estate satz writes nothing at the organization: each line says what to ask the organization's estate for, or what the estate grants its own account on its project.".to_string(),
             remedies: vec![Remedy::Go(View::Apply)],
         });
     }
 
-    // What proves a plan: a plan needs an initialised directory, so a directory that
-    // was never initialised has never been planned. The other way round proves
+    // What proves a plan: a plan needs an initialized directory, so a directory that
+    // was never initialized has never been planned. The other way round proves
     // nothing — a plan leaves no trace — so the row goes once the init is there.
     if !f.hcl.transpiled {
         out.push(Owed {
             id: "not-transpiled",
             icon: "build",
-            title: "The estate has not been compiled here".to_string(),
-            detail: "There is no `main.tf` in the HCL directory: nothing has been emitted from this checkout, so nothing has been planned against it either. `satz transpile` writes it, `hcl-init` prepares the directory and `plan` is what reads it back.".to_string(),
+            title: "The estate has not been transpiled here".to_string(),
+            detail: "There is no `main.tf` in the HCL directory: nothing has been transpiled from this checkout, so nothing has been planned against it either. `satz transpile` writes it, `hcl-init` prepares the directory and `plan` is what reads it back.".to_string(),
             remedies: vec![Remedy::Go(View::Apply)],
         });
     } else if !f.hcl.initialised {
@@ -332,7 +333,7 @@ pub fn owed(f: &Facts) -> Vec<Owed> {
             id: "not-planned",
             icon: "preview",
             title: "Not verified by a plan".to_string(),
-            detail: "The HCL is written and the directory is not initialised, and a plan needs an initialised directory — so nothing here has been through one. Whatever the estate says about the live organisation is still a claim. `hcl-init`, then `plan`.".to_string(),
+            detail: "The HCL code is written and the directory is not initialized, and a plan needs an initialized directory — so nothing here has been through one. Whatever the estate says about the live organization is still a claim. `hcl-init`, then `plan`.".to_string(),
             remedies: vec![Remedy::Go(View::Apply)],
         });
     }
@@ -352,7 +353,7 @@ const FILE_ORDER: [(&str, &str); 4] = [
     ("customer_shortname", "Short name"),
     ("customer_longname", "Customer"),
     ("customer_id", "Customer ID"),
-    ("customer_organization_id", "Organisation ID"),
+    ("customer_organization_id", "Organization ID"),
 ];
 
 /// The rest of the estate's own answers, in reading order. The subjects of [`FILE_ORDER`]
@@ -369,8 +370,8 @@ const CORE_ORDER: [(&str, &str); 12] = [
     ("workload_folder_name", "Workload folder"),
     ("infra_project_name", "Infrastructure project"),
     ("infra_bucket_name", "State bucket"),
-    ("svc_iac_account", "IaC service account"),
-    ("svc_iac_users_group", "Account group"),
+    ("svc_iac_account", "Estate account"),
+    ("estate_account_user_group", "Estate account user group"),
     ("deployment_engine", "Engine"),
     ("default_region", "Region"),
     ("default_zone", "Zone"),
@@ -530,7 +531,7 @@ fn label_for(subject: &str) -> String {
 }
 
 /// Who delegated, in sentences: one per interface file the estate reads, as satz's presets
-/// report gives them. The delegation's own file names the organisation's estate, the
+/// report gives them. The delegation's own file names the organization's estate, the
 /// account and who may act as it; a place's file names the project or says it is a folder.
 pub fn delegated_by_lines(by: &[DelegatedBy]) -> Vec<String> {
     by.iter()
@@ -540,13 +541,13 @@ pub fn delegated_by_lines(by: &[DelegatedBy]) -> Vec<String> {
                 (None, [org, ..]) => format!("the estate {} of {}", d.estate, org),
                 (None, []) => format!("the estate {}", d.estate),
             };
-            match (&d.account, &d.project, d.folder) {
+            match (&d.estate_account, &d.project, d.folder) {
                 (Some(account), _, _) => {
                     let mut s = format!("{whose}: the account {account}");
-                    if let Some(group) = &d.account_group {
+                    if let Some(group) = &d.estate_account_user_group {
                         s.push_str(&format!(", which the members of {group} may act as"));
                     }
-                    if let Some(project) = &d.deploy_project {
+                    if let Some(project) = &d.infrastructure_project {
                         s.push_str(&format!("; calls are billed to {project}"));
                     }
                     s
@@ -565,28 +566,28 @@ pub fn delegated_by_lines(by: &[DelegatedBy]) -> Vec<String> {
 /// what `satz_open` reported, which is enough to tell the ones an open estate can be in.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RunsAs<'a> {
-    /// cloud mode: the IaC service account the estate declares, impersonated by the ADC
+    /// cloud mode: the estate account the estate declares, impersonated by the signed-in
     /// identity
     Impersonated(&'a str),
-    /// the ADC identity itself, and why nothing is impersonated
-    Credentials(String),
+    /// the signed-in identity itself, and why nothing is impersonated
+    SignedIn(String),
 }
 
 /// `runs_as` is `satz_open`'s answer, null whenever the calls impersonate nothing; the
-/// mode is the estate's `deployment_mode`, `local` when it binds none — as the emitter,
+/// mode is the estate's `deployment_mode`, `local` when it binds none — as the transpile,
 /// `satz whoami` and `satz migrate` read it. In cloud mode a null `runs_as` means the
 /// estate declares no account to impersonate.
 pub fn runs_as_row<'a>(runs_as: Option<&'a str>, deployment_mode: Option<&str>) -> RunsAs<'a> {
     match (runs_as, deployment_mode.unwrap_or("local")) {
         (Some(account), _) => RunsAs::Impersonated(account),
-        (None, "cloud") => RunsAs::Credentials(
-            "the estate declares no IaC service account (svc_iac_account, infra_project_name), \
+        (None, "cloud") => RunsAs::SignedIn(
+            "the estate declares no estate account (svc_iac_account, infra_project_name), \
              so nothing is impersonated"
                 .to_string(),
         ),
-        (None, mode) => RunsAs::Credentials(format!(
-            "{mode} mode; `satz migrate --mode cloud` makes every run impersonate the IaC \
-             service account the estate declares"
+        (None, mode) => RunsAs::SignedIn(format!(
+            "{mode} mode; `satz migrate --mode cloud` makes every run impersonate the estate \
+             account the estate declares"
         )),
     }
 }
@@ -773,9 +774,9 @@ fn IdentityCard(facts: Vec<Fact>) -> Element {
                             Some(mode) => rsx! {
                                 Chip { kind: ChipKind::Assist, icon: mode.icon(), label: mode.label().to_string() }
                                 {match mode {
-                                    EstateMode::Organisation => " — the organisation itself; it is built from presets and may take workload packs",
-                                    EstateMode::Folder => " — a folder the organisation delegated access to; it is built from workload packs",
-                                    EstateMode::Project => " — a project the organisation delegated access to; it is built from workload packs",
+                                    EstateMode::Organization => " — the organization itself; it is built from presets and may take workload packs",
+                                    EstateMode::Folder => " — a folder the organization delegated access to; it is built from workload packs",
+                                    EstateMode::Project => " — a project the organization delegated access to; it is built from workload packs",
                                 }}
                             },
                             None => rsx! { span { class: "overview__unanswered", "not read yet" } },
@@ -792,8 +793,8 @@ fn IdentityCard(facts: Vec<Fact>) -> Element {
                 dt { "Runs as" }
                     dd {
                         match runs_as_row(open.runs_as.as_deref(), open.deployment_mode.as_deref()) {
-                            RunsAs::Impersonated(account) => rsx! { code { "{account}" } " — impersonated by the ADC identity" },
-                            RunsAs::Credentials(why) => rsx! { "the ADC identity — {why}" },
+                            RunsAs::Impersonated(account) => rsx! { code { "{account}" } " — impersonated by the signed-in identity" },
+                            RunsAs::SignedIn(why) => rsx! { "the signed-in identity — {why}" },
                         }
                     }
                     dt { "File" }
@@ -803,10 +804,10 @@ fn IdentityCard(facts: Vec<Fact>) -> Element {
                     dt { "State" }
                     dd {
                         match open.deployment_mode.as_deref() {
-                            Some("cloud") => "cloud — the state lives in the bucket bootstrap creates, and every apply runs as the IaC service account",
-                            Some("local") => "local — the state is a file beside the generated HCL",
+                            Some("cloud") => "cloud — the state lives in the bucket bootstrap creates, and every apply runs as the estate account",
+                            Some("local") => "local — the state is a file beside the HCL code",
                             Some(other) => other,
-                            None => "not set — the estate binds no deployment_mode, and the emitter takes local",
+                            None => "not set — the estate binds no deployment_mode, and satz takes local",
                         }
                     }
                     dt { "Schema" }
@@ -821,9 +822,9 @@ fn IdentityCard(facts: Vec<Fact>) -> Element {
                     dd {
                         {
                             let state = match (hcl.transpiled, hcl.initialised) {
-                                (false, _) => "nothing emitted yet",
-                                (true, false) => "emitted, not initialised",
-                                (true, true) => "emitted and initialised",
+                                (false, _) => "not transpiled yet",
+                                (true, false) => "transpiled, not initialized",
+                                (true, true) => "transpiled and initialized",
                             };
                             rsx! { "{state}" }
                         }
@@ -898,7 +899,7 @@ mod tests {
     }
 
     /// The four params that say whose estate this is, as an estate that does not use the
-    /// core pack sets them; the organisation id is a number.
+    /// core pack sets them; the organization id is a number.
     fn whose() -> Vec<ParamRow> {
         let mut org = param("customer_organization_id", "");
         org.value = SourceValue::Num("123456789012".to_string());
@@ -933,7 +934,7 @@ mod tests {
                     reading: value("C0example")
                 },
                 Fact {
-                    label: "Organisation ID".to_string(),
+                    label: "Organization ID".to_string(),
                     reading: value("123456789012")
                 },
             ]
@@ -962,7 +963,7 @@ mod tests {
                 "Short name",
                 "Customer",
                 "Customer ID",
-                "Organisation ID",
+                "Organization ID",
                 "Region"
             ]
         );
@@ -1042,18 +1043,19 @@ mod tests {
         assert_eq!(answered_rows(&facts)[0].reading, Reading::NotAnswered);
     }
 
-    /// The workload folder answered `""` says what `""` means — the organisation — rather
-    /// than an empty line; a choice says its option's label.
+    /// A question answered `""` whose `empty` says what `""` means reads that meaning
+    /// rather than an empty line — the showcase's team folder is one; a choice says its
+    /// option's label.
     #[test]
     fn an_empty_answer_says_its_meaning_and_a_choice_its_label() {
-        let mut folder = row("workload_folder_name", CORE_PACK, Some(json!("")));
-        folder.empty = Some("the organisation".to_string());
+        let mut folder = row("team_folder_name", CORE_PACK, Some(json!("")));
+        folder.empty = Some("no team folder".to_string());
         let r = report(vec![folder]);
         let facts = identity(Some(&[]), Some(&r));
-        assert_eq!(labels(answered_rows(&facts)), ["Workload folder"]);
+        assert_eq!(answered_rows(&facts).len(), 1);
         assert_eq!(
             answered_rows(&facts)[0].reading,
-            value("\"\" (the organisation)")
+            value("\"\" (no team folder)")
         );
         let choice: QuestionRow = serde_json::from_value(json!({
             "subject": "security_model", "kind": "oneof", "prompt": "p", "reversal": "edit",
@@ -1176,7 +1178,7 @@ mod tests {
             unmanaged: Vec::new(),
             interfaces: Vec::new(),
             delegated_by: Vec::new(),
-            works_in: satz_studio_core::satz::reports::EstateMode::Organisation,
+            works_in: satz_studio_core::satz::reports::EstateMode::Organization,
             findings: (0..findings)
                 .map(|i| Finding {
                     severity: FindingSeverity::Warning,
@@ -1249,17 +1251,18 @@ mod tests {
     }
 
     #[test]
-    fn day_zero_is_owed_by_a_cloud_estate_whose_hcl_was_never_initialised_and_by_no_local_one() {
+    fn the_bootstrap_is_owed_by_a_cloud_estate_whose_hcl_was_never_initialized_and_by_no_local_one()
+    {
         let m = model(packs(PackLine::Active, 0), loaded());
         let q = questions(0, 0);
         let fresh = HclState::default();
         let rows = owed(&facts(Some("cloud"), fresh, Some(&q), Some(&m), &[]));
         assert_eq!(ids(&rows), ["bootstrap", "not-transpiled"]);
-        let day_zero = &rows[0];
-        assert_eq!(day_zero.remedies.len(), 2, "a check and a hand-off");
-        assert!(matches!(day_zero.remedies[0], Remedy::Run { .. }));
-        assert!(matches!(day_zero.remedies[1], Remedy::Terminal { .. }));
-        // a local estate has no day 0: there is no bucket to create
+        let bootstrap = &rows[0];
+        assert_eq!(bootstrap.remedies.len(), 2, "a check and a hand-off");
+        assert!(matches!(bootstrap.remedies[0], Remedy::Run { .. }));
+        assert!(matches!(bootstrap.remedies[1], Remedy::Terminal { .. }));
+        // a local estate has no bootstrap: there is no bucket to create
         let rows = owed(&facts(Some("local"), fresh, Some(&q), Some(&m), &[]));
         assert_eq!(ids(&rows), ["not-transpiled"]);
     }
@@ -1334,7 +1337,7 @@ mod tests {
         assert_eq!(rows[0].remedies, [Remedy::Go(View::Presets)]);
     }
 
-    /// satz reports `ungated-pack` only while the file declaring the gate deploys, so the
+    /// satz reports `ungated-pack` only while the file declaring the gate is on, so the
     /// findings row is silent about a line no answer switches off in an estate with the
     /// map off. This row is not.
     #[test]
@@ -1435,7 +1438,7 @@ mod tests {
         assert!(owed(&facts(None, hcl, Some(&q), Some(&m), &[])).is_empty());
     }
 
-    /// The count is the compile's, so a notice acknowledged outside the window stops
+    /// The count is the transpile's, so a notice acknowledged outside the window stops
     /// being a row at the next reload; the button appears only where this session is
     /// holding the notice and can raise its dialog again.
     #[test]
@@ -1474,7 +1477,7 @@ mod tests {
             transpiled: true,
             initialised: true,
         };
-        let mut d = Diagnostic::error("the IaC service account lacks roles", DiagSource::Check);
+        let mut d = Diagnostic::error("the estate account lacks roles", DiagSource::Check);
         d.kind = Some("prerequisites".to_string());
         let rows = owed(&facts(
             None,
@@ -1578,13 +1581,13 @@ mod tests {
         );
     }
 
-    /// Local mode runs as the credentials whatever the estate declares, and the row
+    /// Local mode runs as the signed-in identity whatever the estate declares, and the row
     /// names the switch rather than claiming the estate declares no account — the card
     /// above it lists the account it does declare.
     #[test]
-    fn local_mode_runs_as_the_credentials_and_names_the_switch() {
+    fn local_mode_runs_as_the_signed_in_identity_and_names_the_switch() {
         for mode in [Some("local"), None] {
-            let RunsAs::Credentials(why) = runs_as_row(None, mode) else {
+            let RunsAs::SignedIn(why) = runs_as_row(None, mode) else {
                 panic!("local mode impersonates nothing");
             };
             assert!(why.starts_with("local mode;"), "{why}");
@@ -1596,13 +1599,13 @@ mod tests {
     /// Cloud mode with nothing to impersonate is the estate declaring no account.
     #[test]
     fn cloud_mode_without_an_account_says_the_estate_declares_none() {
-        let RunsAs::Credentials(why) = runs_as_row(None, Some("cloud")) else {
+        let RunsAs::SignedIn(why) = runs_as_row(None, Some("cloud")) else {
             panic!("nothing is impersonated");
         };
-        assert!(why.contains("declares no IaC service account"), "{why}");
+        assert!(why.contains("declares no estate account"), "{why}");
         assert!(!why.contains("migrate"), "{why}");
     }
-    /// The delegation's own file names the organisation's estate, the account and who may
+    /// The delegation's own file names the organization's estate, the account and who may
     /// act as it; a place's file names the project, or that it is a folder.
     #[test]
     fn who_delegated_is_said_per_interface_file() {
@@ -1612,17 +1615,17 @@ mod tests {
             estate: "c0example".into(),
             organizations: vec!["organizations/123456789012".into()],
             customer_shortname: Some("acme".into()),
-            account: Some("svc-deploy-shop@acme-deploy-shop.iam.gserviceaccount.com".into()),
-            account_group: Some("gcp-shop-admins@example.com".into()),
-            deploy_project: Some("acme-deploy-shop".into()),
+            estate_account: Some("svc-deploy-shop@acme-deploy-shop.iam.gserviceaccount.com".into()),
+            estate_account_user_group: Some("gcp-shop-admins@example.com".into()),
+            infrastructure_project: Some("acme-deploy-shop".into()),
             project: None,
             folder: false,
         };
         let project = DelegatedBy {
             interface: "shop-backend".into(),
-            account: None,
-            account_group: None,
-            deploy_project: None,
+            estate_account: None,
+            estate_account_user_group: None,
+            infrastructure_project: None,
             project: Some("acme-shop-backend-001".into()),
             customer_shortname: None,
             ..base.clone()

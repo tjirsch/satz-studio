@@ -2,7 +2,7 @@
 //! two places a reviewed pack goes.
 //!
 //! The rules are satz's; the view runs the command ([`EstateAction::ReviewPack`]) and
-//! shows what it said: the verdict, what the pack emits, each finding — clickable, and
+//! shows what it said: the verdict, what the pack creates, each finding — clickable, and
 //! in the drawer at its line — and the pack's own text with the chosen finding's line
 //! marked. Then the two destinations. **Upstream** is a pull request to the satz
 //! repository, by hand until satz ships `contribute-pack`: the card says what it takes and
@@ -46,7 +46,7 @@ fn choose_and_review(handle: Coroutine<EstateAction>, start: PathBuf, against: b
     });
 }
 
-/// The line the drawer's selection marks in the pack's text: the selected diagnostic's
+/// The line the drawer's selection marks in the pack's text: the selected finding's
 /// line, when it is a finding about this pack.
 pub fn marked_line(selected: Option<&Diagnostic>, pack: &Path) -> Option<u32> {
     selected
@@ -112,7 +112,7 @@ pub fn PackReviewCard() -> Element {
                 }
             }
             p { class: "review__lead",
-                "satz review-preset holds a pack to the library's own bar: it parses, it is formatted, its header says what it is, its version has a changelog row, it declares no membership, it runs no legacy constraint beside its managed replacement, every type it emits has a prerequisite row, and it compiles. The pack is folded into an estate made of the documented example values, or into "
+                "satz review-preset holds a pack to the library's own bar: it parses, it is formatted, its header says what it is, its version has a changelog row, it declares no membership, it runs no legacy constraint beside its managed replacement, every type it creates has a prerequisite row, and it transpiles. The pack is folded into an estate made of the documented example values, or into "
                 code { "{open.name}" }
                 " with the switch on — for a pack that estate uses. Each finding is in the drawer at its line."
             }
@@ -164,7 +164,7 @@ fn Reviewed(reviewed: ReviewedPack, presets: PathBuf, reviewing: bool) -> Elemen
     } else {
         "folded into example values"
     };
-    let emits = if r.emits.is_empty() {
+    let creates = if r.emits.is_empty() {
         "nothing".to_string()
     } else {
         r.emits.join(", ")
@@ -200,7 +200,7 @@ fn Reviewed(reviewed: ReviewedPack, presets: PathBuf, reviewing: bool) -> Elemen
             }
             Button { variant: ButtonVariant::Text, icon: "close", onclick: move |_| handle.send(EstateAction::CloseReview), "Close" }
         }
-        p { class: "review__emits", "{folded} · emits {emits}" }
+        p { class: "review__emits", "{folded} · creates {creates}" }
         div { class: "review__panes",
             List { class: "review__findings",
                 for (i, d) in diagnostics.into_iter().enumerate() {
@@ -291,7 +291,7 @@ fn Upstream(reviewed: ReviewedPack) -> Element {
                 }
                 li {
                     Icon { name: "shield", size: 18 }
-                    span { "no organisation in the file: the review reads every organisation and project id, e-mail address and domain that is not a documented example value as an error above, and each one becomes a param before the pack goes upstream." }
+                    span { "no organization in the file: the review reads every organization and project id, e-mail address and domain that is not a documented example value as an error above, and each one becomes a param before the pack goes upstream." }
                 }
             }
             div { class: "review__actions",

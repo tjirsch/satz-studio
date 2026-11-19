@@ -1,4 +1,4 @@
-//! The root component: the stores, the app coroutine, the stylesheets and the font,
+//! The root Dioxus component: the stores, the app coroutine, the stylesheets and the font,
 //! the theme attribute on the document root, the window's title, and the shell around the
 //! current view.
 
@@ -52,7 +52,7 @@ fn Studio(settings: Settings) -> Element {
 
     // The commands palette opens on ⌘K / Ctrl+K. The listener is the WINDOW's: a
     // keydown inside a text field never reaches a handler above it. It is installed
-    // here, in the component that mounts once, so opening a second estate does not
+    // here, in the root, which mounts once, so opening a second estate does not
     // leave a second listener behind.
     use_hook(move || {
         spawn(async move {

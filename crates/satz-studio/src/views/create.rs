@@ -1,7 +1,7 @@
 //! The Create door of the Start screen: the form behind `satz init`, and the run.
 //!
-//! `init` is a live command. It reads the Application Default Credentials and derives
-//! the customer's domain, directory id, organisation id, billing account and first
+//! `init` is a live command. It reads the sign-in and derives
+//! the customer's domain, directory id, organization id, billing account and first
 //! administrator from the platform, saying of each where it came from. The form
 //! therefore asks only for what satz cannot answer and offers the derivable values as
 //! overrides that are empty by default; what the run derives is shown in the log while
@@ -68,7 +68,7 @@ pub fn CreateEstate() -> Element {
         ..Default::default()
     });
 
-    // an organisation's estate, or a workload estate from the interface folders it was given
+    // an organization's estate, or a workload estate from the interface folders it was given
     let mut team = use_signal(|| false);
     let running = app.create().running().cloned();
     let log = app.create().log().cloned();
@@ -92,7 +92,7 @@ pub fn CreateEstate() -> Element {
             Card { variant: CardVariant::Outlined, class: "create__form",
                 h2 { class: "create__heading", Icon { name: "add_home", size: 22 } "New estate" }
                 p { class: "create__description",
-                    "satz init writes config.toml, satz/, hcl/, schemas/, .gitignore and the estate file into the folder you choose. It reads your Application Default Credentials and derives the customer's domain, directory id, organisation id, billing account and first administrator from the platform, saying of each where it came from."
+                    "satz init writes config.toml, satz/, hcl/, schemas/, .gitignore and the estate file into the folder you choose. It reads your sign-in and derives the customer's domain, directory id, organization id, billing account and first administrator from the platform, saying of each where it came from."
                 }
 
                 div { class: "create__folder",
@@ -117,8 +117,8 @@ pub fn CreateEstate() -> Element {
 
                 p { class: "create__label", "What the estate is for" }
                 SegmentedButton {
-                    options: vec![Segment::new("organisation", "An organisation"), Segment::new("team", "A workload, from interface folders")],
-                    selected: if team() { "team".to_string() } else { "organisation".to_string() },
+                    options: vec![Segment::new("organization", "An organization"), Segment::new("team", "A workload, from interface folders")],
+                    selected: if team() { "team".to_string() } else { "organization".to_string() },
                     onselect: move |v: String| {
                         team.set(v == "team");
                         if v != "team" {
@@ -130,7 +130,7 @@ pub fn CreateEstate() -> Element {
                 }
                 if team() {
                     p { class: "create__note",
-                        "A workload estate is written from the folders an organisation's estate wrote for a delegation, under its interfaces/outgoing/: the delegation's own, delegation-<name>, and that of the folder or project this estate works in. satz copies them into interfaces/incoming/ here and writes an estate that runs as the delegation's account."
+                        "A workload estate is written from the folders an organization's estate wrote for a delegation, under its interfaces/outgoing/: the delegation's own, delegation-<name>, and that of the folder or project this estate works in. satz copies them into interfaces/incoming/ here and writes an estate that runs as the delegation's account."
                     }
                     ChipList {
                         label: "Interface folders",
@@ -177,14 +177,6 @@ pub fn CreateEstate() -> Element {
                     supporting: "Left blank, satz writes europe-west3.",
                     oninput: move |v: String| options.write().default_region = v,
                 }
-                TextField {
-                    label: "Workload folder",
-                    value: options().workload_folder_name,
-                    placeholder: "Workloads",
-                    disabled: running,
-                    supporting: "The folder directly under the organisation that holds the customer's and the teams' folders. Left blank, they live at the organisation and no folder is created.",
-                    oninput: move |v: String| options.write().workload_folder_name = v,
-                }
                 }
                 p { class: "create__label", "Terraform tool" }
                 SegmentedButton {
@@ -213,9 +205,9 @@ pub fn CreateEstate() -> Element {
                 }
 
                 if !team() {
-                h3 { class: "create__subheading", "From your credentials, unless you state them" }
+                h3 { class: "create__subheading", "From your sign-in, unless you state them" }
                 p { class: "create__note",
-                    "Left blank, each of these is read from the credentials you are signed in with. State one to override what the platform answers."
+                    "Left blank, each of these is read from the account you are signed in with. State one to override what the platform answers."
                 }
                 TextField {
                     label: "Customer id",
@@ -273,7 +265,7 @@ pub fn CreateEstate() -> Element {
                 }
                 p { class: "create__privacy",
                     Icon { name: "lock", size: 18 }
-                    "What satz derives — an organisation id, a billing account, an administrator's address — is printed here and written into the estate satz creates. This app keeps none of it: not in its settings, not in a file of its own."
+                    "What satz derives — an organization id, a billing account, an administrator's address — is printed here and written into the estate satz creates. This app keeps none of it: not in its settings, not in a file of its own."
                 }
                 pre { class: "log",
                     for (i, line) in log.iter().enumerate() {

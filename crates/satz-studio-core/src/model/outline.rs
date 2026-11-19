@@ -57,9 +57,9 @@ fn within(inner: Span, outer: Span) -> bool {
 /// file is not a missing argument (`vendor/satz/src/emitter.rs`, `emit_shared.rs`): a
 /// folder's parent is its nesting and its display name falls back to its label; a
 /// project's name falls back to its id and its parent and billing account to the
-/// context; a group's key, parent and labels come from the customer; an org policy's
+/// context; a group's key, parent and labels come from the customer; an organization policy's
 /// parent is its nesting; every other type inherits the narrowest of project, folder
-/// and organisation into whichever of these attributes its schema has.
+/// and organization into whichever of these attributes its schema has.
 fn derived(tf_type: &str) -> &'static [&'static str] {
     match tf_type {
         "google_folder" => &["display_name", "parent"],

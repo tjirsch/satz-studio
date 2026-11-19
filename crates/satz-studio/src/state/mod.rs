@@ -107,14 +107,14 @@ pub enum View {
     Decisions,
     /// the preset library's pack lines: which are in, which are off, which the file has
     /// no line for. The destination of an estate that holds the library — an
-    /// organisation's; an estate in a delegated place has none
+    /// organization's; a workload estate has none
     Presets,
     /// the estate's workload packs: templates taken from a source and adapted here
     Packs,
     /// the estate file itself: its params and its resource tree
     Estate,
-    /// the estate's way to the organisation: who is signed in, what state it is in, and
-    /// the steps — the checks, day 0, the generated code, the plan, the apply
+    /// the estate's way to the organization: who is signed in, what state it is in, and
+    /// the steps — the checks, the bootstrap, the HCL code, the plan, the apply
     Apply,
     /// what the estate hands to people as a file: the decisions sheet
     Documents,
@@ -130,7 +130,7 @@ impl View {
     /// from what the estate HAS to what it still has to decide. A pack is what declares a
     /// question, and `merge-presets` — the command that brings new pack lines in — is in
     /// Packs, so Packs is where the questions in Decisions come from and it stands before
-    /// them. Apply is the estate's way to the organisation, and Documents is what is handed
+    /// them. Apply is the estate's way to the organization, and Documents is what is given
     /// to people once the rest is settled. Those five are the path, each ending with a
     /// bar that leads to the next (`views/path.rs`); Estate stands after them, because
     /// the estate file itself is not a step of the walk. Six; Material 3 puts up to seven
@@ -148,7 +148,7 @@ impl View {
     /// The primary destinations of the open estate. An estate that holds no preset
     /// library, as satz's presets report says ([`PacksReport::has_presets`]) — one in a
     /// delegated folder or project — has no Presets destination: the library is the
-    /// organisation's estate's.
+    /// organization's estate's.
     pub fn primary(presets: bool) -> Vec<View> {
         View::PRIMARY
             .into_iter()
@@ -210,8 +210,8 @@ impl View {
     }
 }
 
-/// The development routes — the Gallery — are behind `SATZ_STUDIO_DEBUG`: the component
-/// checklist is for whoever changes the components, not for an operator's rail.
+/// The development routes — the Gallery — are behind `SATZ_STUDIO_DEBUG`: the UI
+/// checklist is for whoever changes the Material widgets, not for an operator's rail.
 pub fn debug_routes() -> bool {
     std::env::var_os("SATZ_STUDIO_DEBUG").is_some_and(|v| !v.is_empty())
 }
@@ -258,10 +258,10 @@ impl Door {
     pub fn supporting(self) -> &'static str {
         match self {
             Door::Create => {
-                "A new estate, made by satz init: the config, the directories and the estate file, with what your credentials answer already in it."
+                "A new estate, made by satz init: the config, the directories and the estate file, with what your sign-in answers already in it."
             }
             Door::Import => {
-                "An estate made by satz import out of what exists: a tofu show -json document, a live organisation, folder or project, Terraform HCL, or a legacy YAML file."
+                "An estate made by satz import out of what exists: a tofu show -json document, a live organization, folder or project, Terraform HCL, or a legacy YAML file."
             }
             Door::Open => "An estate that is already on disk: choose the folder that holds it.",
         }
@@ -341,9 +341,9 @@ pub struct EstateStore {
     pub last_command: Option<String>,
     /// how the last command or tool call ended
     pub outcome: Option<CommandOutcome>,
-    /// the estate is being reloaded (questions, parse, model, the compile's own check)
+    /// the estate is being reloaded (questions, parse, model, the transpile's own check)
     pub loading: bool,
-    /// what the generated HCL directory holds, read at every reload: the Overview says
+    /// what the HCL directory holds, read at every reload: the Overview says
     /// what is still owed from it
     pub hcl: HclState,
     /// whether git holds the estate file's directory in a work tree, asked at every
@@ -385,9 +385,9 @@ pub struct EstateStore {
 #[derive(Debug, Clone, PartialEq)]
 pub enum SignIn {
     Checking,
-    /// satz's report: the credentials, the estate's account and what was checked
+    /// satz's report: the sign-in, the estate's account and what was checked
     Known(Box<satz_studio_core::satz::reports::WhoamiReport>),
-    /// satz's refusal, in its own words — no credentials, or a token that is not minted
+    /// satz's refusal, in its own words — no sign-in, or a token that is not minted
     Refused(String),
 }
 
@@ -406,7 +406,7 @@ impl PackReviewState {
         }
     }
 
-    /// The review's findings as diagnostics, for the drawer; none for a failed review,
+    /// The review's findings, for the drawer; none for a failed review,
     /// whose reason the view and the toast carry.
     pub fn diagnostics(&self) -> Vec<Diagnostic> {
         match self {
@@ -432,8 +432,8 @@ pub struct CommandOutcome {
 
 /// One `satz init` run behind the Create door, reset when a run starts.
 ///
-/// `init` derives a customer's organisation id, billing account and administrator
-/// address from the credentials and prints where each came from. Those lines are held
+/// `init` derives a customer's organization id, billing account and administrator
+/// address from the sign-in and prints where each came from. Those lines are held
 /// here, in memory, for as long as the window shows them; they are written into the
 /// estate satz created and nowhere else — not into `Settings`, not into a file of this
 /// app's own.
@@ -456,8 +456,8 @@ pub struct CreateStore {
 /// what it wrote, what it could not derive and what it left out.
 ///
 /// The privacy rule of [`CreateStore`] holds here word for word, and a live import makes
-/// it matter more: the run prints the organisation id, the customer directory id, the
-/// billing account and an administrator's address it derived from the credentials. Those
+/// it matter more: the run prints the organization id, the customer directory id, the
+/// billing account and an administrator's address it derived from the sign-in. Those
 /// lines live here, in memory, for as long as the window shows them; they are written
 /// into the estate satz created and nowhere else — not into `Settings`, not into a file
 /// of this app's own.
@@ -582,7 +582,7 @@ impl AppStore {
     }
 }
 
-/// The diagnostic the drawer selected last; the estate views scroll to it.
+/// The finding the drawer selected last; the estate views scroll to it.
 #[derive(Clone, Copy, PartialEq)]
 pub struct DiagnosticSelection(pub Signal<Option<Diagnostic>>);
 
@@ -666,7 +666,7 @@ mod tests {
         assert_eq!(icons.len(), all.len());
     }
 
-    /// An organisation's estate has Presets and Packs; an estate without a preset library
+    /// An organization's estate has Presets and Packs; an estate without a preset library
     /// has every other destination, Packs among them.
     #[test]
     fn an_estate_without_presets_has_every_primary_destination_but_presets() {

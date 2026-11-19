@@ -12,8 +12,10 @@ use super::SatzError;
 /// The oldest satz this build works with; an older binary is refused. It may sit below the
 /// submodule's satz ([`SatzBinary::built_against`]), and rises only when a satz release
 /// breaks the app or the app starts using something a later satz introduced — a routine pin
-/// bump leaves it alone (ADR 0014).
-pub const MIN_SATZ: &str = "0.101.0";
+/// bump leaves it alone (ADR 0014). It is 0.102.0 because the app reads report fields that
+/// release introduced: a delegation's `estate_account`, `estate_account_user_group` and
+/// `infrastructure_project`, and the `list_params` of `satz interfaces`.
+pub const MIN_SATZ: &str = "0.102.0";
 
 /// The manifest of the submodule `vendor/satz`, whose version is the satz this build is
 /// built and tested against.
@@ -133,7 +135,7 @@ impl SatzBinary {
     }
 
     /// The satz this build is built and tested against: the version of the submodule
-    /// `vendor/satz`, read from its manifest as the crate compiled, so it cannot name
+    /// `vendor/satz`, read from its manifest when the crate is built, so it cannot name
     /// another release than the one the tests ran over.
     pub fn built_against() -> semver::Version {
         let version = VENDORED_MANIFEST

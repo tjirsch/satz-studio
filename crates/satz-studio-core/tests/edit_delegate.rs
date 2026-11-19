@@ -24,7 +24,7 @@ impl Checker for Unreached {
     }
 }
 
-/// A checker that refuses every file with no diagnostics.
+/// A checker that refuses every file with no findings.
 struct Refuses;
 
 impl Checker for Refuses {

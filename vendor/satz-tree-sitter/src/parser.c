@@ -51,7 +51,7 @@ enum ts_symbol_identifiers {
   anon_sym_each = 29,
   anon_sym_by = 30,
   anon_sym_private = 31,
-  anon_sym_request = 32,
+  anon_sym_entries = 32,
   anon_sym_suppress = 33,
   anon_sym_role = 34,
   anon_sym_hcl = 35,
@@ -99,7 +99,7 @@ enum ts_symbol_identifiers {
   sym_each_interface = 77,
   sym_use_interface = 78,
   sym_private = 79,
-  sym_request = 80,
+  sym_entries = 80,
   sym_suppress = 81,
   sym_hcl_block = 82,
   sym_hcl_body = 83,
@@ -166,7 +166,7 @@ static const char * const ts_symbol_names[] = {
   [anon_sym_each] = "each",
   [anon_sym_by] = "by",
   [anon_sym_private] = "private",
-  [anon_sym_request] = "request",
+  [anon_sym_entries] = "entries",
   [anon_sym_suppress] = "suppress",
   [anon_sym_role] = "role",
   [anon_sym_hcl] = "hcl",
@@ -214,7 +214,7 @@ static const char * const ts_symbol_names[] = {
   [sym_each_interface] = "each_interface",
   [sym_use_interface] = "use_interface",
   [sym_private] = "private",
-  [sym_request] = "request",
+  [sym_entries] = "entries",
   [sym_suppress] = "suppress",
   [sym_hcl_block] = "hcl_block",
   [sym_hcl_body] = "hcl_body",
@@ -281,7 +281,7 @@ static const TSSymbol ts_symbol_map[] = {
   [anon_sym_each] = anon_sym_each,
   [anon_sym_by] = anon_sym_by,
   [anon_sym_private] = anon_sym_private,
-  [anon_sym_request] = anon_sym_request,
+  [anon_sym_entries] = anon_sym_entries,
   [anon_sym_suppress] = anon_sym_suppress,
   [anon_sym_role] = anon_sym_role,
   [anon_sym_hcl] = anon_sym_hcl,
@@ -329,7 +329,7 @@ static const TSSymbol ts_symbol_map[] = {
   [sym_each_interface] = sym_each_interface,
   [sym_use_interface] = sym_use_interface,
   [sym_private] = sym_private,
-  [sym_request] = sym_request,
+  [sym_entries] = sym_entries,
   [sym_suppress] = sym_suppress,
   [sym_hcl_block] = sym_hcl_block,
   [sym_hcl_body] = sym_hcl_body,
@@ -492,7 +492,7 @@ static const TSSymbolMetadata ts_symbol_metadata[] = {
     .visible = true,
     .named = false,
   },
-  [anon_sym_request] = {
+  [anon_sym_entries] = {
     .visible = true,
     .named = false,
   },
@@ -684,7 +684,7 @@ static const TSSymbolMetadata ts_symbol_metadata[] = {
     .visible = true,
     .named = true,
   },
-  [sym_request] = {
+  [sym_entries] = {
     .visible = true,
     .named = true,
   },
@@ -1892,35 +1892,35 @@ static bool ts_lex_keywords(TSLexer *lexer, TSStateId state) {
       END_STATE();
     case 5:
       if (lookahead == 'a') ADVANCE(27);
-      if (lookahead == 's') ADVANCE(28);
-      if (lookahead == 'x') ADVANCE(29);
+      if (lookahead == 'n') ADVANCE(28);
+      if (lookahead == 's') ADVANCE(29);
+      if (lookahead == 'x') ADVANCE(30);
       END_STATE();
     case 6:
-      if (lookahead == 'a') ADVANCE(30);
+      if (lookahead == 'a') ADVANCE(31);
       END_STATE();
     case 7:
-      if (lookahead == 'c') ADVANCE(31);
+      if (lookahead == 'c') ADVANCE(32);
       END_STATE();
     case 8:
-      if (lookahead == 'm') ADVANCE(32);
-      if (lookahead == 'n') ADVANCE(33);
+      if (lookahead == 'm') ADVANCE(33);
+      if (lookahead == 'n') ADVANCE(34);
       END_STATE();
     case 9:
-      if (lookahead == 'o') ADVANCE(34);
+      if (lookahead == 'o') ADVANCE(35);
       END_STATE();
     case 10:
-      if (lookahead == 'f') ADVANCE(35);
-      if (lookahead == 'n') ADVANCE(36);
+      if (lookahead == 'f') ADVANCE(36);
+      if (lookahead == 'n') ADVANCE(37);
       END_STATE();
     case 11:
-      if (lookahead == 'a') ADVANCE(37);
-      if (lookahead == 'r') ADVANCE(38);
+      if (lookahead == 'a') ADVANCE(38);
+      if (lookahead == 'r') ADVANCE(39);
       END_STATE();
     case 12:
-      if (lookahead == 'u') ADVANCE(39);
+      if (lookahead == 'u') ADVANCE(40);
       END_STATE();
     case 13:
-      if (lookahead == 'e') ADVANCE(40);
       if (lookahead == 'o') ADVANCE(41);
       END_STATE();
     case 14:
@@ -1972,42 +1972,42 @@ static bool ts_lex_keywords(TSLexer *lexer, TSStateId state) {
       if (lookahead == 't') ADVANCE(57);
       END_STATE();
     case 29:
-      if (lookahead == 'p') ADVANCE(58);
+      if (lookahead == 't') ADVANCE(58);
       END_STATE();
     case 30:
-      if (lookahead == 'l') ADVANCE(59);
+      if (lookahead == 'p') ADVANCE(59);
       END_STATE();
     case 31:
       if (lookahead == 'l') ADVANCE(60);
       END_STATE();
     case 32:
-      if (lookahead == 'p') ADVANCE(61);
+      if (lookahead == 'l') ADVANCE(61);
       END_STATE();
     case 33:
       if (lookahead == 'p') ADVANCE(62);
-      if (lookahead == 't') ADVANCE(63);
       END_STATE();
     case 34:
+      if (lookahead == 'p') ADVANCE(63);
       if (lookahead == 't') ADVANCE(64);
       END_STATE();
     case 35:
-      if (lookahead == 'f') ADVANCE(65);
+      if (lookahead == 't') ADVANCE(65);
       END_STATE();
     case 36:
-      if (lookahead == 'e') ADVANCE(66);
+      if (lookahead == 'f') ADVANCE(66);
       END_STATE();
     case 37:
-      if (lookahead == 'c') ADVANCE(67);
-      if (lookahead == 'r') ADVANCE(68);
+      if (lookahead == 'e') ADVANCE(67);
       END_STATE();
     case 38:
-      if (lookahead == 'i') ADVANCE(69);
+      if (lookahead == 'c') ADVANCE(68);
+      if (lookahead == 'r') ADVANCE(69);
       END_STATE();
     case 39:
-      if (lookahead == 'e') ADVANCE(70);
+      if (lookahead == 'i') ADVANCE(70);
       END_STATE();
     case 40:
-      if (lookahead == 'q') ADVANCE(71);
+      if (lookahead == 'e') ADVANCE(71);
       END_STATE();
     case 41:
       if (lookahead == 'l') ADVANCE(72);
@@ -2058,50 +2058,50 @@ static bool ts_lex_keywords(TSLexer *lexer, TSStateId state) {
       if (lookahead == 'h') ADVANCE(86);
       END_STATE();
     case 57:
-      if (lookahead == 'a') ADVANCE(87);
+      if (lookahead == 'r') ADVANCE(87);
       END_STATE();
     case 58:
-      if (lookahead == 'o') ADVANCE(88);
+      if (lookahead == 'a') ADVANCE(88);
       END_STATE();
     case 59:
-      if (lookahead == 's') ADVANCE(89);
+      if (lookahead == 'o') ADVANCE(89);
       END_STATE();
     case 60:
-      ACCEPT_TOKEN(anon_sym_hcl);
+      if (lookahead == 's') ADVANCE(90);
       END_STATE();
     case 61:
-      if (lookahead == 'l') ADVANCE(90);
+      ACCEPT_TOKEN(anon_sym_hcl);
       END_STATE();
     case 62:
-      if (lookahead == 'u') ADVANCE(91);
+      if (lookahead == 'l') ADVANCE(91);
       END_STATE();
     case 63:
-      if (lookahead == 'e') ADVANCE(92);
+      if (lookahead == 'u') ADVANCE(92);
       END_STATE();
     case 64:
-      ACCEPT_TOKEN(anon_sym_not);
-      if (lookahead == 'i') ADVANCE(93);
+      if (lookahead == 'e') ADVANCE(93);
       END_STATE();
     case 65:
-      if (lookahead == 'e') ADVANCE(94);
+      ACCEPT_TOKEN(anon_sym_not);
+      if (lookahead == 'i') ADVANCE(94);
       END_STATE();
     case 66:
-      if (lookahead == 'o') ADVANCE(95);
+      if (lookahead == 'e') ADVANCE(95);
       END_STATE();
     case 67:
-      if (lookahead == 'k') ADVANCE(96);
+      if (lookahead == 'o') ADVANCE(96);
       END_STATE();
     case 68:
-      if (lookahead == 'a') ADVANCE(97);
+      if (lookahead == 'k') ADVANCE(97);
       END_STATE();
     case 69:
-      if (lookahead == 'v') ADVANCE(98);
+      if (lookahead == 'a') ADVANCE(98);
       END_STATE();
     case 70:
-      if (lookahead == 's') ADVANCE(99);
+      if (lookahead == 'v') ADVANCE(99);
       END_STATE();
     case 71:
-      if (lookahead == 'u') ADVANCE(100);
+      if (lookahead == 's') ADVANCE(100);
       END_STATE();
     case 72:
       if (lookahead == 'e') ADVANCE(101);
@@ -2150,46 +2150,46 @@ static bool ts_lex_keywords(TSLexer *lexer, TSStateId state) {
       ACCEPT_TOKEN(anon_sym_each);
       END_STATE();
     case 87:
-      if (lookahead == 't') ADVANCE(115);
+      if (lookahead == 'i') ADVANCE(115);
       END_STATE();
     case 88:
-      if (lookahead == 'r') ADVANCE(116);
+      if (lookahead == 't') ADVANCE(116);
       END_STATE();
     case 89:
-      if (lookahead == 'e') ADVANCE(117);
+      if (lookahead == 'r') ADVANCE(117);
       END_STATE();
     case 90:
       if (lookahead == 'e') ADVANCE(118);
       END_STATE();
     case 91:
-      if (lookahead == 't') ADVANCE(119);
+      if (lookahead == 'e') ADVANCE(119);
       END_STATE();
     case 92:
-      if (lookahead == 'r') ADVANCE(120);
+      if (lookahead == 't') ADVANCE(120);
       END_STATE();
     case 93:
-      if (lookahead == 'c') ADVANCE(121);
+      if (lookahead == 'r') ADVANCE(121);
       END_STATE();
     case 94:
-      if (lookahead == 'r') ADVANCE(122);
+      if (lookahead == 'c') ADVANCE(122);
       END_STATE();
     case 95:
-      if (lookahead == 'f') ADVANCE(123);
+      if (lookahead == 'r') ADVANCE(123);
       END_STATE();
     case 96:
-      ACCEPT_TOKEN(anon_sym_pack);
+      if (lookahead == 'f') ADVANCE(124);
       END_STATE();
     case 97:
-      if (lookahead == 'm') ADVANCE(124);
+      ACCEPT_TOKEN(anon_sym_pack);
       END_STATE();
     case 98:
-      if (lookahead == 'a') ADVANCE(125);
+      if (lookahead == 'm') ADVANCE(125);
       END_STATE();
     case 99:
-      if (lookahead == 't') ADVANCE(126);
+      if (lookahead == 'a') ADVANCE(126);
       END_STATE();
     case 100:
-      if (lookahead == 'e') ADVANCE(127);
+      if (lookahead == 't') ADVANCE(127);
       END_STATE();
     case 101:
       ACCEPT_TOKEN(anon_sym_role);
@@ -2237,40 +2237,40 @@ static bool ts_lex_keywords(TSLexer *lexer, TSStateId state) {
       if (lookahead == 'e') ADVANCE(138);
       END_STATE();
     case 116:
-      if (lookahead == 't') ADVANCE(139);
+      if (lookahead == 'e') ADVANCE(139);
       END_STATE();
     case 117:
-      ACCEPT_TOKEN(anon_sym_false);
+      if (lookahead == 't') ADVANCE(140);
       END_STATE();
     case 118:
-      if (lookahead == 'm') ADVANCE(140);
+      ACCEPT_TOKEN(anon_sym_false);
       END_STATE();
     case 119:
-      if (lookahead == 's') ADVANCE(141);
+      if (lookahead == 'm') ADVANCE(141);
       END_STATE();
     case 120:
-      if (lookahead == 'f') ADVANCE(142);
+      if (lookahead == 's') ADVANCE(142);
       END_STATE();
     case 121:
-      if (lookahead == 'e') ADVANCE(143);
+      if (lookahead == 'f') ADVANCE(143);
       END_STATE();
     case 122:
-      if (lookahead == 's') ADVANCE(144);
+      if (lookahead == 'e') ADVANCE(144);
       END_STATE();
     case 123:
-      ACCEPT_TOKEN(anon_sym_oneof);
-      END_STATE();
-    case 124:
       if (lookahead == 's') ADVANCE(145);
       END_STATE();
+    case 124:
+      ACCEPT_TOKEN(anon_sym_oneof);
+      END_STATE();
     case 125:
-      if (lookahead == 't') ADVANCE(146);
+      if (lookahead == 's') ADVANCE(146);
       END_STATE();
     case 126:
-      if (lookahead == 'i') ADVANCE(147);
+      if (lookahead == 't') ADVANCE(147);
       END_STATE();
     case 127:
-      if (lookahead == 's') ADVANCE(148);
+      if (lookahead == 'i') ADVANCE(148);
       END_STATE();
     case 128:
       if (lookahead == 'e') ADVANCE(149);
@@ -2303,37 +2303,37 @@ static bool ts_lex_keywords(TSLexer *lexer, TSStateId state) {
       if (lookahead == 'e') ADVANCE(153);
       END_STATE();
     case 138:
-      ACCEPT_TOKEN(anon_sym_estate);
+      if (lookahead == 's') ADVANCE(154);
       END_STATE();
     case 139:
-      ACCEPT_TOKEN(anon_sym_export);
+      ACCEPT_TOKEN(anon_sym_estate);
       END_STATE();
     case 140:
-      if (lookahead == 'e') ADVANCE(154);
+      ACCEPT_TOKEN(anon_sym_export);
       END_STATE();
     case 141:
-      ACCEPT_TOKEN(anon_sym_inputs);
+      if (lookahead == 'e') ADVANCE(155);
       END_STATE();
     case 142:
-      if (lookahead == 'a') ADVANCE(155);
+      ACCEPT_TOKEN(anon_sym_inputs);
       END_STATE();
     case 143:
-      ACCEPT_TOKEN(anon_sym_notice);
+      if (lookahead == 'a') ADVANCE(156);
       END_STATE();
     case 144:
-      ACCEPT_TOKEN(anon_sym_offers);
+      ACCEPT_TOKEN(anon_sym_notice);
       END_STATE();
     case 145:
-      ACCEPT_TOKEN(anon_sym_params);
+      ACCEPT_TOKEN(anon_sym_offers);
       END_STATE();
     case 146:
-      if (lookahead == 'e') ADVANCE(156);
+      ACCEPT_TOKEN(anon_sym_params);
       END_STATE();
     case 147:
-      if (lookahead == 'o') ADVANCE(157);
+      if (lookahead == 'e') ADVANCE(157);
       END_STATE();
     case 148:
-      if (lookahead == 't') ADVANCE(158);
+      if (lookahead == 'o') ADVANCE(158);
       END_STATE();
     case 149:
       if (lookahead == 's') ADVANCE(159);
@@ -2351,19 +2351,19 @@ static bool ts_lex_keywords(TSLexer *lexer, TSStateId state) {
       if (lookahead == 's') ADVANCE(163);
       END_STATE();
     case 154:
-      if (lookahead == 'n') ADVANCE(164);
+      ACCEPT_TOKEN(anon_sym_entries);
       END_STATE();
     case 155:
-      if (lookahead == 'c') ADVANCE(165);
+      if (lookahead == 'n') ADVANCE(164);
       END_STATE();
     case 156:
-      ACCEPT_TOKEN(anon_sym_private);
+      if (lookahead == 'c') ADVANCE(165);
       END_STATE();
     case 157:
-      if (lookahead == 'n') ADVANCE(166);
+      ACCEPT_TOKEN(anon_sym_private);
       END_STATE();
     case 158:
-      ACCEPT_TOKEN(anon_sym_request);
+      if (lookahead == 'n') ADVANCE(166);
       END_STATE();
     case 159:
       if (lookahead == 's') ADVANCE(167);
@@ -2701,7 +2701,7 @@ static const uint16_t ts_parse_table[LARGE_STATE_COUNT][SYMBOL_COUNT] = {
     [anon_sym_each] = ACTIONS(1),
     [anon_sym_by] = ACTIONS(1),
     [anon_sym_private] = ACTIONS(1),
-    [anon_sym_request] = ACTIONS(1),
+    [anon_sym_entries] = ACTIONS(1),
     [anon_sym_suppress] = ACTIONS(1),
     [anon_sym_role] = ACTIONS(1),
     [anon_sym_hcl] = ACTIONS(1),
@@ -2738,7 +2738,7 @@ static const uint16_t ts_parse_table[LARGE_STATE_COUNT][SYMBOL_COUNT] = {
     [sym_interface] = STATE(2),
     [sym_each_interface] = STATE(2),
     [sym_private] = STATE(2),
-    [sym_request] = STATE(2),
+    [sym_entries] = STATE(2),
     [sym_suppress] = STATE(2),
     [sym_hcl_block] = STATE(2),
     [sym_attribute] = STATE(2),
@@ -2765,7 +2765,7 @@ static const uint16_t ts_parse_table[LARGE_STATE_COUNT][SYMBOL_COUNT] = {
     [anon_sym_export] = ACTIONS(31),
     [anon_sym_each] = ACTIONS(33),
     [anon_sym_private] = ACTIONS(35),
-    [anon_sym_request] = ACTIONS(37),
+    [anon_sym_entries] = ACTIONS(37),
     [anon_sym_suppress] = ACTIONS(39),
     [anon_sym_hcl] = ACTIONS(41),
     [anon_sym_DQUOTE] = ACTIONS(43),
@@ -2807,7 +2807,7 @@ static const uint16_t ts_small_parse_table[] = {
     ACTIONS(35), 1,
       anon_sym_private,
     ACTIONS(37), 1,
-      anon_sym_request,
+      anon_sym_entries,
     ACTIONS(39), 1,
       anon_sym_suppress,
     ACTIONS(41), 1,
@@ -2842,7 +2842,7 @@ static const uint16_t ts_small_parse_table[] = {
       sym_interface,
       sym_each_interface,
       sym_private,
-      sym_request,
+      sym_entries,
       sym_suppress,
       sym_hcl_block,
       sym_attribute,
@@ -2882,7 +2882,7 @@ static const uint16_t ts_small_parse_table[] = {
     ACTIONS(93), 1,
       anon_sym_private,
     ACTIONS(96), 1,
-      anon_sym_request,
+      anon_sym_entries,
     ACTIONS(99), 1,
       anon_sym_suppress,
     ACTIONS(102), 1,
@@ -2915,7 +2915,7 @@ static const uint16_t ts_small_parse_table[] = {
       sym_interface,
       sym_each_interface,
       sym_private,
-      sym_request,
+      sym_entries,
       sym_suppress,
       sym_hcl_block,
       sym_attribute,
@@ -2948,7 +2948,7 @@ static const uint16_t ts_small_parse_table[] = {
       anon_sym_common,
       anon_sym_each,
       anon_sym_private,
-      anon_sym_request,
+      anon_sym_entries,
       anon_sym_suppress,
       anon_sym_role,
       anon_sym_hcl,
@@ -2981,7 +2981,7 @@ static const uint16_t ts_small_parse_table[] = {
       anon_sym_common,
       anon_sym_each,
       anon_sym_private,
-      anon_sym_request,
+      anon_sym_entries,
       anon_sym_suppress,
       anon_sym_role,
       anon_sym_hcl,
@@ -3014,7 +3014,7 @@ static const uint16_t ts_small_parse_table[] = {
       anon_sym_common,
       anon_sym_each,
       anon_sym_private,
-      anon_sym_request,
+      anon_sym_entries,
       anon_sym_suppress,
       anon_sym_role,
       anon_sym_hcl,
@@ -3047,7 +3047,7 @@ static const uint16_t ts_small_parse_table[] = {
       anon_sym_common,
       anon_sym_each,
       anon_sym_private,
-      anon_sym_request,
+      anon_sym_entries,
       anon_sym_suppress,
       anon_sym_role,
       anon_sym_hcl,
@@ -3080,7 +3080,7 @@ static const uint16_t ts_small_parse_table[] = {
       anon_sym_common,
       anon_sym_each,
       anon_sym_private,
-      anon_sym_request,
+      anon_sym_entries,
       anon_sym_suppress,
       anon_sym_role,
       anon_sym_hcl,
@@ -3113,7 +3113,7 @@ static const uint16_t ts_small_parse_table[] = {
       anon_sym_description,
       anon_sym_each,
       anon_sym_private,
-      anon_sym_request,
+      anon_sym_entries,
       anon_sym_suppress,
       anon_sym_hcl,
       sym_identifier,
@@ -3146,7 +3146,7 @@ static const uint16_t ts_small_parse_table[] = {
       anon_sym_export,
       anon_sym_each,
       anon_sym_private,
-      anon_sym_request,
+      anon_sym_entries,
       anon_sym_suppress,
       anon_sym_hcl,
       sym_identifier,
@@ -3176,7 +3176,7 @@ static const uint16_t ts_small_parse_table[] = {
       anon_sym_description,
       anon_sym_each,
       anon_sym_private,
-      anon_sym_request,
+      anon_sym_entries,
       anon_sym_suppress,
       anon_sym_hcl,
       sym_identifier,
@@ -3206,7 +3206,7 @@ static const uint16_t ts_small_parse_table[] = {
       anon_sym_description,
       anon_sym_each,
       anon_sym_private,
-      anon_sym_request,
+      anon_sym_entries,
       anon_sym_suppress,
       anon_sym_hcl,
       sym_identifier,
@@ -3236,7 +3236,7 @@ static const uint16_t ts_small_parse_table[] = {
       anon_sym_description,
       anon_sym_each,
       anon_sym_private,
-      anon_sym_request,
+      anon_sym_entries,
       anon_sym_suppress,
       anon_sym_hcl,
       sym_identifier,
@@ -3266,7 +3266,7 @@ static const uint16_t ts_small_parse_table[] = {
       anon_sym_description,
       anon_sym_each,
       anon_sym_private,
-      anon_sym_request,
+      anon_sym_entries,
       anon_sym_suppress,
       anon_sym_hcl,
       sym_identifier,
@@ -3296,7 +3296,7 @@ static const uint16_t ts_small_parse_table[] = {
       anon_sym_description,
       anon_sym_each,
       anon_sym_private,
-      anon_sym_request,
+      anon_sym_entries,
       anon_sym_suppress,
       anon_sym_hcl,
       sym_identifier,
@@ -3331,7 +3331,7 @@ static const uint16_t ts_small_parse_table[] = {
       anon_sym_export,
       anon_sym_each,
       anon_sym_private,
-      anon_sym_request,
+      anon_sym_entries,
       anon_sym_suppress,
       anon_sym_hcl,
       anon_sym_DQUOTE,
@@ -3363,7 +3363,7 @@ static const uint16_t ts_small_parse_table[] = {
       anon_sym_export,
       anon_sym_each,
       anon_sym_private,
-      anon_sym_request,
+      anon_sym_entries,
       anon_sym_suppress,
       anon_sym_hcl,
       sym_identifier,
@@ -3393,7 +3393,7 @@ static const uint16_t ts_small_parse_table[] = {
       anon_sym_description,
       anon_sym_each,
       anon_sym_private,
-      anon_sym_request,
+      anon_sym_entries,
       anon_sym_suppress,
       anon_sym_hcl,
       sym_identifier,
@@ -3423,7 +3423,7 @@ static const uint16_t ts_small_parse_table[] = {
       anon_sym_description,
       anon_sym_each,
       anon_sym_private,
-      anon_sym_request,
+      anon_sym_entries,
       anon_sym_suppress,
       anon_sym_hcl,
       sym_identifier,
@@ -3456,7 +3456,7 @@ static const uint16_t ts_small_parse_table[] = {
       anon_sym_export,
       anon_sym_each,
       anon_sym_private,
-      anon_sym_request,
+      anon_sym_entries,
       anon_sym_suppress,
       anon_sym_hcl,
       sym_identifier,
@@ -3489,7 +3489,7 @@ static const uint16_t ts_small_parse_table[] = {
       anon_sym_export,
       anon_sym_each,
       anon_sym_private,
-      anon_sym_request,
+      anon_sym_entries,
       anon_sym_suppress,
       anon_sym_hcl,
       sym_identifier,
@@ -3519,7 +3519,7 @@ static const uint16_t ts_small_parse_table[] = {
       anon_sym_description,
       anon_sym_each,
       anon_sym_private,
-      anon_sym_request,
+      anon_sym_entries,
       anon_sym_suppress,
       anon_sym_hcl,
       sym_identifier,
@@ -3549,7 +3549,7 @@ static const uint16_t ts_small_parse_table[] = {
       anon_sym_description,
       anon_sym_each,
       anon_sym_private,
-      anon_sym_request,
+      anon_sym_entries,
       anon_sym_suppress,
       anon_sym_hcl,
       sym_identifier,
@@ -3579,7 +3579,7 @@ static const uint16_t ts_small_parse_table[] = {
       anon_sym_description,
       anon_sym_each,
       anon_sym_private,
-      anon_sym_request,
+      anon_sym_entries,
       anon_sym_suppress,
       anon_sym_hcl,
       sym_identifier,
@@ -3612,7 +3612,7 @@ static const uint16_t ts_small_parse_table[] = {
       anon_sym_export,
       anon_sym_each,
       anon_sym_private,
-      anon_sym_request,
+      anon_sym_entries,
       anon_sym_suppress,
       anon_sym_hcl,
       sym_identifier,
@@ -3644,7 +3644,7 @@ static const uint16_t ts_small_parse_table[] = {
       anon_sym_export,
       anon_sym_each,
       anon_sym_private,
-      anon_sym_request,
+      anon_sym_entries,
       anon_sym_suppress,
       anon_sym_hcl,
       sym_identifier,
@@ -3705,7 +3705,7 @@ static const uint16_t ts_small_parse_table[] = {
       anon_sym_export,
       anon_sym_each,
       anon_sym_private,
-      anon_sym_request,
+      anon_sym_entries,
       anon_sym_suppress,
       anon_sym_hcl,
       sym_identifier,
@@ -3766,7 +3766,7 @@ static const uint16_t ts_small_parse_table[] = {
       anon_sym_export,
       anon_sym_each,
       anon_sym_private,
-      anon_sym_request,
+      anon_sym_entries,
       anon_sym_suppress,
       anon_sym_hcl,
       sym_identifier,
@@ -3882,7 +3882,7 @@ static const uint16_t ts_small_parse_table[] = {
       anon_sym_export,
       anon_sym_each,
       anon_sym_private,
-      anon_sym_request,
+      anon_sym_entries,
       anon_sym_suppress,
       anon_sym_hcl,
       sym_identifier,
@@ -3910,7 +3910,7 @@ static const uint16_t ts_small_parse_table[] = {
       anon_sym_export,
       anon_sym_each,
       anon_sym_private,
-      anon_sym_request,
+      anon_sym_entries,
       anon_sym_suppress,
       anon_sym_hcl,
       sym_identifier,
@@ -3938,7 +3938,7 @@ static const uint16_t ts_small_parse_table[] = {
       anon_sym_export,
       anon_sym_each,
       anon_sym_private,
-      anon_sym_request,
+      anon_sym_entries,
       anon_sym_suppress,
       anon_sym_hcl,
       sym_identifier,
@@ -3966,7 +3966,7 @@ static const uint16_t ts_small_parse_table[] = {
       anon_sym_export,
       anon_sym_each,
       anon_sym_private,
-      anon_sym_request,
+      anon_sym_entries,
       anon_sym_suppress,
       anon_sym_hcl,
       sym_identifier,
@@ -3996,7 +3996,7 @@ static const uint16_t ts_small_parse_table[] = {
       anon_sym_export,
       anon_sym_each,
       anon_sym_private,
-      anon_sym_request,
+      anon_sym_entries,
       anon_sym_suppress,
       anon_sym_hcl,
       sym_identifier,
@@ -4024,7 +4024,7 @@ static const uint16_t ts_small_parse_table[] = {
       anon_sym_export,
       anon_sym_each,
       anon_sym_private,
-      anon_sym_request,
+      anon_sym_entries,
       anon_sym_suppress,
       anon_sym_hcl,
       sym_identifier,
@@ -4052,7 +4052,7 @@ static const uint16_t ts_small_parse_table[] = {
       anon_sym_export,
       anon_sym_each,
       anon_sym_private,
-      anon_sym_request,
+      anon_sym_entries,
       anon_sym_suppress,
       anon_sym_hcl,
       sym_identifier,
@@ -4080,7 +4080,7 @@ static const uint16_t ts_small_parse_table[] = {
       anon_sym_export,
       anon_sym_each,
       anon_sym_private,
-      anon_sym_request,
+      anon_sym_entries,
       anon_sym_suppress,
       anon_sym_hcl,
       sym_identifier,
@@ -4109,7 +4109,7 @@ static const uint16_t ts_small_parse_table[] = {
       anon_sym_export,
       anon_sym_each,
       anon_sym_private,
-      anon_sym_request,
+      anon_sym_entries,
       anon_sym_suppress,
       anon_sym_hcl,
       sym_identifier,
@@ -4137,7 +4137,7 @@ static const uint16_t ts_small_parse_table[] = {
       anon_sym_export,
       anon_sym_each,
       anon_sym_private,
-      anon_sym_request,
+      anon_sym_entries,
       anon_sym_suppress,
       anon_sym_hcl,
       sym_identifier,
@@ -4165,7 +4165,7 @@ static const uint16_t ts_small_parse_table[] = {
       anon_sym_export,
       anon_sym_each,
       anon_sym_private,
-      anon_sym_request,
+      anon_sym_entries,
       anon_sym_suppress,
       anon_sym_hcl,
       sym_identifier,
@@ -4192,7 +4192,7 @@ static const uint16_t ts_small_parse_table[] = {
       anon_sym_export,
       anon_sym_each,
       anon_sym_private,
-      anon_sym_request,
+      anon_sym_entries,
       anon_sym_suppress,
       anon_sym_hcl,
       sym_identifier,
@@ -4219,7 +4219,7 @@ static const uint16_t ts_small_parse_table[] = {
       anon_sym_export,
       anon_sym_each,
       anon_sym_private,
-      anon_sym_request,
+      anon_sym_entries,
       anon_sym_suppress,
       anon_sym_hcl,
       sym_identifier,
@@ -4246,7 +4246,7 @@ static const uint16_t ts_small_parse_table[] = {
       anon_sym_export,
       anon_sym_each,
       anon_sym_private,
-      anon_sym_request,
+      anon_sym_entries,
       anon_sym_suppress,
       anon_sym_hcl,
       sym_identifier,
@@ -4273,7 +4273,7 @@ static const uint16_t ts_small_parse_table[] = {
       anon_sym_export,
       anon_sym_each,
       anon_sym_private,
-      anon_sym_request,
+      anon_sym_entries,
       anon_sym_suppress,
       anon_sym_hcl,
       sym_identifier,
@@ -4300,7 +4300,7 @@ static const uint16_t ts_small_parse_table[] = {
       anon_sym_export,
       anon_sym_each,
       anon_sym_private,
-      anon_sym_request,
+      anon_sym_entries,
       anon_sym_suppress,
       anon_sym_hcl,
       sym_identifier,
@@ -4327,7 +4327,7 @@ static const uint16_t ts_small_parse_table[] = {
       anon_sym_export,
       anon_sym_each,
       anon_sym_private,
-      anon_sym_request,
+      anon_sym_entries,
       anon_sym_suppress,
       anon_sym_hcl,
       sym_identifier,
@@ -4354,7 +4354,7 @@ static const uint16_t ts_small_parse_table[] = {
       anon_sym_export,
       anon_sym_each,
       anon_sym_private,
-      anon_sym_request,
+      anon_sym_entries,
       anon_sym_suppress,
       anon_sym_hcl,
       sym_identifier,
@@ -4381,7 +4381,7 @@ static const uint16_t ts_small_parse_table[] = {
       anon_sym_export,
       anon_sym_each,
       anon_sym_private,
-      anon_sym_request,
+      anon_sym_entries,
       anon_sym_suppress,
       anon_sym_hcl,
       sym_identifier,
@@ -4408,7 +4408,7 @@ static const uint16_t ts_small_parse_table[] = {
       anon_sym_export,
       anon_sym_each,
       anon_sym_private,
-      anon_sym_request,
+      anon_sym_entries,
       anon_sym_suppress,
       anon_sym_hcl,
       sym_identifier,
@@ -4435,7 +4435,7 @@ static const uint16_t ts_small_parse_table[] = {
       anon_sym_export,
       anon_sym_each,
       anon_sym_private,
-      anon_sym_request,
+      anon_sym_entries,
       anon_sym_suppress,
       anon_sym_hcl,
       sym_identifier,
@@ -4462,7 +4462,7 @@ static const uint16_t ts_small_parse_table[] = {
       anon_sym_export,
       anon_sym_each,
       anon_sym_private,
-      anon_sym_request,
+      anon_sym_entries,
       anon_sym_suppress,
       anon_sym_hcl,
       sym_identifier,
@@ -4489,7 +4489,7 @@ static const uint16_t ts_small_parse_table[] = {
       anon_sym_export,
       anon_sym_each,
       anon_sym_private,
-      anon_sym_request,
+      anon_sym_entries,
       anon_sym_suppress,
       anon_sym_hcl,
       sym_identifier,
@@ -4516,7 +4516,7 @@ static const uint16_t ts_small_parse_table[] = {
       anon_sym_export,
       anon_sym_each,
       anon_sym_private,
-      anon_sym_request,
+      anon_sym_entries,
       anon_sym_suppress,
       anon_sym_hcl,
       sym_identifier,
@@ -4543,7 +4543,7 @@ static const uint16_t ts_small_parse_table[] = {
       anon_sym_export,
       anon_sym_each,
       anon_sym_private,
-      anon_sym_request,
+      anon_sym_entries,
       anon_sym_suppress,
       anon_sym_hcl,
       sym_identifier,
@@ -4570,7 +4570,7 @@ static const uint16_t ts_small_parse_table[] = {
       anon_sym_export,
       anon_sym_each,
       anon_sym_private,
-      anon_sym_request,
+      anon_sym_entries,
       anon_sym_suppress,
       anon_sym_hcl,
       sym_identifier,
@@ -4597,7 +4597,7 @@ static const uint16_t ts_small_parse_table[] = {
       anon_sym_export,
       anon_sym_each,
       anon_sym_private,
-      anon_sym_request,
+      anon_sym_entries,
       anon_sym_suppress,
       anon_sym_hcl,
       sym_identifier,
@@ -4624,7 +4624,7 @@ static const uint16_t ts_small_parse_table[] = {
       anon_sym_export,
       anon_sym_each,
       anon_sym_private,
-      anon_sym_request,
+      anon_sym_entries,
       anon_sym_suppress,
       anon_sym_hcl,
       sym_identifier,
@@ -4651,7 +4651,7 @@ static const uint16_t ts_small_parse_table[] = {
       anon_sym_export,
       anon_sym_each,
       anon_sym_private,
-      anon_sym_request,
+      anon_sym_entries,
       anon_sym_suppress,
       anon_sym_hcl,
       sym_identifier,
@@ -4678,7 +4678,7 @@ static const uint16_t ts_small_parse_table[] = {
       anon_sym_export,
       anon_sym_each,
       anon_sym_private,
-      anon_sym_request,
+      anon_sym_entries,
       anon_sym_suppress,
       anon_sym_hcl,
       sym_identifier,
@@ -4705,7 +4705,7 @@ static const uint16_t ts_small_parse_table[] = {
       anon_sym_export,
       anon_sym_each,
       anon_sym_private,
-      anon_sym_request,
+      anon_sym_entries,
       anon_sym_suppress,
       anon_sym_hcl,
       sym_identifier,
@@ -4732,7 +4732,7 @@ static const uint16_t ts_small_parse_table[] = {
       anon_sym_export,
       anon_sym_each,
       anon_sym_private,
-      anon_sym_request,
+      anon_sym_entries,
       anon_sym_suppress,
       anon_sym_hcl,
       sym_identifier,
@@ -4759,7 +4759,7 @@ static const uint16_t ts_small_parse_table[] = {
       anon_sym_export,
       anon_sym_each,
       anon_sym_private,
-      anon_sym_request,
+      anon_sym_entries,
       anon_sym_suppress,
       anon_sym_hcl,
       sym_identifier,
@@ -4786,7 +4786,7 @@ static const uint16_t ts_small_parse_table[] = {
       anon_sym_export,
       anon_sym_each,
       anon_sym_private,
-      anon_sym_request,
+      anon_sym_entries,
       anon_sym_suppress,
       anon_sym_hcl,
       sym_identifier,
@@ -4813,7 +4813,7 @@ static const uint16_t ts_small_parse_table[] = {
       anon_sym_export,
       anon_sym_each,
       anon_sym_private,
-      anon_sym_request,
+      anon_sym_entries,
       anon_sym_suppress,
       anon_sym_hcl,
       sym_identifier,
@@ -7339,8 +7339,8 @@ static const TSParseActionEntry ts_parse_actions[] = {
   [305] = {.entry = {.count = 1, .reusable = false}}, REDUCE(sym_offers, 3, 0, 10),
   [307] = {.entry = {.count = 1, .reusable = true}}, REDUCE(sym_attribute, 4, 0, 29),
   [309] = {.entry = {.count = 1, .reusable = false}}, REDUCE(sym_attribute, 4, 0, 29),
-  [311] = {.entry = {.count = 1, .reusable = true}}, REDUCE(sym_request, 3, 0, 11),
-  [313] = {.entry = {.count = 1, .reusable = false}}, REDUCE(sym_request, 3, 0, 11),
+  [311] = {.entry = {.count = 1, .reusable = true}}, REDUCE(sym_entries, 3, 0, 11),
+  [313] = {.entry = {.count = 1, .reusable = false}}, REDUCE(sym_entries, 3, 0, 11),
   [315] = {.entry = {.count = 1, .reusable = true}}, REDUCE(sym_block, 4, 0, 31),
   [317] = {.entry = {.count = 1, .reusable = false}}, REDUCE(sym_block, 4, 0, 31),
   [319] = {.entry = {.count = 1, .reusable = true}}, REDUCE(sym_inputs, 3, 0, 0),

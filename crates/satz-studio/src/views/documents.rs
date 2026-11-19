@@ -1,7 +1,7 @@
 //! The Documents destination: what the estate hands to people as a file. Three kinds
 //! stand here, in the order they are made: the decisions sheet, which satz writes from
 //! the estate ([`crate::views::export`]); the compliance reports, which satz writes from
-//! the estate and the live organisation ([`COMPLIANCE`]); and the documents an agent
+//! the estate and the live organization ([`COMPLIANCE`]); and the documents an agent
 //! writes with a skill — the app runs no model, so those are started in the configured
 //! client and made there
 //! ([ADR 0027](../../../../docs/adr/0027-documents-is-a-destination-of-its-own.md),
@@ -31,13 +31,13 @@ pub const AGENT_DOCUMENTS: &[AgentDocument] = &[
         skill: "estate-documentation",
         icon: "description",
         title: "Estate documentation",
-        text: "The short documentation of the organisation as Word documents, written from the estate: its main settings, the infrastructure project, and what is deployed.",
+        text: "The short documentation of the organization as Word documents, written from the estate: its main settings, the infrastructure project, and what is applied.",
     },
     AgentDocument {
         skill: "security-review",
         icon: "verified_user",
         title: "Security review",
-        text: "A review against the CIS Google Cloud Foundations benchmark with live evidence from the organisation: the checklist of every control with its status, and the remediation plan.",
+        text: "A review against the CIS Google Cloud Foundations benchmark with live evidence from the organization: the checklist of every control with its status, and the remediation plan.",
     },
 ];
 
@@ -76,12 +76,12 @@ pub fn DocumentsView() -> Element {
             h2 { class: "documents__section", "Compliance" }
             if catalogs {
                 p { class: "view__lead",
-                    "The estate against a catalog, and the evidence report. Both read the live organisation, so they need you signed in (Apply says whether you are)."
+                    "The estate against a catalog, and the evidence report. Both read the live organization, so they need you signed in (Apply says whether you are)."
                 }
                 CommandDeck { ids: COMPLIANCE.to_vec() }
             } else {
                 p { class: "view__lead",
-                    "The compliance reports are made from the catalogs of the preset library, which an organisation's estate holds. This estate has none: its compliance is reported in the organisation's estate."
+                    "The compliance reports are made from the catalogs of the preset library, which an organization's estate holds. This estate has none: its compliance is reported in the organization's estate."
                 }
             }
 

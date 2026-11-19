@@ -12,11 +12,11 @@ is on the current version, and a fix ships as a release.
 
 ## What the app holds
 
-satz-studio holds no credential at all. It calls no model
+satz-studio holds no sign-in and no secret at all. It calls no model
 ([ADR 0020](docs/adr/0020-the-agent-is-an-external-client-that-studio-configures-and-starts.md)),
-so there is no API key, no keychain entry and no conversation kept; the credential the
-live satz commands run on is gcloud's Application Default Credentials, which satz reads
-and the app never touches. What the app writes outside an estate is the settings file,
+so there is no API key, no keychain entry and no conversation kept; the sign-in the
+live satz commands run on is gcloud's (`gcloud auth application-default login`), which
+satz reads and the app never touches. What the app writes outside an estate is the settings file,
 which holds no secret, and the one-shot scripts it opens in your terminal. The
 configuration it writes for an agent — `.mcp.json` beside the estate, or a block for
 Claude Desktop — names the satz binary, the estate's root and the capability ceiling,
@@ -40,7 +40,7 @@ Report them by opening a GitHub Security Advisory on this repository
 - its potential impact;
 - the satz-studio version, the operating system, and `satz --version`.
 
-Replace any real estate path, project id or organisation number with an example
+Replace any real estate path, project id or organization number with an example
 value, as anywhere else in this repository.
 
 A report is acknowledged within 48 hours, and fixed as quickly as the issue allows.

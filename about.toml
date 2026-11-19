@@ -1,4 +1,4 @@
-# cargo-about — the licence texts of the crates compiled into satz-studio.
+# cargo-about — the license texts of the crates built into satz-studio.
 #
 #   scripts/update-third-party-licenses.sh           # rewrite THIRD-PARTY-LICENSES.md
 #   scripts/update-third-party-licenses.sh --check    # fail when it is stale
@@ -8,9 +8,9 @@
 # redistribution. `NOTICE` names the material that is not a crate.
 
 # The allow-list, and the preference order for a crate that offers a choice. A
-# dependency under a licence that is not here fails the generate, so a new licence
+# dependency under a license that is not here fails the generate, so a new license
 # reaches a person instead of the file. Apache-2.0 first: a crate offered as
-# `MIT OR Apache-2.0` is taken under Apache 2.0, satz-studio's own licence.
+# `MIT OR Apache-2.0` is taken under Apache 2.0, satz-studio's own license.
 accepted = [
     "Apache-2.0",
     # the LLVM exception adds a permission to Apache 2.0 and takes none away; the
@@ -38,14 +38,14 @@ targets = [
     "x86_64-pc-windows-msvc",
 ]
 
-# Test-only crates are compiled by `cargo test` and never shipped. Build
+# Test-only crates are built by `cargo test` and never shipped. Build
 # dependencies stay IN: a build script is how C code reaches the binary that is
 # shipped.
 ignore-dev-dependencies = true
 ignore-build-dependencies = false
 
 # satz-studio and satz-studio-core are this repository, satz-core and satz-hcl the
-# pinned satz submodule (all `publish = false`). Their licence is Apache 2.0: this
+# pinned satz submodule (all `publish = false`). Their license is Apache 2.0: this
 # repository's LICENSE, and satz's, which NOTICE names.
 [private]
 ignore = true

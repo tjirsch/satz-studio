@@ -1,5 +1,5 @@
-//! The path through an estate, as the rail orders it: what the estate is, its components,
-//! their questions, its way to the organisation, its documents. Each step's view ends
+//! The path through an estate, as the rail orders it: what the estate is, its presets and packs,
+//! their questions, its way to the organization, its documents. Each step's view ends
 //! with a bar that names the next one and goes there
 //! ([ADR 0028](../../../../docs/adr/0028-apply-is-one-destination-and-starts-with-who-is-signed-in.md)).
 //! The Estate destination is not a step: it is the estate file itself, for whoever wants
@@ -32,11 +32,11 @@ pub fn next_after(from: View, presets: bool) -> Option<View> {
 /// What the next step is for, in one sentence.
 pub fn purpose(step: View) -> &'static str {
     match step {
-        View::Presets => "Choose the presets this organisation is built from.",
+        View::Presets => "Choose the presets this organization is built from.",
         View::Packs => "Take the packs this estate is built from.",
         View::Decisions => "Answer what the estate's presets and packs ask.",
         View::Apply => "Check who is signed in, then check, plan and apply.",
-        View::Documents => "Make the documents that are handed over.",
+        View::Documents => "Make the documents the customer receives.",
         _ => "",
     }
 }

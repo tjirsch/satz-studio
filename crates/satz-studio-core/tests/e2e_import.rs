@@ -3,7 +3,7 @@
 //! The Terraform HCL shape is the one that can be driven end to end offline: a `.tf`
 //! file on disk, the real binary, and what it wrote and printed read back the way the
 //! app reads it. The LIVE shape is never run here and must never be — it reads a Google
-//! organisation with the maintainer's credentials and would put an organisation id, a
+//! organization with the maintainer's sign-in and would put an organization id, a
 //! project id and a billing account into a test's output, every one of which the privacy
 //! gate refuses. The state shape is driven as far as its refusal: a raw `.tfstate` is
 //! refused by the form and by satz alike, before anything is written.
@@ -34,7 +34,7 @@ resource "google_storage_bucket" "b" {
 }
 "#;
 
-/// The organisation the configuration belongs to: `MAIN_TF` names none, and satz writes
+/// The organization the configuration belongs to: `MAIN_TF` names none, and satz writes
 /// no estate from the hcl shape without one. satz's documented example value.
 const ORGANIZATION: &str = "123456789012";
 
@@ -130,10 +130,10 @@ async fn the_hcl_shape_writes_an_estate_the_read_back_finds() {
     assert!(report.skipped.is_empty() && report.warnings.is_empty());
 }
 
-/// A configuration that names no organisation, imported without `--organization`, is
+/// A configuration that names no organization, imported without `--organization`, is
 /// refused and writes nothing; the form's field is what the refusal asks for.
 #[tokio::test]
-async fn the_hcl_shape_without_an_organisation_is_refused_and_writes_nothing() {
+async fn the_hcl_shape_without_an_organization_is_refused_and_writes_nothing() {
     let estate = support::estate_dir(None);
     let source = estate.root.join("src");
     std::fs::create_dir_all(&source).unwrap();
@@ -148,7 +148,7 @@ async fn the_hcl_shape_without_an_organisation_is_refused_and_writes_nothing() {
     let before = satz_files(&dirs).unwrap();
 
     let (ok, lines) = run_in(&estate.root, &options.argv()).await;
-    assert!(!ok, "satz wrote an estate with no organisation");
+    assert!(!ok, "satz wrote an estate with no organization");
     let said = stderr(&lines);
     assert!(said.contains("--organization"), "{said}");
     assert!(written_since(&before, &dirs).unwrap().is_empty());

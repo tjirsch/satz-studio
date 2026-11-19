@@ -1,6 +1,6 @@
 //! The settings file: `<config dir>/satz-studio/settings.toml`. A missing file means
 //! first run and yields the defaults; a file that does not parse is an error, never
-//! silently replaced. Nothing here is a credential: the app holds none (ADR 0020).
+//! silently replaced. Nothing here is a sign-in: the app holds none (ADR 0020).
 
 use std::path::{Path, PathBuf};
 
@@ -67,7 +67,7 @@ pub enum SettingsError {
         #[source]
         source: toml::de::Error,
     },
-    #[error("settings could not be serialised: {0}")]
+    #[error("settings could not be serialized: {0}")]
     Serialize(#[from] toml::ser::Error),
 }
 

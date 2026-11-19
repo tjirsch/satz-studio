@@ -1,7 +1,7 @@
 //! The Settings view: every field of `Settings` as a form, saved as one file; the
 //! detected satz beside its path; and the agentic client the Agent destination starts.
 //!
-//! There is no credential here and no engine to choose: satz-studio runs no model
+//! There is no sign-in here and no engine to choose: satz-studio runs no model
 //! ([ADR 0020](../../../../docs/adr/0020-the-agent-is-an-external-client-that-studio-configures-and-starts.md)).
 
 use std::path::PathBuf;

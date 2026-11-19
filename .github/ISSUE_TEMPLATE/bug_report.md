@@ -31,5 +31,5 @@ If applicable, add screenshots to help explain your problem.
 
 **Additional context**
 Add any other context about the problem here. Estate paths, project ids and
-organisation numbers are private data: replace them with example values before
+organization numbers are private data: replace them with example values before
 you post.

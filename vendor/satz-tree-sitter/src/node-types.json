@@ -387,6 +387,32 @@
     }
   },
   {
+    "type": "entries",
+    "named": true,
+    "fields": {
+      "body": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "body",
+            "named": true
+          }
+        ]
+      },
+      "param": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
     "type": "export",
     "named": true,
     "fields": {
@@ -866,32 +892,6 @@
     }
   },
   {
-    "type": "request",
-    "named": true,
-    "fields": {
-      "body": {
-        "multiple": false,
-        "required": true,
-        "types": [
-          {
-            "type": "body",
-            "named": true
-          }
-        ]
-      },
-      "param": {
-        "multiple": false,
-        "required": true,
-        "types": [
-          {
-            "type": "identifier",
-            "named": true
-          }
-        ]
-      }
-    }
-  },
-  {
     "type": "source_file",
     "named": true,
     "root": true,
@@ -918,6 +918,10 @@
         },
         {
           "type": "each_interface",
+          "named": true
+        },
+        {
+          "type": "entries",
           "named": true
         },
         {
@@ -958,10 +962,6 @@
         },
         {
           "type": "question",
-          "named": true
-        },
-        {
-          "type": "request",
           "named": true
         },
         {
@@ -1174,6 +1174,10 @@
     "named": false
   },
   {
+    "type": "entries",
+    "named": false
+  },
+  {
     "type": "escape_sequence",
     "named": true
   },
@@ -1264,10 +1268,6 @@
   {
     "type": "reference",
     "named": true
-  },
-  {
-    "type": "request",
-    "named": false
   },
   {
     "type": "role",

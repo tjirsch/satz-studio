@@ -1,6 +1,6 @@
 //! The component library: Material 3 Expressive anatomies as Dioxus components, one
 //! per file, each a CSS class in `assets/css/components.css`. `docs/ui.md` names the
-//! spec page every component follows and what deviates from it.
+//! spec page each of them follows and what deviates from it.
 
 mod badge;
 mod button;
@@ -27,7 +27,7 @@ mod tooltip;
 mod top_app_bar;
 mod tree;
 /// The one module named rather than only re-exported: [`typed_field::commits`] is the
-/// rule a view chooses its commit behaviour by, and the Decisions view's test reads it.
+/// rule a view chooses its commit behavior by, and the Decisions view's test reads it.
 pub(crate) mod typed_field;
 
 pub use badge::Badge;

@@ -19,7 +19,7 @@
 //! - [`agent`] — the agentic client the window starts on the open estate; the
 //!   configuration that points it there is satz's, printed by `satz mcp-config`
 //!   ([`satz::mcp_config`]). satz-studio runs no model (ADR 0020).
-//! - [`settings`] and [`diag`] — the settings file and the one diagnostic type.
+//! - [`settings`] and [`diag`] — the settings file and the one finding type.
 //!
 //! The public surface of every module is the contract between the crates and the
 //! views (see `docs/architecture.md`).

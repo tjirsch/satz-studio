@@ -124,7 +124,7 @@ pub struct ImportOptions {
     pub on_collision: OnCollision,
     /// `--customer-shortname`: the one value no platform fact carries (state, live)
     pub customer_shortname: String,
-    /// `--organization`: the organisation the source belongs to, for a source that names
+    /// `--organization`: the organization the source belongs to, for a source that names
     /// none — satz writes no estate from such a state or configuration without it, nor
     /// from any `--wrap-all` import, which translates nothing (state, hcl; a live sweep
     /// reads it from its own root, and satz refuses the flag there)
@@ -223,7 +223,7 @@ impl ImportOptions {
     /// the two are told apart by `values.root_module` — a distinction an operator
     /// otherwise learns by failing a run once. It is not part of
     /// [`Self::check_source_exists`] because answering it means parsing the document,
-    /// which for a real organisation is megabytes: once per run, never per keystroke.
+    /// which for a real organization is megabytes: once per run, never per keystroke.
     /// The form states the requirement under the field instead.
     pub fn check_source(&self, dir: &Path) -> Result<(), SatzError> {
         self.check_source_exists(dir)?;
@@ -351,7 +351,7 @@ pub struct ImportReport {
     /// the files satz wrote, with what to do next
     pub wrote: Vec<String>,
     /// everything else satz printed, in order: the counts it translated, promoted,
-    /// wrapped and dropped, the discovery statistics, what a conversion compiled to
+    /// wrapped and dropped, the discovery statistics, what a conversion transpiled to
     pub rest: Vec<String>,
 }
 
@@ -626,7 +626,7 @@ mod tests {
         );
     }
 
-    /// A live sweep reads the organisation from its own root, and satz refuses
+    /// A live sweep reads the organization from its own root, and satz refuses
     /// `--organization` there: the field the state shape carries never reaches it.
     #[test]
     fn a_live_scope_is_the_source_and_takes_the_same_flags() {
@@ -787,7 +787,7 @@ mod tests {
 
     /// The split is deliberate and stated: the cheap check answers that the file is
     /// there, and only the full one reads it. A form that called the full check on every
-    /// keystroke would parse a real organisation's state document on every keystroke.
+    /// keystroke would parse a real organization's state document on every keystroke.
     #[test]
     fn the_cheap_check_does_not_read_the_document_and_the_full_one_does() {
         let tmp = tempfile::tempdir().unwrap();
