@@ -178,7 +178,7 @@ pub fn CreateEstate() -> Element {
                     oninput: move |v: String| options.write().default_region = v,
                 }
                 TextField {
-                    label: "Workloads folder (Google Cloud)",
+                    label: "Workload folder",
                     value: options().workload_folder_name,
                     placeholder: "Workloads",
                     disabled: running,

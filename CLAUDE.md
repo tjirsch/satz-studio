@@ -131,7 +131,8 @@ the rules that apply to every change, whoever or whatever makes it.
 - **One word for one thing.** The words of satz's glossary (`vendor/satz/docs/glossary.md`)
   are used for their defined purpose and meaning — in labels, messages, documentation
   and comments: an interface folder, a workload estate, the organisation's estate, a
-  delegated resource, presets and packs as two things, transpile and HCL code. A thing
+  delegated resource, a pack as the word for presets and workload packs alike, transpile
+  and HCL code. A thing
   the app adds gets one word, proposed for the glossary in the satz repository.
   `scripts/check-wording.sh` reports a wording that names a second thing; its list,
   `scripts/check-wording.txt`, is satz's.

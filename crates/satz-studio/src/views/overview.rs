@@ -366,7 +366,7 @@ const CORE_ORDER: [(&str, &str); 12] = [
     ("first_admin", "First admin"),
     ("billing_account_infra", "Billing account"),
     ("infra_folder_name", "Infrastructure folder"),
-    ("workload_folder_name", "Workloads folder (Google Cloud)"),
+    ("workload_folder_name", "Workload folder"),
     ("infra_project_name", "Infrastructure project"),
     ("infra_bucket_name", "State bucket"),
     ("svc_iac_account", "IaC service account"),
@@ -1050,7 +1050,7 @@ mod tests {
         folder.empty = Some("the organisation".to_string());
         let r = report(vec![folder]);
         let facts = identity(Some(&[]), Some(&r));
-        assert_eq!(labels(answered_rows(&facts)), ["Workloads folder (Google Cloud)"]);
+        assert_eq!(labels(answered_rows(&facts)), ["Workload folder"]);
         assert_eq!(
             answered_rows(&facts)[0].reading,
             value("\"\" (the organisation)")
