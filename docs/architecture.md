@@ -217,9 +217,9 @@ plan and satz's report; **Open** (`src/views/estates.rs`) is the folder walk and
 estate cards. A door is one `Door` variant, one card in the row and one arm of the
 view's `match`, so another way in joins by being added in those three places.
 
-With an estate open the window is ordered by the job: **Overview**, **Components**,
+With an estate open the window is ordered by the job: **Overview**, **Presets**, **Packs**,
 **Decisions**, **Apply**, **Documents**, **Estate**, then Agent and Settings at the foot of
-the rail — Components before Decisions, because a pack is what declares a question. Overview
+the rail — Presets and Packs before Decisions, because a pack is what declares a question. Overview
 (`src/views/overview.rs`) says which estate this is — the short name, the customer, the
 customer id and the organisation id from the file's own `params { }` block (the model's
 `params`), then the answers its other `estate_core` questions carry (`identity()` over

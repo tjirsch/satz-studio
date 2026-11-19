@@ -40,8 +40,7 @@ beside it.
 Once an estate is open the window is ordered by the job, and the rail reads in that
 order: **Overview**, which estate this is — its short name, the customer, the customer
 id and the organisation id as its own file sets them, then the infrastructure it names,
-in its own answers — and what it still has to do; **Components**, what the estate is built from — for an organisation's estate the presets
-of the library:
+in its own answers — and what it still has to do; **Presets**, for an estate that holds the preset library — an organisation's:
 every pack satz's pack graph offers, as the estate has it, the packs that need another
 hung below it, each switched on and off by satz's own `add-preset` and `remove-preset`,
 and a pack you wrote reviewed against the library's own bar with `satz review-preset` —
@@ -67,12 +66,15 @@ reload, "Switch estate" — the Start screen with your estates listed — and "C
 every satz command the app runs is one keystroke away in the commands palette (⌘K,
 Ctrl+K on Windows and Linux, or that footer button). What a command prints lands in the
 log in the form satz writes for a person — text, or markdown for the evidence report;
-`json` is a format you pick when you want the file. satz says what an estate works in — the organisation, a delegated folder or a delegated
-project — and the window follows it on the same path: Components shows an organisation's
-estate its presets and an estate in a delegated place its workload packs, each row saying
-which delegated values the pack reads; Apply leaves day 0 to the organisation; the
-compliance reports are offered where the library's catalogs are. The Overview names the mode
-and what a delegated estate was delegated through. The workload packs are the ones the repository wrote
+`json` is a format you pick when you want the file. **Packs**, for every estate, are workload packs: templates taken from a source and adapted
+here. satz says what an estate works in — the organisation, a delegated folder or a
+delegated project — and the window follows it on the same path: an organisation's estate
+has Presets and Packs, an estate in a delegated place Packs alone; Apply leaves day 0 to
+the organisation; the compliance reports are offered where the library's catalogs are. The
+Overview names the mode and, for a delegated estate, who delegated. Delegating access is
+done in Estate → Interfaces: every list a preset declares is shown with its entries, and
+"Add" writes one through `satz add-entry` from a form of the declared fields. A team's
+estate is created from the interface folders it was given, on the Start screen. The workload packs are the ones the repository wrote
 itself and the ones `satz get-pack` fetched, listed against the satz repository or a
 folder you choose, each fetched, updated, kept as your own or added to the estate from
 its row.
@@ -118,7 +120,7 @@ that holds them up — in front of apply and bootstrap, which satz refuses.
 
 ## What it needs
 
-- **`satz` 0.99.0 or newer.** `MIN_SATZ` in `crates/satz-studio-core/src/satz/binary.rs`
+- **`satz` 0.101.0 or newer.** `MIN_SATZ` in `crates/satz-studio-core/src/satz/binary.rs`
   names the oldest satz this build works with. It rises when a satz release breaks the
   app or the app starts using something a later satz introduced, not with every satz
   release. Install satz with its installer or bring it up to date with `satz
