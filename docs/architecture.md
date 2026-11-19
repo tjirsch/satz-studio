@@ -181,7 +181,7 @@ no estate file: a write from it would hold no write lock and reload no model. So
 in satz's default text — and `merge-presets`, which write the estate file by default,
 run with `--report-only` fixed, and `get-presets` is offered without the `--force` that
 overwrites the packs the estate uses. The writing runs are the locked actions': the
-prerequisites in Checks, as `EstateAction::WritePrerequisites` — `satz_update_prerequisites
+prerequisites in Apply, as `EstateAction::WritePrerequisites` — `satz_update_prerequisites
 {report_only: false}` through the delegated-write discipline of section 4b — and the merge
 in Presets, as `EstateAction::MergePresets` under the write lock and followed by a reload.
 
@@ -218,7 +218,7 @@ estate cards. A door is one `Door` variant, one card in the row and one arm of t
 view's `match`, so another way in joins by being added in those three places.
 
 With an estate open the window is ordered by the job: **Overview**, **Presets**,
-**Decisions**, **Estate**, **Checks**, **Deploy**, then Agent and Settings at the foot of
+**Decisions**, **Apply**, **Documents**, **Estate**, then Agent and Settings at the foot of
 the rail — Presets before Decisions, because a pack is what declares a question. Overview
 (`src/views/overview.rs`) says which estate this is — the short name, the customer, the
 customer id and the organisation id from the file's own `params { }` block (the model's
@@ -238,13 +238,13 @@ the decisions sheet or the workbook, written by `satz questions --format <format
 into the shared log, then checks the file is there and not empty and opens it. The
 formats are read once per session from `satz questions --help`, so the picker is the
 installed satz's own set; a help the app cannot read is a toast and the card's text. Commands is not a
-destination: `PALETTE` is a table and `CommandDeck` renders any group of it, so Checks
-and Deploy each gather their own and the palette over the window (⌘K) holds them all.
+destination: `PALETTE` is a table and `CommandDeck` renders any group of it, so Apply
+and Documents each gather their own and the palette over the window (⌘K) holds them all.
 Presets carries the pack review (`src/views/review.rs`): `satz review-preset` over a pack
 file the operator chooses, its findings in the drawer and beside the pack's text, and
 the two places a reviewed pack goes — upstream by a pull request the card describes,
 private as a `.local.satz` in the estate's library. The Gallery is behind `SATZ_STUDIO_DEBUG`. `docs/ui.md` is the whole map, including why
-seven primary destinations is the limit of the navigation-rail pattern.
+seven primary destinations is the limit of the navigation-rail pattern, of which the app uses six.
 
 ## 4. Runtime views
 

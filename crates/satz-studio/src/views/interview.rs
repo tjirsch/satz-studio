@@ -28,7 +28,8 @@ use crate::components::{
     Button, ButtonVariant, Card, CardVariant, Chip, ChipKind, Draft, FieldKind, Icon,
     LinearProgress, List, ListItem, Switch, TypedField,
 };
-use crate::state::{AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt};
+use crate::state::{AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt, View};
+use crate::views::path::NextStep;
 
 /// The questions in the order the view walks them: the unanswered ones as the report
 /// lists them, then — when asked for — the answered ones and the ones not asked.
@@ -526,6 +527,7 @@ pub fn DecisionsView() -> Element {
                     }
                 }
             }
+            NextStep { from: View::Decisions }
         }
     }
 }

@@ -110,10 +110,9 @@ pub enum View {
     Presets,
     /// the estate file itself: its params and its resource tree
     Estate,
-    /// what judges the estate: the compile, the goal view, the evidence report
-    Checks,
-    /// what hands it off: the HCL directory, the plan, the apply, the state migration
-    Deploy,
+    /// the estate's way to the organisation: who is signed in, what state it is in, and
+    /// the steps — the checks, day 0, the generated code, the plan, the apply
+    Apply,
     /// what the estate hands to people as a file: the decisions sheet
     Documents,
     /// setting an external agent up on this estate, and starting it
@@ -128,17 +127,18 @@ impl View {
     /// from what the estate HAS to what it still has to decide. A pack is what declares a
     /// question, and `merge-presets` — the command that brings new pack lines in — is in
     /// Packs, so Packs is where the questions in Decisions come from and it stands before
-    /// them. Documents stands last: it is what is handed to people once the rest is settled.
-    /// Seven, which is as many as Material 3 puts in a navigation rail — the rail is full
-    /// (ADR 0027).
-    pub const PRIMARY: [View; 7] = [
+    /// them. Apply is the estate's way to the organisation, and Documents is what is handed
+    /// to people once the rest is settled. Those five are the path, each ending with a
+    /// bar that leads to the next (`views/path.rs`); Estate stands after them, because
+    /// the estate file itself is not a step of the walk. Six; Material 3 puts up to seven
+    /// in a navigation rail (ADR 0027, ADR 0028).
+    pub const PRIMARY: [View; 6] = [
         View::Overview,
         View::Presets,
         View::Decisions,
-        View::Estate,
-        View::Checks,
-        View::Deploy,
+        View::Apply,
         View::Documents,
+        View::Estate,
     ];
 
     /// The primary destinations of the open estate. An estate that works in a delegated
@@ -165,8 +165,7 @@ impl View {
             View::Decisions => "Decisions",
             View::Presets => "Presets",
             View::Estate => "Estate",
-            View::Checks => "Checks",
-            View::Deploy => "Deploy",
+            View::Apply => "Apply",
             View::Documents => "Documents",
             View::Agent => "Agent",
             View::Settings => "Settings",
@@ -182,8 +181,7 @@ impl View {
             View::Decisions => "quiz",
             View::Presets => "inventory_2",
             View::Estate => "description",
-            View::Checks => "fact_check",
-            View::Deploy => "rocket_launch",
+            View::Apply => "rocket_launch",
             View::Documents => "article",
             View::Agent => "smart_toy",
             View::Settings => "settings",
@@ -199,8 +197,7 @@ impl View {
                 | View::Decisions
                 | View::Presets
                 | View::Estate
-                | View::Checks
-                | View::Deploy
+                | View::Apply
                 | View::Documents
                 | View::Agent
         )
@@ -372,6 +369,20 @@ pub struct EstateStore {
     pub pack_update: Option<UpdatePackReport>,
     /// a list, a fetch, an update or a detach is running
     pub packs_busy: bool,
+    /// who is signed in on this machine and what the estate's live commands run as, as
+    /// `satz_whoami` answered — or why it could not; `None` until it has been asked,
+    /// which the Apply destination does: the check mints a token, a network call
+    pub sign_in: Option<SignIn>,
+}
+
+/// The sign-in check of the Apply destination.
+#[derive(Debug, Clone, PartialEq)]
+pub enum SignIn {
+    Checking,
+    /// satz's report: the credentials, the estate's account and what was checked
+    Known(Box<satz_studio_core::satz::reports::WhoamiReport>),
+    /// satz's refusal, in its own words — no credentials, or a token that is not minted
+    Refused(String),
 }
 
 /// The pack review of the Presets view.
@@ -587,8 +598,8 @@ mod tests {
     use super::*;
 
     /// Material 3 puts three to seven destinations in a navigation rail, and the app uses
-    /// all seven (ADR 0027): seven primary ones and a bottom-aligned footer of two secondary
-    /// ones is inside the pattern because the footer's are not peers of the seven. An eighth
+    /// six (ADR 0028): six primary ones and a bottom-aligned footer of two secondary ones
+    /// is inside the pattern because the footer's are not peers of the six. An eighth
     /// PRIMARY destination is a navigation drawer's, not a smaller font's (`docs/ui.md`), so
     /// the Interfaces view is a tab of Estate and not a destination (ADR 0023).
     #[test]
@@ -632,8 +643,7 @@ mod tests {
             View::Decisions,
             View::Presets,
             View::Estate,
-            View::Checks,
-            View::Deploy,
+            View::Apply,
             View::Documents,
             View::Agent,
             View::Settings,

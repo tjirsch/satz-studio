@@ -1,4 +1,6 @@
-//! Starting the agentic client on one estate.
+//! Starting the agentic client on one estate — and, by the same hand-off, any other
+//! command line that is the operator's to run in a terminal: the sign-in of the Apply
+//! destination is one.
 //!
 //! satz-studio runs no model ([ADR 0020](../../../docs/adr/0020-the-agent-is-an-external-client-that-studio-configures-and-starts.md)).
 //! The configuration that points a client at the open estate is satz's own

@@ -1,6 +1,6 @@
 # 0027 — Documents is a destination of its own, and the rail is full
 
-- **Status:** accepted
+- **Status:** accepted; the rail is no longer full — Checks and Deploy became one destination ([ADR 0028](0028-apply-is-one-destination-and-starts-with-who-is-signed-in.md))
 - **Date:** 2026-11-18
 - **Deciders:** the maintainer
 

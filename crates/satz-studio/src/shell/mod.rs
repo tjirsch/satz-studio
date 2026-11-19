@@ -24,9 +24,8 @@ pub use top_bar::TopBar;
 
 use crate::state::{AppStore, AppStoreStoreExt, EstateAction, OpenEstate, View, estate_coroutine};
 use crate::views::agent::AgentView;
-use crate::views::checks::ChecksView;
+use crate::views::apply::ApplyView;
 use crate::views::commands::CommandPalette;
-use crate::views::deploy::DeployView;
 use crate::views::documents::DocumentsView;
 use crate::views::estate::EstateView;
 use crate::views::estates::EstatesView;
@@ -103,8 +102,7 @@ fn Content() -> Element {
         View::Decisions => rsx! { DecisionsView {} },
         View::Presets => rsx! { PresetsView {} },
         View::Estate => rsx! { EstateView {} },
-        View::Checks => rsx! { ChecksView {} },
-        View::Deploy => rsx! { DeployView {} },
+        View::Apply => rsx! { ApplyView {} },
         View::Documents => rsx! { DocumentsView {} },
         View::Agent => rsx! { AgentView {} },
         View::Settings => rsx! { SettingsView {} },

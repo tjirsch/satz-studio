@@ -3,10 +3,9 @@
 //! line's text, sliced from the document tree the reload keeps in the store.
 
 pub mod agent;
-pub mod checks;
+pub mod apply;
 pub mod commands;
 pub mod create;
-pub mod deploy;
 pub mod documents;
 pub mod estate;
 pub mod estates;
@@ -18,6 +17,7 @@ pub mod interview;
 pub mod map;
 pub mod overview;
 pub mod params;
+pub mod path;
 pub mod resources;
 pub mod review;
 pub mod satz_release;

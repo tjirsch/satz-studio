@@ -32,6 +32,7 @@ use satz_studio_core::satz::reports::{PackLine, QuestionRow, QuestionState, Ques
 use crate::components::{Button, ButtonVariant, Card, CardVariant, Chip, ChipKind, Icon};
 use crate::state::{AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt, View};
 use crate::views::commands::CommandLog;
+use crate::views::path::NextStep;
 
 /// What the estate is, as the Overview reads it. Borrowed rather than cloned: this is
 /// built on every render.
@@ -311,7 +312,7 @@ pub fn owed(f: &Facts) -> Vec<Owed> {
             icon: "admin_panel_settings",
             title: "The prerequisites are not declared".to_string(),
             detail: "The compile found roles this estate's own resource types need and its IaC service account is not granted, or APIs a project its resources' calls are billed to does not enable. The drawer carries each of them; `satz update-prerequisites` writes them into the file. In a workload's estate satz writes nothing at the organisation: each line says what to ask the organisation's estate for, or what the estate grants its own account on its project.".to_string(),
-            remedies: vec![Remedy::Go(View::Checks)],
+            remedies: vec![Remedy::Go(View::Apply)],
         });
     }
 
@@ -324,7 +325,7 @@ pub fn owed(f: &Facts) -> Vec<Owed> {
             icon: "build",
             title: "The estate has not been compiled here".to_string(),
             detail: "There is no `main.tf` in the HCL directory: nothing has been emitted from this checkout, so nothing has been planned against it either. `satz transpile` writes it, `hcl-init` prepares the directory and `plan` is what reads it back.".to_string(),
-            remedies: vec![Remedy::Go(View::Deploy)],
+            remedies: vec![Remedy::Go(View::Apply)],
         });
     } else if !f.hcl.initialised {
         out.push(Owed {
@@ -332,7 +333,7 @@ pub fn owed(f: &Facts) -> Vec<Owed> {
             icon: "preview",
             title: "Not verified by a plan".to_string(),
             detail: "The HCL is written and the directory is not initialised, and a plan needs an initialised directory — so nothing here has been through one. Whatever the estate says about the live organisation is still a claim. `hcl-init`, then `plan`.".to_string(),
-            remedies: vec![Remedy::Go(View::Deploy)],
+            remedies: vec![Remedy::Go(View::Apply)],
         });
     }
 
@@ -674,6 +675,8 @@ pub fn OverviewView() -> Element {
                     }
                 }
             }
+
+            NextStep { from: View::Overview }
 
             if last_command.is_some() {
                 CommandLog {}
@@ -1440,7 +1443,7 @@ mod tests {
             std::slice::from_ref(&d),
         ));
         assert_eq!(ids(&rows), ["prerequisites"]);
-        assert_eq!(rows[0].remedies, [Remedy::Go(View::Checks)]);
+        assert_eq!(rows[0].remedies, [Remedy::Go(View::Apply)]);
         // a note of the kind — a type satz has no row for — owes nothing
         let mut note = d.clone();
         note.severity = Severity::Info;
