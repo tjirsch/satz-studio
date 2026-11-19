@@ -5,6 +5,7 @@
 pub mod agent;
 pub mod apply;
 pub mod commands;
+pub mod components;
 pub mod create;
 pub mod documents;
 pub mod estate;

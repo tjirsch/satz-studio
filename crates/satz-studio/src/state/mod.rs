@@ -105,9 +105,9 @@ pub enum View {
     Overview,
     /// the questions its packs declare and it has not answered
     Decisions,
-    /// the preset library's pack lines: which are in, which are off, which the file has
-    /// no line for. Not a destination of a workload estate, which has no library
-    Presets,
+    /// what the estate is built from: the preset library's pack lines for an
+    /// organisation's estate, the workload packs for one in a delegated folder or project
+    Components,
     /// the estate file itself: its params and its resource tree
     Estate,
     /// the estate's way to the organisation: who is signed in, what state it is in, and
@@ -134,24 +134,12 @@ impl View {
     /// in a navigation rail (ADR 0027, ADR 0028).
     pub const PRIMARY: [View; 6] = [
         View::Overview,
-        View::Presets,
+        View::Components,
         View::Decisions,
         View::Apply,
         View::Documents,
         View::Estate,
     ];
-
-    /// The primary destinations of the open estate. An estate that works in a delegated
-    /// folder or project and holds no preset library, as satz's presets report says
-    /// ([`PacksReport::has_presets`]), has no Presets destination: the library belongs to
-    /// the organisation's estate, and its components are the Estate destination's
-    /// Workload packs tab.
-    pub fn primary(presets: bool) -> Vec<View> {
-        View::PRIMARY
-            .into_iter()
-            .filter(|v| presets || *v != View::Presets)
-            .collect()
-    }
 
     /// The secondary group, bottom-aligned in the rail. Agent needs an estate — it
     /// configures an agent for the one that is open; Settings is the one destination
@@ -163,7 +151,7 @@ impl View {
             View::Start => "Estates",
             View::Overview => "Overview",
             View::Decisions => "Decisions",
-            View::Presets => "Presets",
+            View::Components => "Components",
             View::Estate => "Estate",
             View::Apply => "Apply",
             View::Documents => "Documents",
@@ -179,7 +167,7 @@ impl View {
             View::Start => "home_storage",
             View::Overview => "dashboard",
             View::Decisions => "quiz",
-            View::Presets => "inventory_2",
+            View::Components => "inventory_2",
             View::Estate => "description",
             View::Apply => "rocket_launch",
             View::Documents => "article",
@@ -195,7 +183,7 @@ impl View {
             self,
             View::Overview
                 | View::Decisions
-                | View::Presets
+                | View::Components
                 | View::Estate
                 | View::Apply
                 | View::Documents
@@ -641,7 +629,7 @@ mod tests {
             View::Start,
             View::Overview,
             View::Decisions,
-            View::Presets,
+            View::Components,
             View::Estate,
             View::Apply,
             View::Documents,
@@ -659,18 +647,11 @@ mod tests {
         assert_eq!(icons.len(), all.len());
     }
 
-    /// An estate in a delegated folder or project has no preset library, so its rail has no
-    /// Presets destination; every other destination stands where it stood.
+    /// Every estate has the same rail: what Components shows follows what the estate
+    /// works in, the destination does not.
     #[test]
-    fn an_estate_without_presets_has_every_primary_destination_but_presets() {
-        assert_eq!(View::primary(true), View::PRIMARY);
-        let workload = View::primary(false);
-        assert!(!workload.contains(&View::Presets));
-        let rest: Vec<View> = View::PRIMARY
-            .into_iter()
-            .filter(|v| *v != View::Presets)
-            .collect();
-        assert_eq!(workload, rest);
-        assert_eq!(View::Presets.label(), "Presets");
+    fn the_components_destination_is_every_estates() {
+        assert!(View::PRIMARY.contains(&View::Components));
+        assert_eq!(View::Components.label(), "Components");
     }
 }

@@ -510,6 +510,17 @@ pub const APPLY: &[&str] = &[
     "migrate",
 ];
 
+/// The same walk for an estate in a delegated folder or project: day 0 and the state's
+/// move to the other backend are the organisation's, and are not its steps.
+pub const APPLY_DELEGATED: &[&str] = &[
+    "transpile-check",
+    "update-prerequisites",
+    "transpile",
+    "hcl-init",
+    "plan",
+    "apply",
+];
+
 /// The palette entries the Documents destination gathers: the goal view against a
 /// catalog and the evidence report, whose result is a document.
 pub const COMPLIANCE: &[&str] = &["require", "report-compliance"];
@@ -1054,7 +1065,11 @@ mod tests {
     /// neither destination is still one keystroke away.
     #[test]
     fn the_destinations_name_entries_that_exist() {
-        for id in APPLY.iter().chain(COMPLIANCE.iter()) {
+        for id in APPLY
+            .iter()
+            .chain(APPLY_DELEGATED.iter())
+            .chain(COMPLIANCE.iter())
+        {
             assert!(spec_of(id).is_some(), "{id}");
         }
         assert!(spec_of("no-such-command").is_none());

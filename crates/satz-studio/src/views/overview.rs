@@ -189,14 +189,14 @@ pub fn owed(f: &Facts) -> Vec<Owed> {
                 icon: "inventory_2",
                 title: "The pack map is switched off".to_string(),
                 detail: "`use \"presets/estate-map.satz\"` is commented out, so no pack asks this estate anything. Switching it on is what opens the questions the library declares.".to_string(),
-                remedies: vec![Remedy::Go(View::Presets)],
+                remedies: vec![Remedy::Go(View::Components)],
             }),
             Some(PackLine::Absent) => out.push(Owed {
                 id: "map-absent",
                 icon: "inventory_2",
                 title: "The estate has no pack map".to_string(),
                 detail: "The file carries no line for `presets/estate-map.satz`, the map of pack choices every other question hangs from. Switching it on in Presets writes the line where the pack graph places it.".to_string(),
-                remedies: vec![Remedy::Go(View::Presets)],
+                remedies: vec![Remedy::Go(View::Components)],
             }),
             _ => {}
         }
@@ -215,7 +215,7 @@ pub fn owed(f: &Facts) -> Vec<Owed> {
                 remedies: if no_presets {
                     Vec::new()
                 } else {
-                    vec![Remedy::Go(View::Presets)]
+                    vec![Remedy::Go(View::Components)]
                 },
             });
         }
@@ -239,7 +239,7 @@ pub fn owed(f: &Facts) -> Vec<Owed> {
                     n => format!("{n} pack lines have no gate"),
                 },
                 detail: "A `use` line without its `when <gate>` deploys the pack whatever this estate answers, so no question switches it off. Presets names the gate each of them needs.".to_string(),
-                remedies: vec![Remedy::Go(View::Presets)],
+                remedies: vec![Remedy::Go(View::Components)],
             });
         }
 
@@ -745,6 +745,14 @@ fn IdentityCard(facts: Vec<Fact>) -> Element {
                                     EstateMode::Folder => " — a folder the organisation delegated access to; its components are workload packs",
                                     EstateMode::Project => " — a project the organisation delegated access to; its components are workload packs",
                                 }}
+                                if mode != EstateMode::Organisation {
+                                    for i in model.as_deref().map(|m| m.packs.interfaces.clone()).unwrap_or_default() {
+                                        span { key: "{i.path}", class: "overview__delegated",
+                                            " — delegated through "
+                                            code { "{i.path}" }
+                                        }
+                                    }
+                                }
                             },
                             None => rsx! { span { class: "overview__unanswered", "not read yet" } },
                         }
@@ -1290,7 +1298,7 @@ mod tests {
         assert_eq!(ids(&rows), ["pack-findings"]);
         assert_eq!(rows[0].title, "The pack graph has 2 findings");
         assert_eq!(rows[0].detail, "finding 0");
-        assert_eq!(rows[0].remedies, [Remedy::Go(View::Presets)]);
+        assert_eq!(rows[0].remedies, [Remedy::Go(View::Components)]);
     }
 
     /// satz reports `ungated-pack` only while the file declaring the gate deploys, so the
@@ -1329,7 +1337,7 @@ mod tests {
         let rows = owed(&facts(None, hcl, Some(&q), Some(&m), &[]));
         assert_eq!(ids(&rows), ["map-off", "ungated-lines"]);
         assert_eq!(rows[1].title, "1 pack line has no gate");
-        assert_eq!(rows[1].remedies, [Remedy::Go(View::Presets)]);
+        assert_eq!(rows[1].remedies, [Remedy::Go(View::Components)]);
 
         // satz's own sentence on the row takes the line over
         report.packs[1].findings = vec!["is used without `when use_budget`".to_string()];

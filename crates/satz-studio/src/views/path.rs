@@ -8,30 +8,27 @@
 use dioxus::prelude::*;
 
 use crate::components::{Button, ButtonVariant, Card, CardVariant, Icon};
-use crate::state::{AppStore, AppStoreStoreExt, EstateStoreStoreExt, View};
+use crate::state::{AppStore, AppStoreStoreExt, View};
 
-/// The steps, in order. An estate without a Presets destination skips that one.
+/// The steps, in order, for every estate.
 const STEPS: [View; 5] = [
     View::Overview,
-    View::Presets,
+    View::Components,
     View::Decisions,
     View::Apply,
     View::Documents,
 ];
 
 /// The step after `from`, or `None` for the last step and for a view that is not one.
-pub fn next_after(from: View, presets: bool) -> Option<View> {
+pub fn next_after(from: View) -> Option<View> {
     let at = STEPS.iter().position(|v| *v == from)?;
-    STEPS[at + 1..]
-        .iter()
-        .copied()
-        .find(|v| presets || *v != View::Presets)
+    STEPS.get(at + 1).copied()
 }
 
 /// What the next step is for, in one sentence.
 pub fn purpose(step: View) -> &'static str {
     match step {
-        View::Presets => "Choose the components this estate is built from.",
+        View::Components => "Choose the components this estate is built from.",
         View::Decisions => "Answer what the estate and its components ask.",
         View::Apply => "Check who is signed in, then check, plan and apply.",
         View::Documents => "Make the documents that are handed over.",
@@ -44,13 +41,7 @@ pub fn purpose(step: View) -> &'static str {
 #[component]
 pub fn NextStep(from: View) -> Element {
     let app = use_context::<Store<AppStore>>();
-    let presets = app
-        .estate()
-        .model()
-        .read()
-        .as_deref()
-        .is_none_or(|m| m.packs.has_presets());
-    let Some(next) = next_after(from, presets) else {
+    let Some(next) = next_after(from) else {
         return rsx! {};
     };
     rsx! {
@@ -72,32 +63,19 @@ pub fn NextStep(from: View) -> Element {
 mod tests {
     use super::*;
 
-    /// The walk is the rail's order without Estate; an estate without presets goes from
-    /// the Overview straight to its questions.
+    /// The walk is the rail's order without Estate, the same for every estate.
     #[test]
-    fn the_steps_follow_each_other_and_an_estate_without_presets_skips_them() {
-        let walk = |presets: bool| {
-            let mut at = View::Overview;
-            let mut out = vec![at];
-            while let Some(next) = next_after(at, presets) {
-                out.push(next);
-                at = next;
-            }
-            out
-        };
-        assert_eq!(walk(true), STEPS);
-        assert_eq!(
-            walk(false),
-            [
-                View::Overview,
-                View::Decisions,
-                View::Apply,
-                View::Documents
-            ]
-        );
+    fn the_steps_follow_each_other() {
+        let mut at = View::Overview;
+        let mut walk = vec![at];
+        while let Some(next) = next_after(at) {
+            walk.push(next);
+            at = next;
+        }
+        assert_eq!(walk, STEPS);
         // not a step, and the last step
-        assert_eq!(next_after(View::Estate, true), None);
-        assert_eq!(next_after(View::Documents, true), None);
+        assert_eq!(next_after(View::Estate), None);
+        assert_eq!(next_after(View::Documents), None);
     }
 
     /// Every step that can be gone to says what it is for, and is a primary destination.

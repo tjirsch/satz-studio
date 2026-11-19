@@ -27,11 +27,17 @@ use crate::components::{
 use crate::state::{
     AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt, SignIn, ToastKind, View, toast,
 };
-use crate::views::commands::{APPLY, CommandDeck};
+use crate::views::commands::{APPLY, APPLY_DELEGATED, CommandDeck};
 use crate::views::path::NextStep;
+use satz_studio_core::satz::reports::EstateMode;
 
 /// The command that signs in, as satz's own refusal names it.
 const SIGN_IN: &str = "gcloud auth application-default login";
+
+/// The steps of the walk: an organisation's, or those of an estate in a delegated place.
+pub fn steps(delegated: bool) -> &'static [&'static str] {
+    if delegated { APPLY_DELEGATED } else { APPLY }
+}
 
 /// What the sign-in card says in its first line, and whether it is an error.
 pub fn sign_in_headline(sign_in: Option<&SignIn>) -> (String, bool) {
@@ -130,6 +136,12 @@ pub fn ApplyView() -> Element {
         .map(|d| d.message.clone())
         .collect();
     let (headline, failed) = sign_in_headline(sign_in.as_ref());
+    let delegated = app
+        .estate()
+        .model()
+        .read()
+        .as_deref()
+        .is_some_and(|m| m.packs.works_in != EstateMode::Organisation);
 
     rsx! {
         div { class: "view apply",
@@ -236,7 +248,12 @@ pub fn ApplyView() -> Element {
                 }
             }
 
-            CommandDeck { ids: APPLY.to_vec() }
+            if delegated {
+                p { class: "view__lead",
+                    "This estate works in a delegated place: day 0 and the state's move to another backend are the organisation's, and are not offered here."
+                }
+            }
+            CommandDeck { key: "{delegated}", ids: steps(delegated).to_vec() }
             NextStep { from: View::Apply }
         }
     }
@@ -302,6 +319,25 @@ mod tests {
             sign_in_headline(Some(&SignIn::Known(Box::new(blocked)))),
             ("Signed in, and the estate cannot run".to_string(), true)
         );
+    }
+
+    /// A delegated estate walks the organisation's steps without day 0 and without the
+    /// state's move, in the same order.
+    #[test]
+    fn a_delegated_estate_has_no_day_zero_and_no_migration() {
+        let delegated = steps(true);
+        for id in ["bootstrap", "bootstrap-check", "migrate"] {
+            assert!(
+                steps(false).contains(&id) && !delegated.contains(&id),
+                "{id}"
+            );
+        }
+        let rest: Vec<&str> = steps(false)
+            .iter()
+            .copied()
+            .filter(|id| delegated.contains(id))
+            .collect();
+        assert_eq!(rest, delegated);
     }
 
     /// Every line carries whether it is in order: the account, the billed project and

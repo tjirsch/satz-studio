@@ -11,7 +11,7 @@ use dioxus::prelude::*;
 use satz_studio_core::agent;
 
 use crate::components::{Button, ButtonVariant, Card, CardVariant, Icon};
-use crate::state::{AppStore, AppStoreStoreExt, ToastKind, toast};
+use crate::state::{AppStore, AppStoreStoreExt, EstateStoreStoreExt, ToastKind, toast};
 use crate::views::commands::{COMPLIANCE, CommandDeck};
 use crate::views::export::ExportCard;
 
@@ -55,6 +55,13 @@ pub fn DocumentsView() -> Element {
     let Some(open) = app.open().cloned() else {
         return rsx! {};
     };
+    // the catalogs are part of the preset library, `<presets_dir>/catalogs/`
+    let catalogs = app
+        .estate()
+        .model()
+        .read()
+        .as_deref()
+        .is_none_or(|m| m.packs.has_presets());
     let agent_command = app.settings().read().agent_command.clone();
     let program = agent::program(&agent_command);
 
@@ -67,10 +74,16 @@ pub fn DocumentsView() -> Element {
             ExportCard {}
 
             h2 { class: "documents__section", "Compliance" }
-            p { class: "view__lead",
-                "The estate against a catalog, and the evidence report. Both read the live organisation, so they need you signed in (Apply says whether you are)."
+            if catalogs {
+                p { class: "view__lead",
+                    "The estate against a catalog, and the evidence report. Both read the live organisation, so they need you signed in (Apply says whether you are)."
+                }
+                CommandDeck { ids: COMPLIANCE.to_vec() }
+            } else {
+                p { class: "view__lead",
+                    "The compliance reports are made from the catalogs of the preset library, which an organisation's estate holds. This estate has none: its compliance is reported in the organisation's estate."
+                }
             }
-            CommandDeck { ids: COMPLIANCE.to_vec() }
 
             h2 { class: "documents__section", "Written by an agent" }
             p { class: "view__lead",

@@ -530,10 +530,11 @@ pub struct PacksReport {
 }
 
 impl PacksReport {
-    /// Whether the estate has a Presets destination: an organisation's estate, and any
-    /// estate with a preset library in its `presets_dir`. An estate that works in a
-    /// delegated folder or project and holds no library has none — the library is the
-    /// organisation's estate's, and this one's components are workload packs.
+    /// Whether the estate holds a preset library: an organisation's estate, and any
+    /// estate with one in its `presets_dir`. The compliance catalogs are part of that
+    /// library, so this is where the compliance commands can run. An estate that works
+    /// in a delegated folder or project and holds no library has none — the library is
+    /// the organisation's estate's, and this one's components are workload packs.
     pub fn has_presets(&self) -> bool {
         self.works_in == EstateMode::Organisation || !self.packs.is_empty()
     }

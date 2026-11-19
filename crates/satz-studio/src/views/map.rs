@@ -291,7 +291,7 @@ pub fn PresetsView() -> Element {
     let Some(model) = model else {
         return rsx! {
             div { class: "view packs",
-                h1 { class: "view__title", "Presets" }
+                h1 { class: "view__title", "Components" }
                 Card { variant: CardVariant::Filled, class: "map__empty",
                     Icon { name: "map", size: 48, class: "placeholder__icon" }
                     p { "The estate model is not available — the drawer says why." }
@@ -308,7 +308,7 @@ pub fn PresetsView() -> Element {
 
     rsx! {
         div { class: "view packs",
-            h1 { class: "view__title", "Presets" }
+            h1 { class: "view__title", "Components" }
             if let Some(note) = &report.note {
                 Card { variant: CardVariant::Filled, class: "map__map-card",
                     Icon { name: "map", size: 32, class: "placeholder__icon" }
@@ -397,7 +397,7 @@ pub fn PresetsView() -> Element {
                     }
                 }
             }
-            NextStep { from: View::Presets }
+            NextStep { from: View::Components }
         }
     }
 }
