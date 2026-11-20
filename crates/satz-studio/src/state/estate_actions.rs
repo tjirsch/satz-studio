@@ -103,7 +103,8 @@ pub enum EstateAction {
     /// the review closed: its card and its findings leave the window
     CloseReview,
     /// a workload-pack command on the estate's `packs_dir`: `satz packs`, `get-pack`,
-    /// `update-pack` or `detach-pack`, then the list read again from the same source
+    /// `update-pack`, `detach-pack` or `publish-pack`, then the list read again from the
+    /// same source
     Packs(PackOp),
     /// a new pack of the repository's own: `packs_dir/<id>.satz` written and formatted
     /// by `satz fmt`, its `use` line added through the app's writer, and the file
@@ -155,6 +156,14 @@ pub enum PackOp {
     },
     /// `satz detach-pack <id>`
     Detach(String),
+    /// `satz publish-pack <id> --source <source> --estate <the open estate> [--force]`:
+    /// one of the repository's own packs copied into a folder source and recorded as
+    /// fetched from it
+    Publish {
+        id: String,
+        source: String,
+        force: bool,
+    },
 }
 
 pub async fn estate_coroutine(
@@ -1365,8 +1374,9 @@ async fn check_sign_in(session: &Arc<EstateSession>) -> SignIn {
 }
 
 /// One workload-pack operation, and the list read again from the same source after it.
-/// A fetch, an update and a detach write `packs_dir`, so they hold the write lock; what
-/// satz refuses is a toast carrying satz's sentence. Returns whether a pack file was
+/// A fetch, an update, a detach and a publish write `packs_dir`, so they hold the write
+/// lock; what satz refuses is a toast carrying satz's sentence — a publish's refusal is
+/// kept for its dialog instead. Returns whether a pack file was
 /// written, which is when the estate is read again.
 async fn workload_packs(session: &Arc<EstateSession>, app: Store<AppStore>, op: PackOp) -> bool {
     let estate = app.estate();
@@ -1383,6 +1393,14 @@ async fn workload_packs(session: &Arc<EstateSession>, app: Store<AppStore>, op: 
             estate.pack_source().set(Some(source.clone()));
             source.clone()
         }
+        // the list read after it is the listed source's, the published one's when none is
+        PackOp::Publish { source, .. } => match estate.pack_source().cloned() {
+            Some(listed) => listed,
+            None => {
+                estate.pack_source().set(Some(source.clone()));
+                source.clone()
+            }
+        },
         _ => match estate.pack_source().cloned() {
             Some(source) => source,
             None => {
@@ -1470,6 +1488,22 @@ async fn workload_packs(session: &Arc<EstateSession>, app: Store<AppStore>, op: 
                     ToastKind::Error,
                     format!("detach-pack: {}", project::said(&e)),
                 ),
+            }
+        }
+        PackOp::Publish {
+            id,
+            source: target,
+            force,
+        } => {
+            estate.pack_publish().set(None);
+            let _lock = session.write_lock().await;
+            match workload::publish(cli, &id, &target, &session.main, force).await {
+                Ok(published) => {
+                    toast(app, ToastKind::Info, workload::published_text(&published));
+                    estate.pack_publish().set(Some(Ok(published)));
+                }
+                // the dialog stays open and shows it
+                Err(e) => estate.pack_publish().set(Some(Err(project::said(&e)))),
             }
         }
     }

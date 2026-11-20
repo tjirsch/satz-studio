@@ -380,7 +380,10 @@ pub struct EstateStore {
     /// what the last `satz update-pack` reported: the edited packs with their
     /// difference stand in the tab until the next list
     pub pack_update: Option<UpdatePackReport>,
-    /// a list, a fetch, an update or a detach is running
+    /// what satz said to the last `satz publish-pack`: its report when the pack was
+    /// published, its refusal as it said it; `None` while one runs and before the first
+    pub pack_publish: Option<Result<satz_studio_core::satz::reports::Published, String>>,
+    /// a list, a fetch, an update, a detach or a publish is running
     pub packs_busy: bool,
     /// who is signed in on this machine and what the estate's live commands run as, as
     /// `satz_whoami` answered — or why it could not; `None` until it has been asked,

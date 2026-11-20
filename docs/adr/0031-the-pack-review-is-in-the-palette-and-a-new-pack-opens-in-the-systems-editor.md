@@ -78,4 +78,9 @@ reads, and its actions as text and icon buttons — at most one tonal button per
   The estate file is still written only through the document layer or satz.
 - A pack opens in whatever the system opens `.satz` files with; with nothing registered
   the system asks, and a failure is a toast naming the file.
+- A pack of the repository's own leaves the estate through satz alone: its row's "Store
+  in a pack source…" runs `satz publish-pack` into a folder source (satz's ADR 0099),
+  which checks it against `review-pack`'s bar inside the estate and records it in
+  `origin.toml` as fetched from there; the app copies no pack itself, and `MIN_SATZ` is
+  0.106.0 for it.
 - A used pack whose file is not in `packs_dir` is not listed: it is no workload pack.

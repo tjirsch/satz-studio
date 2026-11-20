@@ -1,6 +1,7 @@
 //! Workload packs through the CLI: `satz packs`, `get-pack`, `update-pack` and
-//! `detach-pack` on the estate's `packs_dir` (satz's ADR 0083), and the pack sources they
-//! read, `satz pack-source list|add|remove` (satz's ADR 0097). They run as commands
+//! `detach-pack` on the estate's `packs_dir` (satz's ADR 0083), `publish-pack`, which
+//! copies one of the repository's own packs into a folder source (satz's ADR 0099), and
+//! the pack sources they read, `satz pack-source list|add|remove` (satz's ADR 0097). They run as commands
 //! because a source may be a folder outside the estate, which `satz mcp` confines to its
 //! root (ADR 0024). A source is named: `satz`, the satz repository's `packs/`, or a
 //! `[[pack_source]]` of `config.toml`, which satz alone writes.
@@ -9,7 +10,8 @@ use std::path::{Component, Path, PathBuf};
 use std::process::ExitStatus;
 
 use super::reports::{
-    DetachedPack, GetPackReport, PackSourcesReport, UpdatePackReport, WorkloadPacksReport,
+    DetachedPack, GetPackReport, PackPlace, PackSourcesReport, PublishAction, Published,
+    UpdatePackReport, WorkloadPacksReport,
 };
 use super::{SatzCli, SatzError};
 
@@ -215,6 +217,117 @@ pub async fn detach(cli: &SatzCli, id: &str) -> Result<DetachedPack, SatzError> 
     held(report, status, true, "detach-pack", "it removed the row")
 }
 
+/// The arguments of `satz publish-pack <id> --source <name> --estate <estate> [--force]`;
+/// `--format json` is added where it runs.
+pub fn publish_argv(id: &str, source: &str, estate: &Path, force: bool) -> Vec<String> {
+    let mut argv = vec![
+        "publish-pack".to_string(),
+        id.to_string(),
+        "--source".to_string(),
+        source.to_string(),
+        "--estate".to_string(),
+        estate.display().to_string(),
+    ];
+    if force {
+        argv.push("--force".to_string());
+    }
+    argv
+}
+
+/// `satz publish-pack`: one of the repository's own packs copied into the folder source
+/// `source`, after it clears `review-pack`'s bar inside `estate`, and recorded in
+/// `origin.toml` as fetched from there. `force` copies it over another file of that id.
+/// A refusal is an error carrying satz's stderr, which [`PublishRefusal::read`] reads.
+pub async fn publish(
+    cli: &SatzCli,
+    id: &str,
+    source: &str,
+    estate: &Path,
+    force: bool,
+) -> Result<Published, SatzError> {
+    let (report, status) = cli
+        .json_stdout(&publish_argv(id, source, estate, force))
+        .await?;
+    held(
+        report,
+        status,
+        true,
+        "publish-pack",
+        "it published the pack",
+    )
+}
+
+/// The sources `publish-pack` writes: the folders `config.toml` names. A GitHub source,
+/// the built-in `satz` among them, is written by a pull request to its repository.
+pub fn folder_sources(report: &PackSourcesReport) -> Vec<(String, String)> {
+    report
+        .sources
+        .iter()
+        .filter_map(|s| match &s.place {
+            PackPlace::Folder(dir) => Some((s.name.clone(), dir.clone())),
+            PackPlace::Github { .. } => None,
+        })
+        .collect()
+}
+
+/// What a publish did, in one line: where the file went, or that it was there already.
+pub fn published_text(p: &Published) -> String {
+    match p.action {
+        PublishAction::Copied => format!("{} {} copied to {}", p.id, p.version, p.path),
+        PublishAction::Identical => format!(
+            "{} {} already identical in {} ({}); its origin is recorded",
+            p.id, p.version, p.source, p.path
+        ),
+        PublishAction::Overwritten => {
+            format!("{} {} overwritten at {}", p.id, p.version, p.path)
+        }
+    }
+}
+
+/// A `publish-pack` refusal as the Packs view answers it, read from satz's sentence
+/// ([`super::project::sentence`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PublishRefusal {
+    /// the source's folder holds another file of that id: `--force` copies over `file`
+    Exists { file: String },
+    /// the pack does not clear `review-pack`'s bar: one line per error, and the command
+    /// satz names that lists every finding
+    Bar {
+        lines: Vec<String>,
+        command: Option<String>,
+    },
+    /// anything else, shown as satz said it
+    Other,
+}
+
+impl PublishRefusal {
+    pub fn read(said: &str) -> PublishRefusal {
+        let first = said.lines().next().unwrap_or_default();
+        if let Some((file, _)) = first.split_once(" holds another `")
+            && first.contains("--force")
+        {
+            return PublishRefusal::Exists {
+                file: file.to_string(),
+            };
+        }
+        if first.contains("does not clear review-pack's bar") {
+            let rest: Vec<&str> = said.lines().skip(1).collect();
+            let lines = rest
+                .iter()
+                .filter(|l| l.starts_with("  "))
+                .map(|l| l.trim().to_string())
+                .collect();
+            let command = rest
+                .iter()
+                .find(|l| l.starts_with("`satz review-pack "))
+                .and_then(|l| l.split('`').nth(1))
+                .map(str::to_string);
+            return PublishRefusal::Bar { lines, command };
+        }
+        PublishRefusal::Other
+    }
+}
+
 /// Whether `id` can name a new pack of the repository: a lowercase letter, then
 /// lowercase letters, digits and `-`. It is the file's name in `packs_dir` and, with
 /// `_` for `-`, the name its `pack` statement declares. `Err` says what is wrong.
@@ -332,6 +445,128 @@ mod tests {
                 "--path",
                 "workloads"
             ]
+        );
+    }
+
+    #[test]
+    fn a_publish_names_the_pack_the_source_and_the_estate_and_forces_only_when_asked() {
+        let estate = Path::new("/e/yaml/wp.satz");
+        assert_eq!(
+            publish_argv("team-notes", "shared", estate, false),
+            [
+                "publish-pack",
+                "team-notes",
+                "--source",
+                "shared",
+                "--estate",
+                "/e/yaml/wp.satz"
+            ]
+        );
+        let forced = publish_argv("team-notes", "shared", estate, true);
+        assert_eq!(forced.last().map(String::as_str), Some("--force"));
+        assert_eq!(forced.len(), 7);
+    }
+
+    #[test]
+    fn only_a_folder_source_is_offered_to_publish_to() {
+        use crate::satz::reports::PackSourceRow;
+        let report = PackSourcesReport {
+            sources: vec![
+                PackSourceRow {
+                    name: "satz".into(),
+                    builtin: true,
+                    place: PackPlace::Github {
+                        repo: "tjirsch/satz".into(),
+                        git_ref: Some("main".into()),
+                        path: Some("packs".into()),
+                    },
+                },
+                PackSourceRow {
+                    name: "team".into(),
+                    builtin: false,
+                    place: PackPlace::Github {
+                        repo: "acme/packs".into(),
+                        git_ref: None,
+                        path: None,
+                    },
+                },
+                PackSourceRow {
+                    name: "shared".into(),
+                    builtin: false,
+                    place: PackPlace::Folder("../shared".into()),
+                },
+            ],
+        };
+        assert_eq!(
+            folder_sources(&report),
+            [("shared".to_string(), "../shared".to_string())]
+        );
+        assert!(
+            folder_sources(&PackSourcesReport {
+                sources: report.sources[..2].to_vec()
+            })
+            .is_empty()
+        );
+    }
+
+    #[test]
+    fn a_publish_says_where_the_file_went() {
+        let mut p = Published {
+            id: "team-notes".into(),
+            version: "1.0".into(),
+            source: "shared".into(),
+            location: "../shared".into(),
+            path: "../shared/team-notes.satz".into(),
+            action: PublishAction::Copied,
+            estate: "yaml/wp.satz".into(),
+        };
+        assert_eq!(
+            published_text(&p),
+            "team-notes 1.0 copied to ../shared/team-notes.satz"
+        );
+        p.action = PublishAction::Identical;
+        assert_eq!(
+            published_text(&p),
+            "team-notes 1.0 already identical in shared (../shared/team-notes.satz); its origin is recorded"
+        );
+        p.action = PublishAction::Overwritten;
+        assert_eq!(
+            published_text(&p),
+            "team-notes 1.0 overwritten at ../shared/team-notes.satz"
+        );
+    }
+
+    /// The refusals as satz words them (`src/workload_packs.rs` of satz v0.106.0).
+    #[test]
+    fn a_publish_refusal_is_read_for_what_the_view_offers() {
+        let exists = "./../shared/team-notes.satz holds another `team-notes` than ./packs/team-notes.satz — compare the two files; `--force` copies this one over it";
+        assert_eq!(
+            PublishRefusal::read(exists),
+            PublishRefusal::Exists {
+                file: "./../shared/team-notes.satz".into()
+            }
+        );
+        let bar = "./packs/team-notes.satz does not clear review-pack's bar inside /e/yaml/wp.satz, so it is not published:\n  line 1: no header comment — open with one sentence saying what it does\n  /e/yaml/wp.satz writes nothing from this pack — does that estate `use` it?\n`satz review-pack ./packs/team-notes.satz --against /e/yaml/wp.satz --format text --out -` lists every finding";
+        assert_eq!(
+            PublishRefusal::read(bar),
+            PublishRefusal::Bar {
+                lines: vec![
+                    "line 1: no header comment — open with one sentence saying what it does"
+                        .into(),
+                    "/e/yaml/wp.satz writes nothing from this pack — does that estate `use` it?"
+                        .into(),
+                ],
+                command: Some(
+                    "satz review-pack ./packs/team-notes.satz --against /e/yaml/wp.satz --format text --out -"
+                        .into()
+                ),
+            }
+        );
+        assert_eq!(
+            PublishRefusal::read(
+                "the pack `x` came from `shared`; detach it first (`satz detach-pack x`) to publish it as your own"
+            ),
+            PublishRefusal::Other
         );
     }
 

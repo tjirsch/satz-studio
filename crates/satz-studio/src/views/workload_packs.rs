@@ -6,8 +6,9 @@
 //! source, and a pack edited here is shown with its difference and written only when the
 //! operator says so (ADR 0024). A new pack is the repository's own: written and formatted,
 //! its `use` line added through the app's writer, and opened in the application the
-//! system gives `.satz` files, as Edit opens any pack (ADR 0031). The states are satz's
-//! report; the app derives none of its own.
+//! system gives `.satz` files, as Edit opens any pack (ADR 0031); once it works, "Store in
+//! a pack source…" copies it into a folder source with `satz publish-pack`
+//! ([`PublishDialog`]). The states are satz's report; the app derives none of its own.
 
 use std::path::PathBuf;
 
@@ -27,7 +28,8 @@ use crate::components::{
 use crate::state::{
     AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt, PackOp, SourceOp, open_file,
 };
-use crate::views::pack_sources::PackSourcesCard;
+use crate::views::pack_sources::{PackSourcesCard, Sheet};
+use crate::views::publish_pack::PublishDialog;
 
 /// A delegated value a pack reads, in words.
 fn need_word(need: &PackNeed) -> &'static str {
@@ -187,6 +189,8 @@ pub fn WorkloadPacksPane() -> Element {
         .unwrap_or_default();
     let packs_dir = open.session.dir.packs_dir();
     let mut confirm = use_signal(|| None::<Confirm>);
+    let sheet = use_signal(|| Sheet::Closed);
+    let publishing = use_signal(|| None::<String>);
 
     let (listed, failed) = match &report {
         Some(Ok(r)) => (Some(r.clone()), None),
@@ -212,6 +216,7 @@ pub fn WorkloadPacksPane() -> Element {
             }
             PackSourcesCard {
                 busy,
+                sheet,
                 confirm_remove: move |name: String| confirm.set(Some(Confirm::RemoveSource(name))),
             }
             HereCard {
@@ -223,6 +228,7 @@ pub fn WorkloadPacksPane() -> Element {
                 update,
                 busy,
                 confirm,
+                publishing,
             }
             if let Some(report) = listed.filter(|_| !available.is_empty()) {
                 Card { variant: CardVariant::Outlined, class: "interfaces__card",
@@ -232,11 +238,12 @@ pub fn WorkloadPacksPane() -> Element {
                         code { class: "interfaces__at", "{read_from(&report)}" }
                     }
                     for row in available {
-                        PackLine { key: "{row.id}", id: row.id.clone(), row: Some(row.clone()), used: true, file: None, edited: None, busy, confirm }
+                        PackLine { key: "{row.id}", id: row.id.clone(), row: Some(row.clone()), used: true, file: None, edited: None, busy, confirm, publishing }
                     }
                 }
             }
         }
+        PublishDialog { publishing, sheet, busy }
         Dialog {
             open: confirm().is_some(),
             title: match confirm() {
@@ -299,6 +306,7 @@ fn HereCard(
     update: Option<UpdatePackReport>,
     busy: bool,
     confirm: Signal<Option<Confirm>>,
+    publishing: Signal<Option<String>>,
 ) -> Element {
     let handle = use_coroutine_handle::<EstateAction>();
     let mut creating = use_signal(|| false);
@@ -351,6 +359,7 @@ fn HereCard(
                     p { "Choosing a pack source runs satz packs against it, and each fetched pack says how it stands: Update available — unchanged here, and the source holds a newer file; Edited here — changed since it was fetched, so an update leaves it as it is and shows the difference; Gone from source — the source holds it no longer; Not checked — fetched from another source than the one listed." }
                     p { "Reads … values names the delegated folder or project a pack reads by default; an estate that was not delegated that value answers the param itself." }
                     p { "New pack writes {packs_dir}/<name>.satz, adds its use line to the estate and opens the file in the application this computer gives .satz files; Edit opens a pack the same way. Keep as own forgets where a fetched pack came from. What a pack asks is answered in Decisions." }
+                    p { "Store in a pack source, on your own pack, copies it into a folder pack source with satz publish-pack once it clears review-pack's bar inside this estate, and records it as fetched from there, so other estates fetch it and update-pack follows it here too." }
                 }
             }
             if let Some(e) = &failed {
@@ -379,6 +388,7 @@ fn HereCard(
                     row: here.row,
                     busy,
                     confirm,
+                    publishing,
                 }
             }
         }
@@ -434,6 +444,7 @@ fn PackLine(
     edited: Option<UpdatedPack>,
     busy: bool,
     confirm: Signal<Option<Confirm>>,
+    mut publishing: Signal<Option<String>>,
 ) -> Element {
     let app = use_context::<Store<AppStore>>();
     let handle = use_coroutine_handle::<EstateAction>();
@@ -509,6 +520,20 @@ fn PackLine(
                         label: "Keep as own…",
                         disabled: busy,
                         onclick: { let id = id.clone(); move |_| confirm.set(Some(Confirm::Detach(id.clone()))) },
+                    }
+                }
+                if state == Some(PackState::Own) {
+                    IconButton {
+                        icon: "drive_folder_upload",
+                        label: "Store in a pack source…",
+                        disabled: busy,
+                        onclick: {
+                            let id = id.clone();
+                            move |_| {
+                                app.estate().pack_publish().set(None);
+                                publishing.set(Some(id.clone()));
+                            }
+                        },
                     }
                 }
                 if let Some(file) = file {

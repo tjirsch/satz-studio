@@ -86,7 +86,12 @@ from source", "Not checked"), and what the source holds beyond them; each is fet
 updated from the source it came from, kept as your own or added to the estate from its
 row. "New pack…" writes a pack of your own into `packs_dir`, adds its `use` line to the
 estate and opens it in the application your system gives `.satz` files; Edit opens any
-pack the same way. The sources card names them in one line; "Manage" lists them all,
+pack the same way. A pack of your own is developed here, where the estate uses it, and
+once it works "Store in a pack source…" on its row copies it into a folder pack source
+(`satz publish-pack`): satz first checks it inside the estate against `review-pack`'s
+bar, then records it as fetched from that source, so other estates fetch it from there
+and `update-pack` follows it here too. A GitHub source is written by a pull request, not
+from the window. The sources card names them in one line; "Manage" lists them all,
 updates the packs fetched from one, removes one no fetched pack names (`satz pack-source
 remove`) and adds one (`satz pack-source add`, from a name and a repository with an
 optional branch or tag and folder, or a folder you choose); satz writes `config.toml`,
@@ -134,7 +139,7 @@ that holds them up — in front of apply and bootstrap, which satz refuses.
 
 ## What it needs
 
-- **`satz` 0.103.0 or newer.** `MIN_SATZ` in `crates/satz-studio-core/src/satz/binary.rs`
+- **`satz` 0.106.0 or newer.** `MIN_SATZ` in `crates/satz-studio-core/src/satz/binary.rs`
   names the oldest satz this build works with. It rises when a satz release breaks the
   app or the app starts using something a later satz introduced, not with every satz
   release. Install satz with its installer or bring it up to date with `satz

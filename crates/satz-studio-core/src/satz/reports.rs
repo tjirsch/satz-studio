@@ -1312,6 +1312,36 @@ pub struct DetachedPack {
     pub source: String,
 }
 
+/// What `satz publish-pack` did with the folder source's file.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum PublishAction {
+    /// the folder held no file of that id
+    Copied,
+    /// the folder held the same file: nothing copied, the row written
+    Identical,
+    /// `--force`: the folder held another file, and the pack was copied over it
+    Overwritten,
+}
+
+/// What `satz publish-pack --format json` prints: one of the repository's own packs
+/// copied into a folder source and recorded in `origin.toml` as fetched from it.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct Published {
+    pub id: String,
+    /// the version the pack states
+    pub version: String,
+    /// the name of the folder source it was copied to
+    pub source: String,
+    /// that source's folder, as `config.toml` writes it
+    pub location: String,
+    /// the file in the source's folder, where `get-pack --source` reads it
+    pub path: String,
+    pub action: PublishAction,
+    /// the estate the pack was checked in
+    pub estate: String,
+}
+
 /// What `satz_whoami` returns: who is signed in on this machine, and what the open
 /// estate's live commands run as. Online it is also a check — whether the signed-in
 /// identity may act as the estate's account, whether the project its calls are billed
@@ -1996,6 +2026,30 @@ mod tests {
         let detached: DetachedPack =
             serde_json::from_str(r#"{"id":"demo","source":"up"}"#).unwrap();
         assert_eq!(detached.source, "up");
+
+        let published: Published = serde_json::from_str(
+            r#"{"id":"team-notes","version":"1.0","source":"shared","location":"../shared","path":"./../shared/team-notes.satz","action":"copied","estate":"yaml/wp.satz"}"#,
+        )
+        .unwrap();
+        assert_eq!(published.action, PublishAction::Copied);
+        assert_eq!(published.location, "../shared");
+        for (word, action) in [
+            ("identical", PublishAction::Identical),
+            ("overwritten", PublishAction::Overwritten),
+        ] {
+            assert_eq!(
+                serde_json::from_str::<PublishAction>(&format!("\"{word}\"")).unwrap(),
+                action
+            );
+        }
+        // an action satz grows, or a field it drops, is refused
+        assert!(serde_json::from_str::<PublishAction>(r#""moved""#).is_err());
+        assert!(
+            serde_json::from_str::<Published>(
+                r#"{"id":"a","version":"1.0","source":"s","location":"l","path":"p","action":"copied"}"#
+            )
+            .is_err()
+        );
 
         // a state satz grows is refused, never read as another
         assert!(serde_json::from_str::<PackState>(r#""sideways""#).is_err());

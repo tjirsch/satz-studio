@@ -5,8 +5,10 @@
 //! `get-pack` fetches one and prints the `use` line; a pack edited here is reported with
 //! its difference and left byte for byte as it was, and overwritten only when asked; a
 //! pack the repository wrote is never one an update looks at; `detach-pack` makes a
-//! fetched pack the repository's own. The `use` line satz names goes into the estate
-//! file through the app's writer and satz's check.
+//! fetched pack the repository's own; `publish-pack` copies the repository's own pack into
+//! a folder source of its own, a temporary one, after review-pack's bar, and records it as
+//! fetched from there. The `use` line satz names goes into the estate file through the
+//! app's writer and satz's check.
 
 #[path = "fixtures/e2e/support.rs"]
 mod e2e;
@@ -16,8 +18,10 @@ use satz_studio_core::estate::EstateDir;
 use satz_studio_core::satz::SatzCli;
 use satz_studio_core::satz::SatzError;
 use satz_studio_core::satz::project;
-use satz_studio_core::satz::reports::{PackPlace, PackState, UpdateAction, WorkloadPackRow};
-use satz_studio_core::satz::workload::{self, NewPlace, NewSource, Which};
+use satz_studio_core::satz::reports::{
+    PackPlace, PackState, PublishAction, UpdateAction, WorkloadPackRow,
+};
+use satz_studio_core::satz::workload::{self, NewPlace, NewSource, PublishRefusal, Which};
 
 const PACK: &str = "workload-project";
 const ESTATE: &str = "estate wp\n\nparams {\n  customer_organization_id = \"123456789012\"\n}\n\nterraform {\n  backend {\n    local { path = \"terraform.tfstate\" }\n  }\n}\n";
@@ -253,4 +257,111 @@ async fn a_new_pack_is_the_repositorys_own_and_the_estate_uses_it_through_the_wr
     let own = row(&report.packs, "team-notes");
     assert_eq!(own.state, PackState::Own);
     assert_eq!(own.use_path(), Some(path.as_str()));
+}
+
+/// What the new pack `team-notes` is written as before it is published: a header the index
+/// prints and one resource the estate writes from it, as `satz fmt` formats it.
+const NOTES: &str = "// A log bucket for the team.\npack team_notes version \"1.0\"\n\ngoogle_storage_bucket {\n  logs {\n    name     = \"acme-logs\"\n    location = \"EU\"\n  }\n}\n";
+
+#[tokio::test(flavor = "multi_thread")]
+async fn an_own_pack_is_published_to_a_folder_source_and_follows_it_from_then_on() {
+    let estate = e2e::estate_dir(None);
+    let main = estate.file("wp.satz");
+    std::fs::write(&main, ESTATE).unwrap();
+    let cli = estate.cli().await;
+    let dir = EstateDir::open(&estate.root).unwrap();
+    let id = "team-notes";
+
+    // the new pack, used by the estate through the writer
+    let file = e2e::within(workload::create_pack(&cli, &dir.packs_dir(), id))
+        .await
+        .unwrap();
+    let path = dir.use_path_of(&file).unwrap();
+    let es = EditSession::open(&main).unwrap();
+    let proposed = es.apply(&[Edit::AddUse { path }]).unwrap();
+    let checker = CliChecker { cli: cli.clone() };
+    e2e::within(proposed.commit(&checker)).await.unwrap();
+
+    // a folder source of its own, outside the satz checkout
+    let shared_dir = e2e::scratch();
+    let shared = shared_dir.path().canonicalize().unwrap();
+    let source = NewSource {
+        name: "shared".into(),
+        place: NewPlace::Folder(shared.clone()),
+    };
+    e2e::within(workload::add_source(&cli, &source))
+        .await
+        .unwrap();
+    let sources = e2e::within(workload::sources(&cli)).await.unwrap();
+    let folders = workload::folder_sources(&sources);
+    assert_eq!(folders.len(), 1, "{folders:?}");
+    assert_eq!(folders[0].0, "shared");
+    let target = shared.join(format!("{id}.satz"));
+
+    // the empty new pack does not clear the bar: its lines, and the command that lists all
+    let refused = e2e::within(workload::publish(&cli, id, "shared", &main, false)).await;
+    let said = project::said(&refused.expect_err("an empty pack was published"));
+    match PublishRefusal::read(&said) {
+        PublishRefusal::Bar { lines, command } => {
+            assert!(!lines.is_empty(), "{said}");
+            assert!(
+                command.is_some_and(|c| c.starts_with("satz review-pack ")),
+                "{said}"
+            );
+        }
+        other => panic!("the bar was read as {other:?}: {said}"),
+    }
+    assert!(!target.exists(), "a refused pack was copied");
+
+    // the built-in source is a GitHub one: refused by satz, and no folder source
+    let github = e2e::within(workload::publish(&cli, id, "satz", &main, false)).await;
+    let said = project::said(&github.expect_err("publishing to satz was not refused"));
+    assert!(said.contains("pull request"), "{said}");
+    assert_eq!(PublishRefusal::read(&said), PublishRefusal::Other);
+
+    // written out, it is copied where get-pack reads it, and recorded as fetched from there
+    std::fs::write(&file, NOTES).unwrap();
+    let published = e2e::within(workload::publish(&cli, id, "shared", &main, false))
+        .await
+        .unwrap();
+    assert_eq!(published.action, PublishAction::Copied);
+    assert_eq!(
+        (published.id.as_str(), published.source.as_str()),
+        (id, "shared")
+    );
+    assert_eq!(published.version, "1.0");
+    assert_eq!(e2e::read(&target), NOTES);
+    let report = e2e::within(workload::list(&cli, "shared")).await.unwrap();
+    let listed = row(&report.packs, id);
+    assert_eq!(listed.state, PackState::Current);
+    assert_eq!(listed.source.as_deref(), Some("shared"));
+    let update = e2e::within(workload::update(&cli, &Which::One(id.into()), None, false))
+        .await
+        .unwrap();
+    assert!(!update.attention, "{update:?}");
+    assert_eq!(update.packs[0].action, UpdateAction::Current);
+
+    // a fetched pack is published again only after it is detached
+    let again = e2e::within(workload::publish(&cli, id, "shared", &main, false)).await;
+    let said = project::said(&again.expect_err("a fetched pack was published"));
+    assert!(said.contains("detach-pack"), "{said}");
+
+    // detached and changed here: the folder's file is another, kept until --force
+    e2e::within(workload::detach(&cli, id)).await.unwrap();
+    let changed = NOTES.replace("version \"1.0\"", "version \"1.1\"");
+    std::fs::write(&file, &changed).unwrap();
+    let other = e2e::within(workload::publish(&cli, id, "shared", &main, false)).await;
+    let said = project::said(&other.expect_err("another file was overwritten unasked"));
+    match PublishRefusal::read(&said) {
+        PublishRefusal::Exists { file } => assert!(file.ends_with("team-notes.satz"), "{file}"),
+        other => panic!("another file was read as {other:?}: {said}"),
+    }
+    assert_eq!(e2e::read(&target), NOTES);
+    let forced = e2e::within(workload::publish(&cli, id, "shared", &main, true))
+        .await
+        .unwrap();
+    assert_eq!(forced.action, PublishAction::Overwritten);
+    assert_eq!(e2e::read(&target), changed);
+    let report = e2e::within(workload::list(&cli, "shared")).await.unwrap();
+    assert_eq!(row(&report.packs, id).state, PackState::Current);
 }

@@ -69,9 +69,10 @@ pub fn sources_summary(names: &[&str]) -> String {
     format!("{count}: {shown}")
 }
 
-/// What the dialog over the sources shows.
+/// What the dialog over the sources shows. The Packs view holds it, so the dialog that
+/// stores a pack in a source opens the form that adds one.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Sheet {
+pub enum Sheet {
     Closed,
     /// every source, each chosen, updated from or removed
     Manage,
@@ -81,7 +82,7 @@ enum Sheet {
 
 /// A refusal of satz's, as it said it.
 #[component]
-fn Refused(said: String) -> Element {
+pub fn Refused(said: String) -> Element {
     rsx! {
         div { class: "interfaces__error",
             Icon { name: "error", size: 20 }
@@ -93,9 +94,14 @@ fn Refused(said: String) -> Element {
     }
 }
 
-/// The sources card. `confirm_remove` asks before a source leaves `config.toml`.
+/// The sources card. `sheet` is which of its dialogs stands; `confirm_remove` asks before
+/// a source leaves `config.toml`.
 #[component]
-pub fn PackSourcesCard(busy: bool, confirm_remove: EventHandler<String>) -> Element {
+pub fn PackSourcesCard(
+    busy: bool,
+    mut sheet: Signal<Sheet>,
+    confirm_remove: EventHandler<String>,
+) -> Element {
     let app = use_context::<Store<AppStore>>();
     let handle = use_coroutine_handle::<EstateAction>();
     let sources = app.estate().pack_sources().cloned();
@@ -108,7 +114,6 @@ pub fn PackSourcesCard(busy: bool, confirm_remove: EventHandler<String>) -> Elem
         }
     });
 
-    let mut sheet = use_signal(|| Sheet::Closed);
     let mut name = use_signal(String::new);
     let mut kind = use_signal(|| "github".to_string());
     let mut repo = use_signal(String::new);
