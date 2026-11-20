@@ -1,6 +1,6 @@
 # 0031 — the pack review is in the palette, and a new pack opens in the system's editor
 
-- **Status:** accepted
+- **Status:** accepted; what opens a pack's file is superseded by [ADR 0033](0033-a-pack-opens-in-the-editor-setting-or-the-systems-text-editor.md) — the Editor setting, or the system's text editor
 - **Date:** 2026-11-20
 - **Deciders:** the maintainer
 

@@ -33,8 +33,9 @@
 }
 
 /* the path bar: the window's foot while a step of the path is showing, outside the
-   scrolling content — a docked toolbar holding Back, what the next step is for, and Next.
-   The description gives way to one ellipsized line; the buttons never shrink */
+   scrolling content — a docked toolbar holding Back and Next together on the left, then
+   what the next step is for. The description gives way to one ellipsized line, down to
+   nothing; the buttons never shrink */
 .path-bar {
   flex: none;
   display: flex;
@@ -47,7 +48,7 @@
 }
 
 .path-bar__text {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-width: 0;
   font: var(--md-sys-typescale-body-medium);
   white-space: nowrap;

@@ -95,8 +95,10 @@ for them, its list params, its exports by interface, and each value it reads fro
 interface folders, with the folders of this estate that give it, the param the estate
 sets in its place, or why none does; a pack with such a read is marked "Unmet read", so
 the list says before a fetch whether a pack fits. "New pack…" writes a pack of your own
-into `packs_dir`, adds its `use` line to the estate and opens it in the application your
-system gives `.satz` files; Edit opens any pack the same way, and Reload on the card reads
+into `packs_dir`, adds its `use` line to the estate and opens it in the editor Settings →
+Editor names — a command line such as `zed` or `subl -n`, run with the file last — or,
+with that empty, in the system's text editor (`open -t` on macOS, `xdg-open` on Linux,
+`notepad` on Windows); Edit opens any pack the same way, and Reload on the card reads
 the estate and the listed source again once the editor is done. A pack of your own is developed here, where the estate uses it, and
 once it works "Store in a pack source…" on its row copies it into a folder pack source
 (`satz publish-pack`): satz first checks it inside the estate against `review-pack`'s

@@ -53,9 +53,10 @@ pub fn purpose(step: View) -> &'static str {
     }
 }
 
-/// The bar at the window's foot while a step is showing: "Back: <step>" to the step
-/// before, what the next step is for, and "Next: <step>". The description gives way —
-/// one line, cut with an ellipsis — and the two buttons never do. Nothing on a view that
+/// The bar at the window's foot while a step is showing, left to right: "Back: <step>" to
+/// the step before, "Next: <step>", and what the next step is for. The two buttons stand
+/// together on the left and never shrink; where one is missing the other keeps the left
+/// edge. The description gives way — one line, cut with an ellipsis, down to nothing. Nothing on a view that
 /// is not a step, and nothing without an open estate.
 #[component]
 pub fn PathBar() -> Element {
@@ -83,11 +84,6 @@ pub fn PathBar() -> Element {
                     "Back: {previous.label()}"
                 }
             }
-            span { class: "path-bar__text",
-                if let Some(next) = next {
-                    "{purpose(next)}"
-                }
-            }
             if let Some(next) = next {
                 Button {
                     variant: ButtonVariant::Filled,
@@ -96,6 +92,7 @@ pub fn PathBar() -> Element {
                     onclick: move |_| app.nav().set(next),
                     "Next: {next.label()}"
                 }
+                span { class: "path-bar__text", "{purpose(next)}" }
             }
         }
     }

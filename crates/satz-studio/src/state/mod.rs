@@ -35,7 +35,7 @@ use satz_studio_core::settings::Settings;
 pub use ansi::strip_ansi;
 pub use app_actions::{AppAction, app_coroutine, run_line};
 pub use estate_actions::{
-    EstateAction, PackOp, SourceOp, command_line, estate_coroutine, open_file, quote, reports_dir,
+    EstateAction, PackOp, SourceOp, command_line, edit_file, estate_coroutine, quote, reports_dir,
 };
 pub use pace::{
     ahead_sentence, install_offer, newer_satz_sentence, satz_available, satz_notice,

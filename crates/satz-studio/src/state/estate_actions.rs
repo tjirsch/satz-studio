@@ -22,6 +22,7 @@ use satz_studio_core::edit::{
     self, CheckFailure, Checker, CommitError, Committed, Delegated, Edit, EditSession, McpChecker,
     Rollback,
 };
+use satz_studio_core::editor;
 use satz_studio_core::estate::{EstateDir, HclState};
 use satz_studio_core::git::{self, WorkTree};
 use satz_studio_core::model::EstateModel;
@@ -1553,19 +1554,31 @@ async fn new_pack(session: &Arc<EstateSession>, app: Store<AppStore>, id: &str) 
             ),
         ),
     }
-    open_file(app, &file);
+    edit_file(app, &file);
 }
 
-/// A file opened in the application the system gives its type — `open` on macOS,
-/// `start` on Windows, `xdg-open` on Linux; one that does not open is a toast.
-pub fn open_file(app: Store<AppStore>, file: &Path) {
-    if let Err(e) = open::that(file) {
-        toast(
-            app,
-            ToastKind::Error,
-            format!("{} did not open: {e}", file.display()),
-        );
-    }
+/// A pack's file opened for its author: in the Editor setting's command, or the system's
+/// text editor when it is empty ([`satz_studio_core::editor`]). The editor is started on
+/// a task of its own and the window goes on; one that does not start, or exits with a
+/// failure, is a toast that names the command and the setting.
+pub fn edit_file(app: Store<AppStore>, file: &Path) {
+    let editor = app.settings().read().editor.clone();
+    let file = file.to_path_buf();
+    spawn(async move {
+        if let Err(e) = editor::open(&editor, &file).await {
+            toast(app, ToastKind::Error, edit_failed(&editor, &file, &e));
+        }
+    });
+}
+
+/// The toast of an editor that did not open the file: the file, the command, what went
+/// wrong, and where the command is set.
+fn edit_failed(editor: &str, file: &Path, e: &editor::EditorError) -> String {
+    format!(
+        "{} did not open with {}: {e}. Set an editor in Settings → Editor.",
+        file.display(),
+        editor::shown(editor, editor::Platform::current())
+    )
 }
 
 /// One pack-source operation. An add and a remove write `config.toml` through satz under
@@ -1819,6 +1832,17 @@ async fn reload_with(session: &Arc<EstateSession>, app: Store<AppStore>, carried
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// An editor that did not open the file names the file, the command and the setting.
+    #[test]
+    fn an_editor_that_failed_names_the_command_and_the_setting() {
+        let e = editor::EditorError::Launch("exit status: 1".to_string());
+        let said = edit_failed("zed", Path::new("/packs/acme.satz"), &e);
+        assert_eq!(
+            said,
+            "/packs/acme.satz did not open with zed: exit status: 1. Set an editor in Settings → Editor."
+        );
+    }
 
     fn notice(param: &str) -> NoticeRow {
         NoticeRow {

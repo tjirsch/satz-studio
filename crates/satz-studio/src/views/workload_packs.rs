@@ -31,7 +31,7 @@ use crate::components::{
     LinearProgress, TextField,
 };
 use crate::state::{
-    AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt, PackOp, SourceOp, open_file,
+    AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt, PackOp, SourceOp, edit_file,
 };
 use crate::views::pack_sources::{PackSourcesCard, Sheet};
 use crate::views::publish_pack::PublishDialog;
@@ -574,7 +574,7 @@ fn PackLine(
                     IconButton {
                         icon: "edit",
                         label: "Edit {id}.satz",
-                        onclick: move |_| open_file(app, &file),
+                        onclick: move |_| edit_file(app, &file),
                     }
                 }
             }

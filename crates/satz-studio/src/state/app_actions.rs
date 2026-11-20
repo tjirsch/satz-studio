@@ -975,9 +975,15 @@ async fn stream_into_import_log(
 
 /// Write the settings file, put them in the store and locate satz again. The one
 /// saver: the Settings view sends [`AppAction::SaveSettings`] and this writes the file,
-/// then locates satz again. A file that did not write is a toast and the sentence, so
-/// the caller can refuse to go on.
+/// then locates satz again. An Editor whose program is not found is refused before
+/// anything is written — the Settings view shows why under the field. A file that did not
+/// write is a toast and the sentence, so the caller can refuse to go on.
 pub async fn save_settings(app: Store<AppStore>, settings: Settings) -> Result<(), String> {
+    if let Err(e) = satz_studio_core::editor::validate(&settings.editor) {
+        let message = format!("settings not saved: Editor: {e}");
+        toast(app, ToastKind::Error, message.clone());
+        return Err(message);
+    }
     match settings.save() {
         Ok(()) => {
             app.settings().set(settings);
