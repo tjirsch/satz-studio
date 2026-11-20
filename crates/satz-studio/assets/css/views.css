@@ -2391,10 +2391,9 @@
   user-select: text;
 }
 
-/* ---- Estate › Workload packs: the Interfaces tab's cards, plus a source row, the
-        actions of a pack and the difference of an edited one ---------------------------- */
+/* ---- Packs: the Interfaces tab's cards, plus the actions of a pack, the difference of
+        an edited one and the Add a source form ------------------------------------------ */
 
-.wpacks__sources,
 .wpacks__actions {
   display: flex;
   align-items: center;
@@ -2402,8 +2401,10 @@
   flex-wrap: wrap;
 }
 
-.wpacks__sources {
-  margin-top: 12px;
+.wpacks__form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 .wpacks__diff {

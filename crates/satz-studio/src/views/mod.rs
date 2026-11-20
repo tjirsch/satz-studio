@@ -16,6 +16,7 @@ pub mod interfaces;
 pub mod interview;
 pub mod map;
 pub mod overview;
+pub mod pack_sources;
 pub mod packs;
 pub mod params;
 pub mod path;

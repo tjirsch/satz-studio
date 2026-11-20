@@ -1,23 +1,25 @@
-//! The Estate destination's Workload packs tab: the packs in the estate's `packs_dir` as
-//! `satz packs` lists them against a source — the repository's own, the ones fetched and
-//! how each stands — and what the source holds beyond them. A fetch is `satz get-pack`,
-//! an update `satz update-pack`, and a pack edited here is shown with its difference and
-//! written only when the operator says so (ADR 0024). The rows are satz's report; the
-//! app derives no state of its own.
-
-use std::path::PathBuf;
+//! The Packs view's pane: the estate's pack sources ([`PackSourcesCard`]), then the packs
+//! in the estate's `packs_dir` as `satz packs --source <name>` lists them against the
+//! chosen source — the repository's own, the ones fetched and how each stands — and what
+//! the source holds beyond them. A fetch is `satz get-pack --source`, an update `satz
+//! update-pack` from each pack's recorded source, and a pack edited here is shown with its
+//! difference and written only when the operator says so (ADR 0024). The rows are satz's
+//! report; the app derives no state of its own.
 
 use dioxus::prelude::*;
 use satz_studio_core::edit::Edit;
 use satz_studio_core::satz::reports::{
     PackNeed, PackState, UpdateAction, UpdatedPack, WorkloadPackRow, WorkloadPacksReport,
 };
-use satz_studio_core::satz::workload::{PackSource, Which};
+use satz_studio_core::satz::workload::Which;
 
 use crate::components::{
     Button, ButtonVariant, Card, CardVariant, Chip, ChipKind, Dialog, Icon, LinearProgress,
 };
-use crate::state::{AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt, PackOp};
+use crate::state::{
+    AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt, PackOp, SourceOp,
+};
+use crate::views::pack_sources::PackSourcesCard;
 
 /// Which delegated values a pack reads, in the words its row shows; none for a pack that
 /// reads neither. Each is the default of a param of the pack: an estate that was not
@@ -69,26 +71,10 @@ fn meaning(state: PackState) -> &'static str {
         }
         PackState::Gone => "Fetched, and the source holds it no longer.",
         PackState::NotChecked => {
-            "Fetched from another kind of source than the one read. Read that source to check it."
+            "Fetched from another pack source than the one listed. Choose that source to check it."
         }
         PackState::Available => "The source holds it and this estate does not.",
     }
-}
-
-/// The OS folder dialog for a source of packs; the chosen folder is listed.
-fn choose_folder(handle: Coroutine<EstateAction>, start: Option<PathBuf>) {
-    spawn(async move {
-        let mut dialog =
-            rfd::AsyncFileDialog::new().set_title("Choose the folder that holds the packs");
-        if let Some(dir) = start {
-            dialog = dialog.set_directory(dir);
-        }
-        if let Some(folder) = dialog.pick_folder().await {
-            handle.send(EstateAction::Packs(PackOp::List(PackSource::Folder(
-                folder.path().to_path_buf(),
-            ))));
-        }
-    });
 }
 
 /// What the operator is asked before a write that cannot be taken back from here.
@@ -98,6 +84,23 @@ enum Confirm {
     TakeUpstream(String),
     /// forget where a fetched pack came from
     Detach(String),
+    /// take a pack source out of `config.toml`
+    RemoveSource(String),
+}
+
+/// A commit shortened to the seven characters git shows.
+fn short(commit: &str) -> String {
+    commit.chars().take(7).collect()
+}
+
+/// A fetched pack's source as its row names it: the name, and the commit of a GitHub
+/// source, shortened.
+fn origin_text(row: &WorkloadPackRow) -> Option<String> {
+    let source = row.source.as_deref()?;
+    Some(match &row.commit {
+        Some(commit) => format!("{source} @ {}", short(commit)),
+        None => source.to_string(),
+    })
 }
 
 #[component]
@@ -105,7 +108,7 @@ pub fn WorkloadPacksPane() -> Element {
     let app = use_context::<Store<AppStore>>();
     let handle = use_coroutine_handle::<EstateAction>();
     let report = app.estate().workload_packs().cloned();
-    let source = app.estate().pack_source().cloned();
+    let listed = app.estate().pack_source().cloned();
     let busy = app.estate().packs_busy().cloned() || app.estate().loading().cloned();
     let update = app.estate().pack_update().cloned();
     let used: Vec<String> = app
@@ -121,16 +124,13 @@ pub fn WorkloadPacksPane() -> Element {
         })
         .unwrap_or_default();
     let mut confirm = use_signal(|| None::<Confirm>);
-    let folder_start = match &source {
-        Some(PackSource::Folder(dir)) => Some(dir.clone()),
-        _ => None,
-    };
 
     let body = match report {
+        None if listed.is_some() => rsx! {},
         None => rsx! {
             Card { variant: CardVariant::Filled, class: "interfaces__empty",
                 Icon { name: "inventory", size: 48, class: "placeholder__icon" }
-                p { "Nothing has been read yet. Reading the satz repository is a network read, so it happens when you ask for it." }
+                p { "No pack source has been listed yet. Choose one above to list its packs." }
             }
         },
         Some(Err(e)) => rsx! {
@@ -151,33 +151,15 @@ pub fn WorkloadPacksPane() -> Element {
         div { class: "pane interfaces",
             div { class: "interfaces__head",
                 p { class: "view__lead",
-                    "The workload packs of this estate, as satz packs lists them: the ones this repository wrote itself, the ones fetched from a source and how each stands against it, and what the source holds beyond them. A fetched pack is recorded in origin.toml beside the packs; a pack without a row there is this repository's own."
-                }
-                div { class: "wpacks__sources",
-                    Button {
-                        variant: ButtonVariant::Tonal,
-                        icon: "cloud_sync",
-                        disabled: busy,
-                        onclick: move |_| handle.send(EstateAction::Packs(PackOp::List(PackSource::Repository))),
-                        "Read the satz repository"
-                    }
-                    Button {
-                        variant: ButtonVariant::Outlined,
-                        icon: "folder_open",
-                        disabled: busy,
-                        onclick: {
-                            let start = folder_start.clone();
-                            move |_| choose_folder(handle, start.clone())
-                        },
-                        "Read a folder…"
-                    }
-                    if let Some(source) = &source {
-                        span { class: "interfaces__supporting", "read from " code { "{source.label()}" } }
-                    }
+                    "The workload packs of this estate, as satz packs lists them against the pack source you choose: the ones this repository wrote itself, the ones fetched and how each stands against its source, and what the source holds beyond them. A fetched pack is recorded in origin.toml beside the packs, with the name of its source; a pack without a row there is this repository's own."
                 }
                 if busy {
                     LinearProgress {}
                 }
+            }
+            PackSourcesCard {
+                busy,
+                confirm_remove: move |name: String| confirm.set(Some(Confirm::RemoveSource(name))),
             }
             {body}
         }
@@ -186,6 +168,7 @@ pub fn WorkloadPacksPane() -> Element {
             title: match confirm() {
                 Some(Confirm::TakeUpstream(_)) => "Overwrite your changes?".to_string(),
                 Some(Confirm::Detach(_)) => "Keep it as your own pack?".to_string(),
+                Some(Confirm::RemoveSource(_)) => "Remove the pack source?".to_string(),
                 None => String::new(),
             },
             icon: "warning",
@@ -201,12 +184,14 @@ pub fn WorkloadPacksPane() -> Element {
                                 take_upstream: true,
                             })),
                             Some(Confirm::Detach(id)) => handle.send(EstateAction::Packs(PackOp::Detach(id))),
+                            Some(Confirm::RemoveSource(name)) => handle.send(EstateAction::PackSources(SourceOp::Remove(name))),
                             None => {}
                         }
                         confirm.set(None);
                     },
                     match confirm() {
                         Some(Confirm::TakeUpstream(_)) => "Overwrite",
+                        Some(Confirm::RemoveSource(_)) => "Remove",
                         _ => "Keep as own",
                     }
                 }
@@ -218,10 +203,27 @@ pub fn WorkloadPacksPane() -> Element {
                 Some(Confirm::Detach(id)) => rsx! {
                     p { "satz detach-pack " code { "{id}" } " removes its row from origin.toml. The file stays as it is, and from then on no update writes it or tells you the source moved." }
                 },
+                Some(Confirm::RemoveSource(name)) => rsx! {
+                    p { "satz pack-source remove " code { "{name}" } " takes it out of config.toml. satz refuses while origin.toml names it for a fetched pack: keep that pack as your own first." }
+                },
                 None => rsx! {},
             }
         }
     }
+}
+
+/// The sources a list read, as the report names them: each one's location, with the
+/// commit of a GitHub source shortened.
+fn read_from(report: &WorkloadPacksReport) -> String {
+    report
+        .sources
+        .iter()
+        .map(|s| match &s.commit {
+            Some(c) => format!("{} @ {}", s.location, short(c)),
+            None => s.location.clone(),
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 /// The packs that are here, then what the source holds beyond them.
@@ -238,7 +240,7 @@ fn PackCards(
         return rsx! {
             Card { variant: CardVariant::Filled, class: "interfaces__empty",
                 Icon { name: "inventory", size: 48, class: "placeholder__icon" }
-                p { "No workload pack is here, and " code { "{report.source}" } " holds none." }
+                p { "No workload pack is here, and " code { "{read_from(&report)}" } " holds none." }
             }
         };
     }
@@ -292,7 +294,7 @@ fn PackCards(
                 div { class: "interfaces__card-head",
                     Icon { name: "cloud_download", size: 22 }
                     h2 { class: "interfaces__name", "Available" }
-                    code { class: "interfaces__at", "{report.source}" }
+                    code { class: "interfaces__at", "{read_from(&report)}" }
                 }
                 for row in available {
                     PackLine { key: "{row.id}", row: row.clone(), in_use: false, edited: None, busy, confirm }
@@ -328,8 +330,8 @@ fn PackLine(
                     Chip { kind: ChipKind::Assist, icon: "link", label: "used by the estate" }
                 }
                 span { class: "grow" }
-                if let Some(source) = &row.source {
-                    code { class: "interfaces__at", "{source}" }
+                if let Some(origin) = origin_text(&row) {
+                    code { class: "interfaces__at", "{origin}" }
                 }
             }
             p { class: "interfaces__supporting", {meaning(row.state)} }
@@ -426,9 +428,21 @@ mod tests {
             version: version.map(str::to_string),
             upstream_version: upstream.map(str::to_string),
             source: None,
+            commit: None,
             use_line: None,
             needs: Vec::new(),
         }
+    }
+
+    #[test]
+    fn a_fetched_row_names_its_source_and_short_commit() {
+        let mut fetched = row(PackState::Current, Some("1.0"), Some("1.0"));
+        assert_eq!(origin_text(&fetched), None);
+        fetched.source = Some("up".into());
+        assert_eq!(origin_text(&fetched).as_deref(), Some("up"));
+        fetched.source = Some("satz".into());
+        fetched.commit = Some("0123456789abcdef0123456789abcdef01234567".into());
+        assert_eq!(origin_text(&fetched).as_deref(), Some("satz @ 0123456"));
     }
 
     #[test]

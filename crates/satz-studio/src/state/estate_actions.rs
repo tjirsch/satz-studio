@@ -32,7 +32,7 @@ use satz_studio_core::satz::reports::{
     QuestionsReport, RemovePackArgs, UpdateAction,
 };
 use satz_studio_core::satz::review::{self, PlaceError, Placed};
-use satz_studio_core::satz::workload::{self, PackSource, Which};
+use satz_studio_core::satz::workload::{self, NewSource, Which};
 use satz_studio_core::satz::{CliLine, EstateSession, SatzError, ToolOutcome, export};
 use satz_studio_core::schema::{ResourceRegistry, SchemaError};
 use tokio_util::sync::CancellationToken;
@@ -105,6 +105,9 @@ pub enum EstateAction {
     /// a workload-pack command on the estate's `packs_dir`: `satz packs`, `get-pack`,
     /// `update-pack` or `detach-pack`, then the list read again from the same source
     Packs(PackOp),
+    /// a command on the estate's pack sources: `satz pack-source list`, `add` or
+    /// `remove`, the last two followed by the list read again
+    PackSources(SourceOp),
     /// `satz_whoami`, online: who is signed in, what the estate runs as, and whether
     /// that works — asked by the Apply destination, never unasked
     CheckSignIn,
@@ -119,14 +122,26 @@ pub enum EstateAction {
     Switch,
 }
 
-/// What the Workload packs tab asks for.
+/// What the Packs view asks of the pack sources. Each writes `config.toml` through satz,
+/// or reads it; none writes a pack.
+#[derive(Debug, Clone, PartialEq)]
+pub enum SourceOp {
+    /// `satz pack-source list`
+    List,
+    /// `satz pack-source add …`
+    Add(NewSource),
+    /// `satz pack-source remove <name>`
+    Remove(String),
+}
+
+/// What the Packs view asks of the workload packs.
 #[derive(Debug, Clone, PartialEq)]
 pub enum PackOp {
-    /// `satz packs` against this source, which the later operations read too
-    List(PackSource),
-    /// `satz get-pack <id>|--all`
+    /// `satz packs --source <name>`: the source a fetch reads too
+    List(String),
+    /// `satz get-pack <id>|--all --source <name>`, from the listed source
     Get(Which),
-    /// `satz update-pack <id>|--all [--take-upstream]`
+    /// `satz update-pack <id>|--all [--take-upstream]`: each pack from its recorded source
     Update { which: Which, take_upstream: bool },
     /// `satz detach-pack <id>`
     Detach(String),
@@ -229,6 +244,15 @@ pub async fn estate_coroutine(
                 if wrote {
                     reload(&session, app).await;
                 }
+            }
+            EstateAction::PackSources(op) => {
+                if app.estate().packs_busy().cloned() {
+                    toast(app, ToastKind::Info, "a pack command is already running");
+                    continue;
+                }
+                app.estate().packs_busy().set(true);
+                pack_sources(&session, app, op).await;
+                app.estate().packs_busy().set(false);
             }
             EstateAction::CheckSignIn => {
                 if app.estate().sign_in().cloned() == Some(SignIn::Checking) {
@@ -1331,12 +1355,13 @@ async fn workload_packs(session: &Arc<EstateSession>, app: Store<AppStore>, op: 
         PackOp::List(source) => {
             estate.pack_source().set(Some(source.clone()));
             estate.pack_update().set(None);
+            estate.workload_packs().set(None);
             source.clone()
         }
         _ => match estate.pack_source().cloned() {
             Some(source) => source,
             None => {
-                toast(app, ToastKind::Error, "read a source of packs first");
+                toast(app, ToastKind::Error, "choose a pack source first");
                 return false;
             }
         },
@@ -1358,7 +1383,11 @@ async fn workload_packs(session: &Arc<EstateSession>, app: Store<AppStore>, op: 
                 Ok(report) => {
                     wrote = true;
                     let ids: Vec<&str> = report.installed.iter().map(|p| p.id.as_str()).collect();
-                    toast(app, ToastKind::Info, format!("fetched {}", ids.join(", ")));
+                    toast(
+                        app,
+                        ToastKind::Info,
+                        format!("fetched {} from {}", ids.join(", "), report.source),
+                    );
                 }
                 Err(e) => toast(
                     app,
@@ -1372,7 +1401,7 @@ async fn workload_packs(session: &Arc<EstateSession>, app: Store<AppStore>, op: 
             take_upstream,
         } => {
             let _lock = session.write_lock().await;
-            match workload::update(cli, &which, &source, take_upstream).await {
+            match workload::update(cli, &which, take_upstream).await {
                 Ok(report) => {
                     let written = report
                         .packs
@@ -1386,7 +1415,7 @@ async fn workload_packs(session: &Arc<EstateSession>, app: Store<AppStore>, op: 
                         toast(
                             app,
                             ToastKind::Error,
-                            "a pack was left as it is: it was edited here, or the source holds it no longer",
+                            "a pack was left as it is: it was edited here, or its pack source holds it no longer",
                         );
                     } else if written > 0 {
                         toast(app, ToastKind::Info, format!("updated {written} pack(s)"));
@@ -1423,6 +1452,63 @@ async fn workload_packs(session: &Arc<EstateSession>, app: Store<AppStore>, op: 
         .map_err(|e| project::said(&e));
     estate.workload_packs().set(Some(listed));
     wrote
+}
+
+/// One pack-source operation. An add and a remove write `config.toml` through satz under
+/// the write lock, keep what satz said for the view, and read the sources again; a
+/// removed source that was the listed one takes its list with it.
+async fn pack_sources(session: &Arc<EstateSession>, app: Store<AppStore>, op: SourceOp) {
+    let estate = app.estate();
+    let cli = &session.cli;
+    let (name, said) = match op {
+        SourceOp::List => {
+            read_sources(session, app).await;
+            return;
+        }
+        SourceOp::Add(new) => {
+            estate.source_change().set(None);
+            let _lock = session.write_lock().await;
+            (new.name.clone(), workload::add_source(cli, &new).await)
+        }
+        SourceOp::Remove(name) => {
+            estate.source_change().set(None);
+            let _lock = session.write_lock().await;
+            let said = workload::remove_source(cli, &name).await;
+            if said.is_ok() && estate.pack_source().cloned().as_deref() == Some(name.as_str()) {
+                estate.pack_source().set(None);
+                estate.workload_packs().set(None);
+                estate.pack_update().set(None);
+            }
+            (name, said)
+        }
+    };
+    source_changed(app, &name, said);
+    read_sources(session, app).await;
+}
+
+/// `satz pack-source list` into the store.
+async fn read_sources(session: &Arc<EstateSession>, app: Store<AppStore>) {
+    let listed = workload::sources(&session.cli)
+        .await
+        .map_err(|e| project::said(&e));
+    app.estate().pack_sources().set(Some(listed));
+}
+
+/// What satz said to a `pack-source add` or `remove`: its first line as a toast when it
+/// wrote `config.toml`, its refusal as it said it, kept for the view.
+fn source_changed(app: Store<AppStore>, name: &str, said: Result<String, SatzError>) {
+    match said {
+        Ok(stdout) => {
+            if let Some(line) = stdout.lines().map(str::trim).find(|l| !l.is_empty()) {
+                toast(app, ToastKind::Info, line.to_string());
+            }
+            app.estate().source_change().set(Some(Ok(name.to_string())));
+        }
+        Err(e) => app
+            .estate()
+            .source_change()
+            .set(Some(Err(project::said(&e)))),
+    }
 }
 
 /// `satz_transpile_check` on the estate as it stands: the findings of a transpile that

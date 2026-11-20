@@ -1081,7 +1081,7 @@ pub enum PackState {
     Edited,
     /// fetched, and the source holds it no longer
     Gone,
-    /// fetched from another kind of source than the one that was read
+    /// fetched from another pack source than the one that was read
     NotChecked,
     /// the source holds it and `packs_dir` does not
     Available,
@@ -1100,8 +1100,11 @@ pub struct WorkloadPackRow {
     pub version: Option<String>,
     /// the version the source's file states, where the source holds the pack
     pub upstream_version: Option<String>,
-    /// where a fetched pack came from: `github:<owner>/<repo>` or `dir`
+    /// the name of the pack source: the one a fetched pack's row records, or the one that
+    /// holds an available pack; none for the repository's own
     pub source: Option<String>,
+    /// for a pack fetched from a GitHub source: the commit its row records
+    pub commit: Option<String>,
     /// the line an estate reads the pack with; none for a pack that is only available
     pub use_line: Option<String>,
 }
@@ -1117,14 +1120,121 @@ impl WorkloadPackRow {
     }
 }
 
+/// A pack source as a workload-pack report names what was read. satz's `SourceRead`
+/// (`vendor/satz/src/workload_packs.rs`).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct SourceRead {
+    /// `satz`, or a `[[pack_source]]` of `config.toml`
+    pub name: String,
+    /// `github.com/<owner>/<repository>/<folder>`, with `@<ref>` where `config.toml`
+    /// names one, or the folder as `config.toml` writes it
+    pub location: String,
+    /// for a GitHub source: the commit read
+    pub commit: Option<String>,
+}
+
 /// What `satz packs --format json` writes: every workload pack in the estate's
-/// `packs_dir` with its state, and every pack the source holds that `packs_dir` does not.
+/// `packs_dir` with its state, and every pack the sources read hold that `packs_dir`
+/// does not.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct WorkloadPacksReport {
     pub packs_dir: String,
-    /// what was read: `github.com/<owner>/<repo>`, or the folder
-    pub source: String,
+    /// the pack sources read: every one, or the one `--source` names
+    pub sources: Vec<SourceRead>,
     pub packs: Vec<WorkloadPackRow>,
+}
+
+/// One pack source as `satz pack-source list --format json` prints it: the built-in
+/// `satz` first, then each `[[pack_source]]` of `config.toml`. satz's `SourceRow`
+/// (`vendor/satz/src/pack_sources.rs`); a row that names both a repository and a folder,
+/// or neither, is no row satz writes and fails the deserialization.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
+#[serde(try_from = "RawPackSourceRow")]
+pub struct PackSourceRow {
+    pub name: String,
+    /// `satz`, the satz repository's `packs/`, which `config.toml` does not list
+    pub builtin: bool,
+    pub place: PackPlace,
+}
+
+/// Where a pack source is.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PackPlace {
+    /// a GitHub repository, `owner/repository`, read at `git_ref` — its default branch
+    /// when none — from its folder `path`
+    Github {
+        repo: String,
+        git_ref: Option<String>,
+        path: Option<String>,
+    },
+    /// a folder, as `config.toml` writes it
+    Folder(String),
+}
+
+#[derive(serde::Deserialize)]
+struct RawPackSourceRow {
+    name: String,
+    builtin: bool,
+    github: Option<String>,
+    #[serde(rename = "ref")]
+    git_ref: Option<String>,
+    path: Option<String>,
+    dir: Option<String>,
+}
+
+impl TryFrom<RawPackSourceRow> for PackSourceRow {
+    type Error = String;
+
+    fn try_from(raw: RawPackSourceRow) -> Result<Self, String> {
+        let place = match (raw.github, raw.dir) {
+            (Some(repo), None) => PackPlace::Github {
+                repo,
+                git_ref: raw.git_ref,
+                path: raw.path,
+            },
+            (None, Some(dir)) => PackPlace::Folder(dir),
+            (github, _) => {
+                return Err(format!(
+                    "the pack source `{}` names {} a repository and a folder",
+                    raw.name,
+                    if github.is_some() { "both" } else { "neither" }
+                ));
+            }
+        };
+        Ok(Self {
+            name: raw.name,
+            builtin: raw.builtin,
+            place,
+        })
+    }
+}
+
+impl PackSourceRow {
+    /// Where the source is, in the words `satz pack-source list` prints: the repository
+    /// with its folder and the branch or tag it is read at, or the folder.
+    pub fn location(&self) -> String {
+        match &self.place {
+            PackPlace::Github {
+                repo,
+                git_ref,
+                path,
+            } => {
+                let folder = path.as_deref().map(|p| format!("/{p}")).unwrap_or_default();
+                let at = match git_ref {
+                    Some(r) => format!(" at {r}"),
+                    None => " at its default branch".to_string(),
+                };
+                format!("github.com/{repo}{folder}{at}")
+            }
+            PackPlace::Folder(dir) => format!("the folder {dir}"),
+        }
+    }
+}
+
+/// What `satz pack-source list --format json` prints.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
+pub struct PackSourcesReport {
+    pub sources: Vec<PackSourceRow>,
 }
 
 /// One pack `satz get-pack` installed.
@@ -1140,7 +1250,12 @@ pub struct InstalledPack {
 /// What `satz get-pack --format json` prints.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct GetPackReport {
+    /// the name of the pack source read
     pub source: String,
+    /// where it is, as [`SourceRead::location`] says it
+    pub location: String,
+    /// for a GitHub source: the commit read
+    pub commit: Option<String>,
     pub installed: Vec<InstalledPack>,
     /// with `--all`: packs the source holds that `packs_dir` already had
     pub present: Vec<String>,
@@ -1168,6 +1283,8 @@ pub enum UpdateAction {
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct UpdatedPack {
     pub id: String,
+    /// the name of the pack source its row records
+    pub source: String,
     pub action: UpdateAction,
     pub version: String,
     pub upstream_version: Option<String>,
@@ -1181,7 +1298,8 @@ pub struct UpdatedPack {
 /// exit non-zero: a pack is edited or gone.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct UpdatePackReport {
-    pub source: String,
+    /// the pack sources read, each once
+    pub sources: Vec<SourceRead>,
     pub packs: Vec<UpdatedPack>,
     pub attention: bool,
 }
@@ -1190,7 +1308,7 @@ pub struct UpdatePackReport {
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct DetachedPack {
     pub id: String,
-    /// where it had been fetched from
+    /// the name of the pack source it had been fetched from
     pub source: String,
 }
 
@@ -1828,17 +1946,23 @@ mod tests {
     }
 
     /// What `satz packs`, `get-pack`, `update-pack` and `detach-pack` print with
-    /// `--format json`, as satz v0.99.0 writes them over a folder source.
+    /// `--format json`, as satz v0.104.0 writes them over a folder source and a GitHub one.
     #[test]
     fn the_workload_pack_reports_are_read() {
         let list: WorkloadPacksReport = serde_json::from_str(
-            r#"{"packs_dir":"packs","source":"../up","packs":[
-                {"id":"demo","state":"edited","version":"1.1","upstream_version":"1.2","source":"dir","use_line":"use \"packs/demo.satz\"","needs":["project"]},
-                {"id":"own","state":"own","version":"9.0","upstream_version":null,"source":null,"use_line":"use \"packs/own.satz\"","needs":[]},
-                {"id":"sub/nested","state":"available","version":null,"upstream_version":"0.3","source":"dir","use_line":null,"needs":["folder","project"]},
-                {"id":"elsewhere","state":"not-checked","version":"1.0","upstream_version":null,"source":"github:acme/packs","use_line":null,"needs":[]}]}"#,
+            r#"{"packs_dir":"packs","sources":[{"name":"up","location":"../up","commit":null}],"packs":[
+                {"id":"demo","state":"edited","version":"1.1","upstream_version":"1.2","source":"up","commit":null,"use_line":"use \"packs/demo.satz\"","needs":["project"]},
+                {"id":"own","state":"own","version":"9.0","upstream_version":null,"source":null,"commit":null,"use_line":"use \"packs/own.satz\"","needs":[]},
+                {"id":"sub/nested","state":"available","version":null,"upstream_version":"0.3","source":"up","commit":null,"use_line":null,"needs":["folder","project"]},
+                {"id":"elsewhere","state":"not-checked","version":"1.0","upstream_version":null,"source":"satz","commit":"0123456789abcdef0123456789abcdef01234567","use_line":null,"needs":[]}]}"#,
         )
         .unwrap();
+        assert_eq!(list.sources[0].name, "up");
+        assert_eq!(list.packs[0].source.as_deref(), Some("up"));
+        assert_eq!(
+            list.packs[3].commit.as_deref(),
+            Some("0123456789abcdef0123456789abcdef01234567")
+        );
         assert_eq!(list.packs[0].state, PackState::Edited);
         assert_eq!(list.packs[0].use_path(), Some("packs/demo.satz"));
         assert_eq!(list.packs[2].use_path(), None);
@@ -1851,14 +1975,18 @@ mod tests {
         assert!(list.packs[1].needs.is_empty());
 
         let got: GetPackReport = serde_json::from_str(
-            r#"{"source":"../up","installed":[{"id":"demo","version":"1.0","path":"packs/demo.satz","use_line":"use \"packs/demo.satz\""}],"present":[]}"#,
+            r#"{"source":"up","location":"../up","commit":null,"installed":[{"id":"demo","version":"1.0","path":"packs/demo.satz","use_line":"use \"packs/demo.satz\""}],"present":[]}"#,
         )
         .unwrap();
         assert_eq!(got.installed[0].id, "demo");
+        assert_eq!(
+            (got.source.as_str(), got.location.as_str()),
+            ("up", "../up")
+        );
 
         let update: UpdatePackReport = serde_json::from_str(
-            r#"{"source":"../up","packs":[{"id":"demo","action":"edited","version":"1.1","upstream_version":"1.2","diff":"@@ -1 +1 @@\n-a\n+b\n","note":"left as it is"},
-                {"id":"other","action":"took-upstream","version":"1.0","upstream_version":"1.1","diff":null,"note":null}],"attention":true}"#,
+            r#"{"sources":[{"name":"up","location":"../up","commit":null}],"packs":[{"id":"demo","source":"up","action":"edited","version":"1.1","upstream_version":"1.2","diff":"@@ -1 +1 @@\n-a\n+b\n","note":"left as it is"},
+                {"id":"other","source":"up","action":"took-upstream","version":"1.0","upstream_version":"1.1","diff":null,"note":null}],"attention":true}"#,
         )
         .unwrap();
         assert_eq!(update.packs[0].action, UpdateAction::Edited);
@@ -1866,11 +1994,54 @@ mod tests {
         assert!(update.attention);
 
         let detached: DetachedPack =
-            serde_json::from_str(r#"{"id":"demo","source":"dir"}"#).unwrap();
-        assert_eq!(detached.source, "dir");
+            serde_json::from_str(r#"{"id":"demo","source":"up"}"#).unwrap();
+        assert_eq!(detached.source, "up");
 
         // a state satz grows is refused, never read as another
         assert!(serde_json::from_str::<PackState>(r#""sideways""#).is_err());
+
+        // the report of satz before v0.103.0, one `source` string, is refused
+        assert!(
+            serde_json::from_str::<WorkloadPacksReport>(
+                r#"{"packs_dir":"packs","source":"../up","packs":[]}"#
+            )
+            .is_err()
+        );
+    }
+
+    /// `satz pack-source list --format json` as satz v0.104.0 prints it: the built-in
+    /// `satz` first, then a folder source and a GitHub one; a row with both places, or
+    /// neither, is refused.
+    #[test]
+    fn the_pack_sources_are_read_with_their_place() {
+        let report: PackSourcesReport = serde_json::from_str(
+            r#"{"sources":[
+                {"name":"satz","builtin":true,"github":"tjirsch/satz","ref":"main","path":"packs","dir":null},
+                {"name":"up","builtin":false,"github":null,"ref":null,"path":null,"dir":"../up"},
+                {"name":"team","builtin":false,"github":"acme/packs","ref":null,"path":"packs","dir":null}]}"#,
+        )
+        .unwrap();
+        let names: Vec<&str> = report.sources.iter().map(|s| s.name.as_str()).collect();
+        assert_eq!(names, ["satz", "up", "team"]);
+        assert!(report.sources[0].builtin && !report.sources[1].builtin);
+        assert_eq!(
+            report.sources[0].location(),
+            "github.com/tjirsch/satz/packs at main"
+        );
+        assert_eq!(report.sources[1].place, PackPlace::Folder("../up".into()));
+        assert_eq!(report.sources[1].location(), "the folder ../up");
+        assert_eq!(
+            report.sources[2].location(),
+            "github.com/acme/packs/packs at its default branch"
+        );
+
+        for broken in [
+            r#"{"sources":[{"name":"x","builtin":false,"github":"acme/packs","ref":null,"path":null,"dir":"../up"}]}"#,
+            r#"{"sources":[{"name":"x","builtin":false,"github":null,"ref":null,"path":null,"dir":null}]}"#,
+        ] {
+            let err = serde_json::from_str::<PackSourcesReport>(broken).unwrap_err();
+            assert!(err.to_string().contains("`x`"), "{err}");
+        }
     }
     /// `satz_whoami` as satz v0.100.0 returns it for an estate in cloud mode, online.
     #[test]

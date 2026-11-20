@@ -24,19 +24,18 @@ use satz_studio_core::git::WorkTree;
 use satz_studio_core::github::StudioUpdate;
 use satz_studio_core::model::EstateModel;
 use satz_studio_core::satz::reports::{
-    InterfacesReport, InterviewReport, NoticeRow, QuestionsReport, UpdatePackReport,
-    WorkloadPacksReport,
+    InterfacesReport, InterviewReport, NoticeRow, PackSourcesReport, QuestionsReport,
+    UpdatePackReport, WorkloadPacksReport,
 };
 use satz_studio_core::satz::review::ReviewedPack;
 use satz_studio_core::satz::self_update::SatzRelease;
-use satz_studio_core::satz::workload::PackSource;
 use satz_studio_core::satz::{CliLine, EstateSession, ImportReport, QuestionsFormat, SatzBinary};
 use satz_studio_core::settings::Settings;
 
 pub use ansi::strip_ansi;
 pub use app_actions::{AppAction, app_coroutine, run_line};
 pub use estate_actions::{
-    EstateAction, PackOp, command_line, estate_coroutine, quote, reports_dir,
+    EstateAction, PackOp, SourceOp, command_line, estate_coroutine, quote, reports_dir,
 };
 pub use pace::{
     ahead_sentence, install_offer, newer_satz_sentence, satz_available, satz_notice,
@@ -363,13 +362,21 @@ pub struct EstateStore {
     /// what the estate publishes, from `satz interfaces` at every reload — or satz's
     /// reason it could not say; `None` until the first reload has asked
     pub interfaces: Option<Result<InterfacesReport, String>>,
+    /// the estate's pack sources as `satz pack-source list` names them — or satz's reason
+    /// it could not; read when the Packs view first stands, and again after a source is
+    /// added or removed
+    pub pack_sources: Option<Result<PackSourcesReport, String>>,
+    /// what satz said to the last `satz pack-source add` or `remove`: `Ok` with the
+    /// source's name when it was written, `Err` with satz's refusal; `None` while one runs
+    /// and before the first
+    pub source_change: Option<Result<String, String>>,
     /// the estate's workload packs as `satz packs` listed them against
     /// [`Self::pack_source`] — or satz's reason it could not; `None` until a source has
-    /// been read, which happens only when the operator asks: the default source is a
+    /// been chosen, which happens only when the operator asks: a GitHub source is a
     /// network read
     pub workload_packs: Option<Result<WorkloadPacksReport, String>>,
-    /// the source the list was read from, and the one a fetch and an update read
-    pub pack_source: Option<PackSource>,
+    /// the name of the pack source the list was read from, and the one a fetch reads
+    pub pack_source: Option<String>,
     /// what the last `satz update-pack` reported: the edited packs with their
     /// difference stand in the tab until the next list
     pub pack_update: Option<UpdatePackReport>,

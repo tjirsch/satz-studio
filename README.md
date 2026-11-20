@@ -75,9 +75,15 @@ Overview names the mode and, for a workload estate, who delegated. Delegated acc
 given in Estate → Interfaces: every list param a preset declares is shown with its entries, and
 "Add" writes one through `satz add-entry` from a form of the declared fields. A workload
 estate is created from the interface folders it was given, on the Start screen. The workload packs are the ones the repository wrote
-itself and the ones `satz get-pack` fetched, listed against the satz repository or a
-folder you choose, each fetched, updated, kept as your own or added to the estate from
-its row.
+itself and the ones `satz get-pack` fetched, listed against the pack source you choose
+from the estate's sources — `satz`, the satz repository's `packs/`, then each source
+`config.toml` names, a GitHub repository or a folder — each fetched, updated from the
+source it came from, kept as your own or added to the estate from its row; a fetched
+pack's row names its source and, for a GitHub source, the commit. "Add a source…" runs
+`satz pack-source add` from a name and a repository (with an optional branch or tag and
+folder) or a folder you choose, and a source no fetched pack names is removed with
+`satz pack-source remove`; satz writes `config.toml`, and what it refuses is shown as
+it says it.
 
 The Overview is three cards. The identity card says which estate this is — its short
 name, the customer, the customer id and the organization id, the estate's other answers,
@@ -120,7 +126,7 @@ that holds them up — in front of apply and bootstrap, which satz refuses.
 
 ## What it needs
 
-- **`satz` 0.102.0 or newer.** `MIN_SATZ` in `crates/satz-studio-core/src/satz/binary.rs`
+- **`satz` 0.103.0 or newer.** `MIN_SATZ` in `crates/satz-studio-core/src/satz/binary.rs`
   names the oldest satz this build works with. It rises when a satz release breaks the
   app or the app starts using something a later satz introduced, not with every satz
   release. Install satz with its installer or bring it up to date with `satz
