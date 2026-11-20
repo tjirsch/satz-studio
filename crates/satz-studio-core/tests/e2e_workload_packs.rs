@@ -94,14 +94,20 @@ async fn a_pack_is_fetched_kept_current_left_alone_when_edited_and_detached() {
         .iter()
         .find(|p| p.name == "workload_project_parent")
         .expect("the pack declares its parent");
-    assert!(parent.question && parent.prompt.is_some(), "{parent:?}");
+    assert!(
+        parent.question && parent.prompt.is_some() && parent.why.is_some(),
+        "{parent:?}"
+    );
     let read = available
         .reads
         .iter()
         .find(|r| r.value == "delegated_folder")
         .expect("the pack reads the delegated folder");
     assert_eq!(read.param.as_deref(), Some("workload_project_parent"));
-    assert!(read.met_by.is_empty() && read.unmet(), "{read:?}");
+    assert!(
+        read.met_by.is_empty() && read.unmet() && read.description.is_none(),
+        "{read:?}"
+    );
     assert!(available.has_unmet_read());
 
     // fetched: the file, the row, the line an estate reads it with
@@ -258,7 +264,8 @@ async fn the_local_listing_reads_no_source_and_names_the_interface_folders() {
     assert_eq!(folder.name, "payments");
     assert_eq!(folder.estate, "corpus_central");
     assert!(
-        folder.exports.iter().any(|e| e == "payments_project"),
+        folder.exports.iter().any(|e| e.name == "payments_project"
+            && e.description.as_deref() == Some("The project's Google project")),
         "{:?}",
         folder.exports
     );

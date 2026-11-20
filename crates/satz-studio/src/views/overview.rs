@@ -874,9 +874,9 @@ fn IdentityCard(facts: Vec<Fact>) -> Element {
 }
 
 /// Every export of one interface folder, while `open` holds its line: the dialog "and N
-/// more" opens, on the Overview's "Delegated by" row and in Packs' interface folders.
+/// more" on the "Delegated by" row opens.
 #[component]
-pub fn ExportsDialog(mut open: Signal<Option<DelegatedLine>>) -> Element {
+fn ExportsDialog(mut open: Signal<Option<DelegatedLine>>) -> Element {
     rsx! {
         Dialog {
             open: open().is_some(),

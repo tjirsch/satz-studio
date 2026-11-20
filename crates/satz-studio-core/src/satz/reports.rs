@@ -1109,6 +1109,9 @@ pub struct PackParam {
     pub question: bool,
     /// the question's prompt, where one asks for it
     pub prompt: Option<String>,
+    /// the question's `why`, what getting the answer wrong costs; none where no question
+    /// asks for the param or the question has no `why`
+    pub why: Option<String>,
 }
 
 /// One `entries <list param> { … }` of a pack. satz's `ListParamDecl`.
@@ -1130,6 +1133,8 @@ pub struct PackExport {
     /// pattern; none for a core export
     pub interface: Option<String>,
     pub name: String,
+    /// the export's `description "…"`; none where it has none
+    pub description: Option<String>,
 }
 
 /// One interface value a pack reads, `${{interface.<folder>.<value>}}` or
@@ -1148,6 +1153,9 @@ pub struct PackRead {
     pub met_by: Vec<String>,
     /// why the estate does not give it, in the words the transpile refuses the read with
     pub unmet_reason: Option<String>,
+    /// the description of the export that gives the value, from the first folder of
+    /// `met_by`; none where the estate does not give it or the export has none
+    pub description: Option<String>,
 }
 
 impl PackRead {
@@ -1218,8 +1226,17 @@ pub struct InterfaceFolder {
     pub name: String,
     /// the name of the organization's estate that wrote it
     pub estate: String,
-    /// the names of the values it exports, as it writes them
-    pub exports: Vec<String>,
+    /// the values it exports, as it writes them
+    pub exports: Vec<FolderExport>,
+}
+
+/// One value an interface folder exports. satz's `FolderExport`
+/// (`vendor/satz/src/workload_packs.rs`).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct FolderExport {
+    pub name: String,
+    /// the export's description; none where it has none
+    pub description: Option<String>,
 }
 
 /// One pack source as `satz pack-source list --format json` prints it: the built-in
@@ -2075,21 +2092,33 @@ mod tests {
     }
 
     /// What `satz packs`, `get-pack`, `update-pack` and `detach-pack` print with
-    /// `--format json`, as satz v0.108.0 writes them over a folder source and a GitHub one:
+    /// `--format json`, as satz v0.109.0 writes them over a folder source and a GitHub one:
     /// each row with what the pack declares and its reads matched against the estate.
     #[test]
     fn the_workload_pack_reports_are_read() {
         let list: WorkloadPacksReport = serde_json::from_str(
-            r#"{"packs_dir":"packs","estate":"yaml/wp.satz","interface_folders":[{"name":"shop","estate":"c0example","exports":["project_id","region"]}],"sources":[{"name":"up","location":"../up","commit":null}],"packs":[
-                {"id":"demo","state":"edited","params":[{"name":"budget_project_id","default":"\"${{interface.project_id}}\"","question":false,"prompt":null},{"name":"budget_email","default":null,"question":true,"prompt":"The address that is told"}],"list_params":[{"param":"buckets","key":"name","fields":["name","location"],"defaults":{"location":"\"EU\""}}],"exports":[{"interface":null,"name":"budget_name"},{"interface":"ks-{each.id}","name":"bucket"}],"reads":[{"folder":null,"value":"project_id","param":"budget_project_id","bound_by_estate":false,"met_by":["shop"],"unmet_reason":null}],"version":"1.1","upstream_version":"1.2","source":"up","commit":null,"use_line":"use \"packs/demo.satz\""},
-                {"id":"own","state":"own","params":[],"list_params":[],"exports":[],"reads":[{"folder":"shop","value":"region","param":"own_region","bound_by_estate":true,"met_by":[],"unmet_reason":null}],"version":"9.0","upstream_version":null,"source":null,"commit":null,"use_line":"use \"packs/own.satz\""},
-                {"id":"sub/nested","state":"available","params":[],"list_params":[],"exports":[],"reads":[{"folder":"vm","value":"instance_name","param":null,"bound_by_estate":false,"met_by":[],"unmet_reason":"no folder vm"}],"version":null,"upstream_version":"0.3","source":"up","commit":null,"use_line":null},
+            r#"{"packs_dir":"packs","estate":"yaml/wp.satz","interface_folders":[{"name":"shop","estate":"c0example","exports":[{"name":"project_id","description":"The project of the shop"},{"name":"region","description":null}]}],"sources":[{"name":"up","location":"../up","commit":null}],"packs":[
+                {"id":"demo","state":"edited","params":[{"name":"budget_project_id","default":"\"${{interface.project_id}}\"","question":false,"prompt":null,"why":null},{"name":"budget_email","default":null,"question":true,"prompt":"The address that is told","why":"Nobody else hears of an overrun"}],"list_params":[{"param":"buckets","key":"name","fields":["name","location"],"defaults":{"location":"\"EU\""}}],"exports":[{"interface":null,"name":"budget_name","description":"The budget's name"},{"interface":"ks-{each.id}","name":"bucket","description":null}],"reads":[{"folder":null,"value":"project_id","param":"budget_project_id","bound_by_estate":false,"met_by":["shop"],"unmet_reason":null,"description":"The project of the shop"}],"version":"1.1","upstream_version":"1.2","source":"up","commit":null,"use_line":"use \"packs/demo.satz\""},
+                {"id":"own","state":"own","params":[],"list_params":[],"exports":[],"reads":[{"folder":"shop","value":"region","param":"own_region","bound_by_estate":true,"met_by":[],"unmet_reason":null,"description":null}],"version":"9.0","upstream_version":null,"source":null,"commit":null,"use_line":"use \"packs/own.satz\""},
+                {"id":"sub/nested","state":"available","params":[],"list_params":[],"exports":[],"reads":[{"folder":"vm","value":"instance_name","param":null,"bound_by_estate":false,"met_by":[],"unmet_reason":"no folder vm","description":null}],"version":null,"upstream_version":"0.3","source":"up","commit":null,"use_line":null},
                 {"id":"elsewhere","state":"not-checked","params":[],"list_params":[],"exports":[],"reads":[],"version":"1.0","upstream_version":null,"source":"satz","commit":"0123456789abcdef0123456789abcdef01234567","use_line":null}]}"#,
         )
         .unwrap();
         assert_eq!(list.interface_folders[0].name, "shop");
         assert_eq!(list.interface_folders[0].estate, "c0example");
-        assert_eq!(list.interface_folders[0].exports, ["project_id", "region"]);
+        assert_eq!(
+            list.interface_folders[0].exports,
+            [
+                FolderExport {
+                    name: "project_id".into(),
+                    description: Some("The project of the shop".into())
+                },
+                FolderExport {
+                    name: "region".into(),
+                    description: None
+                },
+            ]
+        );
         assert_eq!(list.sources[0].name, "up");
         assert_eq!(list.packs[0].source.as_deref(), Some("up"));
         assert_eq!(
@@ -2103,6 +2132,20 @@ mod tests {
         let demo = &list.packs[0];
         assert_eq!(demo.params[1].default, None);
         assert!(demo.params[1].question);
+        assert_eq!(
+            demo.params[1].why.as_deref(),
+            Some("Nobody else hears of an overrun")
+        );
+        assert_eq!(demo.params[0].why, None);
+        assert_eq!(
+            demo.exports[0].description.as_deref(),
+            Some("The budget's name")
+        );
+        assert_eq!(demo.exports[1].description, None);
+        assert_eq!(
+            demo.reads[0].description.as_deref(),
+            Some("The project of the shop")
+        );
         assert_eq!(demo.list_params[0].defaults["location"], "\"EU\"");
         assert_eq!(demo.exports[0].interface, None);
         assert_eq!(demo.reads[0].written(), "project_id");
@@ -2164,6 +2207,14 @@ mod tests {
         assert!(
             serde_json::from_str::<Published>(
                 r#"{"id":"a","version":"1.0","source":"s","location":"l","path":"p","action":"copied"}"#
+            )
+            .is_err()
+        );
+
+        // the folders' exports of satz v0.108.0, a list of names, are refused
+        assert!(
+            serde_json::from_str::<WorkloadPacksReport>(
+                r#"{"packs_dir":"packs","estate":"yaml/wp.satz","interface_folders":[{"name":"shop","estate":"c0example","exports":["project_id"]}],"sources":[],"packs":[]}"#
             )
             .is_err()
         );

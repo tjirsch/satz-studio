@@ -2459,7 +2459,79 @@
   gap: 16px;
 }
 
-/* a pack's details: four sections, each a title-small head over a list of declarations */
+/* what flows through a pack: the text button that counts it and opens the panel under
+   the row — Incoming and Outgoing side by side where they fit, each a title-small head
+   over groups, each group a source line over a list of two-line entries */
+.wpacks__flow-toggle {
+  gap: 4px;
+}
+
+.wpacks__flow-dot {
+  padding: 0 2px;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.wpacks__flow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px 24px;
+  padding: 12px 16px;
+  border-radius: var(--md-sys-shape-corner-medium);
+  background: var(--md-sys-color-surface-container-low);
+}
+
+.wpacks__flow-side {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.wpacks__flow-side h3 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font: var(--md-sys-typescale-title-small);
+  color: var(--md-sys-color-on-surface);
+}
+
+.wpacks__flow-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.wpacks__flow-source,
+.wpacks__flow-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.wpacks__flow-source {
+  font: var(--md-sys-typescale-label-large);
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.wpacks__flow-list {
+  margin: 0;
+  padding-left: 24px;
+  list-style: none;
+  font: var(--md-sys-typescale-body-medium);
+  user-select: text;
+}
+
+.wpacks__flow-list li + li {
+  margin-top: 6px;
+}
+
+.wpacks__flow-why {
+  margin: 0 0 0 16px;
+}
+
+/* a pack's details: two sections, each a title-small head over a list of declarations */
 .wpacks__details {
   min-width: min(640px, 92vw);
   max-width: min(880px, 92vw);

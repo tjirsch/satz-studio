@@ -86,20 +86,23 @@ lists every workload pack the estate uses first, then the other files of `packs_
 the ones the repository wrote itself ("Own pack") and the ones `satz get-pack` fetched.
 When Packs opens, `satz packs --local` lists them without reading any pack source — no
 network — so each row has its state, where it came from and "Details" at once: a fetched
-pack is "Edited here" or "Unchanged since fetched". For a workload estate, the card
-"Interface folders" above them names each interface folder the estate uses, the
-organization's estate that wrote it and what it exports.
+pack is "Edited here" or "Unchanged since fetched".
 Choosing a pack source — `satz`, the satz repository's `packs/`, then each source
 `config.toml` names, a GitHub repository or a folder — says how each fetched pack stands
 against it, with a badge where it needs you ("Update available", "Edited here", "Gone
 from source", "Not checked"), and what the source holds beyond them; each is fetched,
 updated from the source it came from, kept as your own or added to the estate from its
-row. "Details" on a listed pack — fetched or not yet — shows what it declares, as
-`satz packs --estate` reads it: its params with their defaults and the questions that ask
-for them, its list params, its exports by interface, and each value it reads from the
-interface folders, with the folders of this estate that give it, the param the estate
-sets in its place, or why none does; a pack with such a read is marked "Unmet read", so
-the list says before a fetch whether a pack fits. "New pack…" writes a pack of your own
+row. Every listed pack — fetched or not yet — counts what flows through it, seen from the
+pack, as `satz packs --estate` matched it: "↓ N in · ↑ M out", the values it reads from
+the interface folders and the values it exports. Opened, it lists the incoming values
+grouped by what gives them — each interface folder of this estate, with the
+organization's estate that wrote it; the estate itself, where it sets the param the value
+would fill; or not given, with why — each with the description of the export that gives
+it and the param it fills with that param's question; and the outgoing values by
+interface, the core exports first, each with its description. A pack with a value this
+estate does not give is marked "Unmet read", so the list says before a fetch whether a
+pack fits. "Details" shows its params with their defaults and the questions that ask for
+them, and its list params. "New pack…" writes a pack of your own
 into `packs_dir`, adds its `use` line to the estate and opens it in the editor Settings →
 Editor names — a command line such as `zed` or `subl -n`, run with the file last — or,
 with that empty, in the system's text editor (`open -t` on macOS, `xdg-open` on Linux,
@@ -157,7 +160,7 @@ that holds them up — in front of apply and bootstrap, which satz refuses.
 
 ## What it needs
 
-- **`satz` 0.108.0 or newer.** `MIN_SATZ` in `crates/satz-studio-core/src/satz/binary.rs`
+- **`satz` 0.109.0 or newer.** `MIN_SATZ` in `crates/satz-studio-core/src/satz/binary.rs`
   names the oldest satz this build works with. It rises when a satz release breaks the
   app or the app starts using something a later satz introduced, not with every satz
   release. Install satz with its installer or bring it up to date with `satz
