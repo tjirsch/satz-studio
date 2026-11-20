@@ -368,7 +368,7 @@ works offline.
 | interface card (`InterfaceCard`, the core card) | `.interfaces__card`, `.interfaces__export` (in `views.css`) | <https://m3.material.io/components/cards/specs>, <https://m3.material.io/components/chips/specs> | an outlined `Card` whose head is an icon, the name, assist chips and the `file:line`, over one row per export separated by an `outline-variant` rule; the value is a monospace block on the surface container, which the spec has no surface for |
 | `SourceChips` | `.source-chips` (in `views.css`) | — (assist chips over literal text) | a value as satz reads it: a `{param}` chip with what it resolves to, a `${…}` reference chip, the literal text between |
 | `Badge` | `.m-badge` | <https://m3.material.io/components/badges/specs> | the large badge holds a count, 99+ above 99, the small one is `dot`; in the error colors only. On the rail's Overview and Decisions, the top bar's status and Findings |
-| path bar (`PathBar`) | `.path-bar` (in `views.css`) | <https://m3.material.io/components/toolbars/specs> (docked toolbar) | a docked toolbar, 64 px, on the surface container, full width of the window's main column between the view and the Findings drawer; left to right it holds a text `Button` "Back: <step>" (`arrow_back`) and a filled `Button` "Next: <step>" (`arrow_forward`) together at the left edge, then one line of body text — what the next step is for, cut with an ellipsis where it does not fit, down to nothing. The buttons never shrink. The first step has no Back, and Next keeps the left edge; the last has no Next and no text. No FAB and no vibrant color variant |
+| path bar (`PathBar`) | `.path-bar` (in `views.css`) | <https://m3.material.io/components/toolbars/specs> (docked toolbar) | a docked toolbar, 64 px, on the surface container, full width of the window's main column between the view and the Findings drawer; at its right edge a text `Button` "← <step>" (`arrow_back`) to the step before and a filled `Button` "<step> →" (trailing `arrow_forward`) to the next. Each button's plain `Tooltip` says what its step is for; in the bar it opens upward, aligned to the button's right edge, and wraps at 360 px. The first step has no previous button, the last no next. |
 | `LinearProgress`, `CircularProgress` | `.m-linear-progress`, `.m-circular-progress` | <https://m3.material.io/components/progress-indicators/specs> | the linear indicator has the Expressive stop indicator; the wavy Expressive variant is not drawn |
 | help button (`HelpButton`) | `.help-dialog` (in `views.css`) | <https://m3.material.io/components/icon-buttons/specs>, <https://m3.material.io/components/dialogs/specs> | a standard `IconButton` with the `help` glyph at the top-right corner of a card or a view, opening a basic `Dialog` that holds what the two lines of lead leave out, with one Close text button; a basic dialog, since the app has no rich tooltip |
 | `Tooltip` | `.m-tooltip` | <https://m3.material.io/components/tooltips/specs> | plain tooltip only, below the anchor, no rich tooltip |
@@ -428,11 +428,10 @@ and the door card on the Start screen, and their classes live in `views.css`, so
   buttons, the release page and the look-again.
 - **Path bar:** while Overview, Presets, Packs, Decisions, Apply or Documents shows, the
   window's foot — below the scrolling content and above the Findings drawer, so it never
-  scrolls away — carries "Back: <step>" to the step before and "Next: <step>" together on
-  the left, then what the next step is for. `next_after` and `previous_before` in `src/views/path.rs` walk the same
+  scrolls away — carries "← <step>" to the step before and "<step> →" to the next at its
+  right edge; each button's tooltip says what its step is for. `next_after` and `previous_before` in `src/views/path.rs` walk the same
   order both ways, and an estate without presets skips Presets in both. Estate, Agent,
-  Settings and the Start screen have no bar. A narrow window cuts the sentence, never a
-  button.
+  Settings and the Start screen have no bar.
 - **Commands palette:** every entry of `PALETTE` in a dialog over the window, opened
   with ⌘K (Ctrl+K on Windows and Linux) or the rail footer's Commands button — which sits
   between Agent and Settings, because the footer is where what is not a destination

@@ -40,6 +40,7 @@
   flex: none;
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 12px;
   min-height: 64px;
   padding: 0 16px;
@@ -47,13 +48,26 @@
   color: var(--md-sys-color-on-surface-variant);
 }
 
-.path-bar__text {
-  flex: 0 1 auto;
-  min-width: 0;
-  font: var(--md-sys-typescale-body-medium);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+/* the step's purpose, above its button: the bar is the window's foot, so the tooltip opens
+   upward and is aligned to the button's right edge; it wraps at a readable width */
+.path-bar__tip .m-tooltip {
+  top: auto;
+  bottom: calc(100% + 4px);
+  left: auto;
+  right: 0;
+  transform: none;
+  height: auto;
+  max-width: 360px;
+  width: max-content;
+  padding: 4px 8px;
+  line-height: 18px;
+  white-space: normal;
+}
+
+.path-bar__next .m-button__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .path-bar__back,

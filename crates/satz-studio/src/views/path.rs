@@ -8,7 +8,7 @@
 
 use dioxus::prelude::*;
 
-use crate::components::{Button, ButtonVariant};
+use crate::components::{Button, ButtonVariant, Icon, Tooltip};
 use crate::state::{AppStore, AppStoreStoreExt, EstateStoreStoreExt, View};
 
 /// The steps, in order. An estate without a Presets destination skips that one.
@@ -53,11 +53,11 @@ pub fn purpose(step: View) -> &'static str {
     }
 }
 
-/// The bar at the window's foot while a step is showing, left to right: "Back: <step>" to
-/// the step before, "Next: <step>", and what the next step is for. The two buttons stand
-/// together on the left and never shrink; where one is missing the other keeps the left
-/// edge. The description gives way — one line, cut with an ellipsis, down to nothing. Nothing on a view that
-/// is not a step, and nothing without an open estate.
+/// The bar at the window's foot while a step is showing: at its right edge a text button
+/// "← <step>" to the step before and a filled button "<step> →" to the next, each with
+/// what that step is for as its tooltip, opening upward. The first step has no previous,
+/// the last no next. Nothing on a view that is not a step, and nothing without an open
+/// estate.
 #[component]
 pub fn PathBar() -> Element {
     let app = use_context::<Store<AppStore>>();
@@ -76,23 +76,26 @@ pub fn PathBar() -> Element {
     rsx! {
         div { class: "path-bar", role: "toolbar", "aria-label": "Path",
             if let Some(previous) = previous {
-                Button {
-                    variant: ButtonVariant::Text,
-                    icon: "arrow_back",
-                    class: "path-bar__back",
-                    onclick: move |_| app.nav().set(previous),
-                    "Back: {previous.label()}"
+                Tooltip { text: purpose(previous), class: "path-bar__tip",
+                    Button {
+                        variant: ButtonVariant::Text,
+                        icon: "arrow_back",
+                        class: "path-bar__back",
+                        onclick: move |_| app.nav().set(previous),
+                        "{previous.label()}"
+                    }
                 }
             }
             if let Some(next) = next {
-                Button {
-                    variant: ButtonVariant::Filled,
-                    icon: "arrow_forward",
-                    class: "path-bar__next",
-                    onclick: move |_| app.nav().set(next),
-                    "Next: {next.label()}"
+                Tooltip { text: purpose(next), class: "path-bar__tip",
+                    Button {
+                        variant: ButtonVariant::Filled,
+                        class: "path-bar__next",
+                        onclick: move |_| app.nav().set(next),
+                        span { class: "path-bar__label", "{next.label()}" }
+                        Icon { name: "arrow_forward", size: 18 }
+                    }
                 }
-                span { class: "path-bar__text", "{purpose(next)}" }
             }
         }
     }
