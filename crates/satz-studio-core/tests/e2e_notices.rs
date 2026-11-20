@@ -1,6 +1,6 @@
 //! What a pack asks to be run once it is switched on, against the satz the submodule
 //! pins: the answer that switches a CIS org-policy pack on comes back with the pack's
-//! notice — the command and the param that acknowledges it — the compile warns at the
+//! notice — the command and the param that acknowledges it — the transpile warns at the
 //! estate's `use` line while it stands, binding the param through `satz_interview` is
 //! what takes it away, and satz never sends the same notice twice.
 //!
@@ -39,7 +39,7 @@ async fn a_pack_switched_on_returns_its_notice_once_and_the_binding_takes_it_awa
     let session = estate.open("new.satz").await;
     support::answer_like_the_smoke_matrix(&session).await;
 
-    // a day-0 estate uses no pack that asks for anything
+    // a bootstrap estate uses no pack that asks for anything
     let (report, _) = support::answer(
         &session,
         support::one_answer("default_region", serde_json::json!("europe-west3")),
@@ -86,7 +86,7 @@ async fn a_pack_switched_on_returns_its_notice_once_and_the_binding_takes_it_awa
     let env = session.dir.params(&session.main).unwrap();
     assert!(!EstateDir::acknowledged(&env, ACK), "not run, not bound");
 
-    // and the compile says so at the estate's own `use` line, which is what the drawer
+    // and the transpile says so at the estate's own `use` line, which is what the drawer
     // and the Overview's card count
     let (passed, lines) = support::check_lines(&estate.cli().await, &main).await;
     assert!(passed, "a notice is a warning, not a refusal");
@@ -109,7 +109,7 @@ async fn a_pack_switched_on_returns_its_notice_once_and_the_binding_takes_it_awa
         "the acknowledgement is a param the estate binds, in the file"
     );
 
-    // the compile has nothing left to say about this one
+    // the transpile has nothing left to say about this one
     let (passed, lines) = support::check_lines(&estate.cli().await, &main).await;
     assert!(passed);
     let printed = said(&lines);

@@ -113,7 +113,7 @@ async fn the_map_and_a_pack_are_switched_by_satz_and_a_refused_switch_writes_not
     assert!(m.params.iter().all(|p| p.name != "use_budget"));
 
     // off: the gate reads false and the line stays active — a gated line with a false
-    // gate deploys nothing
+    // gate creates nothing
     let (change, _) = support::remove_pack(&session, BUDGET).await;
     assert_eq!(change.switched, [BUDGET]);
     let text = support::read(&main);
@@ -184,7 +184,7 @@ async fn a_gate_bound_true_without_its_line_is_absent_and_the_check_names_the_pa
     assert_eq!(last.find('='), shortname, "{text}");
     assert_eq!(committed.sha256, sha256_hex(text.as_bytes()));
 
-    // and says so: a warning on stderr, which parses to a diagnostic naming the pack
+    // and says so: a warning on stderr, which parses to a finding naming the pack
     // and the remedy
     let (passed, lines) = support::check_lines(&session.cli, &main).await;
     assert!(passed, "{lines:?}");
@@ -236,7 +236,7 @@ async fn a_gate_bound_true_without_its_line_is_absent_and_the_check_names_the_pa
     assert!(m.diagnostics.contains(warning), "{:?}", m.diagnostics);
 
     // at validation level `error` the same sentence is a refusal: the CLI checker over
-    // a config at that level returns it as the diagnostic …
+    // a config at that level returns it as the finding …
     let strict_dir = support::config_over(&estate.yaml, "error");
     let strict = CliChecker {
         cli: strict_dir.cli().await,
@@ -270,8 +270,8 @@ async fn a_gate_bound_true_without_its_line_is_absent_and_the_check_names_the_pa
     );
 
     // … and the write discipline rolls a binding back: switching the pack off lands
-    // through the estate's own checker, where a pack nothing emits is a warning;
-    // switching it on again is refused by the strict one with that diagnostic, the
+    // through the estate's own checker, where a pack that creates nothing is a warning;
+    // switching it on again is refused by the strict one with that finding, the
     // file keeps its bytes, no temp file stays
     let es = EditSession::open(&main).unwrap();
     let proposed = es
@@ -333,7 +333,7 @@ async fn a_refused_answer_leaves_the_file_as_it_was_and_says_so_when_satz_had_ch
     assert_eq!(change.switched, [support::MAP]);
 
     // the central alerts read the audit logsink's project, and the logsink is off: the
-    // answer does not compile. the pinned satz binds the gate and uncomments the line before
+    // answer does not transpile. the pinned satz binds the gate and uncomments the line before
     // it refuses; a satz that refuses first writes nothing. Either way the file is what it
     // was, and the refusal names a restore exactly when there was one.
     let before = support::read(&main);
@@ -388,7 +388,7 @@ async fn a_refused_answer_leaves_the_file_as_it_was_and_says_so_when_satz_had_ch
 
 /// A `use` line stripped of its ` when <gate>`: nothing the estate answers switches that
 /// pack off. satz says so with the `ungated-pack` finding while the file declaring the
-/// gate deploys — here the map — and the Packs view's chip and sentence stand on the row
+/// gate is active — here the map — and the Packs view's chip and sentence stand on the row
 /// state and that finding.
 #[tokio::test]
 async fn a_line_without_its_when_is_ungated_and_satz_names_the_gate() {
@@ -407,7 +407,7 @@ async fn a_line_without_its_when_is_ungated_and_satz_names_the_gate() {
     let ungated = text.replacen(&gated, &format!("use \"{BUDGET}\""), 1);
     std::fs::write(&main, &ungated).unwrap();
 
-    // the row: the line is ungated and the pack deploys all the same
+    // the row: the line is ungated and the pack creates all the same
     let m = support::model(&session, Vec::new()).await;
     let row = m.packs.row(BUDGET).unwrap();
     assert_eq!((row.line, row.deploys), (PackLine::Ungated, true));
@@ -434,7 +434,7 @@ async fn a_line_without_its_when_is_ungated_and_satz_names_the_gate() {
     );
 
     // and the check: at validation level `error` the same finding refuses the estate,
-    // as the diagnostic the drawer shows
+    // as the finding the drawer shows
     let strict_dir = support::config_over(&estate.yaml, "error");
     let strict = CliChecker {
         cli: strict_dir.cli().await,
@@ -446,7 +446,7 @@ async fn a_line_without_its_when_is_ungated_and_satz_names_the_gate() {
     let diagnostic = refused
         .iter()
         .find(|d| d.kind.as_deref() == Some("ungated-pack"))
-        .unwrap_or_else(|| panic!("no ungated-pack diagnostic: {refused:?}"));
+        .unwrap_or_else(|| panic!("no ungated-pack finding: {refused:?}"));
     assert_eq!(diagnostic.severity, Severity::Error);
     assert_eq!(diagnostic.source, DiagSource::Check);
     assert!(

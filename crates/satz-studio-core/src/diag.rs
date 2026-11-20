@@ -1,4 +1,4 @@
-//! One diagnostic type for everything the app can point at a line: satz-core's parse
+//! One finding type for everything the app can point at a line: satz-core's parse
 //! and pipeline errors, satz's own stderr, a tool refusal over MCP, the document
 //! layer's own findings. Line granularity — that is what satz records (a node carries
 //! its line and nothing finer).
@@ -18,7 +18,7 @@ pub enum Severity {
     Info,
 }
 
-/// Where a diagnostic came from, so the drawer can group and the reader can judge.
+/// Where a finding came from, so the drawer can group and the reader can judge.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DiagSource {
@@ -43,7 +43,7 @@ pub struct Diagnostic {
     pub line: Option<u32>,
     pub severity: Severity,
     /// which of satz's checks spoke, kebab-case (`unadopted-pack`,
-    /// `missing-required`, …); `None` for a diagnostic that is not one of its findings
+    /// `missing-required`, …); `None` for a finding that is not one of its findings
     #[serde(default)]
     pub kind: Option<String>,
     pub message: String,
@@ -64,7 +64,7 @@ impl Diagnostic {
 
     /// The file is stored as [`plain`] gives it, whichever side named it: satz prints a
     /// plain path and the app knows the same file through `canonicalize`, so two
-    /// diagnostics about one file are one file.
+    /// findings about one file are one file.
     pub fn at(mut self, file: impl Into<PathBuf>, line: u32) -> Self {
         self.file = Some(plain(&file.into()));
         self.line = Some(line);
@@ -139,7 +139,7 @@ impl Diagnostic {
         }
     }
 
-    /// Re-point a diagnostic that names a temp file at the real one (same lines). The
+    /// Re-point a finding that names a temp file at the real one (same lines). The
     /// comparison is on [`plain`]: satz names the file it was given, and the app knows
     /// that file through `canonicalize`, which on Windows is the same path in another
     /// form.
@@ -169,26 +169,26 @@ pub fn plain(path: &Path) -> PathBuf {
 }
 
 /// Parse what satz printed — its stderr, or the text of a refused tool call — into
-/// diagnostics.
+/// findings.
 ///
 /// satz lays its findings out for a reader (its `src/findings.rs`, `lay_out`): a group's
 /// title, `<title> (<count>)`; per finding a first line of columns — severity, kind,
 /// `file:line`, subject — with the message indented under it and `fix: <command>` last;
 /// findings of one group that say the same thing as ONE block, their first lines as a
 /// table and the message once, which belongs to every row; and a footer of counts. Each
-/// row is a diagnostic at its own location, its message the group's title and the text
-/// under the block — the same message [`Diagnostic::from_finding`] builds from the JSON.
+/// row is a finding at its own location, its message the group's title and the text
+/// under the block — the same message `from_finding` builds from the JSON.
 ///
 /// Around the findings satz prints other lines, read as before: the banner
 /// (`satz vX (built …)`) is dropped; `error: `, `warning: ` and `info: ` set the
 /// severity; `transpile --check: ` is stripped; `file:line: msg` gives the location and
-/// `satz: line N: msg` the line alone; an indented line continues the diagnostic above
-/// it. A line that fits none of that is a diagnostic without a location, verbatim —
+/// `satz: line N: msg` the line alone; an indented line continues the finding above
+/// it. A line that fits none of that is a finding without a location, verbatim —
 /// nothing satz says is dropped, bar the title and the footer, which count what the rows
 /// already carry.
 ///
 /// A title reaches the rows under it and no further. satz's CLI prints one refused
-/// compile as TWO layouts — the warnings and infos (`render`), then the errors
+/// transpile as TWO layouts — the warnings and infos (`render`), then the errors
 /// (`report_refusal`) — and each layout lays the findings of NO group out first, its
 /// groups after; nothing in the text itself says where one layout ends and the next
 /// begins. What says it is the order: an error row opening a block PAST the first block
@@ -198,7 +198,7 @@ pub fn plain(path: &Path) -> PathBuf {
 /// the footer too, and by any line satz did not lay out.
 pub fn parse_satz_output(text: &str, source: DiagSource) -> Vec<Diagnostic> {
     let mut out: Vec<Diagnostic> = Vec::new();
-    // per diagnostic: the group title it stands under, and the subject its row named
+    // per finding: the group title it stands under, and the subject its row named
     let mut titles: Vec<Option<String>> = Vec::new();
     let mut subjects: Vec<String> = Vec::new();
     let mut title: Option<String> = None;
@@ -206,7 +206,7 @@ pub fn parse_satz_output(text: &str, source: DiagSource) -> Vec<Diagnostic> {
     // info stood above them: together they spot the errors layout's own first block
     let mut blocks_under_title = 0usize;
     let mut warnings_stood_above = false;
-    // the first diagnostic an indented line belongs to — a block's rows share the text
+    // the first finding an indented line belongs to — a block's rows share the text
     // under them — and whether the line before was a row, so the next row joins it
     let mut body_from = 0;
     let mut in_rows = false;
@@ -476,7 +476,7 @@ mod tests {
     }
 
     /// satz's own layout (`lay_out`): a title, a block of two rows sharing one message
-    /// and one command, a second group, and the footer — and, as a refused compile
+    /// and one command, a second group, and the footer — and, as a refused transpile
     /// prints it, the errors layout after them, which opens with a finding of no group.
     const LAID_OUT: &str = "satz v0.73.0 (built 2026-09-21 07:30:15)
 packs on while a pack they need is off (2)
@@ -649,7 +649,7 @@ error    providers
     }
 
     /// The two halves of the fix: what satz printed and what the app canonicalised name
-    /// the same file, so a diagnostic about the temp file re-points to the real one.
+    /// the same file, so a finding about the temp file re-points to the real one.
     #[test]
     fn a_diagnostic_repoints_across_the_two_forms() {
         let printed = Path::new(r"D:\estate\yaml\a.studio-tmp.satz");

@@ -44,7 +44,7 @@ trap 'git -C vendor/satz checkout --quiet "$pinned"' EXIT
 git -C vendor/satz checkout --quiet "$tag"
 echo "check-newest-satz: reading satz $tag (the pin is $(git -C vendor/satz describe --tags "$pinned" 2>/dev/null || echo "$pinned"))"
 
-# not --locked: satz-core is compiled from the checkout, and its dependencies are that
+# not --locked: satz-core is built from the checkout, and its dependencies are that
 # release's
 if cargo test -p satz-studio-core --test grammar_pin --test cst_roundtrip --test cst_tree; then
   echo "check-newest-satz: the app reads the files of satz $tag"

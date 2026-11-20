@@ -22,17 +22,18 @@ use satz_studio_core::edit::{
     self, CheckFailure, Checker, CommitError, Committed, Delegated, Edit, EditSession, McpChecker,
     Rollback,
 };
+use satz_studio_core::editor;
 use satz_studio_core::estate::{EstateDir, HclState};
 use satz_studio_core::git::{self, WorkTree};
 use satz_studio_core::model::EstateModel;
 use satz_studio_core::satz::project;
 use satz_studio_core::satz::reports::{
-    AddPackArgs, FindingSeverity, InterviewArgs, InterviewReport, MergeReport, NoticeRow,
-    PackChange, PackReview, PacksReport, PrerequisitesResult, QuestionsReport, RemovePackArgs,
-    UpdateAction,
+    AddEntryArgs, AddPackArgs, EntryAdded, FindingSeverity, InterviewArgs, InterviewReport,
+    MergeReport, NoticeRow, PackChange, PackReview, PacksReport, PrerequisitesResult,
+    QuestionsReport, RemovePackArgs, UpdateAction,
 };
 use satz_studio_core::satz::review::{self, PlaceError, Placed};
-use satz_studio_core::satz::workload::{self, PackSource, Which};
+use satz_studio_core::satz::workload::{self, NewSource, Which};
 use satz_studio_core::satz::{CliLine, EstateSession, SatzError, ToolOutcome, export};
 use satz_studio_core::schema::{ResourceRegistry, SchemaError};
 use tokio_util::sync::CancellationToken;
@@ -86,6 +87,9 @@ pub enum EstateAction {
     AddPack(AddPackArgs),
     /// `satz_remove_preset`: the pack's gate bound false, its line left as it is
     RemovePack(RemovePackArgs),
+    /// `satz_add_entry`: one entry added to a list a pack declares, by satz's own writer —
+    /// a delegation, a delegated resource, a subnet
+    AddEntry(AddEntryArgs),
     /// `satz_merge_presets`: the line for a pack the library gained
     MergePresets,
     /// `satz --config <dir> review-preset <pack> [--against <estate>]`: the pack judged
@@ -100,8 +104,16 @@ pub enum EstateAction {
     /// the review closed: its card and its findings leave the window
     CloseReview,
     /// a workload-pack command on the estate's `packs_dir`: `satz packs`, `get-pack`,
-    /// `update-pack` or `detach-pack`, then the list read again from the same source
+    /// `update-pack`, `detach-pack` or `publish-pack`, then the list read again from the
+    /// same source
     Packs(PackOp),
+    /// a new pack of the repository's own: `packs_dir/<id>.satz` written and formatted
+    /// by `satz fmt`, its `use` line added through the app's writer, and the file
+    /// opened in the application the system gives `.satz` files
+    NewPack(String),
+    /// a command on the estate's pack sources: `satz pack-source list`, `add` or
+    /// `remove`, the last two followed by the list read again
+    PackSources(SourceOp),
     /// `satz_whoami`, online: who is signed in, what the estate runs as, and whether
     /// that works — asked by the Apply destination, never unasked
     CheckSignIn,
@@ -116,17 +128,45 @@ pub enum EstateAction {
     Switch,
 }
 
-/// What the Workload packs tab asks for.
+/// What the Packs view asks of the pack sources. Each writes `config.toml` through satz,
+/// or reads it; none writes a pack.
+#[derive(Debug, Clone, PartialEq)]
+pub enum SourceOp {
+    /// `satz pack-source list`
+    List,
+    /// `satz pack-source add …`
+    Add(NewSource),
+    /// `satz pack-source remove <name>`
+    Remove(String),
+}
+
+/// What the Packs view asks of the workload packs.
 #[derive(Debug, Clone, PartialEq)]
 pub enum PackOp {
-    /// `satz packs` against this source, which the later operations read too
-    List(PackSource),
-    /// `satz get-pack <id>|--all`
+    /// `satz packs --local`: the packs of `packs_dir` alone, no source read
+    ListLocal,
+    /// `satz packs --source <name>`: the source a fetch reads too
+    List(String),
+    /// `satz get-pack <id>|--all --source <name>`, from the listed source
     Get(Which),
-    /// `satz update-pack <id>|--all [--take-upstream]`
-    Update { which: Which, take_upstream: bool },
+    /// `satz update-pack <id>|--all [--source <from>] [--take-upstream]`: each pack from
+    /// its recorded source — only the ones fetched from `from`, where it names one, and
+    /// that source is listed after it
+    Update {
+        which: Which,
+        from: Option<String>,
+        take_upstream: bool,
+    },
     /// `satz detach-pack <id>`
     Detach(String),
+    /// `satz publish-pack <id> --source <source> --estate <the open estate> [--force]`:
+    /// one of the repository's own packs copied into a folder source and recorded as
+    /// fetched from it
+    Publish {
+        id: String,
+        source: String,
+        force: bool,
+    },
 }
 
 pub async fn estate_coroutine(
@@ -184,6 +224,7 @@ pub async fn estate_coroutine(
             EstateAction::RemovePack(args) => {
                 switch_pack(&session, app, "satz_remove_preset", &args).await
             }
+            EstateAction::AddEntry(args) => add_entry(&session, app, &args).await,
             EstateAction::MergePresets => {
                 {
                     let _lock = session.write_lock().await;
@@ -225,6 +266,25 @@ pub async fn estate_coroutine(
                 if wrote {
                     reload(&session, app).await;
                 }
+            }
+            EstateAction::NewPack(id) => {
+                if app.estate().packs_busy().cloned() {
+                    toast(app, ToastKind::Info, "a pack command is already running");
+                    continue;
+                }
+                app.estate().packs_busy().set(true);
+                new_pack(&session, app, &id).await;
+                list_local(&session, app).await;
+                app.estate().packs_busy().set(false);
+            }
+            EstateAction::PackSources(op) => {
+                if app.estate().packs_busy().cloned() {
+                    toast(app, ToastKind::Info, "a pack command is already running");
+                    continue;
+                }
+                app.estate().packs_busy().set(true);
+                pack_sources(&session, app, op).await;
+                app.estate().packs_busy().set(false);
             }
             EstateAction::CheckSignIn => {
                 if app.estate().sign_in().cloned() == Some(SignIn::Checking) {
@@ -296,7 +356,7 @@ impl Carried {
 /// changed the file. A call that did not land is satz's own sentence, followed by what
 /// became of the file when satz had changed it, in a toast and in the drawer. `landed`
 /// reads the outcome of a call that landed and says what the toast says — `Err` for an
-/// outcome the app could not type, which is a toast in the error colour over a write that
+/// outcome the app could not type, which is a toast in the error color over a write that
 /// is already on disk.
 async fn delegated_write<F>(
     session: &Arc<EstateSession>,
@@ -382,7 +442,7 @@ async fn interview(session: &Arc<EstateSession>, app: Store<AppStore>, args: Int
         toast(
             app,
             ToastKind::Error,
-            "satz_interview: the arguments did not serialise to an object",
+            "satz_interview: the arguments did not serialize to an object",
         );
         return;
     };
@@ -407,8 +467,8 @@ async fn interview(session: &Arc<EstateSession>, app: Store<AppStore>, args: Int
 
 /// One pack switched on or off by satz's own pack logic: `satz_add_preset` or
 /// `satz_remove_preset` on the real file, under the delegated-write discipline. satz binds
-/// the gate, writes or uncomments the line, compiles the estate and restores it when the
-/// compile refuses; a switch satz refuses — a pack it needs is off, a pack that needs it
+/// the gate, writes or uncomments the line, transpiles the estate and restores it when the
+/// transpile refuses; a switch satz refuses — a pack it needs is off, a pack that needs it
 /// is on, a line not gated on its gate — wrote nothing and names why. A switch that
 /// turns a pack on can open its notices, which the window raises as an answer's do.
 async fn switch_pack<A: serde::Serialize>(
@@ -424,7 +484,7 @@ async fn switch_pack<A: serde::Serialize>(
         toast(
             app,
             ToastKind::Error,
-            format!("{tool}: the arguments did not serialise to an object"),
+            format!("{tool}: the arguments did not serialize to an object"),
         );
         return;
     };
@@ -434,6 +494,33 @@ async fn switch_pack<A: serde::Serialize>(
             .map_err(|e| format!("{tool}: {e}"))?;
         queue_notices(app, &change.notices);
         Ok(switched(&change))
+    })
+    .await;
+    reload_with(session, app, carried).await;
+}
+
+/// One entry added to a list a pack declares, by satz's own writer: `satz_add_entry` on
+/// the real file, under the delegated-write discipline. satz checks the entry against the
+/// declaration, writes it into the params, transpiles the estate and restores it when the
+/// transpile refuses; an entry satz refuses wrote nothing and names why.
+async fn add_entry(session: &Arc<EstateSession>, app: Store<AppStore>, args: &AddEntryArgs) {
+    const TOOL: &str = "satz_add_entry";
+    let Some(args) = serde_json::to_value(args)
+        .ok()
+        .and_then(|v| v.as_object().cloned())
+    else {
+        toast(
+            app,
+            ToastKind::Error,
+            format!("{TOOL}: the arguments did not serialize to an object"),
+        );
+        return;
+    };
+    let carried = delegated_write(session, app, TOOL, args, |outcome| {
+        let added = outcome
+            .typed::<EntryAdded>(TOOL)
+            .map_err(|e| format!("{TOOL}: {e}"))?;
+        Ok(format!("{} added to {}", added.key, added.list))
     })
     .await;
     reload_with(session, app, carried).await;
@@ -495,8 +582,8 @@ fn queue_notices(app: Store<AppStore>, opened: &[NoticeRow]) {
     app.estate().notices().set(next);
 }
 
-/// The writing half of `update-prerequisites`: satz works out which roles the IaC
-/// service account lacks and which APIs a project its resources' calls are billed to
+/// The writing half of `update-prerequisites`: satz works out which roles the estate
+/// account lacks and which APIs a project its resources' calls are billed to
 /// does not enable, and writes both into the estate. It is offline and it is satz's own writer, so it goes through
 /// the same discipline as an answer — the write lock, the snapshot, the check on the
 /// real path — rather than a command that rewrites the file under the window.
@@ -519,7 +606,7 @@ async fn write_prerequisites(session: &Arc<EstateSession>, app: Store<AppStore>)
 
 /// The app's writer: open, apply in memory, commit through the temp file and the
 /// check. An edit the document layer refuses wrote nothing; a commit the check
-/// refuses leaves the file as it was and its diagnostics in the drawer.
+/// refuses leaves the file as it was and its findings in the drawer.
 async fn commit_edit(session: &Arc<EstateSession>, app: Store<AppStore>, edit: Edit) {
     let carried = {
         let _lock = session.write_lock().await;
@@ -560,8 +647,8 @@ async fn commit_edit(session: &Arc<EstateSession>, app: Store<AppStore>, edit: E
     reload_with(session, app, Carried::checked(carried)).await;
 }
 
-/// The findings of a check that passed, as diagnostics to carry through the reload: a
-/// warning the compile raised — a required argument the provider wants, a pack the
+/// The findings of a check that passed, to carry through the reload: a
+/// warning the transpile raised — a required argument the provider wants, a pack the
 /// estate asks for and does not use — belongs in the drawer at its line, beside the
 /// write that landed.
 fn carried_findings(committed: &Committed) -> Vec<Diagnostic> {
@@ -578,8 +665,8 @@ fn carried_findings(committed: &Committed) -> Vec<Diagnostic> {
         .collect()
 }
 
-/// A commit that did not land, as a toast, and the diagnostics to carry through the
-/// reload: a check refusal names its first line and keeps every diagnostic; a file
+/// A commit that did not land, as a toast, and the findings to carry through the
+/// reload: a check refusal names its first line and keeps every finding; a file
 /// that changed under the edit says so and is reloaded, nothing kept.
 fn rolled_back(app: Store<AppStore>, e: CommitError) -> Vec<Diagnostic> {
     match e {
@@ -1243,7 +1330,7 @@ async fn place_private(session: &Arc<EstateSession>, app: Store<AppStore>) {
             toast(
                 app,
                 ToastKind::Error,
-                format!("not placed — the estate did not compile with it: {first}"),
+                format!("not placed — the estate did not transpile with it: {first}"),
             );
             app.estate().diagnostics().write().extend(diags);
             app.drawer_open().set(true);
@@ -1274,7 +1361,7 @@ async fn reload(session: &Arc<EstateSession>, app: Store<AppStore>) {
     reload_with(session, app, Carried::default()).await;
 }
 
-/// The sign-in check: `satz_whoami` on the open estate, online. A credential that mints
+/// The sign-in check: `satz_whoami` on the open estate, online. A sign-in that mints
 /// no token is satz's refusal, and its text names the command that signs in.
 async fn check_sign_in(session: &Arc<EstateSession>) -> SignIn {
     let outcome = match session.tool("satz_whoami", serde_json::Map::new()).await {
@@ -1290,33 +1377,54 @@ async fn check_sign_in(session: &Arc<EstateSession>) -> SignIn {
     }
 }
 
-/// One workload-pack operation, and the list read again from the same source after it.
-/// A fetch, an update and a detach write `packs_dir`, so they hold the write lock; what
-/// satz refuses is a toast carrying satz's sentence. Returns whether a pack file was
-/// written, which is when the estate is read again.
+/// One workload-pack operation, then the lists read again: the local one always, and the
+/// listed source's where one is chosen. A fetch, an update, a detach and a publish write
+/// `packs_dir`, so they hold the write lock; what satz refuses is a toast carrying satz's
+/// sentence — a publish's refusal is kept for its dialog instead. Only a fetch needs a
+/// listed source; an update and a detach go by each pack's recorded one. Returns whether
+/// a pack file was written, which is when the estate is read again.
 async fn workload_packs(session: &Arc<EstateSession>, app: Store<AppStore>, op: PackOp) -> bool {
     let estate = app.estate();
     let source = match &op {
         PackOp::List(source) => {
             estate.pack_source().set(Some(source.clone()));
             estate.pack_update().set(None);
-            source.clone()
+            estate.workload_packs().set(None);
+            Some(source.clone())
         }
-        _ => match estate.pack_source().cloned() {
-            Some(source) => source,
+        PackOp::Update {
+            from: Some(source), ..
+        } => {
+            estate.pack_source().set(Some(source.clone()));
+            Some(source.clone())
+        }
+        // the list read after it is the listed source's, the published one's when none is
+        PackOp::Publish { source, .. } => match estate.pack_source().cloned() {
+            Some(listed) => Some(listed),
             None => {
-                toast(app, ToastKind::Error, "read a source of packs first");
+                estate.pack_source().set(Some(source.clone()));
+                Some(source.clone())
+            }
+        },
+        PackOp::Get(_) => match estate.pack_source().cloned() {
+            Some(source) => Some(source),
+            None => {
+                toast(app, ToastKind::Error, "choose a pack source first");
                 return false;
             }
         },
+        PackOp::ListLocal | PackOp::Update { from: None, .. } | PackOp::Detach(_) => {
+            estate.pack_source().cloned()
+        }
     };
     let cli = &session.cli;
     let mut wrote = false;
     match op {
-        PackOp::List(_) => {}
+        PackOp::ListLocal | PackOp::List(_) => {}
         PackOp::Get(which) => {
             let _lock = session.write_lock().await;
-            match workload::get(cli, &which, &source).await {
+            let source = source.as_deref().expect("a fetch has a listed source");
+            match workload::get(cli, &which, source, &session.main).await {
                 Ok(report) if report.installed.is_empty() => {
                     toast(
                         app,
@@ -1327,7 +1435,23 @@ async fn workload_packs(session: &Arc<EstateSession>, app: Store<AppStore>, op: 
                 Ok(report) => {
                     wrote = true;
                     let ids: Vec<&str> = report.installed.iter().map(|p| p.id.as_str()).collect();
-                    toast(app, ToastKind::Info, format!("fetched {}", ids.join(", ")));
+                    toast(
+                        app,
+                        ToastKind::Info,
+                        format!("fetched {} from {}", ids.join(", "), report.source),
+                    );
+                    // satz fetches a pack whose read the estate does not give, and warns
+                    for pack in report.installed.iter().filter(|p| !p.unmet.is_empty()) {
+                        toast(
+                            app,
+                            ToastKind::Error,
+                            format!(
+                                "{} reads what this estate does not give: {}",
+                                pack.id,
+                                pack.unmet.join("; ")
+                            ),
+                        );
+                    }
                 }
                 Err(e) => toast(
                     app,
@@ -1338,10 +1462,11 @@ async fn workload_packs(session: &Arc<EstateSession>, app: Store<AppStore>, op: 
         }
         PackOp::Update {
             which,
+            from,
             take_upstream,
         } => {
             let _lock = session.write_lock().await;
-            match workload::update(cli, &which, &source, take_upstream).await {
+            match workload::update(cli, &which, from.as_deref(), take_upstream).await {
                 Ok(report) => {
                     let written = report
                         .packs
@@ -1355,7 +1480,7 @@ async fn workload_packs(session: &Arc<EstateSession>, app: Store<AppStore>, op: 
                         toast(
                             app,
                             ToastKind::Error,
-                            "a pack was left as it is: it was edited here, or the source holds it no longer",
+                            "a pack was left as it is: it was edited here, or its pack source holds it no longer",
                         );
                     } else if written > 0 {
                         toast(app, ToastKind::Info, format!("updated {written} pack(s)"));
@@ -1386,16 +1511,155 @@ async fn workload_packs(session: &Arc<EstateSession>, app: Store<AppStore>, op: 
                 ),
             }
         }
+        PackOp::Publish {
+            id,
+            source: target,
+            force,
+        } => {
+            estate.pack_publish().set(None);
+            let _lock = session.write_lock().await;
+            match workload::publish(cli, &id, &target, &session.main, force).await {
+                Ok(published) => {
+                    toast(app, ToastKind::Info, workload::published_text(&published));
+                    estate.pack_publish().set(Some(Ok(published)));
+                }
+                // the dialog stays open and shows it
+                Err(e) => estate.pack_publish().set(Some(Err(project::said(&e)))),
+            }
+        }
     }
-    let listed = workload::list(cli, &source)
-        .await
-        .map_err(|e| project::said(&e));
-    estate.workload_packs().set(Some(listed));
+    if let Some(source) = source {
+        let listed = workload::list(cli, &source, &session.main)
+            .await
+            .map_err(|e| project::said(&e));
+        estate.workload_packs().set(Some(listed));
+    }
+    list_local(session, app).await;
     wrote
 }
 
-/// `satz_transpile_check` on the estate as it stands: the findings of a compile that
-/// passed, the diagnostics of one that refused, or the one error of a checker that
+/// `satz packs --local` into the store: the packs of `packs_dir` with their state and
+/// declarations, and the interface folders the estate uses, no pack source read.
+async fn list_local(session: &Arc<EstateSession>, app: Store<AppStore>) {
+    let listed = workload::list_local(&session.cli, &session.main)
+        .await
+        .map_err(|e| project::said(&e));
+    app.estate().local_packs().set(Some(listed));
+}
+
+/// A new pack of the repository's own (`workload::create_pack`, under the write lock),
+/// then its `use` line — the path satz names for a file of `packs_dir` — through the
+/// app's writer like every other edit, then the file opened for its author. A refused
+/// line leaves the pack where it is, opened all the same: the file is the author's.
+async fn new_pack(session: &Arc<EstateSession>, app: Store<AppStore>, id: &str) {
+    let created = {
+        let _lock = session.write_lock().await;
+        workload::create_pack(&session.cli, &session.dir.packs_dir(), id).await
+    };
+    let file = match created {
+        Ok(file) => file,
+        Err(e) => {
+            toast(app, ToastKind::Error, format!("no new pack: {e}"));
+            return;
+        }
+    };
+    match session.dir.use_path_of(&file) {
+        Some(path) => commit_edit(session, app, Edit::AddUse { path }).await,
+        None => toast(
+            app,
+            ToastKind::Error,
+            format!(
+                "{} is written, and no use line reaches it: packs_dir is under none of config.toml's include_dirs",
+                file.display()
+            ),
+        ),
+    }
+    edit_file(app, &file);
+}
+
+/// A pack's file opened for its author: in the Editor setting's command, or the system's
+/// text editor when it is empty ([`satz_studio_core::editor`]). The editor is started on
+/// a task of its own and the window goes on; one that does not start, or exits with a
+/// failure, is a toast that names the command and the setting.
+pub fn edit_file(app: Store<AppStore>, file: &Path) {
+    let editor = app.settings().read().editor.clone();
+    let file = file.to_path_buf();
+    spawn(async move {
+        if let Err(e) = editor::open(&editor, &file).await {
+            toast(app, ToastKind::Error, edit_failed(&editor, &file, &e));
+        }
+    });
+}
+
+/// The toast of an editor that did not open the file: the file, the command, what went
+/// wrong, and where the command is set.
+fn edit_failed(editor: &str, file: &Path, e: &editor::EditorError) -> String {
+    format!(
+        "{} did not open with {}: {e}. Set an editor in Settings → Editor.",
+        file.display(),
+        editor::shown(editor, editor::Platform::current())
+    )
+}
+
+/// One pack-source operation. An add and a remove write `config.toml` through satz under
+/// the write lock, keep what satz said for the view, and read the sources again; a
+/// removed source that was the listed one takes its list with it.
+async fn pack_sources(session: &Arc<EstateSession>, app: Store<AppStore>, op: SourceOp) {
+    let estate = app.estate();
+    let cli = &session.cli;
+    let (name, said) = match op {
+        SourceOp::List => {
+            read_sources(session, app).await;
+            return;
+        }
+        SourceOp::Add(new) => {
+            estate.source_change().set(None);
+            let _lock = session.write_lock().await;
+            (new.name.clone(), workload::add_source(cli, &new).await)
+        }
+        SourceOp::Remove(name) => {
+            estate.source_change().set(None);
+            let _lock = session.write_lock().await;
+            let said = workload::remove_source(cli, &name).await;
+            if said.is_ok() && estate.pack_source().cloned().as_deref() == Some(name.as_str()) {
+                estate.pack_source().set(None);
+                estate.workload_packs().set(None);
+                estate.pack_update().set(None);
+            }
+            (name, said)
+        }
+    };
+    source_changed(app, &name, said);
+    read_sources(session, app).await;
+}
+
+/// `satz pack-source list` into the store.
+async fn read_sources(session: &Arc<EstateSession>, app: Store<AppStore>) {
+    let listed = workload::sources(&session.cli)
+        .await
+        .map_err(|e| project::said(&e));
+    app.estate().pack_sources().set(Some(listed));
+}
+
+/// What satz said to a `pack-source add` or `remove`: its first line as a toast when it
+/// wrote `config.toml`, its refusal as it said it, kept for the view.
+fn source_changed(app: Store<AppStore>, name: &str, said: Result<String, SatzError>) {
+    match said {
+        Ok(stdout) => {
+            if let Some(line) = stdout.lines().map(str::trim).find(|l| !l.is_empty()) {
+                toast(app, ToastKind::Info, line.to_string());
+            }
+            app.estate().source_change().set(Some(Ok(name.to_string())));
+        }
+        Err(e) => app
+            .estate()
+            .source_change()
+            .set(Some(Err(project::said(&e)))),
+    }
+}
+
+/// `satz_transpile_check` on the estate as it stands: the findings of a transpile that
+/// passed, the findings of one that refused, or the one error of a checker that
 /// could not run.
 async fn check(session: &Arc<EstateSession>) -> Vec<Diagnostic> {
     let checker = McpChecker {
@@ -1417,8 +1681,8 @@ async fn check(session: &Arc<EstateSession>) -> Vec<Diagnostic> {
 }
 
 /// Questions and packs through the session, then the file, the params and the schema on
-/// a blocking thread, then the model, then the compile's own check. Every failure is a
-/// diagnostic and a toast; the model stays what it was. `carried` — what the write this
+/// a blocking thread, then the model, then the transpile's own check. Every failure is a
+/// finding and a toast; the model stays what it was. `carried` — what the write this
 /// reload follows said — stays in the drawer, at its line in the file as it is: what the
 /// check already said, so the reload does not run it again, and a tool's refusal.
 async fn reload_with(session: &Arc<EstateSession>, app: Store<AppStore>, carried: Carried) {
@@ -1477,7 +1741,7 @@ async fn reload_with(session: &Arc<EstateSession>, app: Store<AppStore>, carried
 
     let main = session.main.clone();
     let dir = session.dir.clone();
-    // The error is boxed: a `Diagnostic` is a path, a message and a source, which is
+    // The error is boxed: a finding is a path, a message and a source, which is
     // large enough that clippy refuses it as the `Err` of a `Result` returned by value.
     let parsed = tokio::task::spawn_blocking(move || {
         let text = std::fs::read_to_string(&main).map_err(|e| {
@@ -1561,7 +1825,7 @@ async fn reload_with(session: &Arc<EstateSession>, app: Store<AppStore>, carried
         Some(Err(d)) => diagnostics.push(*d),
         None => {}
     }
-    // What the compile finds after the front end — a role the IaC service account
+    // What the transpile finds after the front end — a role the estate account
     // lacks, a required argument the provider wants, raw HCL nobody has reviewed — is
     // data the estate carries and the app has no other way to learn. It is read here,
     // once per reload, and only when the front end got as far as a model: a file the
@@ -1588,6 +1852,17 @@ async fn reload_with(session: &Arc<EstateSession>, app: Store<AppStore>, carried
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// An editor that did not open the file names the file, the command and the setting.
+    #[test]
+    fn an_editor_that_failed_names_the_command_and_the_setting() {
+        let e = editor::EditorError::Launch("exit status: 1".to_string());
+        let said = edit_failed("zed", Path::new("/packs/acme.satz"), &e);
+        assert_eq!(
+            said,
+            "/packs/acme.satz did not open with zed: exit status: 1. Set an editor in Settings → Editor."
+        );
+    }
 
     fn notice(param: &str) -> NoticeRow {
         NoticeRow {

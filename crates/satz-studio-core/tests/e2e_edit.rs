@@ -6,7 +6,7 @@
 //! edit lands, a bad one rolls back naming the real file, a file changed on disk is
 //! refused, a delegated write is verified or restored) is not repeated here. Over the
 //! skeleton `satz interview --create` writes, which carries `init`'s scaffold: its
-//! `private = true` on the state bucket and the IaC service account is satz's bool, and
+//! `private = true` on the state bucket and the estate account is satz's bool, and
 //! flipping it passes the check and flips back to the original bytes.
 
 #[path = "fixtures/e2e/support.rs"]

@@ -140,10 +140,10 @@ impl<'t> Builder<'t> {
             "block" => self.block(n),
             "string" | "number" | "boolean" | "reference" | "list" | "object" => self.value(n),
             "claim" | "question" | "action" | "notice" | "offers" | "export" | "interface"
-            | "suppress" | "private" | "request" | "hcl_block" => Ok(self.opaque(n)),
+            | "suppress" | "private" | "entries" | "hcl_block" => Ok(self.opaque(n)),
             // `each <list> by <field> { … }` inside a resource type map, and at the top
             // level around `interface` blocks: kept whole, the bodies and interfaces it
-            // writes exist only once the estate compiles
+            // writes exist only once the estate transpiles
             "each" | "each_interface" => Ok(self.opaque(n)),
             other => Err(CstError::Parse {
                 line: line(n),

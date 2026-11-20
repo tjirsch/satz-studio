@@ -7,10 +7,12 @@
 //! a person reads — `text` where satz offers it, `markdown` where it does not — and
 //! `json` stays a choice in the format picker for whoever wants the file.
 //!
-//! The commands are grouped by the job: [`APPLY`] is the estate's way to the organisation,
+//! The commands are grouped by the job: [`APPLY`] is the estate's way to the organization,
 //! in the order it is walked, and [`COMPLIANCE`] is what the Documents destination runs
 //! for a report. The palette holds every entry, including the ones neither gathers, and opens on ⌘K /
-//! Ctrl+K. `apply`, `bootstrap` and `migrate` are command lines to copy or to open in
+//! Ctrl+K. For an estate that holds the preset library it also holds "Review a pack for the
+//! preset library" ([`REVIEW_LABEL`]), the pack review of [`crate::views::review`], which is a
+//! card of its own rather than a command line. `apply`, `bootstrap` and `migrate` are command lines to copy or to open in
 //! the OS terminal ([ADR 0006](../../../../docs/adr/0006-apply-and-bootstrap-run-in-the-users-terminal.md),
 //! [ADR 0012](../../../../docs/adr/0012-migrate-hands-off-to-the-terminal.md)).
 
@@ -29,6 +31,7 @@ use crate::state::{
     AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt, ToastKind, command_line,
     reports_dir, toast,
 };
+use crate::views::review::PackReviewCard;
 
 /// Where the open estate's file goes on the command line.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -113,7 +116,7 @@ pub struct CommandSpec {
 }
 
 /// The palette entries a deck with `tools` offers as one click each, at their default
-/// values: who the estate runs as, whether it compiles, and what its packs ask. Each
+/// values: who the estate runs as, whether it transpiles, and what its packs ask. Each
 /// is satz's own command, so the log holds satz's own text.
 pub const ONE_CLICK: &[&str] = &["whoami", "transpile-check", "questions"];
 
@@ -123,7 +126,7 @@ pub const PALETTE: &[CommandSpec] = &[
         id: "transpile-check",
         label: "transpile --check",
         icon: "fact_check",
-        description: "Compile in memory and write nothing: the estate either transpiles or the error says why.",
+        description: "Transpile in memory and write nothing: the estate either transpiles or the error says why.",
         head: &["transpile"],
         estate: EstateArg::Positional,
         tail: &["--check"],
@@ -135,7 +138,7 @@ pub const PALETTE: &[CommandSpec] = &[
         id: "transpile",
         label: "transpile",
         icon: "build",
-        description: "Compile the estate to HCL in hcl_dir.",
+        description: "Transpile the estate to HCL code in hcl_dir.",
         head: &["transpile"],
         estate: EstateArg::Positional,
         tail: &[],
@@ -214,7 +217,7 @@ pub const PALETTE: &[CommandSpec] = &[
         id: "update-prerequisites",
         label: "update-prerequisites",
         icon: "admin_panel_settings",
-        description: "What the estate's resource types oblige it to declare and does not: the roles its IaC service account is missing, and the APIs a project its resources' calls are billed to does not enable.",
+        description: "What the estate's resource types oblige it to declare and does not: the roles its estate account is missing, and the APIs a project its resources' calls are billed to does not enable.",
         // one of the two commands satz's ADR 0021 leaves on the console: the exit code
         // is the answer and the text is the diagnosis, so it takes no `--out`.
         // `--report-only` is fixed: the command writes the estate file by default, and
@@ -233,14 +236,14 @@ pub const PALETTE: &[CommandSpec] = &[
         id: "whoami",
         label: "whoami",
         icon: "person_search",
-        description: "Who the estate's live commands run as: the credentials, the service account a cloud-mode estate impersonates, and — checked live — whether this credential may, whether the quota project is reachable, and which permissions the estate's resource types need.",
+        description: "Who the estate's live commands run as: the signed-in identity, the estate account a cloud-mode estate impersonates, and — checked live — whether that identity may, whether the quota project is reachable, and which permissions the estate's resource types need.",
         head: &["whoami"],
         estate: EstateArg::Positional,
         tail: &[],
         fields: &[Field::Flag {
             key: "offline",
             flag: "--offline",
-            label: "Read the credentials file only: no network, nothing checked",
+            label: "Read the sign-in file only: no network, nothing checked",
         }],
         reports: false,
         external: false,
@@ -383,7 +386,7 @@ pub const PALETTE: &[CommandSpec] = &[
         estate: EstateArg::None,
         tail: &[],
         // `--force` is not offered: it overwrites the packs the estate uses, which changes
-        // what the estate compiles to under the window with no write lock held and no
+        // what the estate transpiles to under the window with no write lock held and no
         // reload after it. The forced refresh is the terminal's.
         fields: &[Field::Option {
             key: "pristine_dir",
@@ -428,7 +431,7 @@ pub const PALETTE: &[CommandSpec] = &[
         id: "bootstrap-check",
         label: "bootstrap --dry-run",
         icon: "fact_check",
-        description: "Day 0, read-only: the plan satz would carry out, the identity your credentials resolve to, and the permission pre-flight. It creates nothing.",
+        description: "The bootstrap, read-only: the plan satz would carry out, the identity you are signed in as, and the prerequisites. It creates nothing.",
         head: &["bootstrap"],
         estate: EstateArg::Positional,
         tail: &["--dry-run"],
@@ -474,7 +477,7 @@ pub const PALETTE: &[CommandSpec] = &[
         id: "bootstrap",
         label: "bootstrap",
         icon: "foundation",
-        description: "Day 0: folder, project, billing link, core APIs and the state bucket, created as you — in your terminal.",
+        description: "The bootstrap: folder, project, billing link, core APIs and the state bucket, created as you — in your terminal.",
         head: &["bootstrap"],
         estate: EstateArg::Positional,
         tail: &[],
@@ -482,7 +485,7 @@ pub const PALETTE: &[CommandSpec] = &[
             Field::Flag {
                 key: "greenfield",
                 flag: "--greenfield",
-                label: "Greenfield: materialise a not-yet-existing organisation",
+                label: "Greenfield: materialise a not-yet-existing organization",
             },
             Field::Flag {
                 key: "no_default_grants",
@@ -496,7 +499,7 @@ pub const PALETTE: &[CommandSpec] = &[
 ];
 
 /// The palette entries the Apply destination gathers, in the order they are walked: the
-/// checks that go further than the compile, day 0 and its dry run, the generated code,
+/// checks that go further than the transpile, the bootstrap and its dry run, the HCL code,
 /// its directory, the plan, the apply, and the state's move to the other backend.
 pub const APPLY: &[&str] = &[
     "transpile-check",
@@ -508,6 +511,17 @@ pub const APPLY: &[&str] = &[
     "plan",
     "apply",
     "migrate",
+];
+
+/// The same walk for a workload estate: the bootstrap and the state's move to the other
+/// backend are the organization's, and are not its steps.
+pub const APPLY_WORKLOAD: &[&str] = &[
+    "transpile-check",
+    "update-prerequisites",
+    "transpile",
+    "hcl-init",
+    "plan",
+    "apply",
 ];
 
 /// The palette entries the Documents destination gathers: the goal view against a
@@ -663,19 +677,54 @@ pub fn build_args(
     Ok(args)
 }
 
+/// The palette entry of the pack review, after the commands.
+pub const REVIEW_LABEL: &str = "Review a pack for the preset library";
+
 /// One group of palette entries: the list of them, the argument form of the chosen
 /// one, its command line as it will run, and the shared log. Apply and Documents each
-/// hold one over their own ids; the palette is one over every id.
+/// hold one over their own ids; the palette is one over every id, and with `review` a
+/// last entry, [`REVIEW_LABEL`], whose work area is the pack review card.
 #[component]
-pub fn CommandDeck(ids: Vec<&'static str>, #[props(default)] tools: bool) -> Element {
+pub fn CommandDeck(
+    ids: Vec<&'static str>,
+    #[props(default)] tools: bool,
+    #[props(default)] review: bool,
+) -> Element {
     let app = use_context::<Store<AppStore>>();
     let handle = use_coroutine_handle::<EstateAction>();
     let specs: Vec<&'static CommandSpec> = ids.iter().filter_map(|id| spec_of(id)).collect();
-    let mut selected = use_signal(|| 0usize);
+    let count = specs.len();
+    // a finding of the reviewed pack chosen in the drawer opens the palette on the review
+    let mut selected = use_signal(move || {
+        if review && *app.palette_review().peek() {
+            count
+        } else {
+            0
+        }
+    });
+    // read once: the next time the palette opens, it opens on its first command again
+    use_effect(move || {
+        if *app.palette_review().peek() {
+            app.palette_review().set(false);
+        }
+    });
     let first = specs.first().copied();
     let mut values = use_signal(move || first.map(defaults).unwrap_or_default());
     let open = app.open().cloned();
-    let (Some(open), Some(spec)) = (open, specs.get(selected()).copied()) else {
+    let reviewing = review && selected() == count;
+    let review_item = rsx! {
+        if review {
+            ListItem {
+                headline: REVIEW_LABEL.to_string(),
+                supporting: "satz review-preset".to_string(),
+                selected: reviewing,
+                leading: rsx! { Icon { name: "rate_review", size: 20 } },
+                onclick: move |_| selected.set(count),
+            }
+        }
+    };
+    // the review's entry has no spec: the form below it stays the first command's
+    let (Some(open), Some(spec)) = (open, specs.get(selected()).or(specs.first()).copied()) else {
         return rsx! {};
     };
     let running = app.estate().running().cloned();
@@ -711,8 +760,12 @@ pub fn CommandDeck(ids: Vec<&'static str>, #[props(default)] tools: bool) -> Ele
                             },
                         }
                     }
+                    {review_item}
                 }
             }
+            if reviewing {
+                div { class: "commands__work", PackReviewCard {} }
+            } else {
             div { class: "commands__work",
                 Card { variant: CardVariant::Outlined, class: "commands__form",
                     h2 { class: "commands__heading", Icon { name: spec.icon.to_string(), size: 22 } "{spec.label}" }
@@ -800,7 +853,7 @@ pub fn CommandDeck(ids: Vec<&'static str>, #[props(default)] tools: bool) -> Ele
                 if tools {
                     Card { variant: CardVariant::Outlined, class: "commands__tools",
                         h2 { class: "commands__heading", Icon { name: "handyman", size: 22 } "One click" }
-                        p { class: "commands__description", "Who the estate runs as, whether it compiles, and what its packs ask: satz's own answer, in the log." }
+                        p { class: "commands__description", "Who the estate runs as, whether it transpiles, and what its packs ask: satz's own answer, in the log." }
                         div { class: "commands__actions commands__actions--start",
                             for s in ONE_CLICK.iter().filter_map(|id| spec_of(id)) {
                                 {
@@ -826,6 +879,7 @@ pub fn CommandDeck(ids: Vec<&'static str>, #[props(default)] tools: bool) -> Ele
                     }
                 }
                 CommandLog {}
+            }
             }
         }
     }
@@ -870,19 +924,26 @@ pub fn CommandLog() -> Element {
 }
 
 /// The command palette: every satz command the app runs, over the window, opened with
-/// ⌘K / Ctrl+K or the top bar's button. It is not a destination — the work happens in
-/// Checks and Deploy — and it is where a command that belongs to neither still lives.
+/// ⌘K / Ctrl+K or the rail's Commands button. It is not a destination — the work happens
+/// in Apply and Documents — and it is where a command that belongs to neither still
+/// lives, and, for an estate that holds the preset library, the pack review.
 #[component]
 pub fn CommandPalette() -> Element {
     let app = use_context::<Store<AppStore>>();
     let ids: Vec<&'static str> = PALETTE.iter().map(|s| s.id).collect();
+    let review = app
+        .estate()
+        .model()
+        .read()
+        .as_deref()
+        .is_none_or(|m| m.packs.has_presets());
     rsx! {
         Dialog {
             open: true,
             title: "Commands".to_string(),
             class: "command-palette".to_string(),
             ondismiss: move |_| app.palette_open().set(false),
-            CommandDeck { ids, tools: true }
+            CommandDeck { ids, tools: true, review }
         }
     }
 }
@@ -1031,9 +1092,9 @@ mod tests {
         );
     }
 
-    /// The three that change a live organisation from a terminal, and the read-only
-    /// day-0 check that does not: `bootstrap --dry-run` is its own entry precisely so
-    /// that checking day 0 is one click in the app and doing it is a hand-off.
+    /// The three that change a live organization from a terminal, and the read-only
+    /// bootstrap check that does not: `bootstrap --dry-run` is its own entry precisely so
+    /// that checking the bootstrap is one click in the app and doing it is a hand-off.
     #[test]
     fn only_apply_migrate_and_bootstrap_run_outside_the_app() {
         let external: Vec<&str> = PALETTE
@@ -1054,7 +1115,11 @@ mod tests {
     /// neither destination is still one keystroke away.
     #[test]
     fn the_destinations_name_entries_that_exist() {
-        for id in APPLY.iter().chain(COMPLIANCE.iter()) {
+        for id in APPLY
+            .iter()
+            .chain(APPLY_WORKLOAD.iter())
+            .chain(COMPLIANCE.iter())
+        {
             assert!(spec_of(id).is_some(), "{id}");
         }
         assert!(spec_of("no-such-command").is_none());

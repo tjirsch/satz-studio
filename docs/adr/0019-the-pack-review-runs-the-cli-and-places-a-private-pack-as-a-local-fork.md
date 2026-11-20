@@ -1,6 +1,6 @@
 # 0019 — the pack review runs the CLI, and a private pack is placed as a `.local.satz`
 
-- **Status:** accepted
+- **Status:** accepted; where the review lives is [ADR 0031](0031-the-pack-review-is-in-the-palette-and-a-new-pack-opens-in-the-systems-editor.md) — an entry of the commands palette
 - **Date:** 2026-09-21
 - **Deciders:** the maintainer
 

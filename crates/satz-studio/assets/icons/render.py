@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The app icon, drawn: a rounded square in the app's primary colour (#3A6EA5, the
+"""The app icon, drawn: a rounded square in the app's primary color (#3A6EA5, the
 seed of the Material palette in assets/css/tokens.css) with a lighter rounded square
 inset in it. Writes icon-1024.png beside this file with nothing but the standard
 library; the smaller sizes are resampled from it by `sips` (see the header comment
@@ -21,7 +21,7 @@ INNER_RADIUS = 0.11 * SIZE
 
 
 def rounded_rect_coverage(x, y, x0, y0, x1, y1, r):
-    """Coverage in [0, 1] of the pixel centred at (x, y) by the rounded rectangle
+    """Coverage in [0, 1] of the pixel centered at (x, y) by the rounded rectangle
     (x0, y0)-(x1, y1) with corner radius r: the signed distance to its edge, mapped
     over one pixel so the edge is anti-aliased."""
     cx = min(max(x, x0 + r), x1 - r)

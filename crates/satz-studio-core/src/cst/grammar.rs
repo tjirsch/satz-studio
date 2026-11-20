@@ -1,4 +1,4 @@
-//! The tree-sitter language for Satz, compiled from the vendored generated parser
+//! The tree-sitter language for Satz, built from the vendored generated parser
 //! (`vendor/satz-tree-sitter/src/parser.c`, commit in `vendor/satz-tree-sitter/COMMIT`).
 
 unsafe extern "C" {

@@ -24,7 +24,7 @@ fn key(diags: &[Diagnostic]) -> BTreeSet<Key> {
         .collect()
 }
 
-/// The diagnostic a test is about, by kind. A compile carries every finding the satz
+/// The finding a test is about, by kind. A transpile carries every finding the satz
 /// release makes over the estate — a prerequisite the fixture does not declare, a check
 /// a later version adds — so a test names the finding it asserts on instead of counting
 /// them.
@@ -172,7 +172,7 @@ async fn a_check_that_passes_carries_its_warnings_through_both_checkers() {
     let tmp = asks_for_a_pack_it_does_not_use(&copy, &session.main);
     let (mcp, cli) = support::checkers(&session);
 
-    // the same finding at satz's default level: a warning, so the compile goes on
+    // the same finding at satz's default level: a warning, so the transpile goes on
     let a = support::within(mcp.check(&tmp)).await.unwrap();
     assert!(!a.addresses.is_empty());
     let pack = a

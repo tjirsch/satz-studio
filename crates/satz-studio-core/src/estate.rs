@@ -15,7 +15,7 @@ pub struct ToolConfig {
     pub yaml_dir: String,
     #[serde(default = "default_hcl_dir")]
     pub hcl_dir: String,
-    /// where satz writes the estate's interfaces for the projects beside it — output,
+    /// where satz writes the estate's outgoing interface folders for the estates that read them — output,
     /// like `hcl_dir`, rewritten whole on every transpile
     #[serde(default = "default_interfaces_dir")]
     pub interfaces_dir: String,
@@ -25,6 +25,10 @@ pub struct ToolConfig {
     pub schema_dir: String,
     #[serde(default = "default_presets_dir")]
     pub presets_dir: String,
+    /// the folder of the workload packs: the ones `satz get-pack` fetched, beside the
+    /// repository's own
+    #[serde(default = "default_packs_dir")]
+    pub packs_dir: String,
     #[serde(default = "default_tf_tool")]
     pub tf_tool: String,
     #[serde(default = "default_provider_version")]
@@ -52,6 +56,9 @@ fn default_schema_dir() -> String {
 }
 fn default_presets_dir() -> String {
     "presets".to_string()
+}
+fn default_packs_dir() -> String {
+    "packs".to_string()
 }
 fn default_tf_tool() -> String {
     "tofu".to_string()
@@ -81,6 +88,7 @@ impl ToolConfig {
             include_dirs: self.include_dirs.iter().map(|d| at(d)).collect(),
             schema_dir: at(&self.schema_dir),
             presets_dir: at(&self.presets_dir),
+            packs_dir: at(&self.packs_dir),
             tf_tool: self.tf_tool.clone(),
             provider_version: self.provider_version.clone(),
             validation_level: self.validation_level.clone(),
@@ -267,18 +275,65 @@ impl EstateDir {
     pub fn presets_dir(&self) -> PathBuf {
         PathBuf::from(&self.runtime.presets_dir)
     }
+    pub fn packs_dir(&self) -> PathBuf {
+        PathBuf::from(&self.runtime.packs_dir)
+    }
     pub fn hcl_dir(&self) -> PathBuf {
         PathBuf::from(&self.runtime.hcl_dir)
+    }
+
+    /// The workload pack of `packs_dir` that `use "<path>"` in `main` reads, by its id —
+    /// its path under `packs_dir` without `.satz` — or `None` for a line that reads a
+    /// file elsewhere or none. The file is the one [`Self::loader`] would read.
+    pub fn pack_of_use(&self, main: &Path, path: &str) -> Option<String> {
+        let base_dir = main.parent().unwrap_or(Path::new("."));
+        let file = std::iter::once(base_dir.join(path))
+            .chain(
+                self.runtime
+                    .include_dirs
+                    .iter()
+                    .map(|d| Path::new(d).join(path)),
+            )
+            .find(|c| c.is_file())?;
+        let file = std::fs::canonicalize(file).ok()?;
+        let packs = std::fs::canonicalize(self.packs_dir()).ok()?;
+        let id = slashed(file.strip_prefix(&packs).ok()?);
+        id.strip_suffix(".satz").map(str::to_string)
+    }
+
+    /// The `use` path satz names for a file of `packs_dir`, as `satz get-pack` prints it:
+    /// its path under the `include_dirs` entry that holds it by the shortest path; `None`
+    /// when none does, which satz refuses for every pack of the folder.
+    pub fn use_path_of(&self, file: &Path) -> Option<String> {
+        let file = std::fs::canonicalize(file).ok()?;
+        self.runtime
+            .include_dirs
+            .iter()
+            .filter_map(|d| std::fs::canonicalize(d).ok())
+            .filter_map(|d| file.strip_prefix(d).ok().map(slashed))
+            .min_by_key(String::len)
+    }
+    /// Where satz writes what the estate publishes: `<interfaces_dir>/outgoing`.
+    pub fn outgoing_dir(&self) -> PathBuf {
+        PathBuf::from(&self.runtime.interfaces_dir).join("outgoing")
     }
     pub fn yaml_dir(&self) -> PathBuf {
         PathBuf::from(&self.runtime.yaml_dir)
     }
 }
 
-/// How far the generated HCL directory has been taken, read from disk and nothing run.
+/// A relative path with `/` between its parts, as a `use` line writes it on every OS.
+fn slashed(path: &Path) -> String {
+    path.components()
+        .map(|c| c.as_os_str().to_string_lossy())
+        .collect::<Vec<_>>()
+        .join("/")
+}
+
+/// How far the HCL directory has been taken, read from disk and nothing run.
 /// Two facts, and only what each proves: `main.tf` is there, so the estate has been
 /// transpiled here; `.terraform` is there, so the tool's init has run. A plan needs an
-/// initialised directory, so `initialised == false` proves no plan has run against this
+/// initialized directory, so `initialized == false` proves no plan has run against this
 /// checkout — and `true` proves nothing about a plan, which leaves no trace of its own.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct HclState {
@@ -387,6 +442,35 @@ mod tests {
                 "showcase.satz",
                 "smoke.satz"
             ]
+        );
+    }
+
+    /// A `use` line into `packs_dir` names its pack, and the pack's file the line that
+    /// reads it; a line elsewhere, or to no file, names none.
+    #[test]
+    fn a_use_line_into_packs_dir_names_its_pack_and_back() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        std::fs::write(
+            root.join("config.toml"),
+            "yaml_dir = \".\"\ninclude_dirs = [\".\"]\npacks_dir = \"packs\"\n",
+        )
+        .unwrap();
+        std::fs::create_dir_all(root.join("packs/team")).unwrap();
+        std::fs::write(root.join("packs/team/access.satz"), "").unwrap();
+        std::fs::write(root.join("other.satz"), "").unwrap();
+        let e = EstateDir::open(root).unwrap();
+        let main = root.join("e.satz");
+        assert_eq!(
+            e.pack_of_use(&main, "packs/team/access.satz").as_deref(),
+            Some("team/access")
+        );
+        assert_eq!(e.pack_of_use(&main, "other.satz"), None);
+        assert_eq!(e.pack_of_use(&main, "packs/none.satz"), None);
+        assert_eq!(
+            e.use_path_of(&root.join("packs/team/access.satz"))
+                .as_deref(),
+            Some("packs/team/access.satz")
         );
     }
 

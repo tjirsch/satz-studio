@@ -5,6 +5,8 @@
    `[data-theme="light"]`, dark on `[data-theme="dark"]` and, when the document sets no
    theme, under `prefers-color-scheme: dark`. A committed palette, not dynamic colour.
    Regenerate with: uvx --from materialyoucolor python — SchemeTonalSpot(Hct.from_int(0xFF3A6EA5), is_dark, 0.0, spec_version="2021").
+   One extended color beside the scheme, which has no role for it: `--app-color-success`,
+   a green at tone 40 (light) and 80 (dark), for a status that says nothing is owed.
 
    Type, shape, motion, state and elevation follow m3.material.io/styles. */
 
@@ -60,6 +62,7 @@
   --md-sys-color-tertiary-container: #f3daff;
   --md-sys-color-tertiary-fixed: #f3daff;
   --md-sys-color-tertiary-fixed-dim: #d7bee4;
+  --app-color-success: #3b6939;
 }
 
 [data-theme="dark"] {
@@ -113,6 +116,7 @@
   --md-sys-color-tertiary-container: #533f5f;
   --md-sys-color-tertiary-fixed: #f3daff;
   --md-sys-color-tertiary-fixed-dim: #d7bee4;
+  --app-color-success: #a1d39a;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -167,6 +171,7 @@
     --md-sys-color-tertiary-container: #533f5f;
     --md-sys-color-tertiary-fixed: #f3daff;
     --md-sys-color-tertiary-fixed-dim: #d7bee4;
+    --app-color-success: #a1d39a;
   }
 }
 

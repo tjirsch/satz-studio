@@ -147,7 +147,7 @@ pub async fn app_coroutine(mut rx: UnboundedReceiver<AppAction>, app: Store<AppS
 /// installer — so the app runs that and shows what it said rather than fetching anything
 /// itself. Two things it must get right. `--no-open-readme`, because without it a
 /// successful update opens the documentation site in a browser behind the operator, which
-/// is satz's right behaviour on a terminal and the wrong one under a window. And the
+/// is satz's right behavior on a terminal and the wrong one under a window. And the
 /// binary it runs is [`SatzStatus::updatable`], which answers for a satz that is TOO OLD
 /// as well as a current one: a too-old satz updating itself is the entire point of the
 /// offer, and the path is the one the refusal carried.
@@ -506,7 +506,7 @@ async fn open_estate(app: Store<AppStore>, config: PathBuf, estate: PathBuf) {
             let dir = session.dir.dir.clone();
             let identity = runs_as
                 .clone()
-                .unwrap_or_else(|| "the ADC identity".to_string());
+                .unwrap_or_else(|| "the signed-in identity".to_string());
             app.open().set(Some(OpenEstate {
                 session: Arc::clone(&session),
                 dir,
@@ -543,7 +543,7 @@ pub fn run_line(dir: &Path, args: &[String]) -> String {
 
 /// `satz init` in `dir`. The target is checked first, the run streams into the create
 /// log, and what it made is READ from the directory afterwards — `init` names the estate
-/// file after a customer id it may have derived from the credentials, so the name is
+/// file after a customer id it may have derived from the sign-in, so the name is
 /// never predicted here.
 ///
 /// Nothing the run derived leaves this function: the lines go into `create.log`, which
@@ -586,15 +586,13 @@ fn create_estate(
     create.outcome().set(None);
     create.running().set(true);
     spawn(async move {
-        let mut last_stderr = None;
+        let mut stderr = Vec::new();
         while let Some(line) = lines.recv().await {
             let clean = match line {
                 CliLine::Stdout(s) => CliLine::Stdout(strip_ansi(&s)),
                 CliLine::Stderr(s) => {
                     let s = strip_ansi(&s);
-                    if !s.trim().is_empty() {
-                        last_stderr = Some(s.clone());
-                    }
+                    stderr.push(s.clone());
                     CliLine::Stderr(s)
                 }
             };
@@ -604,11 +602,12 @@ fn create_estate(
         // a cancel is what the user asked for, so it is the outcome chip and not a toast
         let cancelled = matches!(ended, Ok(Err(SatzError::Cancelled)));
         let outcome = match ended {
-            // satz said why on its own stderr; a status line alone would replace that
-            // sentence with a number
+            // satz said why on its own stderr — its `error:` line, whole; a status line
+            // alone would replace that sentence with a number
             Ok(Ok(status)) if !status.success() => Some(CommandOutcome {
                 ok: false,
-                text: last_stderr.unwrap_or_else(|| format!("exited with {status}")),
+                text: satz_studio_core::satz::init::refusal(&stderr)
+                    .unwrap_or_else(|| format!("exited with {status}")),
             }),
             Ok(Ok(_)) => None,
             Ok(Err(SatzError::Cancelled)) => Some(CommandOutcome {
@@ -656,7 +655,7 @@ async fn created(app: Store<AppStore>, dir: &Path) -> CommandOutcome {
     };
     match estates.as_slice() {
         // satz writes the directories and the config whatever happens, and the estate
-        // file only once it has a customer id — stated, or derived from the credentials
+        // file only once it has a customer id — stated, or derived from the sign-in
         [] => CommandOutcome {
             ok: false,
             text: format!(
@@ -707,9 +706,9 @@ async fn created(app: Store<AppStore>, dir: &Path) -> CommandOutcome {
 // estate is the estate that opens; none at all is a failure, whatever the exit status
 // said.
 //
-// Nothing the run derived leaves here. A live import prints the organisation id, the
+// Nothing the run derived leaves here. A live import prints the organization id, the
 // customer directory id, the billing account and an administrator's address it read from
-// the credentials: those lines go into the import log, which lives as long as the window
+// the sign-in: those lines go into the import log, which lives as long as the window
 // shows it, and the values themselves are in the estate satz wrote.
 
 /// `satz import` in `dir`, with `satz init` first when `dir` holds no `config.toml`.
@@ -976,9 +975,15 @@ async fn stream_into_import_log(
 
 /// Write the settings file, put them in the store and locate satz again. The one
 /// saver: the Settings view sends [`AppAction::SaveSettings`] and this writes the file,
-/// then locates satz again. A file that did not write is a toast and the sentence, so
-/// the caller can refuse to go on.
+/// then locates satz again. An Editor whose program is not found is refused before
+/// anything is written — the Settings view shows why under the field. A file that did not
+/// write is a toast and the sentence, so the caller can refuse to go on.
 pub async fn save_settings(app: Store<AppStore>, settings: Settings) -> Result<(), String> {
+    if let Err(e) = satz_studio_core::editor::validate(&settings.editor) {
+        let message = format!("settings not saved: Editor: {e}");
+        toast(app, ToastKind::Error, message.clone());
+        return Err(message);
+    }
     match settings.save() {
         Ok(()) => {
             app.settings().set(settings);

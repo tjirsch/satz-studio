@@ -290,42 +290,42 @@ fn an_each_entry_is_kept_whole_inside_its_map() {
     cst.lower().expect("satz-core parses it");
 }
 
-/// A `request` statement is kept whole like the other statements.
+/// An `entries` statement is kept whole like the other statements.
 #[test]
-fn a_request_statement_is_kept_whole() {
-    let text = "pack net version \"1.0\"\n\nparams {\n  subnets = []\n}\n\nrequest subnets {\n  key    = \"name\"\n  fields = [\"name\", \"cidr\"]\n}\n";
+fn an_entries_statement_is_kept_whole() {
+    let text = "pack net version \"1.0\"\n\nparams {\n  subnets = []\n}\n\nentries subnets {\n  key    = \"name\"\n  fields = [\"name\", \"cidr\"]\n}\n";
     let cst = Cst::parse(text).unwrap();
     assert_eq!(cst.text(), text);
     assert_eq!(
         labels(&cst, cst.root()),
-        ["Header", "Params", "Opaque(request)"]
+        ["Header", "Params", "Opaque(entries)"]
     );
     cst.lower().expect("satz-core parses it");
 }
 
-/// A request point's `patterns` stays inside the statement, and a top-level `each <list>
+/// A list param's `patterns` stays inside the statement, and a top-level `each <list>
 /// by <field> { interface … }` is one statement kept whole (satz ADR 0075): the tree is
 /// the file byte for byte, has no `Error` node, keeps a comment inside the `each` as
 /// its child, and satz-core parses it.
 #[test]
-fn request_patterns_and_a_top_level_each_of_interfaces_are_kept_whole() {
-    let text = "pack onboarding version \"1.0\"\n\nparams {\n  projects = []\n}\n\nrequest projects {\n  key      = \"name\"\n  fields   = [\"name\", \"owner_group\"]\n  patterns = { name = \"[a-z][a-z0-9-]*\" owner_group = \"[^@: ]+@[^@: ]+\" }\n}\n\neach projects by name {\n  // one interface per project\n  interface \"{each.name}\" {\n    export \"project_id\" = \"${{google_project.{each.name}.project_id}}\" description \"The project\"\n  }\n}\n";
+fn entries_patterns_and_a_top_level_each_of_interfaces_are_kept_whole() {
+    let text = "pack intake version \"1.0\"\n\nparams {\n  projects = []\n}\n\nentries projects {\n  key      = \"name\"\n  fields   = [\"name\", \"owner_group\"]\n  patterns = { name = \"[a-z][a-z0-9-]*\" owner_group = \"[^@: ]+@[^@: ]+\" }\n}\n\neach projects by name {\n  // one interface per project\n  interface \"{each.name}\" {\n    export \"project_id\" = \"${{google_project.{each.name}.project_id}}\" description \"The project\"\n  }\n}\n";
     let cst = Cst::parse(text).unwrap();
     assert_eq!(cst.text(), text);
     assert_eq!(
         labels(&cst, cst.root()),
-        ["Header", "Params", "Opaque(request)", "Opaque(each)"]
+        ["Header", "Params", "Opaque(entries)", "Opaque(each)"]
     );
     assert!(
         cst.nodes()
             .all(|(_, n)| !matches!(n.kind, NodeKind::Error { .. })),
         "an Error node where satz accepts the file"
     );
-    let request = child(&cst, cst.root(), 2);
+    let entries = child(&cst, cst.root(), 2);
     assert!(
-        cst.slice(cst.node(request).span)
+        cst.slice(cst.node(entries).span)
             .contains("patterns = { name = \"[a-z][a-z0-9-]*\""),
-        "the patterns stay inside the request"
+        "the patterns stay inside the entries statement"
     );
     let each = child(&cst, cst.root(), 3);
     let whole = cst.slice(cst.node(each).span);
@@ -438,7 +438,7 @@ fn a_generated_interface_file_is_its_header_and_four_kinds_of_block() {
 }
 
 /// `interface "x" common { … }` is an interface statement kept whole, and the two sides
-/// of a project estate — its `use` of a generated interface file and its
+/// of a workload estate — its `use` of a generated interface file and its
 /// `${{interface.<export>}}` strings — are an ordinary use line and ordinary string
 /// values: the tree is the file, the reference is the value's own text, and satz-core
 /// parses both files.
@@ -453,7 +453,9 @@ fn a_common_interface_and_an_interface_reference_round_trip() {
         cst.slice(cst.node(audit).span)
             .starts_with("interface \"audit\" common {")
     );
-    let file = cst.lower().expect("satz-core parses the central estate");
+    let file = cst
+        .lower()
+        .expect("satz-core parses the organization's estate");
     assert!(
         file.interfaces
             .iter()
@@ -487,7 +489,7 @@ fn a_common_interface_and_an_interface_reference_round_trip() {
         strings.contains(&"\"${{interface.customer_domain}}\""),
         "{strings:?}"
     );
-    cst.lower().expect("satz-core parses the project estate");
+    cst.lower().expect("satz-core parses the workload estate");
 }
 
 /// A claim carrying its measure (`gcloud`, `gcloud_check`, `risk`) is one opaque statement

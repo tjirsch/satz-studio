@@ -6,7 +6,7 @@
 //! satz-core: [`Cst::lower`] parses the same text with `satz_core::satz::parse`.
 //!
 //! The pack lines an estate carries (`use "…" when <gate>`, commented out until a
-//! question is answered yes) are load-bearing comments; [`scan_uses`] recognises them.
+//! question is answered yes) are load-bearing comments; [`scan_uses`] recognizes them.
 
 mod build;
 pub mod grammar;
@@ -97,7 +97,7 @@ pub enum NodeKind {
     /// a list's items and an object's entries are the children; the scalars are leaves
     Value(ValueKind),
     /// `claim`, `question`, `action`, `notice`, `offers`, `export`, `interface`,
-    /// `suppress`, `private`, `request`, `hcl`, an `each` entry and a top-level `each` of
+    /// `suppress`, `private`, `entries`, `hcl`, an `each` entry and a top-level `each` of
     /// interfaces (both `each`) — kept whole in V1; the comments inside are still children
     Opaque { statement: String },
     /// a `//`, `#` or `/* … */` comment, wherever it stands

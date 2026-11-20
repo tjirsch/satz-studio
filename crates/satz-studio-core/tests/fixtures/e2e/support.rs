@@ -34,12 +34,13 @@ pub const TIME_BOX: Duration = Duration::from_secs(120);
 /// The map pack, as its `use` line names it.
 pub const MAP: &str = "presets/estate-map.satz";
 
-/// The seven values `vendor/satz/scripts/smoke.sh` types into the interview
+/// The eight values `vendor/satz/scripts/smoke.sh` types into the interview
 /// (`printf '%s\n' y C0example 123456789012 example.com acme Acme first.admin
-/// 012345-6789AB-CDEF01 '' '' …`), in the order the pack asks them. The `y` before them
-/// accepts the nine defaults; the empty lines after them accept the two names derived
-/// from the short name. Every value is a documented example value.
-pub const TYPED: [(&str, &str); 7] = [
+/// 012345-6789AB-CDEF01 Workloads '' '' …`), in the order the pack asks them. The `y`
+/// before them accepts the opening offer; the empty lines after them accept the defaults,
+/// the two names derived from the short name among them. Every value is a documented
+/// example value.
+pub const TYPED: [(&str, &str); 8] = [
     ("customer_id", "C0example"),
     ("customer_organization_id", "123456789012"),
     ("customer_domain", "example.com"),
@@ -47,6 +48,7 @@ pub const TYPED: [(&str, &str); 7] = [
     ("customer_longname", "Acme"),
     ("first_admin", "first.admin"),
     ("billing_account_infra", "012345-6789AB-CDEF01"),
+    ("workload_folder_name", "Workloads"),
 ];
 
 /// The piped input of the smoke matrix, line by line.
@@ -278,7 +280,7 @@ pub async fn answer(
     }
 }
 
-/// The interview the smoke matrix pipes, taken the app's way: the seven typed answers
+/// The interview the smoke matrix pipes, taken the app's way: the eight typed answers
 /// one call each, then the defaults. Returns the last report.
 pub async fn answer_like_the_smoke_matrix(session: &Arc<EstateSession>) -> InterviewReport {
     for (subject, value) in TYPED {

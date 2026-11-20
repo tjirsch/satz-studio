@@ -1,7 +1,7 @@
 //! The Create door of the Start screen: the form behind `satz init`, and the run.
 //!
-//! `init` is a live command. It reads the Application Default Credentials and derives
-//! the customer's domain, directory id, organisation id, billing account and first
+//! `init` is a live command. It reads the sign-in and derives
+//! the customer's domain, directory id, organization id, billing account and first
 //! administrator from the platform, saying of each where it came from. The form
 //! therefore asks only for what satz cannot answer and offers the derivable values as
 //! overrides that are empty by default; what the run derives is shown in the log while
@@ -10,7 +10,7 @@
 use std::path::{Path, PathBuf};
 
 use dioxus::prelude::*;
-use satz_studio_core::satz::init::check_target;
+use satz_studio_core::satz::init::{check_target, existing};
 use satz_studio_core::satz::{CliLine, InitOptions};
 
 use crate::components::{
@@ -22,6 +22,26 @@ use crate::state::{AppAction, AppStore, AppStoreStoreExt, CreateStoreStoreExt, r
 /// The provider set `satz init --defaults` knows; it expands to `google` and
 /// `google-beta` and fetches the schema of each with the tf tool.
 const GOOGLE_SET: &str = "google";
+
+/// The OS dialog for the interface folders a workload estate is written from: one or more
+/// folders, added to the ones already chosen.
+fn pick_interface_folders(mut options: Signal<InitOptions>) {
+    spawn(async move {
+        let picked = rfd::AsyncFileDialog::new()
+            .set_title("Choose the interface folders")
+            .pick_folders()
+            .await;
+        if let Some(folders) = picked {
+            let mut o = options.write();
+            for f in folders {
+                let path = f.path().display().to_string();
+                if !o.from.contains(&path) {
+                    o.from.push(path);
+                }
+            }
+        }
+    });
+}
 
 /// Open the OS folder picker for the directory the new estate is created in.
 fn pick_target(mut target: Signal<String>) {
@@ -36,6 +56,24 @@ fn pick_target(mut target: Signal<String>) {
     });
 }
 
+/// The one warning line over a folder that already holds an estate's files: what is
+/// there, and what satz does with each kind — it keeps `config.toml`, `.gitignore` and the
+/// schemas, rewrites the estate file it writes only under `--force`, replaces an interface
+/// folder's earlier copy, and writes nothing when it refuses (satz v0.107.0).
+fn existing_warning(found: &[String]) -> String {
+    let copies = found
+        .iter()
+        .any(|f| Path::new(f).starts_with(Path::new("interfaces").join("incoming")));
+    let mut line = format!(
+        "This folder already holds an estate's files: {}. satz keeps config.toml, .gitignore and the schemas as they are, and rewrites the estate file it writes only with Rewrite the estate file on — without it, an organization's estate file takes the values stated here and a workload's is refused. A refused run writes nothing.",
+        found.join(", ")
+    );
+    if copies {
+        line.push_str(" An interface folder's earlier copy is replaced.");
+    }
+    line
+}
+
 #[component]
 pub fn CreateEstate() -> Element {
     let app = use_context::<Store<AppStore>>();
@@ -48,20 +86,34 @@ pub fn CreateEstate() -> Element {
         ..Default::default()
     });
 
+    // an organization's estate, or a workload estate from the interface folders it was given
+    let mut team = use_signal(|| false);
     let running = app.create().running().cloned();
     let log = app.create().log().cloned();
     let last = app.create().command().cloned();
     let outcome = app.create().outcome().cloned();
 
     let dir = target().trim().to_string();
-    // the same refusal the run would give, said while the folder is being chosen
-    let problem = if dir.is_empty() {
-        None
+    // the same refusal the run would give, said while the folder is being chosen, and
+    // what the folder already holds that the run would meet
+    let (problem, found) = if dir.is_empty() {
+        (None, Vec::new())
     } else {
-        check_target(Path::new(&dir)).err().map(|e| e.to_string())
+        match check_target(Path::new(&dir)) {
+            Err(e) => (Some(e.to_string()), Vec::new()),
+            Ok(()) => match existing(Path::new(&dir), &options()) {
+                Ok(found) => (None, found),
+                Err(e) => (Some(e.to_string()), Vec::new()),
+            },
+        }
     };
-    let ready = !dir.is_empty() && problem.is_none() && !running;
-    let preview = run_line(Path::new(&dir), &options().argv());
+    // the switch belongs to a folder that holds something to write over: over an empty
+    // one it is not drawn, and the run does not carry it
+    let mut run = options();
+    run.force &= !found.is_empty();
+    let ready =
+        !dir.is_empty() && problem.is_none() && !running && (!team() || !options().from.is_empty());
+    let preview = run_line(Path::new(&dir), &run.argv());
     let google = options().defaults.iter().any(|d| d == GOOGLE_SET);
 
     rsx! {
@@ -69,7 +121,7 @@ pub fn CreateEstate() -> Element {
             Card { variant: CardVariant::Outlined, class: "create__form",
                 h2 { class: "create__heading", Icon { name: "add_home", size: 22 } "New estate" }
                 p { class: "create__description",
-                    "satz init writes config.toml, satz/, hcl/, schemas/, .gitignore and the estate file into the folder you choose. It reads your Application Default Credentials and derives the customer's domain, directory id, organisation id, billing account and first administrator from the platform, saying of each where it came from."
+                    "satz init writes config.toml, satz/, hcl/, schemas/, .gitignore and the estate file into the folder you choose. It reads your sign-in and derives the customer's domain, directory id, organization id, billing account and first administrator from the platform, saying of each where it came from."
                 }
 
                 div { class: "create__folder",
@@ -91,7 +143,62 @@ pub fn CreateEstate() -> Element {
                         "Choose folder"
                     }
                 }
+                if !found.is_empty() {
+                    p { class: "create__warning",
+                        Icon { name: "warning", size: 18 }
+                        {existing_warning(&found)}
+                    }
+                    Switch {
+                        label: "Rewrite the estate file",
+                        checked: options().force,
+                        disabled: running,
+                        onchange: move |on: bool| options.write().force = on,
+                    }
+                }
 
+                p { class: "create__label", "What the estate is for" }
+                SegmentedButton {
+                    options: vec![Segment::new("organization", "An organization"), Segment::new("team", "A workload, from interface folders")],
+                    selected: if team() { "team".to_string() } else { "organization".to_string() },
+                    onselect: move |v: String| {
+                        team.set(v == "team");
+                        if v != "team" {
+                            let mut o = options.write();
+                            o.from.clear();
+                            o.name.clear();
+                        }
+                    },
+                }
+                if team() {
+                    p { class: "create__note",
+                        "A workload estate is written from the folders an organization's estate wrote for a delegation, under its interfaces/outgoing/: the delegation's own, delegation-<name>, and that of each delegated resource it was given. satz copies them into interfaces/incoming/ here and writes an estate that runs as the delegation's account."
+                    }
+                    ChipList {
+                        label: "Interface folders",
+                        items: options().from,
+                        disabled: running,
+                        supporting: "--from: the delegation's folder and one place",
+                        onchange: move |v: Vec<String>| options.write().from = v,
+                    }
+                    div { class: "create__actions",
+                        Button {
+                            icon: "folder_open",
+                            variant: ButtonVariant::Tonal,
+                            disabled: running,
+                            onclick: move |_| pick_interface_folders(options),
+                            "Add folders…"
+                        }
+                    }
+                    TextField {
+                        label: "Name",
+                        value: options().name,
+                        monospace: true,
+                        disabled: running,
+                        supporting: "--name: the estate's name. Left blank, the delegation's.",
+                        oninput: move |v: String| options.write().name = v,
+                    }
+                }
+                if !team() {
                 h3 { class: "create__subheading", "What satz cannot derive" }
                 TextField {
                     label: "Customer shortname",
@@ -111,13 +218,6 @@ pub fn CreateEstate() -> Element {
                     supporting: "Left blank, satz writes europe-west3.",
                     oninput: move |v: String| options.write().default_region = v,
                 }
-                TextField {
-                    label: "Workload folder",
-                    value: options().workload_folder_name,
-                    placeholder: "Workloads",
-                    disabled: running,
-                    supporting: "The folder directly under the organisation that holds the customer's and the teams' folders. Left blank, they live at the organisation and no folder is created.",
-                    oninput: move |v: String| options.write().workload_folder_name = v,
                 }
                 p { class: "create__label", "Terraform tool" }
                 SegmentedButton {
@@ -145,9 +245,10 @@ pub fn CreateEstate() -> Element {
                     onchange: move |v: Vec<String>| options.write().providers = v,
                 }
 
-                h3 { class: "create__subheading", "From your credentials, unless you state them" }
+                if !team() {
+                h3 { class: "create__subheading", "From your sign-in, unless you state them" }
                 p { class: "create__note",
-                    "Left blank, each of these is read from the credentials you are signed in with. State one to override what the platform answers."
+                    "Left blank, each of these is read from the account you are signed in with. State one to override what the platform answers."
                 }
                 TextField {
                     label: "Customer id",
@@ -165,6 +266,7 @@ pub fn CreateEstate() -> Element {
                     supporting: "From billingAccounts.list, when exactly one account is open to you.",
                     oninput: move |v: String| options.write().billing_account_infra = v,
                 }
+                }
 
                 code { class: "create__preview", "{preview}" }
                 div { class: "create__actions",
@@ -175,7 +277,7 @@ pub fn CreateEstate() -> Element {
                         onclick: move |_| {
                             handle.send(AppAction::CreateEstate {
                                 dir: PathBuf::from(&dir),
-                                options: options(),
+                                options: run.clone(),
                             });
                         },
                         "Create"
@@ -195,8 +297,15 @@ pub fn CreateEstate() -> Element {
                     Icon { name: "terminal", size: 20 }
                     code { class: "create__log-title", {last.unwrap_or_else(|| "nothing created yet".to_string())} }
                     span { class: "grow" }
-                    if let Some(o) = &outcome {
-                        Chip { kind: ChipKind::Assist, icon: if o.ok { "check_circle" } else { "error" }, label: o.text.clone(), error: !o.ok }
+                    if let Some(o) = outcome.as_ref().filter(|o| o.ok) {
+                        Chip { kind: ChipKind::Assist, icon: "check_circle", label: o.text.clone() }
+                    }
+                }
+                // a refusal is satz's whole sentence, wrapped, never cut to fit a chip
+                if let Some(o) = outcome.as_ref().filter(|o| !o.ok) {
+                    p { class: "create__refusal",
+                        Icon { name: "error", size: 18 }
+                        "{o.text}"
                     }
                 }
                 if running {
@@ -204,7 +313,7 @@ pub fn CreateEstate() -> Element {
                 }
                 p { class: "create__privacy",
                     Icon { name: "lock", size: 18 }
-                    "What satz derives — an organisation id, a billing account, an administrator's address — is printed here and written into the estate satz creates. This app keeps none of it: not in its settings, not in a file of its own."
+                    "What satz derives — an organization id, a billing account, an administrator's address — is printed here and written into the estate satz creates. This app keeps none of it: not in its settings, not in a file of its own."
                 }
                 pre { class: "log",
                     for (i, line) in log.iter().enumerate() {
@@ -241,6 +350,27 @@ mod tests {
         assert_eq!(
             run_line(Path::new(""), &options.argv()),
             "satz init --customer-shortname acme"
+        );
+    }
+
+    #[test]
+    fn the_warning_names_every_file_found() {
+        let line = existing_warning(&["config.toml".to_string(), ".gitignore".to_string()]);
+        assert!(
+            line.starts_with(
+                "This folder already holds an estate's files: config.toml, .gitignore."
+            )
+        );
+        assert!(line.contains("Rewrite the estate file"));
+        assert!(line.contains("A refused run writes nothing."));
+        assert!(!line.contains("interface folder"));
+        let copy = Path::new("interfaces")
+            .join("incoming")
+            .join("delegation-shop")
+            .to_string_lossy()
+            .into_owned();
+        assert!(
+            existing_warning(&[copy]).ends_with("An interface folder's earlier copy is replaced.")
         );
     }
 

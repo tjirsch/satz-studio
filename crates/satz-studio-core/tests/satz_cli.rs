@@ -267,7 +267,7 @@ async fn log_of(cli: &SatzCli, argv: &[String], wrote: Option<&Path>) -> Vec<Str
 /// The one-click commands beside the palette — `whoami`, `transpile --check` and
 /// `questions --format text` on the estate — put satz's own prose into the log: lines
 /// of text, and none that opens a JSON object or array. `whoami` runs `--offline`
-/// here, which needs no credential; the button runs it online.
+/// here, which needs no sign-in; the button runs it online.
 #[tokio::test]
 async fn the_one_click_commands_print_prose() {
     let cli = cli().await;

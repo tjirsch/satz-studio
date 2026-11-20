@@ -1,6 +1,6 @@
 //! The Estate destination: the main file as it stands — the params it binds, the
-//! resources it declares, the interfaces it publishes to the projects that read it, and
-//! the workload packs it keeps: four tabs over one estate.
+//! resources it declares, and the interfaces it publishes to the projects that read it:
+//! three tabs over one estate.
 //!
 //! Decisions and this are not two views of one thing: Decisions is the worklist of what
 //! the estate has NOT decided, and this is what it currently says. A param that answers
@@ -14,15 +14,12 @@ use crate::state::{AppStore, AppStoreStoreExt, DiagnosticSelection, EstateStoreS
 use crate::views::interfaces::InterfacesPane;
 use crate::views::params::ParamsPane;
 use crate::views::resources::ResourcesPane;
-use crate::views::workload_packs::WorkloadPacksPane;
-use satz_studio_core::satz::reports::PackState;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Pane {
     Params,
     Resources,
     Interfaces,
-    WorkloadPacks,
 }
 
 #[component]
@@ -32,7 +29,7 @@ pub fn EstateView() -> Element {
     let open = app.open().cloned();
     let mut pane = use_signal(|| Pane::Params);
 
-    // A diagnostic names a line, and a line is a node: the drawer's selection belongs
+    // A finding names a line, and a line is a node: the drawer's selection belongs
     // to the tree, so choosing one opens the tab that can show it.
     use_effect(move || {
         if (selection.0)().is_some() {
@@ -44,11 +41,6 @@ pub fn EstateView() -> Element {
         return rsx! {};
     };
     let model = app.estate().model().cloned();
-    // An organisation's components are the preset library's packs, in Presets; workload
-    // packs are for an estate in a delegated folder or project.
-    let workload_packs = model.as_deref().is_some_and(|m| {
-        m.packs.works_in != satz_studio_core::satz::reports::EstateMode::Organisation
-    });
     let (params, resources) = model
         .as_deref()
         .map(|m| (m.params.len(), m.outline.len()))
@@ -57,18 +49,6 @@ pub fn EstateView() -> Element {
     // them carries, is not one
     let interfaces = match &*app.estate().interfaces().read() {
         Some(Ok(report)) => report.interfaces.len().to_string(),
-        Some(Err(_)) => "!".to_string(),
-        None => "…".to_string(),
-    };
-
-    // the packs that are here; what the source only offers is not the estate's
-    let packs = match &*app.estate().workload_packs().read() {
-        Some(Ok(report)) => report
-            .packs
-            .iter()
-            .filter(|p| p.state != PackState::Available)
-            .count()
-            .to_string(),
         Some(Err(_)) => "!".to_string(),
         None => "…".to_string(),
     };
@@ -98,22 +78,11 @@ pub fn EstateView() -> Element {
                     selected: pane() == Pane::Interfaces,
                     onclick: move |_| pane.set(Pane::Interfaces),
                 }
-                if workload_packs {
-                    Tab {
-                        label: format!("Workload packs ({packs})"),
-                        icon: "inventory",
-                        selected: pane() == Pane::WorkloadPacks,
-                        onclick: move |_| pane.set(Pane::WorkloadPacks),
-                    }
-                }
             }
             match pane() {
                 Pane::Params => rsx! { ParamsPane {} },
                 Pane::Resources => rsx! { ResourcesPane {} },
                 Pane::Interfaces => rsx! { InterfacesPane {} },
-                Pane::WorkloadPacks if workload_packs => rsx! { WorkloadPacksPane {} },
-                // the tab is not this estate's: an organisation's estate that stood on it
-                Pane::WorkloadPacks => rsx! { ParamsPane {} },
             }
         }
     }

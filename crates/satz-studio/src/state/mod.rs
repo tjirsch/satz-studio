@@ -24,19 +24,18 @@ use satz_studio_core::git::WorkTree;
 use satz_studio_core::github::StudioUpdate;
 use satz_studio_core::model::EstateModel;
 use satz_studio_core::satz::reports::{
-    InterfacesReport, InterviewReport, NoticeRow, QuestionsReport, UpdatePackReport,
-    WorkloadPacksReport,
+    InterfacesReport, InterviewReport, NoticeRow, PackSourcesReport, QuestionsReport,
+    UpdatePackReport, WorkloadPacksReport,
 };
 use satz_studio_core::satz::review::ReviewedPack;
 use satz_studio_core::satz::self_update::SatzRelease;
-use satz_studio_core::satz::workload::PackSource;
 use satz_studio_core::satz::{CliLine, EstateSession, ImportReport, QuestionsFormat, SatzBinary};
 use satz_studio_core::settings::Settings;
 
 pub use ansi::strip_ansi;
 pub use app_actions::{AppAction, app_coroutine, run_line};
 pub use estate_actions::{
-    EstateAction, PackOp, command_line, estate_coroutine, quote, reports_dir,
+    EstateAction, PackOp, SourceOp, command_line, edit_file, estate_coroutine, quote, reports_dir,
 };
 pub use pace::{
     ahead_sentence, install_offer, newer_satz_sentence, satz_available, satz_notice,
@@ -106,12 +105,15 @@ pub enum View {
     /// the questions its packs declare and it has not answered
     Decisions,
     /// the preset library's pack lines: which are in, which are off, which the file has
-    /// no line for. Not a destination of a workload estate, which has no library
+    /// no line for. The destination of an estate that holds the library — an
+    /// organization's; a workload estate has none
     Presets,
+    /// the estate's workload packs: templates taken from a source and adapted here
+    Packs,
     /// the estate file itself: its params and its resource tree
     Estate,
-    /// the estate's way to the organisation: who is signed in, what state it is in, and
-    /// the steps — the checks, day 0, the generated code, the plan, the apply
+    /// the estate's way to the organization: who is signed in, what state it is in, and
+    /// the steps — the checks, the bootstrap, the HCL code, the plan, the apply
     Apply,
     /// what the estate hands to people as a file: the decisions sheet
     Documents,
@@ -127,25 +129,25 @@ impl View {
     /// from what the estate HAS to what it still has to decide. A pack is what declares a
     /// question, and `merge-presets` — the command that brings new pack lines in — is in
     /// Packs, so Packs is where the questions in Decisions come from and it stands before
-    /// them. Apply is the estate's way to the organisation, and Documents is what is handed
+    /// them. Apply is the estate's way to the organization, and Documents is what is given
     /// to people once the rest is settled. Those five are the path, each ending with a
     /// bar that leads to the next (`views/path.rs`); Estate stands after them, because
     /// the estate file itself is not a step of the walk. Six; Material 3 puts up to seven
     /// in a navigation rail (ADR 0027, ADR 0028).
-    pub const PRIMARY: [View; 6] = [
+    pub const PRIMARY: [View; 7] = [
         View::Overview,
         View::Presets,
+        View::Packs,
         View::Decisions,
         View::Apply,
         View::Documents,
         View::Estate,
     ];
 
-    /// The primary destinations of the open estate. An estate that works in a delegated
-    /// folder or project and holds no preset library, as satz's presets report says
-    /// ([`PacksReport::has_presets`]), has no Presets destination: the library belongs to
-    /// the organisation's estate, and its components are the Estate destination's
-    /// Workload packs tab.
+    /// The primary destinations of the open estate. An estate that holds no preset
+    /// library, as satz's presets report says ([`PacksReport::has_presets`]) — a workload
+    /// estate without one of its own — has no Presets destination: the library is the
+    /// organization's estate's.
     pub fn primary(presets: bool) -> Vec<View> {
         View::PRIMARY
             .into_iter()
@@ -164,6 +166,7 @@ impl View {
             View::Overview => "Overview",
             View::Decisions => "Decisions",
             View::Presets => "Presets",
+            View::Packs => "Packs",
             View::Estate => "Estate",
             View::Apply => "Apply",
             View::Documents => "Documents",
@@ -180,6 +183,7 @@ impl View {
             View::Overview => "dashboard",
             View::Decisions => "quiz",
             View::Presets => "inventory_2",
+            View::Packs => "package_2",
             View::Estate => "description",
             View::Apply => "rocket_launch",
             View::Documents => "article",
@@ -196,6 +200,7 @@ impl View {
             View::Overview
                 | View::Decisions
                 | View::Presets
+                | View::Packs
                 | View::Estate
                 | View::Apply
                 | View::Documents
@@ -204,8 +209,8 @@ impl View {
     }
 }
 
-/// The development routes — the Gallery — are behind `SATZ_STUDIO_DEBUG`: the component
-/// checklist is for whoever changes the components, not for an operator's rail.
+/// The development routes — the Gallery — are behind `SATZ_STUDIO_DEBUG`: the UI
+/// checklist is for whoever changes the Material widgets, not for an operator's rail.
 pub fn debug_routes() -> bool {
     std::env::var_os("SATZ_STUDIO_DEBUG").is_some_and(|v| !v.is_empty())
 }
@@ -252,10 +257,10 @@ impl Door {
     pub fn supporting(self) -> &'static str {
         match self {
             Door::Create => {
-                "A new estate, made by satz init: the config, the directories and the estate file, with what your credentials answer already in it."
+                "A new estate, made by satz init: the config, the directories and the estate file, with what your sign-in answers already in it."
             }
             Door::Import => {
-                "An estate made by satz import out of what exists: a tofu show -json document, a live organisation, folder or project, Terraform HCL, or a legacy YAML file."
+                "An estate made by satz import out of what exists: a tofu show -json document, a live organization, folder or project, Terraform HCL, or a legacy YAML file."
             }
             Door::Open => "An estate that is already on disk: choose the folder that holds it.",
         }
@@ -335,9 +340,9 @@ pub struct EstateStore {
     pub last_command: Option<String>,
     /// how the last command or tool call ended
     pub outcome: Option<CommandOutcome>,
-    /// the estate is being reloaded (questions, parse, model, the compile's own check)
+    /// the estate is being reloaded (questions, parse, model, the transpile's own check)
     pub loading: bool,
-    /// what the generated HCL directory holds, read at every reload: the Overview says
+    /// what the HCL directory holds, read at every reload: the Overview says
     /// what is still owed from it
     pub hcl: HclState,
     /// whether git holds the estate file's directory in a work tree, asked at every
@@ -357,17 +362,32 @@ pub struct EstateStore {
     /// what the estate publishes, from `satz interfaces` at every reload — or satz's
     /// reason it could not say; `None` until the first reload has asked
     pub interfaces: Option<Result<InterfacesReport, String>>,
+    /// the estate's pack sources as `satz pack-source list` names them — or satz's reason
+    /// it could not; read when the Packs view first stands, and again after a source is
+    /// added or removed
+    pub pack_sources: Option<Result<PackSourcesReport, String>>,
+    /// what satz said to the last `satz pack-source add` or `remove`: `Ok` with the
+    /// source's name when it was written, `Err` with satz's refusal; `None` while one runs
+    /// and before the first
+    pub source_change: Option<Result<String, String>>,
     /// the estate's workload packs as `satz packs` listed them against
     /// [`Self::pack_source`] — or satz's reason it could not; `None` until a source has
-    /// been read, which happens only when the operator asks: the default source is a
+    /// been chosen, which happens only when the operator asks: a GitHub source is a
     /// network read
     pub workload_packs: Option<Result<WorkloadPacksReport, String>>,
-    /// the source the list was read from, and the one a fetch and an update read
-    pub pack_source: Option<PackSource>,
+    /// the packs of `packs_dir` as `satz packs --local` listed them — no pack source read,
+    /// so no network — with the interface folders the estate uses; read when Packs first
+    /// stands and after every pack command; `None` until then
+    pub local_packs: Option<Result<WorkloadPacksReport, String>>,
+    /// the name of the pack source the list was read from, and the one a fetch reads
+    pub pack_source: Option<String>,
     /// what the last `satz update-pack` reported: the edited packs with their
     /// difference stand in the tab until the next list
     pub pack_update: Option<UpdatePackReport>,
-    /// a list, a fetch, an update or a detach is running
+    /// what satz said to the last `satz publish-pack`: its report when the pack was
+    /// published, its refusal as it said it; `None` while one runs and before the first
+    pub pack_publish: Option<Result<satz_studio_core::satz::reports::Published, String>>,
+    /// a list, a fetch, an update, a detach or a publish is running
     pub packs_busy: bool,
     /// who is signed in on this machine and what the estate's live commands run as, as
     /// `satz_whoami` answered — or why it could not; `None` until it has been asked,
@@ -379,9 +399,9 @@ pub struct EstateStore {
 #[derive(Debug, Clone, PartialEq)]
 pub enum SignIn {
     Checking,
-    /// satz's report: the credentials, the estate's account and what was checked
+    /// satz's report: the sign-in, the estate's account and what was checked
     Known(Box<satz_studio_core::satz::reports::WhoamiReport>),
-    /// satz's refusal, in its own words — no credentials, or a token that is not minted
+    /// satz's refusal, in its own words — no sign-in, or a token that is not minted
     Refused(String),
 }
 
@@ -400,7 +420,7 @@ impl PackReviewState {
         }
     }
 
-    /// The review's findings as diagnostics, for the drawer; none for a failed review,
+    /// The review's findings, for the drawer; none for a failed review,
     /// whose reason the view and the toast carry.
     pub fn diagnostics(&self) -> Vec<Diagnostic> {
         match self {
@@ -426,8 +446,8 @@ pub struct CommandOutcome {
 
 /// One `satz init` run behind the Create door, reset when a run starts.
 ///
-/// `init` derives a customer's organisation id, billing account and administrator
-/// address from the credentials and prints where each came from. Those lines are held
+/// `init` derives a customer's organization id, billing account and administrator
+/// address from the sign-in and prints where each came from. Those lines are held
 /// here, in memory, for as long as the window shows them; they are written into the
 /// estate satz created and nowhere else — not into `Settings`, not into a file of this
 /// app's own.
@@ -450,8 +470,8 @@ pub struct CreateStore {
 /// what it wrote, what it could not derive and what it left out.
 ///
 /// The privacy rule of [`CreateStore`] holds here word for word, and a live import makes
-/// it matter more: the run prints the organisation id, the customer directory id, the
-/// billing account and an administrator's address it derived from the credentials. Those
+/// it matter more: the run prints the organization id, the customer directory id, the
+/// billing account and an administrator's address it derived from the sign-in. Those
 /// lines live here, in memory, for as long as the window shows them; they are written
 /// into the estate satz created and nowhere else — not into `Settings`, not into a file
 /// of this app's own.
@@ -534,6 +554,9 @@ pub struct AppStore {
     pub door: Door,
     /// the command palette is over the window
     pub palette_open: bool,
+    /// the palette opens on the pack review rather than its first command: a finding of
+    /// the reviewed pack was chosen in the drawer
+    pub palette_review: bool,
     pub snackbar: VecDeque<Toast>,
     pub drawer_open: bool,
     pub estate: EstateStore,
@@ -564,6 +587,7 @@ impl AppStore {
             nav: View::default(),
             door: Door::default(),
             palette_open: false,
+            palette_review: false,
             snackbar: VecDeque::new(),
             drawer_open: false,
             estate: EstateStore::default(),
@@ -576,7 +600,7 @@ impl AppStore {
     }
 }
 
-/// The diagnostic the drawer selected last; the estate views scroll to it.
+/// The finding the drawer selected last; the estate views scroll to it.
 #[derive(Clone, Copy, PartialEq)]
 pub struct DiagnosticSelection(pub Signal<Option<Diagnostic>>);
 
@@ -642,6 +666,7 @@ mod tests {
             View::Overview,
             View::Decisions,
             View::Presets,
+            View::Packs,
             View::Estate,
             View::Apply,
             View::Documents,
@@ -659,18 +684,17 @@ mod tests {
         assert_eq!(icons.len(), all.len());
     }
 
-    /// An estate in a delegated folder or project has no preset library, so its rail has no
-    /// Presets destination; every other destination stands where it stood.
+    /// An organization's estate has Presets and Packs; an estate without a preset library
+    /// has every other destination, Packs among them.
     #[test]
     fn an_estate_without_presets_has_every_primary_destination_but_presets() {
         assert_eq!(View::primary(true), View::PRIMARY);
         let workload = View::primary(false);
-        assert!(!workload.contains(&View::Presets));
-        let rest: Vec<View> = View::PRIMARY
-            .into_iter()
-            .filter(|v| *v != View::Presets)
-            .collect();
-        assert_eq!(workload, rest);
-        assert_eq!(View::Presets.label(), "Presets");
+        assert!(!workload.contains(&View::Presets) && workload.contains(&View::Packs));
+        assert_eq!(workload.len(), View::PRIMARY.len() - 1);
+        assert_eq!(
+            (View::Presets.label(), View::Packs.label()),
+            ("Presets", "Packs")
+        );
     }
 }

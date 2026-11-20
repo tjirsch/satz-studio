@@ -44,7 +44,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn colour_codes_go_and_text_stays() {
+    fn color_codes_go_and_text_stays() {
         assert_eq!(strip_ansi("\u{1b}[1;31merror\u{1b}[0m: x"), "error: x");
         assert_eq!(strip_ansi("plain"), "plain");
     }

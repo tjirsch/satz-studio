@@ -10,7 +10,7 @@ use super::{EditMode, ModelError, SourceValue, StrPart};
 use crate::cst::{Cst, NodeId, NodeKind, ValueKind};
 
 /// The value node's [`SourceValue`]. `None` when the grammar could not read it whole —
-/// an `Error` node somewhere below it — which the parse diagnostic names; a row over
+/// an `Error` node somewhere below it — which the parse finding names; a row over
 /// a partial value would edit what is not there.
 pub(super) fn decode(cst: &Cst, id: NodeId, env: &Env) -> Result<Option<SourceValue>, ModelError> {
     let node = cst.node(id);

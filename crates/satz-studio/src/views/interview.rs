@@ -28,8 +28,7 @@ use crate::components::{
     Button, ButtonVariant, Card, CardVariant, Chip, ChipKind, Draft, FieldKind, Icon,
     LinearProgress, List, ListItem, Switch, TypedField,
 };
-use crate::state::{AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt, View};
-use crate::views::path::NextStep;
+use crate::state::{AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt};
 
 /// The questions in the order the view walks them: the unanswered ones as the report
 /// lists them, then — when asked for — the answered ones and the ones not asked.
@@ -527,7 +526,6 @@ pub fn DecisionsView() -> Element {
                     }
                 }
             }
-            NextStep { from: View::Decisions }
         }
     }
 }
@@ -903,16 +901,16 @@ mod tests {
     fn an_empty_field_answers_a_question_that_says_what_empty_means() {
         let kind = FieldKind::Text;
         let empty = Draft::of_json(None, kind);
-        assert!(!held_param(kind, "workload_folder_name", None, false, &empty).valid);
-        let h = held_param(kind, "workload_folder_name", None, true, &empty);
+        assert!(!held_param(kind, "team_folder_name", None, false, &empty).valid);
+        let h = held_param(kind, "team_folder_name", None, true, &empty);
         assert!(h.valid);
         assert_eq!(h.value, json!(""));
-        let mut folder = q("workload_folder_name", QuestionState::Answered);
-        folder.empty = Some("the organisation".into());
+        let mut folder = q("team_folder_name", QuestionState::Answered);
+        folder.empty = Some("no team folder".into());
         folder.current = Some(json!(""));
         assert_eq!(
             listed(&folder),
-            "workload_folder_name · answered: \"\" (the organisation)"
+            "team_folder_name · answered: \"\" (no team folder)"
         );
     }
 

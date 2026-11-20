@@ -90,7 +90,7 @@ fn the_interview_skeleton_is_scanned_line_for_line() {
         active[0]
             .phase_comment
             .as_deref()
-            .is_some_and(|c| c.starts_with("The day-0 params")),
+            .is_some_and(|c| c.starts_with("The bootstrap params")),
         "{:?}",
         active[0].phase_comment
     );

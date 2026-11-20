@@ -16,7 +16,7 @@
 # sidecar — a missing sidecar is a failure, never a skipped check — runs it with
 # SATZ_NO_MODIFY_PATH=1 in its environment, so no shell profile is edited (satz's
 # install-path is ~/.local/bin; the installer's --no-modify-path flag is deprecated
-# in favour of the variable) and prints the version of
+# in favor of the variable) and prints the version of
 # the binary it installed, which must be the tag's.
 #
 # Windows: satz's release installs there through PowerShell, which this script does

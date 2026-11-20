@@ -1,4 +1,4 @@
-//! The NOTICE every bundle carries holds satz's NOTICE verbatim: satz-core is compiled
+//! The NOTICE every bundle carries holds satz's NOTICE verbatim: satz-core is built
 //! into the app, and Apache 2.0 §4(d) asks a redistribution of a work that includes it to
 //! carry its attribution notices. A pin bump that changes `vendor/satz/NOTICE` fails here
 //! until the repository's `NOTICE` carries the new text.

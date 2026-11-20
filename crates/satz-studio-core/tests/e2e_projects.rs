@@ -1,7 +1,7 @@
 //! The Interfaces tab over the real satz, on a copy of satz's smoke showcase: `satz
 //! interfaces` read through the CLI as the reload reads it — the core exports, the
 //! declared interfaces, one interface per entry of a list that a top-level `each` writes
-//! (satz ADR 0075), and the request points with the pattern each field's value matches.
+//! (satz ADR 0075), and the list params with the pattern each field's value matches.
 
 #[path = "fixtures/e2e/support.rs"]
 mod e2e;
@@ -12,7 +12,7 @@ use satz_studio_core::satz::project;
 use satz_studio_core::satz::reports::ExportHow;
 
 #[tokio::test]
-async fn the_report_reads_what_the_estate_publishes_and_what_projects_may_request() {
+async fn the_report_reads_what_the_estate_publishes_and_its_list_params() {
     let copy = support::copy_smoke();
     let session = copy.open("showcase.satz").await;
 
@@ -38,7 +38,7 @@ async fn the_report_reads_what_the_estate_publishes_and_what_projects_may_reques
         .expect("archive exports archive_project_id");
     assert_eq!(id.attach, ["google_project_iam_member"]);
     assert!(
-        report.core().any(|e| e.name == "workload_folder"),
+        report.core().any(|e| e.name == "infra_folder"),
         "a core export"
     );
     let map = report
@@ -71,10 +71,10 @@ async fn the_report_reads_what_the_estate_publishes_and_what_projects_may_reques
     // the list a project may add entries to, the shape of an entry, and the pattern the
     // whole of each field's value matches
     let topics = report
-        .requests
+        .list_params
         .iter()
         .find(|r| r.param == "event_topics")
-        .expect("the showcase takes requests for event_topics");
+        .expect("the showcase declares the list param event_topics");
     assert_eq!(topics.key, "name");
     assert_eq!(topics.fields, ["name", "retention", "subscription"]);
     assert_eq!(

@@ -1,5 +1,5 @@
 //! satz-studio — the window. `main` opens it at 1280×840 (900×600 at the smallest), titled
-//! with the app's version, initialises tracing from `RUST_LOG`, and launches [`app::App`].
+//! with the app's version, initializes tracing from `RUST_LOG`, and launches [`app::App`].
 
 mod app;
 mod components;

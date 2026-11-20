@@ -1,9 +1,9 @@
 //! `SatzCli::run_in`: the runner behind Create, which runs satz IN a directory and
 //! passes no `--config`.
 //!
-//! The real `satz init` is never run here. It reads the Application Default Credentials
-//! and asks Google for an organisation, a billing account and an identity, so running
-//! it would put a live organisation id, a billing account id and an administrator's
+//! The real `satz init` is never run here. It reads the sign-in
+//! and asks Google for an organization, a billing account and an identity, so running
+//! it would put a live organization id, a billing account id and an administrator's
 //! address into a test's output. What is proved instead is everything the app decides:
 //! the argv (`InitOptions::argv`, in the module's own tests), where the child runs, and
 //! that no `--config` reaches it. A fake `satz` reports both back.
@@ -142,13 +142,13 @@ async fn a_refusal_is_the_exit_status_and_what_satz_said() {
     let home = tempfile::tempdir().unwrap();
     let bin = binary(support::fake(
         home.path(),
-        "echo 'error: the credentials are not usable' >&2; exit 2",
+        "echo 'error: the sign-in is not usable' >&2; exit 2",
     ));
     let target = tempfile::tempdir().unwrap();
     let (ok, lines) = run_in(&bin, target.path(), &["init".to_string()]).await;
 
     assert!(!ok);
-    assert_eq!(stderr(&lines), ["error: the credentials are not usable"]);
+    assert_eq!(stderr(&lines), ["error: the sign-in is not usable"]);
 }
 
 /// A command that will not end is cancellable, as a streamed command is.
@@ -182,7 +182,8 @@ async fn a_run_that_hangs_is_cancelled() {
     drain.await.unwrap();
 }
 
-/// The guard in front of the run, against the two directories a Create must not touch.
+/// The guard in front of the run: a directory that is not there. One that holds an
+/// estate's files is no refusal — `existing` names them and the form warns.
 #[test]
 fn the_target_is_checked_before_anything_runs() {
     let tmp = tempfile::tempdir().unwrap();
@@ -195,10 +196,7 @@ fn the_target_is_checked_before_anything_runs() {
     ));
 
     std::fs::write(tmp.path().join("config.toml"), "yaml_dir = \"yaml\"\n").unwrap();
-    assert!(matches!(
-        check_target(tmp.path()),
-        Err(SatzError::AlreadyAnEstate(_))
-    ));
+    assert!(check_target(tmp.path()).is_ok());
 }
 
 /// What `created` answers over the directory a real `init` leaves behind, built here by

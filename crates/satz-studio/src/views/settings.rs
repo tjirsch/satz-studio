@@ -1,13 +1,15 @@
 //! The Settings view: every field of `Settings` as a form, saved as one file; the
-//! detected satz beside its path; and the agentic client the Agent destination starts.
+//! detected satz beside its path; the agentic client the Agent destination starts; and
+//! the editor a pack's file opens in.
 //!
-//! There is no credential here and no engine to choose: satz-studio runs no model
+//! There is no sign-in here and no engine to choose: satz-studio runs no model
 //! ([ADR 0020](../../../../docs/adr/0020-the-agent-is-an-external-client-that-studio-configures-and-starts.md)).
 
 use std::path::PathBuf;
 
 use dioxus::prelude::*;
 use satz_studio_core::agent::{self, AgentError, DEFAULT_AGENT_COMMAND};
+use satz_studio_core::editor::{self, Platform};
 use satz_studio_core::satz::Allow;
 use satz_studio_core::settings::{Theme, settings_path};
 
@@ -74,6 +76,8 @@ pub fn SettingsView() -> Element {
     // the command is looked up when it is used, not held: a client installed while the
     // window is open is found by the next press. What the field says is what is there now
     let (agent_text, agent_error) = agent_status(&draft().agent_command);
+    // an editor whose program is not found is not saved: the field says why
+    let (editor_text, editor_error) = editor_status(&draft().editor);
 
     let allow_value = draft().mcp_allow.as_arg().to_string();
     let theme_value = match draft().theme {
@@ -175,6 +179,19 @@ pub fn SettingsView() -> Element {
                     p { class: "settings__label", "The agentic client the Agent destination starts in the estate's directory, as a command line. satz-studio runs no model of its own: the agent is that client, driven by the satz MCP server the Agent destination configures for the open estate." }
                 }
                 Card { variant: CardVariant::Outlined, class: "settings__card",
+                    h2 { class: "settings__heading", Icon { name: "edit_note", size: 20 } "Editor" }
+                    TextField {
+                        label: "Editor",
+                        value: draft().editor,
+                        placeholder: editor::shown("", Platform::current()),
+                        monospace: true,
+                        supporting: editor_text,
+                        error: editor_error,
+                        oninput: move |v: String| draft.write().editor = v,
+                    }
+                    p { class: "settings__label", "The editor a pack's file opens in from Edit and New pack on the Packs page, as a command line; the file is its last argument, and satz-studio does not wait for it. Empty, the file opens in the system's text editor." }
+                }
+                Card { variant: CardVariant::Outlined, class: "settings__card",
                     h2 { class: "settings__heading", Icon { name: "contrast", size: 20 } "Appearance" }
                     p { class: "settings__label", "Theme" }
                     SegmentedButton {
@@ -214,7 +231,7 @@ pub fn SettingsView() -> Element {
                 }
                 span { class: "grow" }
                 Button { variant: ButtonVariant::Text, disabled: !dirty, onclick: move |_| draft.set(app.settings().cloned()), "Discard" }
-                Button { variant: ButtonVariant::Filled, icon: "save", disabled: !dirty, onclick: move |_| handle.send(AppAction::SaveSettings(draft())), "Save" }
+                Button { variant: ButtonVariant::Filled, icon: "save", disabled: !dirty || editor_error, onclick: move |_| handle.send(AppAction::SaveSettings(draft())), "Save" }
             }
         }
     }
@@ -233,9 +250,42 @@ fn agent_status(command: &str) -> (String, bool) {
     }
 }
 
+/// The line under the Editor: the program it runs, the system's text editor when it is
+/// empty, or why it is not saved — a program that is not found.
+fn editor_status(command: &str) -> (String, bool) {
+    if editor::words(command).is_empty() {
+        return (
+            format!(
+                "the system's text editor: {}",
+                editor::shown("", Platform::current())
+            ),
+            false,
+        );
+    }
+    match editor::validate(command) {
+        Ok(()) => (format!("runs {} <file>", command.trim()), false),
+        Err(e) => (format!("not saved: {e}"), true),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_empty_editor_is_the_text_editor_and_one_not_installed_is_not_saved() {
+        let (text, error) = editor_status("  ");
+        assert!(!error);
+        assert!(text.starts_with("the system's text editor: "), "{text}");
+
+        let (text, error) = editor_status("cargo --flag");
+        assert!(!error, "{text}");
+        assert_eq!(text, "runs cargo --flag <file>");
+
+        let (text, error) = editor_status("satz-studio-no-such-editor");
+        assert!(error);
+        assert!(text.contains("satz-studio-no-such-editor"));
+    }
 
     #[test]
     fn a_command_that_is_installed_is_its_path_and_one_that_is_not_is_a_fault() {

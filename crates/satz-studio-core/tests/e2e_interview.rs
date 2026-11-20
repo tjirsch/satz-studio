@@ -1,5 +1,5 @@
 //! Interview parity with satz's smoke matrix (`vendor/satz/scripts/smoke.sh`, the
-//! interview step): the eighteen day-0 answers the matrix pipes into `satz interview`,
+//! interview step): the eighteen bootstrap answers the matrix pipes into `satz interview`,
 //! given the app's way — one `satz_interview` call per typed value, then the defaults,
 //! each verified by `satz transpile --check` through the estate's `satz mcp` — end in
 //! the same estate the CLI-driven interview writes on a second copy: complete, with
@@ -18,11 +18,11 @@ async fn the_app_path_and_the_cli_path_end_in_the_same_estate() {
     let session = estate.open("new.satz").await;
     assert_eq!(session.main, main);
 
-    // day 0: the scaffold's eighteen questions, nine of them without a usable default
+    // the bootstrap: the scaffold's eighteen questions, ten of them without a usable default
     let open = support::questions(&session).await;
     assert_eq!(open.summary.total, 18);
     assert_eq!(open.summary.unanswered, 18);
-    assert_eq!(open.summary.blocking, 9);
+    assert_eq!(open.summary.blocking, 10);
     assert!(!open.summary.complete);
 
     let mut last = None;
@@ -80,8 +80,8 @@ async fn the_app_path_and_the_cli_path_end_in_the_same_estate() {
 
     let (report, committed) = support::answer(&session, support::accept_defaults()).await;
     assert_eq!(
-        report.written, 11,
-        "the nine defaults and the two derived names"
+        report.written, 10,
+        "the eight defaults and the two derived names"
     );
     assert!(report.report.summary.complete);
     assert_eq!(report.report.summary.answered, 18);
@@ -123,12 +123,11 @@ async fn the_app_path_and_the_cli_path_end_in_the_same_estate() {
     let theirs = Cst::parse(&support::read(&other_main)).unwrap();
     let (a, b) = (support::params_of(&ours), support::params_of(&theirs));
     assert_eq!(a.len(), 18, "{a:?}");
-    // the workload folder's default is `""`, the organisation — an answer its question
-    // gives a meaning, and accepting it writes the export that publishes it
-    assert_eq!(a["workload_folder_name"], "\"\"");
+    // answering the workload folder writes the section that declares and publishes it
+    assert_eq!(a["workload_folder_name"], "\"Workloads\"");
     assert!(
         support::read(&main)
-            .contains("export \"workload_folder\" = \"organizations/{customer_organization_id}\""),
+            .contains("export \"workload_folder\" = \"${{google_folder.workload_folder.name}}\""),
         "the workload folder's export"
     );
     assert_eq!(a, b, "the same params, whichever client wrote them");
@@ -142,7 +141,7 @@ async fn the_app_path_and_the_cli_path_end_in_the_same_estate() {
             .map(|(path, _, _)| path.as_str())
             .collect::<Vec<_>>(),
         ["presets/estate-core.satz"],
-        "a day-0 estate uses estate-core and nothing else"
+        "a bootstrap estate uses estate-core and nothing else"
     );
     // and outside `params { }` the two files are the same skeleton, byte for byte
     assert_eq!(
@@ -153,12 +152,11 @@ async fn the_app_path_and_the_cli_path_end_in_the_same_estate() {
     assert!(other.temp_files().is_empty(), "{:?}", other.temp_files());
 }
 
-/// satz v0.84.0's two answers the Decisions card sends: the map's change notice, a
-/// choice that is not required, answered `none` — every option bound `false` — and the
-/// workload folder answered `""`, which its question says is the organisation. Each is
-/// one `satz_interview` call the app's way, and each leaves its question answered.
+/// The map's change notice, a choice that is not required, answered `none` as the
+/// Decisions card sends it — every option bound `false` — in one `satz_interview` call
+/// the app's way, leaves its question answered.
 #[tokio::test]
-async fn a_choice_answered_none_and_an_empty_answer_are_answers() {
+async fn a_choice_answered_none_is_an_answer() {
     let estate = support::estate_dir(None);
     let main = estate.create_skeleton("new.satz").await;
     let session = estate.open("new.satz").await;
@@ -200,25 +198,5 @@ async fn a_choice_answered_none_and_an_empty_answer_are_answers() {
     let params = support::params_of(&Cst::parse(&support::read(&main)).unwrap());
     assert_eq!(params["interface_notice_pubsub"], "false");
 
-    // the workload folder, answered "" by hand after the defaults bound it
-    let (report, _) = support::answer(
-        &session,
-        support::one_answer("workload_folder_name", serde_json::json!("")),
-    )
-    .await;
-    let folder =
-        support::within(session.cli.json_report::<QuestionsReport>(&[
-            "questions".to_string(),
-            main.display().to_string(),
-        ]))
-        .await
-        .unwrap()
-        .questions
-        .into_iter()
-        .find(|q| q.subject == "workload_folder_name")
-        .unwrap();
-    assert_eq!(folder.state, QuestionState::Answered, "{report:?}");
-    assert!(folder.empty.is_some());
-    assert_eq!(folder.current, Some(serde_json::json!("")));
     assert!(estate.temp_files().is_empty(), "{:?}", estate.temp_files());
 }

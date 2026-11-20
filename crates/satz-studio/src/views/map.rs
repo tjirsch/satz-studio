@@ -4,9 +4,11 @@
 //! A pack that another needs — and that meets that need alone — is a tree: its card, and
 //! the cards of the packs that need it hung below by right-angle connectors, whatever
 //! phase their lines stand under. A switch is `satz_add_preset` or `satz_remove_preset`: what
-//! a pack needs, what it deploys and what a switch does are satz's pack graph, and the
-//! view derives none of it. Above the sections stands the pack review
-//! ([`crate::views::review`]), for a pack the operator writes rather than switches.
+//! a pack needs, what it creates and what a switch does are satz's pack graph, and the
+//! view derives none of it. The lead is two lines, and the rest of what the view says
+//! about itself is behind the help button at its top-right corner, as a question's `why`
+//! is behind the one on its pack's card. The pack review of a pack the operator writes
+//! rather than switches is in the commands palette ([`crate::views::review`]).
 
 use std::collections::BTreeMap;
 
@@ -18,11 +20,9 @@ use satz_studio_core::satz::reports::{
 
 use crate::components::{
     Button, ButtonVariant, Card, CardVariant, Chip, ChipKind, ConnectorBranch, ConnectorLine,
-    ConnectorTree, Icon, Switch,
+    ConnectorTree, HelpButton, Icon, Switch,
 };
-use crate::state::{AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt, View};
-use crate::views::path::NextStep;
-use crate::views::review::PackReviewCard;
+use crate::state::{AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt};
 
 /// The header of the section for packs the file has no line for.
 pub const ABSENT_HEADER: &str = "Not in this file";
@@ -50,7 +50,7 @@ pub struct Node {
 pub struct Branch {
     /// the child's requirement the parent meets: satz's own, `met` included
     pub requirement: Requirement,
-    /// the child deploys while its requirement is not met
+    /// the child is switched on while its requirement is not met
     pub warn: bool,
     /// a later sibling's connector warns, so the trunk past this branch leads to it
     pub trunk_warn: bool,
@@ -222,7 +222,7 @@ fn flat_sections(
     out
 }
 
-/// Each of the compile's findings about `row`, with the command that answers it where
+/// Each of the transpile's findings about `row`, with the command that answers it where
 /// satz names one: the sentences are the row's, the commands the report's findings whose
 /// subject is the pack.
 pub fn row_findings(report: &PacksReport, row: &PackRow) -> Vec<(String, Option<String>)> {
@@ -296,7 +296,6 @@ pub fn PresetsView() -> Element {
                     Icon { name: "map", size: 48, class: "placeholder__icon" }
                     p { "The estate model is not available — the drawer says why." }
                 }
-                PackReviewCard {}
             }
         };
     };
@@ -308,7 +307,14 @@ pub fn PresetsView() -> Element {
 
     rsx! {
         div { class: "view packs",
-            h1 { class: "view__title", "Presets" }
+            div { class: "view__head",
+                h1 { class: "view__title", "Presets" }
+                span { class: "grow" }
+                HelpButton { title: "Presets",
+                    p { "A switch is satz's add-preset or remove-preset: satz binds the gate, writes the line where the pack graph places it, and refuses a switch while a pack it needs is off or a pack that needs it is on." }
+                    p { "merge-presets reconciles this estate's library with upstream: a pack that is missing is installed, an unmodified one is upgraded, an edited one is forked rather than overwritten. Its flags are in the commands palette, beside the review of a pack written for the preset library." }
+                }
+            }
             if let Some(note) = &report.note {
                 Card { variant: CardVariant::Filled, class: "map__map-card",
                     Icon { name: "map", size: 32, class: "placeholder__icon" }
@@ -338,7 +344,7 @@ pub fn PresetsView() -> Element {
                                 p { "The map declares the choices every other pack hangs from. Switching it on writes " code { "use \"{map.path}\"" } " where the pack graph places it." }
                             } else {
                                 h2 { class: "map__map-title", "The map declares the choices; switch it on to answer them." }
-                                p { code { "use \"{map.path}\"" } " is {map.line.word()}" if let Some(l) = map.at_line { " on line {l}" } ". While it is, no pack question is asked and no pack the map gates deploys." }
+                                p { code { "use \"{map.path}\"" } " is {map.line.word()}" if let Some(l) = map.at_line { " on line {l}" } ". While it is, no pack question is asked and no pack the map gates is switched on." }
                             }
                         }
                         Button {
@@ -354,8 +360,7 @@ pub fn PresetsView() -> Element {
                     }
                 }
             }
-            p { class: "view__lead", "A switch is satz's add-preset or remove-preset: satz binds the gate, writes the line where the pack graph places it, and refuses a switch while a pack it needs is off or a pack that needs it is on. merge-presets reconciles this estate's library with upstream: a pack that is missing is installed, an unmodified one is upgraded, an edited one is forked rather than overwritten. Its flags are in the commands palette." }
-            PackReviewCard {}
+            p { class: "view__lead", "Switch the presets this organization is built from on or off: satz writes each line where the pack graph places it." }
             for (i, f) in loose.iter().enumerate() {
                 div { key: "loose-{i}", class: "pack-card__diag",
                     Icon { name: "error", size: 18 }
@@ -397,7 +402,6 @@ pub fn PresetsView() -> Element {
                     }
                 }
             }
-            NextStep { from: View::Presets }
         }
     }
 }
@@ -447,7 +451,7 @@ fn PackBranch(
             if warn {
                 span { class: "pack-tree__warn",
                     Icon { name: "error", size: 16 }
-                    "deploys while " code { "{parent}" } " is off"
+                    "switched on while " code { "{parent}" } " is off"
                 }
             }
             if let Some(reads) = &reads {
@@ -514,12 +518,12 @@ fn line_chip(row: &PackRow) -> Element {
     rsx! { Chip { kind: ChipKind::Assist, icon, label, error } }
 }
 
-/// What a line state the chip marks in the error colour means, and the edit that answers
+/// What a line state the chip marks in the error color means, and the edit that answers
 /// it: a sentence for `ungated` and for `misplaced`, `None` for every other state, which
 /// the chip says in full.
 ///
 /// satz says this itself where it can — the `ungated-pack` finding, which the card shows
-/// with satz's own `fix:` — and it can only where the file declaring the gate deploys, so
+/// with satz's own `fix:` — and it can only where the file declaring the gate is switched on, so
 /// an estate with the map off hears nothing about a line no answer switches off. This is
 /// what the card says then: a row that carries a finding of its own has none, because
 /// satz's wording wins wherever satz speaks.
@@ -609,12 +613,14 @@ fn PackCard(
                 code { class: "pack-card__path", "{row.path}" }
                 span { class: "grow" }
                 {line_chip(&row)}
-            }
-            if let Some((prompt, why)) = &prompt {
-                p { class: "pack-card__prompt", "{prompt}" }
-                if let Some(why) = why {
-                    p { class: "pack-card__why", "{why}" }
+                if let Some((prompt, Some(why))) = &prompt {
+                    HelpButton { title: prompt.clone(),
+                        p { "{why}" }
+                    }
                 }
+            }
+            if let Some((prompt, _)) = &prompt {
+                p { class: "pack-card__prompt", "{prompt}" }
             }
             if let Some(gate) = &gate {
                 p { class: "pack-card__note", code { "{gate}" } }
@@ -626,7 +632,7 @@ fn PackCard(
                 p { class: "pack-card__note", "The line is gated on " code { "{on}" } ", not on the pack's own gate." }
             }
             if row.role == PackRole::Core {
-                p { class: "pack-card__why", "The day-0 pack every estate starts with: satz does not switch it." }
+                p { class: "pack-card__why", "The bootstrap pack every estate starts with: satz does not switch it." }
             }
             if let Some(why) = &row.by_hand {
                 p { class: "pack-card__why", "Its line is written by hand, never by satz: {why}." }
@@ -648,7 +654,7 @@ fn PackCard(
                     }
                     span { class: "pack-card__note",
                         if row.deploys {
-                            "On. Off binds the gate false and leaves the line: a gated line with a false gate deploys nothing."
+                            "On. Off binds the gate false and leaves the line: a gated line with a false gate creates nothing."
                         } else {
                             "Off. On binds the gate true and makes the line active where the pack graph places it."
                         }
@@ -781,7 +787,8 @@ mod tests {
             packs,
             unmanaged: Vec::new(),
             interfaces: Vec::new(),
-            works_in: satz_studio_core::satz::reports::EstateMode::Organisation,
+            delegated_by: Vec::new(),
+            works_in: satz_studio_core::satz::reports::EstateMode::Organization,
             findings: Vec::new(),
         }
     }
@@ -1081,7 +1088,7 @@ mod tests {
         );
     }
 
-    /// satz reports `ungated-pack` only where the file declaring the gate deploys, so an
+    /// satz reports `ungated-pack` only where the file declaring the gate is switched on, so an
     /// estate with the map off hears it from the card alone.
     #[test]
     fn an_ungated_line_says_what_it_means_and_names_its_gate() {

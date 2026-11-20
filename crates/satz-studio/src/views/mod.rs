@@ -1,4 +1,4 @@
-//! The views. Each is one component the shell renders for its [`crate::state::View`].
+//! The views. Each is one Dioxus component the shell renders for its [`crate::state::View`].
 //! The two helpers below are what the estate views share: a value's source text and a
 //! line's text, sliced from the document tree the reload keeps in the store.
 
@@ -16,8 +16,11 @@ pub mod interfaces;
 pub mod interview;
 pub mod map;
 pub mod overview;
+pub mod pack_sources;
+pub mod packs;
 pub mod params;
 pub mod path;
+pub mod publish_pack;
 pub mod resources;
 pub mod review;
 pub mod satz_release;

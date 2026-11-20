@@ -179,7 +179,7 @@ pub struct ParamRow {
     pub line: u32,
 }
 
-/// One `hcl { … }` block of the file. Raw HCL is emitted verbatim and is opaque to the
+/// One `hcl { … }` block of the file. Raw HCL is written verbatim and is opaque to the
 /// compliance plane, so satz warns on every transpile until `hcl trust "<reason>" { … }`
 /// says it was reviewed, and notes it after. `trusted` is which of the two this is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -231,7 +231,7 @@ impl EstateModel {
     /// The model of `main`, whose parsed text is `cst`. `schema` is the registry, or
     /// the directory it is missing from; `env` the resolved params
     /// (`EstateDir::params`); `questions` the report of `satz_questions`; `packs` the
-    /// report of `satz_presets`; `diagnostics` what the parse and the compile said.
+    /// report of `satz_presets`; `findings` what the parse and the transpile said.
     pub fn build(
         main: &Path,
         cst: &Cst,

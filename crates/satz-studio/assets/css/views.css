@@ -32,23 +32,74 @@
   min-height: 100%;
 }
 
-/* the bar at the end of a step's view: what the next step is for, and the button there */
-.next-step {
+/* the path bar: the window's foot while a step of the path is showing, outside the
+   scrolling content — a docked toolbar holding Back and Next together on the left, then
+   what the next step is for. The description gives way to one ellipsized line, down to
+   nothing; the buttons never shrink */
+.path-bar {
   flex: none;
-  flex-direction: row;
+  display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 12px;
-  flex-wrap: wrap;
-  padding: 8px 16px;
+  min-height: 64px;
+  padding: 0 16px;
+  background: var(--md-sys-color-surface-container);
   color: var(--md-sys-color-on-surface-variant);
 }
 
-.next-step__text {
-  font: var(--md-sys-typescale-body-medium);
+/* the step's purpose, above its button: the bar is the window's foot, so the tooltip opens
+   upward and is aligned to the button's right edge; it wraps at a readable width */
+.path-bar__tip .m-tooltip {
+  top: auto;
+  bottom: calc(100% + 4px);
+  left: auto;
+  right: 0;
+  transform: none;
+  height: auto;
+  max-width: 360px;
+  width: max-content;
+  padding: 4px 8px;
+  line-height: 18px;
+  white-space: normal;
+}
+
+.path-bar__next .m-button__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.path-bar__back,
+.path-bar__next {
+  flex: none;
+}
+
+/* the top bar's status: the estate owes nothing */
+.m-icon-button.top-bar__status--clear {
+  color: var(--app-color-success);
 }
 
 .view__title {
   font: var(--md-sys-typescale-headline-small);
+}
+
+/* a view's title with the help button at its top-right corner */
+.view__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* the dialog a help button opens: one paragraph after another */
+.help-dialog .m-dialog__body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.help-dialog p {
+  margin: 0;
 }
 
 .view__lead {
@@ -490,6 +541,21 @@
   white-space: pre-wrap;
   word-break: break-all;
   user-select: text;
+}
+
+.create__warning,
+.create__refusal {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font: var(--md-sys-typescale-body-small);
+  color: var(--md-sys-color-error);
+  user-select: text;
+}
+
+.create__refusal {
+  font: var(--md-sys-typescale-body-medium);
+  overflow-wrap: anywhere;
 }
 
 .create__actions {
@@ -1997,20 +2063,6 @@
   flex-wrap: wrap;
 }
 
-.overview__clear {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.overview__clear-icon {
-  color: var(--md-sys-color-primary);
-}
-
-.overview__clear-title {
-  font: var(--md-sys-typescale-title-medium);
-}
-
 .overview__facts {
   display: grid;
   grid-template-columns: max-content 1fr;
@@ -2114,6 +2166,22 @@
 .interfaces__name {
   font: var(--md-sys-typescale-title-small);
   font-family: var(--md-ref-typeface-mono);
+}
+
+/* the entries a declared list holds, as chips, and the dialog that adds one */
+.interfaces__entries {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.interfaces__add {
+  min-width: min(560px, 92vw);
+}
+
+.overview__delegated p {
+  margin: 0;
+  user-select: text;
 }
 
 .interfaces__supporting {
@@ -2375,10 +2443,9 @@
   user-select: text;
 }
 
-/* ---- Estate › Workload packs: the Interfaces tab's cards, plus a source row, the
-        actions of a pack and the difference of an edited one ---------------------------- */
+/* ---- Packs: the Interfaces tab's cards, plus the actions of a pack, the difference of
+        an edited one, the Add a source form and a pack's details ------------------------ */
 
-.wpacks__sources,
 .wpacks__actions {
   display: flex;
   align-items: center;
@@ -2386,8 +2453,113 @@
   flex-wrap: wrap;
 }
 
-.wpacks__sources {
-  margin-top: 12px;
+.wpacks__form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* what flows through a pack: the text button that counts it and opens the panel under
+   the row — Incoming and Outgoing side by side where they fit, each a title-small head
+   over groups, each group a source line over a list of two-line entries */
+.wpacks__flow-toggle {
+  gap: 4px;
+}
+
+.wpacks__flow-dot {
+  padding: 0 2px;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.wpacks__flow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px 24px;
+  padding: 12px 16px;
+  border-radius: var(--md-sys-shape-corner-medium);
+  background: var(--md-sys-color-surface-container-low);
+}
+
+.wpacks__flow-side {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.wpacks__flow-side h3 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font: var(--md-sys-typescale-title-small);
+  color: var(--md-sys-color-on-surface);
+}
+
+.wpacks__flow-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.wpacks__flow-source,
+.wpacks__flow-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.wpacks__flow-source {
+  font: var(--md-sys-typescale-label-large);
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.wpacks__flow-list {
+  margin: 0;
+  padding-left: 24px;
+  list-style: none;
+  font: var(--md-sys-typescale-body-medium);
+  user-select: text;
+}
+
+.wpacks__flow-list li + li {
+  margin-top: 6px;
+}
+
+.wpacks__flow-why {
+  margin: 0 0 0 16px;
+}
+
+/* a pack's details: two sections, each a title-small head over a list of declarations */
+.wpacks__details {
+  min-width: min(640px, 92vw);
+  max-width: min(880px, 92vw);
+}
+
+.wpacks__section h3 {
+  margin: 16px 0 4px;
+  font: var(--md-sys-typescale-title-small);
+  color: var(--md-sys-color-on-surface);
+}
+
+.wpacks__section:first-child h3 {
+  margin-top: 0;
+}
+
+.wpacks__decls {
+  margin: 0;
+  padding-left: 20px;
+  font: var(--md-sys-typescale-body-medium);
+  user-select: text;
+}
+
+.wpacks__decls li + li {
+  margin-top: 4px;
+}
+
+.wpacks__unmet {
+  color: var(--md-sys-color-error);
 }
 
 .wpacks__diff {

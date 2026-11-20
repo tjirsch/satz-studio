@@ -119,8 +119,6 @@ pub enum SatzError {
     },
     #[error("{0}: no such directory — a new estate is created in a directory that exists")]
     TargetMissing(PathBuf),
-    #[error("{0}: already holds a config.toml — open that estate instead of creating one over it")]
-    AlreadyAnEstate(PathBuf),
     #[error("{0}: no such file — an import reads a source that is there")]
     SourceMissing(PathBuf),
     #[error(

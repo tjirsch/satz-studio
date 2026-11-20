@@ -2,7 +2,7 @@ use dioxus::prelude::*;
 
 use crate::components::{NavRail, NavRailItem};
 use crate::state::{AppStore, AppStoreStoreExt, EstateStoreStoreExt, View, debug_routes};
-use crate::views::overview::{Facts, owed};
+use crate::views::overview::owed_now;
 
 /// The rail: the six primary destinations in the order the work happens, and Agent,
 /// Commands and Settings bottom-aligned under them. Commands is not a destination — it
@@ -22,30 +22,8 @@ pub fn NavigationRail() -> Element {
         .as_ref()
         .map(|q| q.summary.unanswered)
         .unwrap_or(0);
-    let owes = if has_estate {
-        let open = app.open().cloned();
-        let model = app.estate().model().cloned();
-        let diagnostics = app.estate().diagnostics().cloned();
-        let hcl = app.estate().hcl().cloned();
-        let work_tree = app.estate().work_tree().cloned();
-        open.map(|open| {
-            owed(&Facts {
-                estate: &open.name,
-                deployment_mode: open.deployment_mode.as_deref(),
-                hcl,
-                work_tree: work_tree.as_ref(),
-                questions: questions.as_ref(),
-                model: model.as_deref(),
-                diagnostics: &diagnostics,
-                held_notices: app.estate().notices().read().len(),
-            })
-            .len()
-        })
-        .unwrap_or(0)
-    } else {
-        0
-    };
-    // an estate in a delegated folder or project has no preset library, and no Presets
+    let owes = owed_now(app).map_or(0, |owed| owed.len());
+    // a workload estate without a preset library of its own has no Presets
     // destination; until the model is read the rail shows every destination
     let presets = app
         .estate()

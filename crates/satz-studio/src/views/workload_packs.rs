@@ -1,48 +1,171 @@
-//! The Estate destination's Workload packs tab: the packs in the estate's `packs_dir` as
-//! `satz packs` lists them against a source — the repository's own, the ones fetched and
-//! how each stands — and what the source holds beyond them. A fetch is `satz get-pack`,
-//! an update `satz update-pack`, and a pack edited here is shown with its difference and
-//! written only when the operator says so (ADR 0024). The rows are satz's report; the
-//! app derives no state of its own.
+//! The Packs view's pane: the estate's pack sources ([`PackSourcesCard`]), then the packs
+//! of the estate's `packs_dir` — first every one the estate `use`s, read from its own `use`
+//! lines, then the others. `satz packs --local`, which reads no pack source, gives each its
+//! state and declarations as soon as the view stands; once a source is listed with `satz
+//! packs --source <name>`, its rows win, saying how each pack stands against it, and what
+//! the source holds beyond them is listed too. A fetch is
+//! `satz get-pack --source`, an update `satz update-pack` from each pack's recorded
+//! source, and a pack edited here is shown with its difference and written only when the
+//! operator says so (ADR 0024). A new pack is the repository's own: written and formatted,
+//! its `use` line added through the app's writer, and opened in the application the
+//! system gives `.satz` files, as Edit opens any pack (ADR 0031); once it works, "Store in
+//! a pack source…" copies it into a folder source with `satz publish-pack`
+//! ([`PublishDialog`]). Each listed pack — fetched or only available — expands to what flows
+//! through it ([`PackFlow`]): the interface values it reads, grouped by what gives each
+//! against the open estate as `satz packs --estate` matched it (satz's ADR 0100), and the
+//! values it exports, grouped by interface; a read the estate does not give marks the row
+//! "Unmet read". Its details ([`PackDetails`]) hold its params and list params. When an external editor is done with a pack is
+//! not knowable, so the card's Reload reads the estate and the listed source again. The
+//! states and the matches are satz's report; the app derives none of its own.
 
 use std::path::PathBuf;
 
 use dioxus::prelude::*;
+use satz_studio_core::cst::UseState;
 use satz_studio_core::edit::Edit;
 use satz_studio_core::satz::reports::{
-    PackNeed, PackState, UpdateAction, UpdatedPack, WorkloadPackRow, WorkloadPacksReport,
+    InterfaceFolder, PackExport, PackState, UpdateAction, UpdatePackReport, UpdatedPack,
+    WorkloadPackRow, WorkloadPacksReport,
 };
-use satz_studio_core::satz::workload::{PackSource, Which};
+use satz_studio_core::satz::workload::{Which, new_pack_id};
 
 use crate::components::{
-    Button, ButtonVariant, Card, CardVariant, Chip, ChipKind, Dialog, Icon, LinearProgress,
+    Button, ButtonVariant, Card, CardVariant, Chip, ChipKind, Dialog, HelpButton, Icon, IconButton,
+    LinearProgress, TextField,
 };
-use crate::state::{AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt, PackOp};
+use crate::state::{
+    AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt, PackOp, SourceOp, edit_file,
+};
+use crate::views::pack_sources::{PackSourcesCard, Sheet};
+use crate::views::publish_pack::PublishDialog;
 
-/// Which delegated values a pack reads, in the words its row shows; none for a pack that
-/// reads neither. Each is the default of a param of the pack: an estate that was not
-/// delegated that value answers the param itself, so no pack is left out for it.
-fn needs_text(needs: &[PackNeed]) -> Option<String> {
-    let words: Vec<&str> = needs
-        .iter()
-        .map(|n| match n {
-            PackNeed::Folder => "the delegated folder",
-            PackNeed::Project => "the delegated project",
-        })
-        .collect();
-    (!words.is_empty()).then(|| format!("reads {}", words.join(" and ")))
+/// What gives a value a pack reads, as satz matched the read against the estate: the
+/// group the expander lists it under.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Given {
+    /// the interface folder that gives it — the first of `met_by` where several do
+    Folder(String),
+    /// the estate sets the param the read is the value of, so the read is not made
+    Estate,
+    /// the estate does not give it
+    Unmet,
 }
 
-/// The word and the icon of a pack's state chip.
-fn state_chip(state: PackState) -> (&'static str, &'static str) {
+impl Given {
+    /// The folders first, in the order the pack first reads from them, then the estate's,
+    /// then what is not given.
+    fn rank(&self) -> u8 {
+        match self {
+            Given::Folder(_) => 0,
+            Given::Estate => 1,
+            Given::Unmet => 2,
+        }
+    }
+}
+
+/// A param a read feeds, with the question that asks for it, where one does.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct FedParam {
+    name: String,
+    prompt: Option<String>,
+    why: Option<String>,
+}
+
+/// One value a pack reads, as the expander lists it: `folder.value` or `value`, the
+/// description of the export that gives it, satz's reason where nothing does, and the
+/// params it feeds.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Incoming {
+    written: String,
+    description: Option<String>,
+    reason: Option<String>,
+    params: Vec<FedParam>,
+}
+
+/// A pack's reads grouped by what gives them: one group per interface folder that meets
+/// a read (a read several folders meet stands under the first), then the reads whose param
+/// the estate sets, then the ones it does not give. A value read for several params is one
+/// entry naming each.
+fn incoming(row: &WorkloadPackRow) -> Vec<(Given, Vec<Incoming>)> {
+    let mut groups: Vec<(Given, Vec<Incoming>)> = Vec::new();
+    for read in &row.reads {
+        let given = if read.bound_by_estate {
+            Given::Estate
+        } else if let Some(folder) = read.met_by.first() {
+            Given::Folder(folder.clone())
+        } else {
+            Given::Unmet
+        };
+        let entries = match groups.iter_mut().find(|(g, _)| *g == given) {
+            Some((_, entries)) => entries,
+            None => {
+                groups.push((given, Vec::new()));
+                &mut groups.last_mut().expect("just pushed").1
+            }
+        };
+        let written = read.written();
+        let entry = match entries.iter_mut().position(|e| e.written == written) {
+            Some(i) => &mut entries[i],
+            None => {
+                entries.push(Incoming {
+                    written,
+                    description: read.description.clone(),
+                    reason: read.unmet_reason.clone().filter(|_| read.unmet()),
+                    params: Vec::new(),
+                });
+                entries.last_mut().expect("just pushed")
+            }
+        };
+        if let Some(name) = &read.param
+            && entry.params.iter().all(|p| &p.name != name)
+        {
+            let declared = row.params.iter().find(|p| &p.name == name);
+            entry.params.push(FedParam {
+                name: name.clone(),
+                prompt: declared.and_then(|p| p.prompt.clone()),
+                why: declared.and_then(|p| p.why.clone()),
+            });
+        }
+    }
+    groups.sort_by_key(|(g, _)| g.rank());
+    groups
+}
+
+/// How many values flow into a pack and out of it: the distinct values it reads, and its
+/// exports.
+fn flow_counts(row: &WorkloadPackRow) -> (usize, usize) {
+    let mut read: Vec<String> = row.reads.iter().map(|r| r.written()).collect();
+    read.sort();
+    read.dedup();
+    (read.len(), row.exports.len())
+}
+
+/// A pack's exports, grouped by the interface they stand in: the core exports first,
+/// then each interface in the order the pack first names it.
+fn export_groups(exports: &[PackExport]) -> Vec<(Option<String>, Vec<PackExport>)> {
+    let mut groups: Vec<(Option<String>, Vec<PackExport>)> = Vec::new();
+    for e in exports {
+        match groups.iter_mut().find(|(i, _)| *i == e.interface) {
+            Some((_, list)) => list.push(e.clone()),
+            None => groups.push((e.interface.clone(), vec![e.clone()])),
+        }
+    }
+    groups.sort_by_key(|(i, _)| i.is_some());
+    groups
+}
+
+/// The badge a pack's state earns: the word, its icon, and whether it is in the error
+/// color. A pack that is current, the repository's own or only available needs no word.
+/// `local` says the row is `satz packs --local`'s, which read no source: its `not-checked`
+/// is a fetched file unchanged since its fetch, not a pack of another source.
+fn badge(state: PackState, local: bool) -> Option<(&'static str, &'static str, bool)> {
     match state {
-        PackState::Own => ("own", "edit_document"),
-        PackState::Current => ("current", "check_circle"),
-        PackState::Behind => ("behind", "update"),
-        PackState::Edited => ("edited", "edit"),
-        PackState::Gone => ("gone from the source", "cloud_off"),
-        PackState::NotChecked => ("not checked", "help"),
-        PackState::Available => ("available", "cloud_download"),
+        PackState::Behind => Some(("Update available", "update", false)),
+        PackState::Edited => Some(("Edited here", "edit", false)),
+        PackState::Gone => Some(("Gone from source", "cloud_off", true)),
+        PackState::NotChecked if local => Some(("Unchanged since fetched", "history", false)),
+        PackState::NotChecked => Some(("Not checked", "pending", false)),
+        PackState::Own | PackState::Current | PackState::Available => None,
     }
 }
 
@@ -56,39 +179,98 @@ fn versions(row: &WorkloadPackRow) -> String {
     }
 }
 
-/// What a state means for the operator, in one sentence.
-fn meaning(state: PackState) -> &'static str {
-    match state {
-        PackState::Own => {
-            "No recorded origin: this repository's own pack. No fetch and no update writes it."
-        }
-        PackState::Current => "Fetched, unchanged since, and the source holds the same file.",
-        PackState::Behind => "Fetched and unchanged since; the source holds a newer file.",
-        PackState::Edited => {
-            "Changed here since it was fetched. An update leaves it as it is and shows the difference."
-        }
-        PackState::Gone => "Fetched, and the source holds it no longer.",
-        PackState::NotChecked => {
-            "Fetched from another kind of source than the one read. Read that source to check it."
-        }
-        PackState::Available => "The source holds it and this estate does not.",
-    }
+/// A commit shortened to the seven characters git shows.
+fn short(commit: &str) -> String {
+    commit.chars().take(7).collect()
 }
 
-/// The OS folder dialog for a source of packs; the chosen folder is listed.
-fn choose_folder(handle: Coroutine<EstateAction>, start: Option<PathBuf>) {
-    spawn(async move {
-        let mut dialog =
-            rfd::AsyncFileDialog::new().set_title("Choose the folder that holds the packs");
-        if let Some(dir) = start {
-            dialog = dialog.set_directory(dir);
+/// Where a pack comes from, as its row names it: "Own pack" for the repository's own,
+/// else the source's name and the commit of a GitHub source, shortened.
+fn origin_text(row: &WorkloadPackRow) -> Option<String> {
+    if row.state == PackState::Own {
+        return Some("Own pack".to_string());
+    }
+    let source = row.source.as_deref()?;
+    Some(match &row.commit {
+        Some(commit) => format!("{source} @ {}", short(commit)),
+        None => source.to_string(),
+    })
+}
+
+/// One pack of `packs_dir`, as the card lists it: the `use` path the estate reads it by,
+/// where it does, satz's row for it once a listing names it, and whether that row is the
+/// local listing's.
+#[derive(Debug, Clone, PartialEq)]
+struct HereRow {
+    id: String,
+    used: Option<String>,
+    row: Option<WorkloadPackRow>,
+    local: bool,
+}
+
+/// The packs of `packs_dir`: every one the estate uses, in the order of its `use` lines,
+/// then the others a listing names, by id. A pack's row is the source listing's where it
+/// names the pack, else the local listing's. `used` is each used pack's id and the path of
+/// its line.
+fn here_rows(
+    source: Option<&WorkloadPacksReport>,
+    local: Option<&WorkloadPacksReport>,
+    used: &[(String, String)],
+) -> Vec<HereRow> {
+    let here = |r: &WorkloadPacksReport, is_local: bool| -> Vec<(WorkloadPackRow, bool)> {
+        r.packs
+            .iter()
+            .filter(|p| p.state != PackState::Available)
+            .map(|p| (p.clone(), is_local))
+            .collect()
+    };
+    let mut listed: Vec<(WorkloadPackRow, bool)> =
+        source.map(|r| here(r, false)).unwrap_or_default();
+    for (row, is_local) in local.map(|r| here(r, true)).unwrap_or_default() {
+        if listed.iter().all(|(p, _)| p.id != row.id) {
+            listed.push((row, is_local));
         }
-        if let Some(folder) = dialog.pick_folder().await {
-            handle.send(EstateAction::Packs(PackOp::List(PackSource::Folder(
-                folder.path().to_path_buf(),
-            ))));
+    }
+    let row_of = |id: &str| listed.iter().find(|(p, _)| p.id == id).cloned();
+    let mut rows: Vec<HereRow> = Vec::new();
+    for (id, path) in used {
+        if rows.iter().all(|r| &r.id != id) {
+            let found = row_of(id);
+            rows.push(HereRow {
+                id: id.clone(),
+                used: Some(path.clone()),
+                local: found.as_ref().is_some_and(|(_, l)| *l),
+                row: found.map(|(p, _)| p),
+            });
         }
-    });
+    }
+    let mut others: Vec<HereRow> = listed
+        .iter()
+        .filter(|(p, _)| used.iter().all(|(id, _)| id != &p.id))
+        .map(|(p, is_local)| HereRow {
+            id: p.id.clone(),
+            used: None,
+            row: Some(p.clone()),
+            local: *is_local,
+        })
+        .collect();
+    others.sort_by(|a, b| a.id.cmp(&b.id));
+    rows.extend(others);
+    rows
+}
+
+/// The sources a list read, as the report names them: each one's location, with the
+/// commit of a GitHub source shortened.
+fn read_from(report: &WorkloadPacksReport) -> String {
+    report
+        .sources
+        .iter()
+        .map(|s| match &s.commit {
+            Some(c) => format!("{} @ {}", s.location, short(c)),
+            None => s.location.clone(),
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 /// What the operator is asked before a write that cannot be taken back from here.
@@ -98,17 +280,29 @@ enum Confirm {
     TakeUpstream(String),
     /// forget where a fetched pack came from
     Detach(String),
+    /// take a pack source out of `config.toml`
+    RemoveSource(String),
 }
 
 #[component]
 pub fn WorkloadPacksPane() -> Element {
     let app = use_context::<Store<AppStore>>();
     let handle = use_coroutine_handle::<EstateAction>();
+    let Some(open) = app.open().cloned() else {
+        return rsx! {};
+    };
     let report = app.estate().workload_packs().cloned();
-    let source = app.estate().pack_source().cloned();
+    let local_report = app.estate().local_packs().cloned();
+    // the local listing reads no source: run when the view first stands
+    use_hook(move || {
+        if app.estate().local_packs().peek().is_none() {
+            handle.send(EstateAction::Packs(PackOp::ListLocal));
+        }
+    });
     let busy = app.estate().packs_busy().cloned() || app.estate().loading().cloned();
     let update = app.estate().pack_update().cloned();
-    let used: Vec<String> = app
+    // the packs the estate uses: its active `use` lines that read a file of packs_dir
+    let used: Vec<(String, String)> = app
         .estate()
         .cst()
         .read()
@@ -116,76 +310,91 @@ pub fn WorkloadPacksPane() -> Element {
         .map(|cst| {
             satz_studio_core::cst::scan_uses(cst)
                 .into_iter()
-                .map(|u| u.path)
+                .filter(|u| u.state == UseState::Active)
+                .filter_map(|u| {
+                    let id = open.session.dir.pack_of_use(&open.main, &u.path)?;
+                    Some((id, u.path))
+                })
                 .collect()
         })
         .unwrap_or_default();
+    let packs_dir = open.session.dir.packs_dir();
     let mut confirm = use_signal(|| None::<Confirm>);
-    let folder_start = match &source {
-        Some(PackSource::Folder(dir)) => Some(dir.clone()),
-        _ => None,
-    };
+    let sheet = use_signal(|| Sheet::Closed);
+    let publishing = use_signal(|| None::<String>);
 
-    let body = match report {
-        None => rsx! {
-            Card { variant: CardVariant::Filled, class: "interfaces__empty",
-                Icon { name: "inventory", size: 48, class: "placeholder__icon" }
-                p { "Nothing has been read yet. Reading the satz repository is a network read, so it happens when you ask for it." }
-            }
-        },
-        Some(Err(e)) => rsx! {
-            div { class: "interfaces__error",
-                Icon { name: "error", size: 20 }
-                div {
-                    p { "satz packs could not list the packs:" }
-                    pre { "{e}" }
-                }
-            }
-        },
-        Some(Ok(report)) => rsx! {
-            PackCards { report, used, update, busy, confirm }
-        },
+    let (listed, failed) = match &report {
+        Some(Ok(r)) => (Some(r.clone()), None),
+        Some(Err(e)) => (None, Some(e.clone())),
+        None => (None, None),
     };
+    let (local, local_failed) = match &local_report {
+        Some(Ok(r)) => (Some(r.clone()), None),
+        Some(Err(e)) => (None, Some(e.clone())),
+        None => (None, None),
+    };
+    let rows = here_rows(listed.as_ref(), local.as_ref(), &used);
+    // the folders are the estate's, the same in either listing: a pack's expander names
+    // the estate that wrote each
+    let folders: Vec<InterfaceFolder> = local
+        .as_ref()
+        .or(listed.as_ref())
+        .map(|r| r.interface_folders.clone())
+        .unwrap_or_default();
+    let available: Vec<WorkloadPackRow> = listed
+        .as_ref()
+        .map(|r| {
+            r.packs
+                .iter()
+                .filter(|p| p.state == PackState::Available)
+                .cloned()
+                .collect()
+        })
+        .unwrap_or_default();
 
     rsx! {
         div { class: "pane interfaces",
-            div { class: "interfaces__head",
-                p { class: "view__lead",
-                    "The workload packs of this estate, as satz packs lists them: the ones this repository wrote itself, the ones fetched from a source and how each stands against it, and what the source holds beyond them. A fetched pack is recorded in origin.toml beside the packs; a pack without a row there is this repository's own."
-                }
-                div { class: "wpacks__sources",
-                    Button {
-                        variant: ButtonVariant::Tonal,
-                        icon: "cloud_sync",
-                        disabled: busy,
-                        onclick: move |_| handle.send(EstateAction::Packs(PackOp::List(PackSource::Repository))),
-                        "Read the satz repository"
+            if busy {
+                LinearProgress {}
+            }
+            PackSourcesCard {
+                busy,
+                sheet,
+                confirm_remove: move |name: String| confirm.set(Some(Confirm::RemoveSource(name))),
+            }
+            HereCard {
+                rows,
+                folders: folders.clone(),
+                listed: listed.is_some(),
+                local_listed: local.is_some(),
+                failed: failed.or(local_failed),
+                packs_dir: open.session.dir.tool.packs_dir.clone(),
+                files: packs_dir,
+                update,
+                busy,
+                confirm,
+                publishing,
+            }
+            if let Some(report) = listed.filter(|_| !available.is_empty()) {
+                Card { variant: CardVariant::Outlined, class: "interfaces__card",
+                    div { class: "interfaces__card-head",
+                        Icon { name: "cloud_download", size: 22 }
+                        h2 { class: "interfaces__name", "Available" }
+                        code { class: "interfaces__at", "{read_from(&report)}" }
                     }
-                    Button {
-                        variant: ButtonVariant::Outlined,
-                        icon: "folder_open",
-                        disabled: busy,
-                        onclick: {
-                            let start = folder_start.clone();
-                            move |_| choose_folder(handle, start.clone())
-                        },
-                        "Read a folder…"
+                    for row in available {
+                        PackLine { key: "{row.id}", id: row.id.clone(), row: Some(row.clone()), folders: folders.clone(), local: false, used: true, file: None, edited: None, busy, confirm, publishing }
                     }
-                    if let Some(source) = &source {
-                        span { class: "interfaces__supporting", "read from " code { "{source.label()}" } }
-                    }
-                }
-                if busy {
-                    LinearProgress {}
                 }
             }
-            {body}
         }
+        PublishDialog { publishing, sheet, busy }
         Dialog {
             open: confirm().is_some(),
             title: match confirm() {
                 Some(Confirm::TakeUpstream(_)) => "Overwrite your changes?".to_string(),
                 Some(Confirm::Detach(_)) => "Keep it as your own pack?".to_string(),
+                Some(Confirm::RemoveSource(_)) => "Remove the pack source?".to_string(),
                 None => String::new(),
             },
             icon: "warning",
@@ -198,15 +407,18 @@ pub fn WorkloadPacksPane() -> Element {
                         match confirm() {
                             Some(Confirm::TakeUpstream(id)) => handle.send(EstateAction::Packs(PackOp::Update {
                                 which: Which::One(id),
+                                from: None,
                                 take_upstream: true,
                             })),
                             Some(Confirm::Detach(id)) => handle.send(EstateAction::Packs(PackOp::Detach(id))),
+                            Some(Confirm::RemoveSource(name)) => handle.send(EstateAction::PackSources(SourceOp::Remove(name))),
                             None => {}
                         }
                         confirm.set(None);
                     },
                     match confirm() {
                         Some(Confirm::TakeUpstream(_)) => "Overwrite",
+                        Some(Confirm::RemoveSource(_)) => "Remove",
                         _ => "Keep as own",
                     }
                 }
@@ -218,37 +430,39 @@ pub fn WorkloadPacksPane() -> Element {
                 Some(Confirm::Detach(id)) => rsx! {
                     p { "satz detach-pack " code { "{id}" } " removes its row from origin.toml. The file stays as it is, and from then on no update writes it or tells you the source moved." }
                 },
+                Some(Confirm::RemoveSource(name)) => rsx! {
+                    p { "satz pack-source remove " code { "{name}" } " takes it out of config.toml. satz refuses while origin.toml names it for a fetched pack: keep that pack as your own first." }
+                },
                 None => rsx! {},
             }
         }
     }
 }
 
-/// The packs that are here, then what the source holds beyond them.
+/// The packs of `packs_dir`: the used ones first, each with what can be done; "New
+/// pack…" in its head, and "Update all" while a pack has an update available.
 #[component]
-fn PackCards(
-    report: WorkloadPacksReport,
-    used: Vec<String>,
-    update: Option<satz_studio_core::satz::reports::UpdatePackReport>,
+fn HereCard(
+    rows: Vec<HereRow>,
+    folders: Vec<InterfaceFolder>,
+    listed: bool,
+    local_listed: bool,
+    failed: Option<String>,
+    packs_dir: String,
+    files: PathBuf,
+    update: Option<UpdatePackReport>,
     busy: bool,
     confirm: Signal<Option<Confirm>>,
+    publishing: Signal<Option<String>>,
 ) -> Element {
+    let app = use_context::<Store<AppStore>>();
     let handle = use_coroutine_handle::<EstateAction>();
-    if report.packs.is_empty() {
-        return rsx! {
-            Card { variant: CardVariant::Filled, class: "interfaces__empty",
-                Icon { name: "inventory", size: 48, class: "placeholder__icon" }
-                p { "No workload pack is here, and " code { "{report.source}" } " holds none." }
-            }
-        };
-    }
-    let (here, available): (Vec<WorkloadPackRow>, Vec<WorkloadPackRow>) = report
-        .packs
+    let mut creating = use_signal(|| false);
+    let mut name = use_signal(String::new);
+    let behind = rows
         .iter()
-        .cloned()
-        .partition(|p| p.state != PackState::Available);
-    let behind = here.iter().any(|p| p.state == PackState::Behind);
-    let updated = |id: &str| -> Option<UpdatedPack> {
+        .any(|r| r.row.as_ref().is_some_and(|p| p.state == PackState::Behind));
+    let edited_of = |id: &str| -> Option<UpdatedPack> {
         update
             .as_ref()?
             .packs
@@ -256,85 +470,269 @@ fn PackCards(
             .find(|p| p.id == id && p.action == UpdateAction::Edited)
             .cloned()
     };
+    let checked = new_pack_id(name().trim());
+    let problem = match &checked {
+        Err(e) if !name().trim().is_empty() => e.clone(),
+        _ => String::new(),
+    };
+
     rsx! {
         Card { variant: CardVariant::Outlined, class: "interfaces__card",
             div { class: "interfaces__card-head",
                 Icon { name: "inventory_2", size: 22 }
                 h2 { class: "interfaces__name", "In this estate" }
-                code { class: "interfaces__at", "{report.packs_dir}" }
+                code { class: "interfaces__at", "{packs_dir}" }
                 span { class: "grow" }
                 if behind {
                     Button {
                         variant: ButtonVariant::Tonal,
                         icon: "update",
                         disabled: busy,
-                        onclick: move |_| handle.send(EstateAction::Packs(PackOp::Update { which: Which::All, take_upstream: false })),
+                        onclick: move |_| handle.send(EstateAction::Packs(PackOp::Update { which: Which::All, from: None, take_upstream: false })),
                         "Update all"
                     }
                 }
+                Button {
+                    variant: ButtonVariant::Text,
+                    icon: "note_add",
+                    disabled: busy,
+                    onclick: move |_| {
+                        name.set(String::new());
+                        creating.set(true);
+                    },
+                    "New pack…"
+                }
+                IconButton {
+                    icon: "refresh",
+                    label: "Reload",
+                    disabled: busy,
+                    onclick: move |_| {
+                        handle.send(EstateAction::Reload);
+                        handle.send(EstateAction::Packs(match app.estate().pack_source().cloned() {
+                            Some(source) => PackOp::List(source),
+                            None => PackOp::ListLocal,
+                        }));
+                    },
+                }
+                HelpButton { title: "Workload packs",
+                    p { "The packs this estate uses come first, then the other files of {packs_dir}. A fetched pack is recorded in origin.toml beside the packs with the name of its source; a pack without a row there is this repository's own, and no fetch and no update writes it." }
+                    p { "Choosing a pack source runs satz packs against it, and each fetched pack says how it stands: Update available — unchanged here, and the source holds a newer file; Edited here — changed since it was fetched, so an update leaves it as it is and shows the difference; Gone from source — the source holds it no longer; Not checked — fetched from another source than the one listed." }
+                    p { "Before a source is chosen, satz packs --local lists the packs here without reading any source, so nothing goes over the network: Edited here — changed since it was fetched; Unchanged since fetched — the file is the one that was fetched, and whether its source holds a newer one is known once that source is chosen." }
+                    p { "The arrows on a pack count what flows through it, seen from the pack: in, the values it reads from the interface folders this estate uses; out, the values it exports. Opening them lists both. In is grouped by what gives each value — an interface folder, named with the organization's estate that wrote it, the estate itself where it sets the param the value would fill, or not given, with why — each value with its export's description and the param it fills with that param's question. Out is grouped by interface, the core exports first, each with its description. Unmet read marks a pack with a value this estate does not give; the transpile refuses it once the estate uses the pack." }
+                    p { "Details shows the rest of what a pack declares: its params with their defaults and the questions that ask for them, and its list params." }
+                    p { "Reload reads the estate again, the packs here and the listed pack source with them: the way to see a pack after New pack or Edit, since the window cannot tell when the editor is done with the file." }
+                    p { "New pack writes {packs_dir}/<name>.satz, adds its use line to the estate and opens the file in the application this computer gives .satz files; Edit opens a pack the same way. Keep as own forgets where a fetched pack came from. What a pack asks is answered in Decisions." }
+                    p { "Store in a pack source, on your own pack, copies it into a folder pack source with satz publish-pack once it clears review-pack's bar inside this estate, and records it as fetched from there, so other estates fetch it and update-pack follows it here too." }
+                }
             }
-            if here.is_empty() {
-                p { class: "interfaces__supporting", "No workload pack is here yet." }
+            if let Some(e) = &failed {
+                div { class: "interfaces__error",
+                    Icon { name: "error", size: 20 }
+                    div {
+                        p { "satz packs could not list the packs:" }
+                        pre { "{e}" }
+                    }
+                }
+            } else if !listed && local_listed && !rows.is_empty() {
+                p { class: "interfaces__supporting", "Choose a pack source to check each fetched pack against it and see what it offers." }
             }
-            for row in here {
+            if rows.is_empty() && (listed || local_listed) {
+                p { class: "interfaces__supporting",
+                    if listed { "No workload pack is here yet." } else { "No workload pack is here yet. Choose a pack source to list what it offers." }
+                }
+            }
+            for here in rows {
                 PackLine {
-                    key: "{row.id}",
-                    in_use: row.use_path().is_some_and(|p| used.iter().any(|u| u == p)),
-                    edited: updated(&row.id),
-                    row: row.clone(),
+                    key: "{here.id}",
+                    id: here.id.clone(),
+                    used: here.used.is_some(),
+                    edited: edited_of(&here.id),
+                    file: Some(files.join(format!("{}.satz", here.id))),
+                    row: here.row,
+                    folders: folders.clone(),
+                    local: here.local,
                     busy,
                     confirm,
+                    publishing,
                 }
             }
         }
-        if !available.is_empty() {
-            Card { variant: CardVariant::Outlined, class: "interfaces__card",
-                div { class: "interfaces__card-head",
-                    Icon { name: "cloud_download", size: 22 }
-                    h2 { class: "interfaces__name", "Available" }
-                    code { class: "interfaces__at", "{report.source}" }
+        Dialog {
+            open: creating(),
+            title: "New pack",
+            icon: "note_add",
+            class: "interfaces__add",
+            ondismiss: move |_| creating.set(false),
+            actions: rsx! {
+                Button { variant: ButtonVariant::Text, onclick: move |_| creating.set(false), "Cancel" }
+                Button {
+                    variant: ButtonVariant::Filled,
+                    icon: "check",
+                    disabled: busy || checked.is_err(),
+                    onclick: move |_| {
+                        handle.send(EstateAction::NewPack(name().trim().to_string()));
+                        creating.set(false);
+                    },
+                    "Create"
                 }
-                for row in available {
-                    PackLine { key: "{row.id}", row: row.clone(), in_use: false, edited: None, busy, confirm }
+            },
+            div { class: "wpacks__form",
+                TextField {
+                    label: "Name",
+                    value: name(),
+                    monospace: true,
+                    error: !problem.is_empty(),
+                    supporting: if problem.is_empty() {
+                        format!("a lowercase letter, then lowercase letters, digits and -; the file is {packs_dir}/<name>.satz")
+                    } else {
+                        problem.clone()
+                    },
+                    oninput: move |v: String| name.set(v),
+                }
+                p { class: "interfaces__supporting",
+                    "The pack starts at version 0.1 with an empty params block, the estate gets its use line, and the file opens in the application this computer gives .satz files."
                 }
             }
         }
     }
 }
 
-/// One pack: its id, version and state, what the state means, and what can be done.
+/// One pack: its id, version, badge, where it comes from and what can be done. `row` is
+/// satz's, once a listing names it, and `local` says that listing read no source; `used`
+/// says the estate reads it; `file` is where it is, for a pack that is here; `folders` are
+/// the interface folders the estate uses, which the expander names.
 #[component]
 fn PackLine(
-    row: WorkloadPackRow,
-    in_use: bool,
+    id: String,
+    row: Option<WorkloadPackRow>,
+    folders: Vec<InterfaceFolder>,
+    local: bool,
+    used: bool,
+    file: Option<PathBuf>,
     edited: Option<UpdatedPack>,
     busy: bool,
     confirm: Signal<Option<Confirm>>,
+    mut publishing: Signal<Option<String>>,
 ) -> Element {
+    let app = use_context::<Store<AppStore>>();
     let handle = use_coroutine_handle::<EstateAction>();
-    let (word, icon) = state_chip(row.state);
-    let id = row.id.clone();
-    let use_path = row.use_path().map(str::to_string);
+    let mut details_open = use_signal(|| false);
+    let mut flow_open = use_signal(|| false);
+    let state = row.as_ref().map(|r| r.state);
+    let unmet = row.as_ref().is_some_and(WorkloadPackRow::has_unmet_read);
+    let use_path = row.as_ref().and_then(|r| r.use_path()).map(str::to_string);
+    let op = |op: PackOp| move |_| handle.send(EstateAction::Packs(op.clone()));
+    let one = Which::One(id.clone());
     rsx! {
         div { class: "interfaces__export",
             div { class: "interfaces__export-head",
-                code { class: "interfaces__export-name", "{row.id}" }
-                span { class: "interfaces__supporting", {versions(&row)} }
-                Chip { kind: ChipKind::Assist, icon, label: word }
-                if let Some(needs) = needs_text(&row.needs) {
-                    Chip { kind: ChipKind::Assist, icon: "rule", label: needs }
+                code { class: "interfaces__export-name", "{id}" }
+                if let Some(row) = &row {
+                    span { class: "interfaces__supporting", {versions(row)} }
                 }
-                if in_use {
-                    Chip { kind: ChipKind::Assist, icon: "link", label: "used by the estate" }
+                if let Some((word, icon, error)) = state.and_then(|s| badge(s, local)) {
+                    Chip { kind: ChipKind::Assist, icon, label: word, error }
+                }
+                if unmet {
+                    Chip { kind: ChipKind::Assist, icon: "report", label: "Unmet read", error: true }
+                }
+                if let Some((into, out)) = row.as_ref().map(flow_counts) {
+                    button {
+                        r#type: "button",
+                        class: "m-button m-button--text wpacks__flow-toggle",
+                        "aria-expanded": if flow_open() { "true" } else { "false" },
+                        title: if flow_open() { "Hide what the pack reads and exports" } else { "Show what the pack reads and exports" },
+                        onclick: move |_| flow_open.toggle(),
+                        Icon { name: "south", size: 18 }
+                        span { "{into} in" }
+                        span { class: "wpacks__flow-dot", "·" }
+                        Icon { name: "north", size: 18 }
+                        span { "{out} out" }
+                        Icon { name: if flow_open() { "expand_less" } else { "expand_more" }, size: 18 }
+                    }
+                }
+                if row.is_some() {
+                    Button { variant: ButtonVariant::Text, onclick: move |_| details_open.set(true), "Details" }
+                }
+                if let Some(origin) = row.as_ref().and_then(origin_text) {
+                    code { class: "interfaces__at", "{origin}" }
                 }
                 span { class: "grow" }
-                if let Some(source) = &row.source {
-                    code { class: "interfaces__at", "{source}" }
+                if state == Some(PackState::Available) {
+                    Button {
+                        variant: ButtonVariant::Text,
+                        icon: "download",
+                        disabled: busy,
+                        onclick: op(PackOp::Get(one.clone())),
+                        "Fetch"
+                    }
+                }
+                if state == Some(PackState::Behind) {
+                    Button {
+                        variant: ButtonVariant::Text,
+                        icon: "update",
+                        disabled: busy,
+                        onclick: op(PackOp::Update { which: one.clone(), from: None, take_upstream: false }),
+                        "Update"
+                    }
+                }
+                if !used {
+                    if let Some(path) = use_path {
+                        Button {
+                            variant: ButtonVariant::Text,
+                            icon: "add_link",
+                            disabled: busy,
+                            onclick: move |_| handle.send(EstateAction::CommitEdit(Edit::AddUse { path: path.clone() })),
+                            "Add to the estate"
+                        }
+                    }
+                }
+                if state == Some(PackState::Edited) {
+                    IconButton {
+                        icon: "difference",
+                        label: "Show the difference to the source's file",
+                        disabled: busy,
+                        onclick: op(PackOp::Update { which: one.clone(), from: None, take_upstream: false }),
+                    }
+                    IconButton {
+                        icon: "cloud_download",
+                        label: "Take the source's file…",
+                        disabled: busy,
+                        onclick: { let id = id.clone(); move |_| confirm.set(Some(Confirm::TakeUpstream(id.clone()))) },
+                    }
+                }
+                if matches!(state, Some(PackState::Edited | PackState::Gone | PackState::Current | PackState::Behind | PackState::NotChecked)) {
+                    IconButton {
+                        icon: "link_off",
+                        label: "Keep as own…",
+                        disabled: busy,
+                        onclick: { let id = id.clone(); move |_| confirm.set(Some(Confirm::Detach(id.clone()))) },
+                    }
+                }
+                if state == Some(PackState::Own) {
+                    IconButton {
+                        icon: "drive_folder_upload",
+                        label: "Store in a pack source…",
+                        disabled: busy,
+                        onclick: {
+                            let id = id.clone();
+                            move |_| {
+                                app.estate().pack_publish().set(None);
+                                publishing.set(Some(id.clone()));
+                            }
+                        },
+                    }
+                }
+                if let Some(file) = file {
+                    IconButton {
+                        icon: "edit",
+                        label: "Edit {id}.satz",
+                        onclick: move |_| edit_file(app, &file),
+                    }
                 }
             }
-            p { class: "interfaces__supporting", {meaning(row.state)} }
-            if let Some(line) = &row.use_line {
-                code { class: "interfaces__value", "{line}" }
+            if let Some(row) = row.as_ref().filter(|_| flow_open()) {
+                PackFlow { row: row.clone(), folders: folders.clone() }
             }
             if let Some(edited) = &edited {
                 if let Some(diff) = &edited.diff {
@@ -342,58 +740,185 @@ fn PackLine(
                     pre { class: "wpacks__diff", "{diff}" }
                 }
             }
-            div { class: "wpacks__actions",
-                if row.state == PackState::Available {
-                    Button {
-                        variant: ButtonVariant::Tonal,
-                        icon: "download",
-                        disabled: busy,
-                        onclick: { let id = id.clone(); move |_| handle.send(EstateAction::Packs(PackOp::Get(Which::One(id.clone())))) },
-                        "Fetch"
+        }
+        if let Some(row) = row.filter(|_| details_open()) {
+            Dialog {
+                open: true,
+                title: "{id}",
+                class: "wpacks__details",
+                ondismiss: move |_| details_open.set(false),
+                actions: rsx! {
+                    Button { variant: ButtonVariant::Text, onclick: move |_| details_open.set(false), "Close" }
+                },
+                PackDetails { row }
+            }
+        }
+    }
+}
+
+/// What flows through a pack, seen from the pack: what it reads, grouped by what gives
+/// each value against the open estate ([`incoming`]), and what it exports, grouped by
+/// interface ([`export_groups`]). The panel under the row its toggle opens.
+#[component]
+fn PackFlow(row: WorkloadPackRow, folders: Vec<InterfaceFolder>) -> Element {
+    let into = incoming(&row);
+    let out = export_groups(&row.exports);
+    let wrote = |folder: &str| {
+        folders
+            .iter()
+            .find(|f| f.name == folder)
+            .map(|f| format!("written by {}", f.estate))
+    };
+    rsx! {
+        div { class: "wpacks__flow",
+            section { class: "wpacks__flow-side",
+                h3 { Icon { name: "south", size: 18 } "Incoming" }
+                if into.is_empty() {
+                    p { class: "interfaces__supporting", "nothing" }
+                }
+                for (given, entries) in into {
+                    div { key: "{given:?}", class: "wpacks__flow-group",
+                        match &given {
+                            Given::Folder(folder) => rsx! {
+                                div { class: "wpacks__flow-source",
+                                    Icon { name: "folder_shared", size: 18 }
+                                    code { "{folder}" }
+                                    if let Some(said) = wrote(folder) {
+                                        span { class: "interfaces__supporting", "{said}" }
+                                    }
+                                }
+                            },
+                            Given::Estate => rsx! {
+                                div { class: "wpacks__flow-source",
+                                    Icon { name: "tune", size: 18 }
+                                    "set by the estate"
+                                }
+                            },
+                            Given::Unmet => rsx! {
+                                div { class: "wpacks__flow-source wpacks__unmet",
+                                    Icon { name: "report", size: 18 }
+                                    "not given"
+                                }
+                            },
+                        }
+                        ul { class: "wpacks__flow-list",
+                            for entry in entries {
+                                li { key: "{entry.written}",
+                                    div { class: "wpacks__flow-line",
+                                        code { "{entry.written}" }
+                                        if let Some(d) = &entry.description {
+                                            span { class: "interfaces__supporting", "{d}" }
+                                        }
+                                    }
+                                    if let Some(reason) = &entry.reason {
+                                        p { class: "wpacks__flow-why wpacks__unmet", "{reason}" }
+                                    }
+                                    for param in entry.params.iter() {
+                                        div { key: "{param.name}", class: "wpacks__flow-line",
+                                            "→ "
+                                            code { "{param.name}" }
+                                            if let Some(prompt) = &param.prompt {
+                                                span { "{prompt}" }
+                                            }
+                                        }
+                                        if let Some(why) = &param.why {
+                                            p { class: "wpacks__flow-why interfaces__supporting", "{why}" }
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
-                if row.state == PackState::Behind {
-                    Button {
-                        variant: ButtonVariant::Tonal,
-                        icon: "update",
-                        disabled: busy,
-                        onclick: { let id = id.clone(); move |_| handle.send(EstateAction::Packs(PackOp::Update { which: Which::One(id.clone()), take_upstream: false })) },
-                        "Update"
+            }
+            section { class: "wpacks__flow-side",
+                h3 { Icon { name: "north", size: 18 } "Outgoing" }
+                if out.is_empty() {
+                    p { class: "interfaces__supporting", "nothing" }
+                }
+                for (interface, exports) in out {
+                    div { key: "{interface:?}", class: "wpacks__flow-group",
+                        div { class: "wpacks__flow-source",
+                            Icon { name: "output", size: 18 }
+                            match &interface {
+                                Some(name) => rsx! { "interface " code { "{name}" } },
+                                None => rsx! { "core" },
+                            }
+                        }
+                        ul { class: "wpacks__flow-list",
+                            for export in exports {
+                                li { key: "{export.name}",
+                                    div { class: "wpacks__flow-line",
+                                        code { "{export.name}" }
+                                        if let Some(d) = &export.description {
+                                            span { class: "interfaces__supporting", "{d}" }
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
-                if row.state == PackState::Edited {
-                    Button {
-                        variant: ButtonVariant::Outlined,
-                        icon: "difference",
-                        disabled: busy,
-                        onclick: { let id = id.clone(); move |_| handle.send(EstateAction::Packs(PackOp::Update { which: Which::One(id.clone()), take_upstream: false })) },
-                        "Show the difference"
-                    }
-                    Button {
-                        variant: ButtonVariant::Outlined,
-                        icon: "cloud_download",
-                        disabled: busy,
-                        onclick: { let id = id.clone(); move |_| confirm.set(Some(Confirm::TakeUpstream(id.clone()))) },
-                        "Take the source's file…"
+            }
+        }
+    }
+}
+
+/// What a pack declares beyond what flows through it, as satz's row gives it (satz's ADR
+/// 0100): its params, each with the question that asks for it, and its list params.
+#[component]
+fn PackDetails(row: WorkloadPackRow) -> Element {
+    rsx! {
+        section { class: "wpacks__section",
+            h3 { "Params" }
+            if row.params.is_empty() {
+                p { class: "interfaces__supporting", "none" }
+            }
+            ul { class: "wpacks__decls",
+                for param in row.params.iter() {
+                    li { key: "{param.name}",
+                        code { "{param.name}" }
+                        " — "
+                        match &param.default {
+                            Some(default) => rsx! { code { "{default}" } },
+                            None => rsx! { span { class: "interfaces__supporting", "no default" } },
+                        }
+                        if param.question {
+                            span { class: "interfaces__supporting",
+                                match &param.prompt {
+                                    Some(prompt) => format!(" — asked: {prompt}"),
+                                    None => " — asked".to_string(),
+                                }
+                            }
+                        }
+                        if let Some(why) = &param.why {
+                            p { class: "wpacks__flow-why interfaces__supporting", "{why}" }
+                        }
                     }
                 }
-                if matches!(row.state, PackState::Edited | PackState::Gone | PackState::Current | PackState::Behind | PackState::NotChecked) {
-                    Button {
-                        variant: ButtonVariant::Text,
-                        icon: "link_off",
-                        disabled: busy,
-                        onclick: { let id = id.clone(); move |_| confirm.set(Some(Confirm::Detach(id.clone()))) },
-                        "Keep as own…"
-                    }
-                }
-                if let Some(path) = use_path {
-                    if !in_use {
-                        Button {
-                            variant: ButtonVariant::Filled,
-                            icon: "add_link",
-                            disabled: busy,
-                            onclick: move |_| handle.send(EstateAction::CommitEdit(Edit::AddUse { path: path.clone() })),
-                            "Add to the estate"
+            }
+        }
+        section { class: "wpacks__section",
+            h3 { "List params" }
+            if row.list_params.is_empty() {
+                p { class: "interfaces__supporting", "none" }
+            }
+            ul { class: "wpacks__decls",
+                for list in row.list_params.iter() {
+                    li { key: "{list.param}",
+                        code { "{list.param}" }
+                        " — key "
+                        code { "{list.key}" }
+                        {format!("; fields {}", list.fields.join(", "))}
+                        if !list.defaults.is_empty() {
+                            "; defaults "
+                            {
+                                list.defaults
+                                    .iter()
+                                    .map(|(field, value)| format!("{field} = {value}"))
+                                    .collect::<Vec<_>>()
+                                    .join(", ")
+                            }
                         }
                     }
                 }
@@ -404,20 +929,9 @@ fn PackLine(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use satz_studio_core::satz::reports::{PackParam, PackRead};
 
-    #[test]
-    fn a_packs_needs_are_said_in_words() {
-        assert_eq!(
-            needs_text(&[PackNeed::Project]).as_deref(),
-            Some("reads the delegated project")
-        );
-        assert_eq!(
-            needs_text(&[PackNeed::Folder, PackNeed::Project]).as_deref(),
-            Some("reads the delegated folder and the delegated project")
-        );
-        assert_eq!(needs_text(&[]), None);
-    }
+    use super::*;
 
     fn row(state: PackState, version: Option<&str>, upstream: Option<&str>) -> WorkloadPackRow {
         WorkloadPackRow {
@@ -426,9 +940,237 @@ mod tests {
             version: version.map(str::to_string),
             upstream_version: upstream.map(str::to_string),
             source: None,
+            commit: None,
             use_line: None,
-            needs: Vec::new(),
+            params: Vec::new(),
+            list_params: Vec::new(),
+            exports: Vec::new(),
+            reads: Vec::new(),
         }
+    }
+
+    fn read(
+        written: (Option<&str>, &str),
+        param: Option<&str>,
+        bound: bool,
+        met_by: &[&str],
+        reason: Option<&str>,
+        description: Option<&str>,
+    ) -> PackRead {
+        PackRead {
+            folder: written.0.map(str::to_string),
+            value: written.1.into(),
+            param: param.map(str::to_string),
+            bound_by_estate: bound,
+            met_by: met_by.iter().map(|f| f.to_string()).collect(),
+            unmet_reason: reason.map(str::to_string),
+            description: description.map(str::to_string),
+        }
+    }
+
+    fn param(name: &str, prompt: Option<&str>, why: Option<&str>) -> PackParam {
+        PackParam {
+            name: name.into(),
+            default: None,
+            question: prompt.is_some(),
+            prompt: prompt.map(str::to_string),
+            why: why.map(str::to_string),
+        }
+    }
+
+    /// The reads stand under the first folder that meets each, in the order the pack
+    /// first reads from it, then under the estate where it sets the param, then under not
+    /// given with satz's reason; a value read for two params is one entry naming both,
+    /// each with its question's prompt and why. Only a value not given earns "Unmet read".
+    #[test]
+    fn the_reads_are_grouped_by_what_gives_them() {
+        let mut r = row(PackState::Available, None, Some("1.0"));
+        r.params = vec![
+            param(
+                "parent",
+                Some("The folder it goes in"),
+                Some("Policies follow it"),
+            ),
+            param("other_parent", None, None),
+        ];
+        r.reads = vec![
+            read((Some("vm"), "zone"), None, false, &["vm"], None, None),
+            read(
+                (None, "delegated_folder"),
+                Some("parent"),
+                false,
+                &["shop", "vm"],
+                None,
+                Some("The folder"),
+            ),
+            read((None, "billing"), Some("billing"), true, &[], None, None),
+            read(
+                (None, "delegated_folder"),
+                Some("other_parent"),
+                false,
+                &["shop", "vm"],
+                None,
+                Some("The folder"),
+            ),
+            read(
+                (Some("gone"), "x"),
+                None,
+                false,
+                &[],
+                Some("no folder gone"),
+                None,
+            ),
+        ];
+        assert!(r.has_unmet_read());
+        let groups = incoming(&r);
+        assert_eq!(
+            groups.iter().map(|(g, _)| g.clone()).collect::<Vec<_>>(),
+            [
+                Given::Folder("vm".into()),
+                Given::Folder("shop".into()),
+                Given::Estate,
+                Given::Unmet,
+            ]
+        );
+        assert_eq!(groups[0].1[0].written, "vm.zone");
+        let folder = &groups[1].1;
+        assert_eq!(folder.len(), 1, "one entry for the value read twice");
+        assert_eq!(folder[0].written, "delegated_folder");
+        assert_eq!(folder[0].description.as_deref(), Some("The folder"));
+        assert_eq!(
+            folder[0].params,
+            [
+                FedParam {
+                    name: "parent".into(),
+                    prompt: Some("The folder it goes in".into()),
+                    why: Some("Policies follow it".into()),
+                },
+                FedParam {
+                    name: "other_parent".into(),
+                    prompt: None,
+                    why: None,
+                },
+            ]
+        );
+        assert_eq!(groups[2].1[0].written, "billing");
+        assert_eq!(groups[2].1[0].params[0].name, "billing");
+        assert_eq!(groups[2].1[0].reason, None);
+        assert_eq!(groups[3].1[0].written, "gone.x");
+        assert_eq!(groups[3].1[0].reason.as_deref(), Some("no folder gone"));
+
+        r.reads.pop();
+        assert!(!r.has_unmet_read());
+    }
+
+    /// In counts the distinct values a pack reads, out its exports; a pack with neither
+    /// has no group on either side.
+    #[test]
+    fn the_counts_are_the_distinct_reads_and_the_exports() {
+        let mut r = row(PackState::Own, Some("1.0"), None);
+        assert_eq!(flow_counts(&r), (0, 0));
+        assert!(incoming(&r).is_empty() && export_groups(&r.exports).is_empty());
+        r.reads = vec![
+            read((None, "a"), Some("p"), false, &["shop"], None, None),
+            read((None, "a"), Some("q"), false, &["shop"], None, None),
+            read((Some("shop"), "a"), None, false, &["shop"], None, None),
+        ];
+        r.exports = vec![
+            PackExport {
+                interface: None,
+                name: "x".into(),
+                description: None,
+            };
+            3
+        ];
+        assert_eq!(flow_counts(&r), (2, 3));
+    }
+
+    /// The core exports come first, then each interface in the order the pack names it,
+    /// each export with its description.
+    #[test]
+    fn exports_are_grouped_by_interface_core_first() {
+        let e = |interface: Option<&str>, name: &str| PackExport {
+            interface: interface.map(str::to_string),
+            name: name.into(),
+            description: Some(format!("the {name}")),
+        };
+        let groups = export_groups(&[
+            e(Some("shop"), "bucket"),
+            e(None, "budget_name"),
+            e(Some("ks-{each.id}"), "key"),
+            e(Some("shop"), "region"),
+            e(None, "budget_id"),
+        ]);
+        let names = |list: &[PackExport]| list.iter().map(|e| e.name.clone()).collect::<Vec<_>>();
+        assert_eq!(
+            groups
+                .iter()
+                .map(|(i, l)| (i.clone(), names(l)))
+                .collect::<Vec<_>>(),
+            [
+                (
+                    None,
+                    vec!["budget_name".to_string(), "budget_id".to_string()]
+                ),
+                (
+                    Some("shop".to_string()),
+                    vec!["bucket".to_string(), "region".to_string()]
+                ),
+                (Some("ks-{each.id}".to_string()), vec!["key".to_string()]),
+            ]
+        );
+        assert_eq!(
+            groups[0].1[0].description.as_deref(),
+            Some("the budget_name")
+        );
+    }
+
+    #[test]
+    fn only_a_state_that_needs_attention_earns_a_badge() {
+        for local in [false, true] {
+            assert_eq!(
+                badge(PackState::Behind, local).map(|b| b.0),
+                Some("Update available")
+            );
+            assert_eq!(
+                badge(PackState::Edited, local).map(|b| b.0),
+                Some("Edited here")
+            );
+            assert_eq!(
+                badge(PackState::Gone, local),
+                Some(("Gone from source", "cloud_off", true))
+            );
+            for quiet in [PackState::Current, PackState::Own, PackState::Available] {
+                assert_eq!(badge(quiet, local), None, "{quiet:?}");
+            }
+        }
+        assert_eq!(
+            badge(PackState::NotChecked, false).map(|b| b.0),
+            Some("Not checked")
+        );
+    }
+
+    /// The local listing read no source: its `not-checked` says the fetched file is the
+    /// one that was fetched, not that another source was read.
+    #[test]
+    fn a_local_not_checked_pack_is_unchanged_since_fetched() {
+        assert_eq!(
+            badge(PackState::NotChecked, true),
+            Some(("Unchanged since fetched", "history", false))
+        );
+    }
+
+    #[test]
+    fn a_row_names_its_source_and_short_commit_or_says_it_is_own() {
+        let mut fetched = row(PackState::Current, Some("1.0"), Some("1.0"));
+        assert_eq!(origin_text(&fetched), None);
+        fetched.source = Some("up".into());
+        assert_eq!(origin_text(&fetched).as_deref(), Some("up"));
+        fetched.source = Some("satz".into());
+        fetched.commit = Some("0123456789abcdef0123456789abcdef01234567".into());
+        assert_eq!(origin_text(&fetched).as_deref(), Some("satz @ 0123456"));
+        let own = row(PackState::Own, Some("0.1"), None);
+        assert_eq!(origin_text(&own).as_deref(), Some("Own pack"));
     }
 
     #[test]
@@ -448,19 +1190,92 @@ mod tests {
         );
     }
 
+    /// The used packs lead in the order of their lines, with satz's row where a source
+    /// was listed; the other packs here follow by id; an available one is no row here.
     #[test]
-    fn every_state_has_a_word_an_icon_and_a_sentence() {
-        for state in [
-            PackState::Own,
-            PackState::Current,
-            PackState::Behind,
-            PackState::Edited,
-            PackState::Gone,
-            PackState::NotChecked,
-            PackState::Available,
-        ] {
-            let (word, icon) = state_chip(state);
-            assert!(!word.is_empty() && !icon.is_empty() && !meaning(state).is_empty());
-        }
+    fn the_used_packs_come_first_and_the_others_follow() {
+        let with = |id: &str, state: PackState| WorkloadPackRow {
+            id: id.into(),
+            ..row(state, Some("1.0"), None)
+        };
+        let used = vec![
+            ("zeta".to_string(), "packs/zeta.satz".to_string()),
+            ("alpha".to_string(), "packs/alpha.satz".to_string()),
+        ];
+        let unlisted = here_rows(None, None, &used);
+        assert_eq!(
+            unlisted.iter().map(|r| r.id.as_str()).collect::<Vec<_>>(),
+            ["zeta", "alpha"]
+        );
+        assert!(unlisted.iter().all(|r| r.row.is_none() && r.used.is_some()));
+
+        let report = WorkloadPacksReport {
+            packs_dir: "packs".into(),
+            estate: "yaml/wp.satz".into(),
+            interface_folders: Vec::new(),
+            sources: Vec::new(),
+            packs: vec![
+                with("alpha", PackState::Own),
+                with("beta", PackState::Behind),
+                with("gamma", PackState::Available),
+                with("aardvark", PackState::Current),
+            ],
+        };
+        let rows = here_rows(Some(&report), None, &used);
+        assert_eq!(
+            rows.iter().map(|r| r.id.as_str()).collect::<Vec<_>>(),
+            ["zeta", "alpha", "aardvark", "beta"]
+        );
+        assert_eq!(rows[0].row, None, "a used pack satz did not list");
+        assert_eq!(rows[1].row.as_ref().map(|r| r.state), Some(PackState::Own));
+        assert_eq!(rows[3].used, None);
+        assert!(rows.iter().all(|r| !r.local));
+    }
+
+    /// The local listing gives every pack here its row before a source is listed; once one
+    /// is, its rows win for the packs it names and the local listing keeps the rest.
+    #[test]
+    fn the_local_listing_fills_the_rows_and_a_source_listing_wins() {
+        let with = |id: &str, state: PackState| WorkloadPackRow {
+            id: id.into(),
+            ..row(state, Some("1.0"), None)
+        };
+        let report = |packs: Vec<WorkloadPackRow>| WorkloadPacksReport {
+            packs_dir: "packs".into(),
+            estate: "yaml/wp.satz".into(),
+            interface_folders: Vec::new(),
+            sources: Vec::new(),
+            packs,
+        };
+        let used = vec![("alpha".to_string(), "packs/alpha.satz".to_string())];
+        let local = report(vec![
+            with("alpha", PackState::NotChecked),
+            with("fresh", PackState::Own),
+        ]);
+        let rows = here_rows(None, Some(&local), &used);
+        assert_eq!(
+            rows.iter().map(|r| r.id.as_str()).collect::<Vec<_>>(),
+            ["alpha", "fresh"]
+        );
+        assert!(rows.iter().all(|r| r.local && r.row.is_some()));
+
+        let source = report(vec![
+            with("alpha", PackState::Behind),
+            with("offered", PackState::Available),
+        ]);
+        let rows = here_rows(Some(&source), Some(&local), &used);
+        assert_eq!(
+            rows.iter().map(|r| r.id.as_str()).collect::<Vec<_>>(),
+            ["alpha", "fresh"]
+        );
+        assert_eq!(
+            rows[0].row.as_ref().map(|r| r.state),
+            Some(PackState::Behind)
+        );
+        assert!(!rows[0].local, "the source's row wins");
+        assert!(
+            rows[1].local,
+            "a pack the source listing does not name keeps its local row"
+        );
     }
 }

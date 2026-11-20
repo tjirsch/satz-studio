@@ -1,4 +1,4 @@
-//! The Gallery view: every component in its variants, the light and the dark theme
+//! The Gallery view: every UI component in its variants, the light and the dark theme
 //! side by side — the visual checklist of the component library.
 
 use dioxus::prelude::*;
@@ -252,7 +252,7 @@ fn Sheet(theme: String) -> Element {
             section { class: "sheet__section",
                 h3 { "List and tree" }
                 List {
-                    ListItem { headline: "C0example.satz", supporting: "cloud · runs as the IaC service account", leading: rsx! { Icon { name: "description" } }, trailing: rsx! { Icon { name: "chevron_right" } }, selected: selected_row() == 0, onclick: move |_| selected_row.set(0) }
+                    ListItem { headline: "C0example.satz", supporting: "cloud · runs as the estate account", leading: rsx! { Icon { name: "description" } }, trailing: rsx! { Icon { name: "chevron_right" } }, selected: selected_row() == 0, onclick: move |_| selected_row.set(0) }
                     ListItem { headline: "greenfield.satz", supporting: "deployment mode not set", leading: rsx! { Icon { name: "description" } }, selected: selected_row() == 1, onclick: move |_| selected_row.set(1) }
                     ListItem { headline: "A static row", supporting: "no handler" }
                 }

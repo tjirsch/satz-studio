@@ -18,7 +18,7 @@ Include:
 - the operating system, the satz-studio version, and the output of `satz --version`;
 - the refusal text or the log line, if there is one.
 
-Estate paths, project ids, organisation numbers and e-mail addresses are private
+Estate paths, project ids, organization numbers and e-mail addresses are private
 data. Replace them with satz's example values before you post.
 
 ### Suggesting enhancements
@@ -72,7 +72,7 @@ below).
    `cargo install dioxus-cli@0.7.10` or `cargo binstall dioxus-cli@0.7.10`. Then
    `dx serve --package satz-studio` runs the app with hot reload and
    `dx bundle --package satz-studio --platform desktop --release`, run from the
-   repository root, builds this machine's bundle with `LICENSE`, `NOTICE`, `THIRD-PARTY-LICENSES.md` and the licence texts of the font and the grammar in it. `cargo run -p satz-studio` runs the app without it.
+   repository root, builds this machine's bundle with `LICENSE`, `NOTICE`, `THIRD-PARTY-LICENSES.md` and the license texts of the font and the grammar in it. `cargo run -p satz-studio` runs the app without it.
 5. **The platform's webview.** Windows 10 and 11 ship WebView2. Linux needs
    `webkit2gtk-4.1`, and the build needs
    `libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev`
@@ -80,7 +80,7 @@ below).
    nothing.
 
 `cargo test -p satz-studio-core` runs the headless tests: no window, no network and
-no credential. Everything is checked against `tests/fixtures` and the pinned
+no sign-in. Everything is checked against `tests/fixtures` and the pinned
 `vendor/satz`; the tests that drive the `satz` binary need it installed.
 
 ## The checks
@@ -107,7 +107,7 @@ builds.
 `ci.yml` runs the Linux job and the macOS and Windows jobs on every pull request, on
 the push to `main` that merges it, on a release tag and by hand — a branch push alone
 runs nothing, because its pull request runs the same jobs on the branch merged into
-`main`; the verification harness and the licence check run in the Linux job. It also
+`main`; the verification harness and the license check run in the Linux job. It also
 runs once a day on `main` against the newest satz release, so a satz release that
 breaks the app is seen the day it ships; a failed daily run opens an issue, or
 comments on the one still open.
@@ -132,7 +132,7 @@ makes it a MINOR. `docs/verification.md` is what is checked before one.
 ## The privacy gate
 
 This repository is public, history included. Nothing shaped like private data
-enters it: no customer, company or person; no directory id, organisation or project
+enters it: no customer, company or person; no directory id, organization or project
 number, billing account, tenant id, e-mail address, project path or checkout path
 that is not one of satz's documented example values (`acme`, `example.com`,
 `C0example`, `123456789012`; the table is `docs/examples.md` in the satz
@@ -166,24 +166,24 @@ record.
 
 ## The vendored grammar
 
-`vendor/satz-tree-sitter/` is generated code: the tree-sitter parser for Satz,
-copied from the grammar repository at the commit named in `COMMIT` and compiled by
+`vendor/satz-tree-sitter/` is a generated parser: the tree-sitter parser for Satz,
+copied from the grammar repository at the commit named in `COMMIT` and built by
 `crates/satz-studio-core/build.rs`. Edit nothing in it. `scripts/sync-grammar.sh
 <path-to-grammar-checkout>` is what refreshes it, and a grammar change belongs in
 the grammar repository first.
 
-## Licence
+## License
 
 The repository is under the Apache License 2.0 ([`LICENSE`](LICENSE)). A contribution
-you submit for inclusion in it is licensed under those same terms, by §5 of the licence
+you submit for inclusion in it is licensed under those same terms, by §5 of the license
 itself; there is no separate agreement to sign and none is asked for.
 
 A change that bundles a file from somewhere else adds its line to [`NOTICE`](NOTICE) in
-the same pull request, with the licence it comes under and where that licence text sits.
+the same pull request, with the license it comes under and where that license text sits.
 
 A change that moves `Cargo.lock` regenerates
-[`THIRD-PARTY-LICENSES.md`](THIRD-PARTY-LICENSES.md), the licence text of every crate the
-app is compiled from, in the same pull request:
+[`THIRD-PARTY-LICENSES.md`](THIRD-PARTY-LICENSES.md), the license text of every crate the
+app is built from, in the same pull request:
 
 ```sh
 cargo binstall cargo-about@0.9.2   # the version scripts/update-third-party-licenses.sh names
@@ -192,11 +192,11 @@ bash scripts/update-third-party-licenses.sh
 ```
 
 `ci.yml` runs the script with `--check` and fails on a stale file. A dependency under a
-licence `about.toml` does not accept fails the script, naming the crate; whether to accept
-that licence is the maintainer's decision, not the pull request's.
+license `about.toml` does not accept fails the script, naming the crate; whether to accept
+that license is the maintainer's decision, not the pull request's.
 
 A change that moves the `vendor/satz` pin and changes satz's own `NOTICE` copies the new
 `vendor/satz/NOTICE` over the text under "The NOTICE of satz" at the end of
-[`NOTICE`](NOTICE), verbatim, in the same pull request: satz-core is compiled into the
+[`NOTICE`](NOTICE), verbatim, in the same pull request: satz-core is built into the
 app, so every bundle carries satz's notices, and `tests/notice.rs` in satz-studio-core
 fails until the two agree.

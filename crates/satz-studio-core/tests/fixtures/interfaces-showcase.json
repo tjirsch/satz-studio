@@ -46,16 +46,6 @@
       "line": 320
     },
     {
-      "name": "workload_folder",
-      "how": "static",
-      "value": "\"organizations/123456789012\"",
-      "targets": [],
-      "attach": [],
-      "description": "Where the customer's and the projects' folders live: the organisation",
-      "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
-      "line": 321
-    },
-    {
       "name": "infra_project_number",
       "how": "lookup",
       "value": "data.google_project.infra.number",
@@ -64,7 +54,7 @@
       ],
       "attach": [],
       "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
-      "line": 322
+      "line": 321
     },
     {
       "name": "audit_bucket_url",
@@ -75,7 +65,7 @@
       ],
       "attach": [],
       "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
-      "line": 323
+      "line": 322
     },
     {
       "name": "regions",
@@ -84,7 +74,7 @@
       "targets": [],
       "attach": [],
       "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
-      "line": 324
+      "line": 323
     },
     {
       "name": "folders",
@@ -97,7 +87,7 @@
       "attach": [],
       "description": "Every folder, by label",
       "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
-      "line": 330
+      "line": 329
     },
     {
       "name": "buckets",
@@ -109,7 +99,7 @@
       ],
       "attach": [],
       "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
-      "line": 331
+      "line": 330
     },
     {
       "name": "infra_projects",
@@ -123,7 +113,7 @@
       "attach": [],
       "description": "The Google projects in the infrastructure folder",
       "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
-      "line": 332
+      "line": 331
     },
     {
       "name": "archive_project_id",
@@ -138,7 +128,7 @@
       ],
       "description": "The project's Google project",
       "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
-      "line": 351
+      "line": 350
     },
     {
       "name": "archive_project_number",
@@ -150,7 +140,7 @@
       ],
       "attach": [],
       "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
-      "line": 352
+      "line": 351
     },
     {
       "name": "audit_bucket_name",
@@ -163,7 +153,7 @@
       "attach": [],
       "description": "The audit log bucket",
       "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
-      "line": 346
+      "line": 345
     },
     {
       "name": "topic",
@@ -176,7 +166,7 @@
       "attach": [],
       "description": "The project's Pub/Sub topic",
       "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
-      "line": 362
+      "line": 361
     },
     {
       "name": "topic",
@@ -189,7 +179,7 @@
       "attach": [],
       "description": "The project's Pub/Sub topic",
       "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
-      "line": 362
+      "line": 361
     }
   ],
   "interfaces": [
@@ -201,7 +191,7 @@
       ],
       "exports": 2,
       "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
-      "line": 349
+      "line": 348
     },
     {
       "name": "audit",
@@ -209,7 +199,7 @@
       "uses": [],
       "exports": 1,
       "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
-      "line": 345
+      "line": 344
     },
     {
       "name": "billing-events",
@@ -219,7 +209,7 @@
       ],
       "exports": 1,
       "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
-      "line": 360
+      "line": 359
     },
     {
       "name": "orders-events",
@@ -229,10 +219,10 @@
       ],
       "exports": 1,
       "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
-      "line": 360
+      "line": 359
     }
   ],
-  "requests": [
+  "list_params": [
     {
       "param": "event_topics",
       "key": "name",
@@ -247,6 +237,20 @@
       },
       "description": "A Pub/Sub topic in the infrastructure project",
       "entries": 2,
+      "rows": [
+        {
+          "name": "orders",
+          "retention": "86400s",
+          "subscription": "orders-audit"
+        },
+        {
+          "name": "billing",
+          "retention": "604800s"
+        }
+      ],
+      "defaults": {
+        "retention": "604800s"
+      },
       "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
       "line": 241
     }

@@ -1,7 +1,7 @@
 //! The Documents destination: what the estate hands to people as a file. Three kinds
 //! stand here, in the order they are made: the decisions sheet, which satz writes from
 //! the estate ([`crate::views::export`]); the compliance reports, which satz writes from
-//! the estate and the live organisation ([`COMPLIANCE`]); and the documents an agent
+//! the estate and the live organization ([`COMPLIANCE`]); and the documents an agent
 //! writes with a skill — the app runs no model, so those are started in the configured
 //! client and made there
 //! ([ADR 0027](../../../../docs/adr/0027-documents-is-a-destination-of-its-own.md),
@@ -11,7 +11,7 @@ use dioxus::prelude::*;
 use satz_studio_core::agent;
 
 use crate::components::{Button, ButtonVariant, Card, CardVariant, Icon};
-use crate::state::{AppStore, AppStoreStoreExt, ToastKind, toast};
+use crate::state::{AppStore, AppStoreStoreExt, EstateStoreStoreExt, ToastKind, toast};
 use crate::views::commands::{COMPLIANCE, CommandDeck};
 use crate::views::export::ExportCard;
 
@@ -31,13 +31,13 @@ pub const AGENT_DOCUMENTS: &[AgentDocument] = &[
         skill: "estate-documentation",
         icon: "description",
         title: "Estate documentation",
-        text: "The short documentation of the organisation as Word documents, written from the estate: its main settings, the infrastructure project, and what is deployed.",
+        text: "The short documentation of the organization as Word documents, written from the estate: its main settings, the infrastructure project, and what is applied.",
     },
     AgentDocument {
         skill: "security-review",
         icon: "verified_user",
         title: "Security review",
-        text: "A review against the CIS Google Cloud Foundations benchmark with live evidence from the organisation: the checklist of every control with its status, and the remediation plan.",
+        text: "A review against the CIS Google Cloud Foundations benchmark with live evidence from the organization: the checklist of every control with its status, and the remediation plan.",
     },
 ];
 
@@ -55,6 +55,13 @@ pub fn DocumentsView() -> Element {
     let Some(open) = app.open().cloned() else {
         return rsx! {};
     };
+    // the catalogs are part of the preset library, `<presets_dir>/catalogs/`
+    let catalogs = app
+        .estate()
+        .model()
+        .read()
+        .as_deref()
+        .is_none_or(|m| m.packs.has_presets());
     let agent_command = app.settings().read().agent_command.clone();
     let program = agent::program(&agent_command);
 
@@ -67,10 +74,16 @@ pub fn DocumentsView() -> Element {
             ExportCard {}
 
             h2 { class: "documents__section", "Compliance" }
-            p { class: "view__lead",
-                "The estate against a catalog, and the evidence report. Both read the live organisation, so they need you signed in (Apply says whether you are)."
+            if catalogs {
+                p { class: "view__lead",
+                    "The estate against a catalog, and the evidence report. Both read the live organization, so they need you signed in (Apply says whether you are)."
+                }
+                CommandDeck { ids: COMPLIANCE.to_vec() }
+            } else {
+                p { class: "view__lead",
+                    "The compliance reports are made from the catalogs of the preset library, which an organization's estate holds. This estate has none: its compliance is reported in the organization's estate."
+                }
             }
-            CommandDeck { ids: COMPLIANCE.to_vec() }
 
             h2 { class: "documents__section", "Written by an agent" }
             p { class: "view__lead",

@@ -34,7 +34,8 @@ fn no_packs(main: &Path) -> PacksReport {
         packs: Vec::new(),
         unmanaged: Vec::new(),
         interfaces: Vec::new(),
-        works_in: satz_studio_core::satz::reports::EstateMode::Organisation,
+        delegated_by: Vec::new(),
+        works_in: satz_studio_core::satz::reports::EstateMode::Organization,
         findings: Vec::new(),
     }
 }
@@ -263,12 +264,12 @@ fn smoke_nests_the_hierarchy_and_types_the_rows() {
 fn smoke_reads_grants_as_member_nodes() {
     let m = model_of("smoke.satz");
     let groups = child(&m.outline, "google_cloud_identity_group");
-    let users = child(&groups.children, "{svc_iac_users_group}");
+    let users = child(&groups.children, "{estate_account_user_group}");
     assert_eq!(users.kind, ResourceKind::Resource);
-    assert_eq!(users.name(), Some("{svc_iac_users_group}"));
+    assert_eq!(users.name(), Some("{estate_account_user_group}"));
     assert_eq!(
         users.key_parts,
-        vec![param("svc_iac_users_group", "svc-iac-001-users")]
+        vec![param("estate_account_user_group", "svc-iac-001-users")]
     );
     assert!(
         users.missing_required.is_empty(),
@@ -345,7 +346,7 @@ fn showcase_decodes_references_locks_import_ids_and_keeps_statements_out() {
             // a grant map holding an `each` is a block too
             "google_pubsub_topic_iam_member",
         ],
-        "claim, question, action, suppress, private, request and hcl are not blocks"
+        "claim, question, action, suppress, private, entries and hcl are not blocks"
     );
     let top: Vec<(&str, Option<&str>, UseState)> = m
         .uses

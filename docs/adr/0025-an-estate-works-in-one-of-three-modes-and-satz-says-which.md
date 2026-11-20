@@ -1,6 +1,6 @@
 # 0025 — an estate works in one of three modes, and satz says which
 
-- **Status:** accepted
+- **Status:** superseded by [0032](0032-an-estate-is-an-organizations-or-a-workload-estate-and-a-pack-shows-its-declarations.md) — satz 0.107.0 knows an organization's estate and a workload estate, and no `needs`
 - **Date:** 2026-11-12
 - **Deciders:** the maintainer
 

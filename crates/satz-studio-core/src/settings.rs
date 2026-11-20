@@ -1,6 +1,6 @@
 //! The settings file: `<config dir>/satz-studio/settings.toml`. A missing file means
 //! first run and yields the defaults; a file that does not parse is an error, never
-//! silently replaced. Nothing here is a credential: the app holds none (ADR 0020).
+//! silently replaced. Nothing here is a sign-in: the app holds none (ADR 0020).
 
 use std::path::{Path, PathBuf};
 
@@ -23,6 +23,10 @@ pub struct Settings {
     /// the agentic client the Agent view starts in the estate's directory, as a command
     /// line; its first word is looked up on `PATH`. Empty means none is configured
     pub agent_command: String,
+    /// the editor a pack's file opens in, as a command line run with the file as its last
+    /// argument; empty means the system's text editor (`crate::editor`). Saved only when
+    /// its program is found (`crate::editor::validate`)
+    pub editor: String,
     pub theme: Theme,
     /// the folder the Start screen opened last
     pub last_root: Option<PathBuf>,
@@ -35,6 +39,7 @@ impl Default for Settings {
             dismissed_satz: None,
             mcp_allow: Allow::ReadWrite,
             agent_command: DEFAULT_AGENT_COMMAND.to_string(),
+            editor: String::new(),
             theme: Theme::System,
             last_root: None,
         }
@@ -67,7 +72,7 @@ pub enum SettingsError {
         #[source]
         source: toml::de::Error,
     },
-    #[error("settings could not be serialised: {0}")]
+    #[error("settings could not be serialized: {0}")]
     Serialize(#[from] toml::ser::Error),
 }
 
@@ -152,6 +157,14 @@ mod tests {
     }
 
     #[test]
+    fn a_written_editor_is_read_back() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("settings.toml");
+        std::fs::write(&path, "editor = \"subl -n\"\n").unwrap();
+        assert_eq!(Settings::load_from(&path).unwrap().editor, "subl -n");
+    }
+
+    #[test]
     fn a_missing_file_is_the_first_run() {
         let dir = tempfile::tempdir().unwrap();
         assert_eq!(
@@ -179,6 +192,7 @@ mod tests {
         let s = Settings::load_from(&path).unwrap();
         assert_eq!(s.mcp_allow, Allow::Read);
         assert_eq!(s.agent_command, DEFAULT_AGENT_COMMAND);
+        assert_eq!(s.editor, "");
         assert_eq!(s.theme, Theme::System);
     }
 }

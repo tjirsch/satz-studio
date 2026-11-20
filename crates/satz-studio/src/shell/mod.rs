@@ -1,5 +1,5 @@
 //! The shell around every view: the navigation rail, the top bar, the satz banner,
-//! the diagnostics drawer and the snackbar host. While an estate is open the whole
+//! the path bar at the foot of a step, the Findings drawer and the snackbar host. While an estate is open the whole
 //! frame sits inside [`EstateHost`], which owns that estate's coroutine, so every part
 //! of the shell can reach it through `try_use_context::<Coroutine<EstateAction>>()`.
 
@@ -33,6 +33,8 @@ use crate::views::gallery::GalleryView;
 use crate::views::interview::DecisionsView;
 use crate::views::map::PresetsView;
 use crate::views::overview::OverviewView;
+use crate::views::packs::PacksView;
+use crate::views::path::PathBar;
 use crate::views::settings::SettingsView;
 
 #[component]
@@ -74,6 +76,7 @@ fn Frame() -> Element {
                 TopBar {}
                 SatzBanner {}
                 main { class: "shell__content", Content {} }
+                PathBar {}
                 DiagnosticsDrawer {}
             }
             if app.palette_open().cloned() && app.open().is_some() {
@@ -101,6 +104,7 @@ fn Content() -> Element {
         View::Overview => rsx! { OverviewView {} },
         View::Decisions => rsx! { DecisionsView {} },
         View::Presets => rsx! { PresetsView {} },
+        View::Packs => rsx! { PacksView {} },
         View::Estate => rsx! { EstateView {} },
         View::Apply => rsx! { ApplyView {} },
         View::Documents => rsx! { DocumentsView {} },
