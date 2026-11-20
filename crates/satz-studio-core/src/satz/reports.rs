@@ -486,14 +486,6 @@ impl EstateMode {
             EstateMode::Workload => "Workload estate",
         }
     }
-
-    /// The Material Symbols name that stands for it.
-    pub fn icon(self) -> &'static str {
-        match self {
-            EstateMode::Organization => "corporate_fare",
-            EstateMode::Workload => "deployed_code",
-        }
-    }
 }
 
 /// What `satz_presets` returns: every pack the pack graph offers, as this estate has it.

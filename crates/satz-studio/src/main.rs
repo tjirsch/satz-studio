@@ -2,10 +2,15 @@
 //! with the app's version, initializes tracing from `RUST_LOG`, and launches [`app::App`].
 
 mod app;
+// The component library's own code, copied in by `dx components add` and kept as
+// published so `dx components update` can replace it. It offers more variants and
+// sizes than the app uses; those are part of the library, not dead code to remove.
+#[allow(dead_code, unused_imports)]
 mod components;
 mod shell;
 mod state;
 mod views;
+mod widgets;
 
 use dioxus::desktop::{Config, LogicalSize, WindowBuilder};
 

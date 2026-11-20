@@ -8,14 +8,19 @@ use satz_studio_core::cst::{NodeId, TypedValue};
 use satz_studio_core::edit::Edit;
 use satz_studio_core::model::{AttrRow, EditMode, ResourceKind, ResourceNode, SchemaStatus};
 
-use crate::components::{
-    Button, ButtonVariant, Card, CardVariant, Chip, ChipKind, Draft, FieldKind, Icon, IconButton,
-    SourceChips, TextField, Tree, TreeItem, TypedField,
+use dioxus_icons::lucide::{
+    Braces, CircleQuestionMark, Code, Download, ListTodo, Lock, Network, Package, Puzzle,
+    Settings as SettingsIcon, Shapes, TextAlignStart, TriangleAlert, User, Workflow,
 };
+
+use crate::components::badge::{Badge, BadgeVariant};
+use crate::components::button::{Button, ButtonSize, ButtonVariant};
+use crate::components::card::{Card, CardContent, CardHeader};
 use crate::state::{
     AppStore, AppStoreStoreExt, DiagnosticSelection, EstateAction, EstateStoreStoreExt,
 };
 use crate::views::{line_text, value_source};
+use crate::widgets::{Draft, Field, FieldKind, SourceTags, Tree, TreeItem, TypedField};
 
 /// Branches deeper than this start collapsed.
 const OPEN_DEPTH: usize = 2;
@@ -55,14 +60,15 @@ pub fn find_node(outline: &[ResourceNode], id: NodeId) -> Option<&ResourceNode> 
     None
 }
 
-fn kind_icon(kind: ResourceKind) -> &'static str {
+/// The icon of a kind of block, at a size and with the class of the place it stands in.
+fn kind_icon(kind: ResourceKind, size: u32, class: &'static str) -> Element {
     match kind {
-        ResourceKind::Config => "settings",
-        ResourceKind::ResourceMap => "category",
-        ResourceKind::Resource => "deployed_code",
-        ResourceKind::NestedBlock => "data_object",
-        ResourceKind::MemberGrant => "person",
-        ResourceKind::Unknown => "help",
+        ResourceKind::Config => rsx! { SettingsIcon { size, class } },
+        ResourceKind::ResourceMap => rsx! { Shapes { size, class } },
+        ResourceKind::Resource => rsx! { Package { size, class } },
+        ResourceKind::NestedBlock => rsx! { Braces { size, class } },
+        ResourceKind::MemberGrant => rsx! { User { size, class } },
+        ResourceKind::Unknown => rsx! { CircleQuestionMark { size, class } },
     }
 }
 
@@ -142,9 +148,11 @@ pub fn ResourcesPane() -> Element {
     let (Some(model), Some(cst)) = (model, cst) else {
         return rsx! {
             div { class: "pane resources",
-                Card { variant: CardVariant::Filled, class: "resources__empty",
-                    Icon { name: "account_tree", size: 48, class: "placeholder__icon" }
-                    p { "The estate model is not available — the drawer says why." }
+                Card {
+                    CardContent { class: "resources__empty",
+                        Network { size: 48, class: "placeholder__icon" }
+                        p { "The estate model is not available — the drawer says why." }
+                    }
                 }
             }
         };
@@ -176,20 +184,22 @@ pub fn ResourcesPane() -> Element {
                 span { class: "grow" }
                 if let Some(dir) = &missing_schema {
                     div { class: "resources__no-schema", role: "alert",
-                        Icon { name: "schema", size: 20 }
+                        Workflow { size: 20 }
                         span { "No provider schema in " code { "{dir}" } ": the rows are untyped and locked. Run update-schema." }
-                        Button { variant: ButtonVariant::Tonal, icon: "download", disabled: loading, onclick: move |_| handle.send(EstateAction::RunCommand(vec!["update-schema".to_string()])), "Run update-schema" }
+                        Button { variant: ButtonVariant::Secondary, disabled: loading, onclick: move |_| handle.send(EstateAction::RunCommand(vec!["update-schema".to_string()])), Download { size: 16 } "Run update-schema" }
                     }
                 }
             }
             div { class: "resources__panes",
-                Card { variant: CardVariant::Filled, class: "resources__tree",
-                    if model.outline.is_empty() {
-                        p { class: "resources__none", "The file declares no block." }
-                    }
-                    Tree {
-                        for n in model.outline.iter().cloned() {
-                            NodeItem { key: "{n.id}", node: n, depth: 0, selected: selected(), onselect: move |id: NodeId| selected.set(Some(id)) }
+                Card { class: "resources__tree",
+                    CardContent {
+                        if model.outline.is_empty() {
+                            p { class: "resources__none", "The file declares no block." }
+                        }
+                        Tree {
+                            for n in model.outline.iter().cloned() {
+                                NodeItem { key: "{n.id}", node: n, depth: 0, selected: selected(), onselect: move |id: NodeId| selected.set(Some(id)) }
+                            }
                         }
                     }
                 }
@@ -199,9 +209,11 @@ pub fn ResourcesPane() -> Element {
                             NodeDetail { key: "{n.id}:{n.line}", node: n, value_sources, read_only, loading }
                         },
                         None => rsx! {
-                            Card { variant: CardVariant::Outlined, class: "resources__empty",
-                                Icon { name: "account_tree", size: 48, class: "placeholder__icon" }
-                                p { "Select a block in the tree to see its attributes." }
+                            Card {
+                                CardContent { class: "resources__empty",
+                                    Network { size: 48, class: "placeholder__icon" }
+                                    p { "Select a block in the tree to see its attributes." }
+                                }
                             }
                         },
                     }
@@ -228,10 +240,16 @@ fn NodeItem(
     let trailing = (missing > 0 || when.is_some()).then(|| {
         rsx! {
             if let Some(when) = when.clone() {
-                Chip { kind: ChipKind::Assist, icon: "rule", label: when }
+                Badge { variant: BadgeVariant::Outline,
+                    ListTodo { size: 12 }
+                    "{when}"
+                }
             }
             if missing > 0 {
-                Chip { kind: ChipKind::Assist, icon: "warning", label: format!("{missing} required missing"), error: true, class: "resources__missing-chip" }
+                Badge { variant: BadgeVariant::Destructive, class: "resources__missing",
+                    TriangleAlert { size: 12 }
+                    "{missing} required missing"
+                }
             }
         }
     });
@@ -239,14 +257,14 @@ fn NodeItem(
         rsx! {
             TreeItem {
                 label,
-                icon: kind_icon(node.kind),
+                icon: kind_icon(node.kind, 16, ""),
                 supporting,
                 open: depth < OPEN_DEPTH,
                 selected: selected == Some(id),
                 trailing,
                 onclick: move |_| onselect.call(id),
                 for u in node.uses.iter() {
-                    TreeItem { key: "use-{u.line}", label: u.path.clone(), icon: "extension", supporting: u.gate.clone().map(|g| format!("when {g}")).unwrap_or_default() }
+                    TreeItem { key: "use-{u.line}", label: u.path.clone(), icon: rsx! { Puzzle { size: 16 } }, supporting: u.gate.clone().map(|g| format!("when {g}")).unwrap_or_default() }
                 }
                 for c in node.children.iter().cloned() {
                     NodeItem { key: "{c.id}", node: c, depth: depth + 1, selected, onselect: move |id: NodeId| onselect.call(id) }
@@ -257,7 +275,7 @@ fn NodeItem(
         rsx! {
             TreeItem {
                 label,
-                icon: kind_icon(node.kind),
+                icon: kind_icon(node.kind, 16, ""),
                 supporting,
                 selected: selected == Some(id),
                 trailing,
@@ -279,36 +297,40 @@ fn NodeDetail(
     let block_editable = !matches!(node.kind, ResourceKind::Unknown);
     let title = label_of(&node);
     rsx! {
-        Card { variant: CardVariant::Outlined, class: "node-detail",
-            div { class: "node-detail__head",
-                Icon { name: kind_icon(node.kind), size: 24, class: "placeholder__icon" }
-                div { class: "node-detail__titles",
-                    h2 { class: "node-detail__title", "{title}" }
-                    span { class: "node-detail__subtitle",
-                        "{kind_label(node.kind)}"
-                        if let Some(t) = &node.tf_type { " · " code { "{t}" } }
-                        " · line {node.line}"
-                    }
-                }
-            }
-            if !node.missing_required.is_empty() {
-                div { class: "node-detail__missing", role: "alert",
-                    Icon { name: "warning", size: 20 }
-                    span {
-                        "Required and not written: "
-                        for (i, m) in node.missing_required.iter().enumerate() {
-                            code { key: "{m}", "{m}" }
-                            if i + 1 < node.missing_required.len() { ", " }
+        Card { class: "node-detail",
+            CardHeader {
+                div { class: "node-detail__head",
+                    {kind_icon(node.kind, 24, "placeholder__icon")}
+                    div { class: "node-detail__titles",
+                        h2 { class: "node-detail__title", "{title}" }
+                        span { class: "node-detail__subtitle",
+                            "{kind_label(node.kind)}"
+                            if let Some(t) = &node.tf_type { " · " code { "{t}" } }
+                            " · line {node.line}"
                         }
-                        ". Adding a row is not part of this version; write it in the file."
                     }
                 }
             }
-            if node.attrs.is_empty() {
-                p { class: "node-detail__none", "No attribute on this block; its blocks are in the tree." }
-            }
-            for (row, (source, line)) in node.attrs.iter().cloned().zip(value_sources.into_iter()) {
-                AttrRowView { key: "{row.key}:{row.line}:{source}", row, source, line, block_editable, read_only, loading }
+            CardContent {
+                if !node.missing_required.is_empty() {
+                    div { class: "node-detail__missing", role: "alert",
+                        TriangleAlert { size: 20 }
+                        span {
+                            "Required and not written: "
+                            for (i, m) in node.missing_required.iter().enumerate() {
+                                code { key: "{m}", "{m}" }
+                                if i + 1 < node.missing_required.len() { ", " }
+                            }
+                            ". Adding a row is not part of this version; write it in the file."
+                        }
+                    }
+                }
+                if node.attrs.is_empty() {
+                    p { class: "node-detail__none", "No attribute on this block; its blocks are in the tree." }
+                }
+                for (row, (source, line)) in node.attrs.iter().cloned().zip(value_sources.into_iter()) {
+                    AttrRowView { key: "{row.key}:{row.line}:{source}", row, source, line, block_editable, read_only, loading }
+                }
             }
         }
     }
@@ -371,18 +393,21 @@ fn AttrRowView(
                 }
                 // a condition satz writes the attribute under: read here, edited in the file
                 if let Some(when) = row.when.clone() {
-                    Chip { kind: ChipKind::Assist, icon: "rule", label: when }
+                    Badge { variant: BadgeVariant::Outline,
+                        ListTodo { size: 12 }
+                        "{when}"
+                    }
                 }
             }
             div { class: "attr-row__field",
                 if locked {
-                    div { class: "attr-row__chips", SourceChips { value: row.value.clone() } }
+                    div { class: "attr-row__tags", SourceTags { value: row.value.clone() } }
                     if let Some(r) = reason {
-                        span { class: "attr-row__reason", Icon { name: "lock", size: 16 } "{r}" }
+                        span { class: "attr-row__reason", Lock { size: 16 } "{r}" }
                     }
                 } else if in_source {
-                    div { class: "attr-row__chips", SourceChips { value: row.value.clone() } }
-                    TextField {
+                    div { class: "attr-row__tags", SourceTags { value: row.value.clone() } }
+                    Field {
                         label: "Satz source",
                         value: raw(),
                         monospace: true,
@@ -401,6 +426,7 @@ fn AttrRowView(
                         kind: k,
                         draft,
                         label: row.key.clone(),
+                        label_hidden: true,
                         subject: row.key.clone(),
                         disabled: loading,
                         oncommit: move |d: Draft| {
@@ -414,21 +440,27 @@ fn AttrRowView(
             }
             div { class: "attr-row__tools",
                 if !locked {
-                    IconButton {
-                        icon: "code",
-                        label: if in_source { "Edit as a value" } else { "Edit the Satz source" },
-                        selected: in_source,
+                    Button {
+                        variant: if in_source { ButtonVariant::Secondary } else { ButtonVariant::Ghost },
+                        size: ButtonSize::Icon,
+                        title: if in_source { "Edit as a value" } else { "Edit the Satz source" },
+                        "aria-label": if in_source { "Edit as a value" } else { "Edit the Satz source" },
+                        "aria-pressed": if in_source { "true" } else { "false" },
                         disabled: value_draft.is_none(),
                         onclick: move |_| {
                             mode.set(if mode() == EditMode::Source { EditMode::Value } else { EditMode::Source });
                         },
+                        Code { size: 16 }
                     }
                 }
-                IconButton {
-                    icon: "subject",
-                    label: "Show the line",
-                    selected: show_raw(),
+                Button {
+                    variant: if show_raw() { ButtonVariant::Secondary } else { ButtonVariant::Ghost },
+                    size: ButtonSize::Icon,
+                    title: "Show the line",
+                    "aria-label": "Show the line",
+                    "aria-pressed": if show_raw() { "true" } else { "false" },
                     onclick: move |_| show_raw.toggle(),
+                    TextAlignStart { size: 16 }
                 }
             }
         }

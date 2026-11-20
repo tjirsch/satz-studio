@@ -1,4 +1,4 @@
-//! The path through an estate, as the rail orders it: what the estate is, its presets and packs,
+//! The path through an estate, as the sidebar orders it: what the estate is, its presets and packs,
 //! their questions, its way to the organization, its documents. While a step's view is
 //! showing, the window's foot carries a bar that goes back to the step before it and on to
 //! the next one, outside the view's scrolling content so it never scrolls away
@@ -8,8 +8,11 @@
 
 use dioxus::prelude::*;
 
-use crate::components::{Button, ButtonVariant, Icon, Tooltip};
+use dioxus_icons::lucide::{ArrowLeft, ArrowRight};
+
+use crate::components::button::{Button, ButtonVariant};
 use crate::state::{AppStore, AppStoreStoreExt, EstateStoreStoreExt, View};
+use crate::widgets::Tip;
 
 /// The steps, in order. An estate without a Presets destination skips that one.
 const STEPS: [View; 6] = [
@@ -53,8 +56,8 @@ pub fn purpose(step: View) -> &'static str {
     }
 }
 
-/// The bar at the window's foot while a step is showing: at its right edge a text button
-/// "← <step>" to the step before and a filled button "<step> →" to the next, each with
+/// The bar at the window's foot while a step is showing: at its right edge a ghost button
+/// "← <step>" to the step before and a primary button "<step> →" to the next, each with
 /// what that step is for as its tooltip, opening upward. The first step has no previous,
 /// the last no next. Nothing on a view that is not a step, and nothing without an open
 /// estate.
@@ -76,24 +79,21 @@ pub fn PathBar() -> Element {
     rsx! {
         div { class: "path-bar", role: "toolbar", "aria-label": "Path",
             if let Some(previous) = previous {
-                Tooltip { text: purpose(previous), class: "path-bar__tip",
+                Tip { text: purpose(previous),
                     Button {
-                        variant: ButtonVariant::Text,
-                        icon: "arrow_back",
-                        class: "path-bar__back",
+                        variant: ButtonVariant::Ghost,
                         onclick: move |_| app.nav().set(previous),
+                        ArrowLeft { size: 16 }
                         "{previous.label()}"
                     }
                 }
             }
             if let Some(next) = next {
-                Tooltip { text: purpose(next), class: "path-bar__tip",
+                Tip { text: purpose(next),
                     Button {
-                        variant: ButtonVariant::Filled,
-                        class: "path-bar__next",
                         onclick: move |_| app.nav().set(next),
-                        span { class: "path-bar__label", "{next.label()}" }
-                        Icon { name: "arrow_forward", size: 18 }
+                        "{next.label()}"
+                        ArrowRight { size: 16 }
                     }
                 }
             }
@@ -105,7 +105,7 @@ pub fn PathBar() -> Element {
 mod tests {
     use super::*;
 
-    /// The walk is the rail's order without Estate; an estate without presets goes from
+    /// The walk is the sidebar's order without Estate; an estate without presets goes from
     /// the Overview to its packs.
     #[test]
     fn the_steps_follow_each_other_and_an_estate_without_presets_skips_them() {
@@ -174,7 +174,7 @@ mod tests {
 
     /// Every step that can be gone to says what it is for, and is a primary destination.
     #[test]
-    fn every_next_step_has_a_purpose_and_is_in_the_rail() {
+    fn every_next_step_has_a_purpose_and_is_in_the_sidebar() {
         for step in &STEPS[1..] {
             assert!(!purpose(*step).is_empty(), "{step:?}");
             assert!(View::PRIMARY.contains(step), "{step:?}");

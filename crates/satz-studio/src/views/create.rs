@@ -7,21 +7,30 @@
 //! overrides that are empty by default; what the run derives is shown in the log while
 //! the window is open and is written into the estate satz created, nowhere else.
 
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use dioxus::prelude::*;
+use dioxus_icons::lucide::{
+    CircleAlert, CircleCheck, FolderOpen, HousePlus, Lock, Square, Terminal, TriangleAlert,
+};
 use satz_studio_core::satz::init::{check_target, existing};
 use satz_studio_core::satz::{CliLine, InitOptions};
 
-use crate::components::{
-    Button, ButtonVariant, Card, CardVariant, Chip, ChipKind, ChipList, Icon, LinearProgress,
-    Segment, SegmentedButton, Switch, TextField,
-};
+use crate::components::badge::{Badge, BadgeVariant};
+use crate::components::button::{Button, ButtonVariant};
+use crate::components::card::{Card, CardContent, CardDescription, CardHeader};
+use crate::components::progress::Progress;
+use crate::components::toggle_group::{ToggleGroup, ToggleItem};
 use crate::state::{AppAction, AppStore, AppStoreStoreExt, CreateStoreStoreExt, run_line};
+use crate::widgets::{Field, SwitchRow, TagList};
 
 /// The provider set `satz init --defaults` knows; it expands to `google` and
 /// `google-beta` and fetches the schema of each with the tf tool.
 const GOOGLE_SET: &str = "google";
+
+/// The Terraform tools `satz init --tf-tool` takes.
+const TF_TOOLS: [&str; 2] = ["tofu", "terraform"];
 
 /// The OS dialog for the interface folders a workload estate is written from: one or more
 /// folders, added to the ones already chosen.
@@ -116,213 +125,236 @@ pub fn CreateEstate() -> Element {
     let preview = run_line(Path::new(&dir), &run.argv());
     let google = options().defaults.iter().any(|d| d == GOOGLE_SET);
 
+    let mode_pressed: HashSet<usize> = [usize::from(team())].into_iter().collect();
+    let tool_index = TF_TOOLS.iter().position(|t| *t == options().tf_tool);
+    let tool_pressed: HashSet<usize> = tool_index.into_iter().collect();
+
     rsx! {
         div { class: "create",
-            Card { variant: CardVariant::Outlined, class: "create__form",
-                h2 { class: "create__heading", Icon { name: "add_home", size: 22 } "New estate" }
-                p { class: "create__description",
-                    "satz init writes config.toml, satz/, hcl/, schemas/, .gitignore and the estate file into the folder you choose. It reads your sign-in and derives the customer's domain, directory id, organization id, billing account and first administrator from the platform, saying of each where it came from."
-                }
-
-                div { class: "create__folder",
-                    TextField {
-                        label: "Folder",
-                        value: target(),
-                        leading_icon: "folder",
-                        class: "create__folder-field",
-                        supporting: problem.clone().unwrap_or_else(|| "An empty folder: satz creates the estate inside it".to_string()),
-                        error: problem.is_some(),
-                        disabled: running,
-                        oninput: move |v| target.set(v),
-                    }
-                    Button {
-                        icon: "folder_open",
-                        variant: ButtonVariant::Tonal,
-                        disabled: running,
-                        onclick: move |_| pick_target(target),
-                        "Choose folder"
+            Card { class: "create__form",
+                CardHeader {
+                    h2 { class: "create__heading", HousePlus { size: 22 } "New estate" }
+                    CardDescription {
+                        "satz init writes config.toml, satz/, hcl/, schemas/, .gitignore and the estate file into the folder you choose. It reads your sign-in and derives the customer's domain, directory id, organization id, billing account and first administrator from the platform, saying of each where it came from."
                     }
                 }
-                if !found.is_empty() {
-                    p { class: "create__warning",
-                        Icon { name: "warning", size: 18 }
-                        {existing_warning(&found)}
-                    }
-                    Switch {
-                        label: "Rewrite the estate file",
-                        checked: options().force,
-                        disabled: running,
-                        onchange: move |on: bool| options.write().force = on,
-                    }
-                }
-
-                p { class: "create__label", "What the estate is for" }
-                SegmentedButton {
-                    options: vec![Segment::new("organization", "An organization"), Segment::new("team", "A workload, from interface folders")],
-                    selected: if team() { "team".to_string() } else { "organization".to_string() },
-                    onselect: move |v: String| {
-                        team.set(v == "team");
-                        if v != "team" {
-                            let mut o = options.write();
-                            o.from.clear();
-                            o.name.clear();
+                CardContent {
+                    div { class: "create__folder",
+                        Field {
+                            label: "Folder",
+                            value: target(),
+                            class: "create__folder-field",
+                            supporting: problem.clone().unwrap_or_else(|| "An empty folder: satz creates the estate inside it".to_string()),
+                            error: problem.is_some(),
+                            disabled: running,
+                            oninput: move |v| target.set(v),
                         }
-                    },
-                }
-                if team() {
-                    p { class: "create__note",
-                        "A workload estate is written from the folders an organization's estate wrote for a delegation, under its interfaces/outgoing/: the delegation's own, delegation-<name>, and that of each delegated resource it was given. satz copies them into interfaces/incoming/ here and writes an estate that runs as the delegation's account."
+                        Button {
+                            variant: ButtonVariant::Secondary,
+                            disabled: running,
+                            onclick: move |_| pick_target(target),
+                            FolderOpen { size: 16 }
+                            "Choose folder"
+                        }
                     }
-                    ChipList {
-                        label: "Interface folders",
-                        items: options().from,
+                    if !found.is_empty() {
+                        p { class: "create__warning",
+                            TriangleAlert { size: 18 }
+                            {existing_warning(&found)}
+                        }
+                        SwitchRow {
+                            label: "Rewrite the estate file",
+                            checked: options().force,
+                            disabled: running,
+                            onchange: move |on: bool| options.write().force = on,
+                        }
+                    }
+
+                    p { class: "create__label", "What the estate is for" }
+                    ToggleGroup {
+                        horizontal: true,
+                        pressed: Some(mode_pressed.clone()),
+                        on_pressed_change: move |now: HashSet<usize>| {
+                            // a click on the pressed one leaves it pressed
+                            if let Some(&i) = now.difference(&mode_pressed).next() {
+                                team.set(i == 1);
+                                if i == 0 {
+                                    let mut o = options.write();
+                                    o.from.clear();
+                                    o.name.clear();
+                                }
+                            }
+                        },
+                        ToggleItem { index: 0usize, "An organization" }
+                        ToggleItem { index: 1usize, "A workload, from interface folders" }
+                    }
+                    if team() {
+                        p { class: "create__note",
+                            "A workload estate is written from the folders an organization's estate wrote for a delegation, under its interfaces/outgoing/: the delegation's own, delegation-<name>, and that of each delegated resource it was given. satz copies them into interfaces/incoming/ here and writes an estate that runs as the delegation's account."
+                        }
+                        TagList {
+                            label: "Interface folders",
+                            items: options().from,
+                            disabled: running,
+                            supporting: "--from: the delegation's folder and one place",
+                            onchange: move |v: Vec<String>| options.write().from = v,
+                        }
+                        div { class: "create__actions",
+                            Button {
+                                variant: ButtonVariant::Secondary,
+                                disabled: running,
+                                onclick: move |_| pick_interface_folders(options),
+                                FolderOpen { size: 16 }
+                                "Add folders…"
+                            }
+                        }
+                        Field {
+                            label: "Name",
+                            value: options().name,
+                            monospace: true,
+                            disabled: running,
+                            supporting: "--name: the estate's name. Left blank, the delegation's.",
+                            oninput: move |v: String| options.write().name = v,
+                        }
+                    }
+                    if !team() {
+                        h3 { class: "create__subheading", "What satz cannot derive" }
+                        Field {
+                            label: "Customer shortname",
+                            value: options().customer_shortname,
+                            placeholder: "acme",
+                            monospace: true,
+                            disabled: running,
+                            supporting: "Nothing on the platform names the customer. The infrastructure project and its state bucket follow from it as <shortname>-infra-001 and <shortname>-infra-001-state; left blank they are written empty.",
+                            oninput: move |v: String| options.write().customer_shortname = v,
+                        }
+                        Field {
+                            label: "Default region",
+                            value: options().default_region,
+                            placeholder: "europe-west3",
+                            monospace: true,
+                            disabled: running,
+                            supporting: "Left blank, satz writes europe-west3.",
+                            oninput: move |v: String| options.write().default_region = v,
+                        }
+                    }
+                    p { class: "create__label", "Terraform tool" }
+                    ToggleGroup {
+                        horizontal: true,
+                        pressed: Some(tool_pressed.clone()),
+                        on_pressed_change: move |now: HashSet<usize>| {
+                            // a click on the pressed one leaves it pressed
+                            if let Some(tool) = now.difference(&tool_pressed).next().and_then(|i| TF_TOOLS.get(*i)) {
+                                options.write().tf_tool = (*tool).to_string();
+                            }
+                        },
+                        for (i, tool) in TF_TOOLS.iter().enumerate() {
+                            ToggleItem { key: "{tool}", index: i, "{tool}" }
+                        }
+                    }
+                    SwitchRow {
+                        label: "Fetch the Google provider schema now",
+                        checked: google,
                         disabled: running,
-                        supporting: "--from: the delegation's folder and one place",
-                        onchange: move |v: Vec<String>| options.write().from = v,
+                        onchange: move |on: bool| {
+                            let mut o = options.write();
+                            o.defaults = if on { vec![GOOGLE_SET.to_string()] } else { Vec::new() };
+                        },
                     }
+                    p { class: "create__note",
+                        "--defaults google writes google and google-beta into config.toml and runs the Terraform tool for each provider's schema, so that tool has to be installed. Without it the estate still uses both providers, and the update-schema command fetches the schema later."
+                    }
+                    TagList {
+                        label: "Extra providers",
+                        items: options().providers,
+                        disabled: running,
+                        supporting: "--providers, beside the set above",
+                        onchange: move |v: Vec<String>| options.write().providers = v,
+                    }
+
+                    if !team() {
+                        h3 { class: "create__subheading", "From your sign-in, unless you state them" }
+                        p { class: "create__note",
+                            "Left blank, each of these is read from the account you are signed in with. State one to override what the platform answers."
+                        }
+                        Field {
+                            label: "Customer id",
+                            value: options().customer_id,
+                            monospace: true,
+                            disabled: running,
+                            supporting: "The directory id, from organizations:search. satz names the estate file after it, and a run that has none writes no estate file at all.",
+                            oninput: move |v: String| options.write().customer_id = v,
+                        }
+                        Field {
+                            label: "Billing account",
+                            value: options().billing_account_infra,
+                            monospace: true,
+                            disabled: running,
+                            supporting: "From billingAccounts.list, when exactly one account is open to you.",
+                            oninput: move |v: String| options.write().billing_account_infra = v,
+                        }
+                    }
+
+                    code { class: "create__preview", "{preview}" }
                     div { class: "create__actions",
                         Button {
-                            icon: "folder_open",
-                            variant: ButtonVariant::Tonal,
-                            disabled: running,
-                            onclick: move |_| pick_interface_folders(options),
-                            "Add folders…"
+                            disabled: !ready,
+                            onclick: move |_| {
+                                handle.send(AppAction::CreateEstate {
+                                    dir: PathBuf::from(&dir),
+                                    options: run.clone(),
+                                });
+                            },
+                            HousePlus { size: 16 }
+                            "Create"
                         }
-                    }
-                    TextField {
-                        label: "Name",
-                        value: options().name,
-                        monospace: true,
-                        disabled: running,
-                        supporting: "--name: the estate's name. Left blank, the delegation's.",
-                        oninput: move |v: String| options.write().name = v,
-                    }
-                }
-                if !team() {
-                h3 { class: "create__subheading", "What satz cannot derive" }
-                TextField {
-                    label: "Customer shortname",
-                    value: options().customer_shortname,
-                    placeholder: "acme",
-                    monospace: true,
-                    disabled: running,
-                    supporting: "Nothing on the platform names the customer. The infrastructure project and its state bucket follow from it as <shortname>-infra-001 and <shortname>-infra-001-state; left blank they are written empty.",
-                    oninput: move |v: String| options.write().customer_shortname = v,
-                }
-                TextField {
-                    label: "Default region",
-                    value: options().default_region,
-                    placeholder: "europe-west3",
-                    monospace: true,
-                    disabled: running,
-                    supporting: "Left blank, satz writes europe-west3.",
-                    oninput: move |v: String| options.write().default_region = v,
-                }
-                }
-                p { class: "create__label", "Terraform tool" }
-                SegmentedButton {
-                    options: vec![Segment::new("tofu", "tofu"), Segment::new("terraform", "terraform")],
-                    selected: options().tf_tool,
-                    onselect: move |v: String| options.write().tf_tool = v,
-                }
-                Switch {
-                    label: "Fetch the Google provider schema now",
-                    checked: google,
-                    disabled: running,
-                    onchange: move |on: bool| {
-                        let mut o = options.write();
-                        o.defaults = if on { vec![GOOGLE_SET.to_string()] } else { Vec::new() };
-                    },
-                }
-                p { class: "create__note",
-                    "--defaults google writes google and google-beta into config.toml and runs the Terraform tool for each provider's schema, so that tool has to be installed. Without it the estate still uses both providers, and the update-schema command fetches the schema later."
-                }
-                ChipList {
-                    label: "Extra providers",
-                    items: options().providers,
-                    disabled: running,
-                    supporting: "--providers, beside the set above",
-                    onchange: move |v: Vec<String>| options.write().providers = v,
-                }
-
-                if !team() {
-                h3 { class: "create__subheading", "From your sign-in, unless you state them" }
-                p { class: "create__note",
-                    "Left blank, each of these is read from the account you are signed in with. State one to override what the platform answers."
-                }
-                TextField {
-                    label: "Customer id",
-                    value: options().customer_id,
-                    monospace: true,
-                    disabled: running,
-                    supporting: "The directory id, from organizations:search. satz names the estate file after it, and a run that has none writes no estate file at all.",
-                    oninput: move |v: String| options.write().customer_id = v,
-                }
-                TextField {
-                    label: "Billing account",
-                    value: options().billing_account_infra,
-                    monospace: true,
-                    disabled: running,
-                    supporting: "From billingAccounts.list, when exactly one account is open to you.",
-                    oninput: move |v: String| options.write().billing_account_infra = v,
-                }
-                }
-
-                code { class: "create__preview", "{preview}" }
-                div { class: "create__actions",
-                    Button {
-                        variant: ButtonVariant::Filled,
-                        icon: "add_home",
-                        disabled: !ready,
-                        onclick: move |_| {
-                            handle.send(AppAction::CreateEstate {
-                                dir: PathBuf::from(&dir),
-                                options: run.clone(),
-                            });
-                        },
-                        "Create"
-                    }
-                    Button {
-                        variant: ButtonVariant::Outlined,
-                        icon: "stop",
-                        disabled: !running,
-                        onclick: move |_| handle.send(AppAction::CancelCreate),
-                        "Cancel"
+                        Button {
+                            variant: ButtonVariant::Outline,
+                            disabled: !running,
+                            onclick: move |_| handle.send(AppAction::CancelCreate),
+                            Square { size: 16 }
+                            "Cancel"
+                        }
                     }
                 }
             }
 
-            Card { variant: CardVariant::Filled, class: "create__log-card",
-                div { class: "create__log-header",
-                    Icon { name: "terminal", size: 20 }
-                    code { class: "create__log-title", {last.unwrap_or_else(|| "nothing created yet".to_string())} }
-                    span { class: "grow" }
-                    if let Some(o) = outcome.as_ref().filter(|o| o.ok) {
-                        Chip { kind: ChipKind::Assist, icon: "check_circle", label: o.text.clone() }
+            Card { class: "create__log-card",
+                CardContent {
+                    div { class: "create__log-header",
+                        Terminal { size: 20 }
+                        code { class: "create__log-title", {last.unwrap_or_else(|| "nothing created yet".to_string())} }
+                        span { class: "grow" }
+                        if let Some(o) = outcome.as_ref().filter(|o| o.ok) {
+                            Badge { variant: BadgeVariant::Outline,
+                                CircleCheck { size: 12 }
+                                "{o.text}"
+                            }
+                        }
                     }
-                }
-                // a refusal is satz's whole sentence, wrapped, never cut to fit a chip
-                if let Some(o) = outcome.as_ref().filter(|o| !o.ok) {
-                    p { class: "create__refusal",
-                        Icon { name: "error", size: 18 }
-                        "{o.text}"
+                    // a refusal is satz's whole sentence, wrapped, never cut to fit a badge
+                    if let Some(o) = outcome.as_ref().filter(|o| !o.ok) {
+                        p { class: "create__refusal",
+                            CircleAlert { size: 18 }
+                            "{o.text}"
+                        }
                     }
-                }
-                if running {
-                    LinearProgress {}
-                }
-                p { class: "create__privacy",
-                    Icon { name: "lock", size: 18 }
-                    "What satz derives — an organization id, a billing account, an administrator's address — is printed here and written into the estate satz creates. This app keeps none of it: not in its settings, not in a file of its own."
-                }
-                pre { class: "log",
-                    for (i, line) in log.iter().enumerate() {
-                        {
-                            let (class, text) = match line {
-                                CliLine::Stdout(s) => ("log__line", s),
-                                CliLine::Stderr(s) => ("log__line log__line--stderr", s),
-                            };
-                            rsx! { span { key: "{i}", class: "{class}", "{text}\n" } }
+                    if running {
+                        Progress { value: None::<f64>, "aria-label": "working" }
+                    }
+                    p { class: "create__privacy",
+                        Lock { size: 18 }
+                        "What satz derives — an organization id, a billing account, an administrator's address — is printed here and written into the estate satz creates. This app keeps none of it: not in its settings, not in a file of its own."
+                    }
+                    pre { class: "log",
+                        for (i, line) in log.iter().enumerate() {
+                            {
+                                let (class, text) = match line {
+                                    CliLine::Stdout(s) => ("log__line", s),
+                                    CliLine::Stderr(s) => ("log__line log__line--stderr", s),
+                                };
+                                rsx! { span { key: "{i}", class: "{class}", "{text}\n" } }
+                            }
                         }
                     }
                 }

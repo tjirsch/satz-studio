@@ -38,11 +38,11 @@ name: release
 # windows/msi/SatzStudio_<version>_<arch>.msi; `--out-dir dist` copies each into
 # dist/ flat, which is what the steps below read.
 #
-# Every bundle carries LICENSE, NOTICE, THIRD-PARTY-LICENSES.md, LICENSE-MaterialSymbols
-# and LICENSE-satz-tree-sitter, from `resources` in crates/satz-studio/Dioxus.toml, which
+# Every bundle carries LICENSE, NOTICE, THIRD-PARTY-LICENSES.md, LICENSE-Geist,
+# LICENSE-dioxus-components and LICENSE-satz-tree-sitter, from `resources` in crates/satz-studio/Dioxus.toml, which
 # dx resolves against the directory it runs in — the checkout root here. dx skips a
 # resource it cannot find with a warning and exits 0, and copies each under its file
-# name alone, so the macOS job compares the five files in the .app with the checkout's
+# name alone, so the macOS job compares the six files in the .app with the checkout's
 # before anything is attached; the .deb, the AppImage and the MSI take them from the
 # same list.
 
@@ -116,7 +116,8 @@ jobs:
         run: |
           set -euo pipefail
           for f in LICENSE NOTICE THIRD-PARTY-LICENSES.md \
-                   crates/satz-studio/assets/fonts/LICENSE-MaterialSymbols \
+                   crates/satz-studio/assets/fonts/LICENSE-Geist \
+                   crates/satz-studio/LICENSE-dioxus-components \
                    vendor/satz-tree-sitter/LICENSE-satz-tree-sitter; do
             cmp "dist/SatzStudio.app/Contents/Resources/$(basename "$f")" "$f"
           done

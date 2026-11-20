@@ -12,18 +12,24 @@ use std::path::PathBuf;
 
 use dioxus::prelude::*;
 
-use crate::components::{
-    Button, ButtonVariant, Card, CardVariant, Chip, ChipKind, CircularProgress, Icon, IconButton,
-    LinearProgress, TextField,
+use dioxus_icons::lucide::{
+    CircleAlert, CircleCheck, CircleQuestionMark, Cloud, ExternalLink, FileText, Folder,
+    FolderOpen, HardDrive, Laptop, LoaderCircle, LogIn, RefreshCw,
 };
+
+use crate::components::badge::{Badge, BadgeVariant};
+use crate::components::button::{Button, ButtonSize, ButtonVariant};
+use crate::components::card::{Card, CardContent, CardHeader};
+use crate::components::progress::Progress;
 use crate::state::{
     AppAction, AppStore, AppStoreStoreExt, Door, EstateFile, EstateSummary, ToastKind, toast,
 };
 use crate::views::create::CreateEstate;
 use crate::views::import::ImportEstate;
+use crate::widgets::Field;
 
-/// Open the OS folder picker; a choice becomes [`AppAction::Discover`]. The rail's FAB
-/// calls this too, so it puts the view on the Open door: that is the door it opens.
+/// Open the OS folder picker; a choice becomes [`AppAction::Discover`]. The sidebar's
+/// button calls this too, so it puts the view on the Open door: that is the door it opens.
 pub fn pick_root(app: Store<AppStore>, handle: Coroutine<AppAction>) {
     app.door().set(Door::Open);
     spawn(async move {
@@ -63,14 +69,19 @@ pub fn EstatesView() -> Element {
 fn DoorCard(door: Door, selected: bool) -> Element {
     let app = use_context::<Store<AppStore>>();
     rsx! {
-        Card {
-            variant: if selected { CardVariant::Filled } else { CardVariant::Outlined },
-            class: if selected { "door door--selected" } else { "door" },
+        div {
+            class: "card-button",
+            role: "button",
+            tabindex: "0",
             onclick: move |_| app.door().set(door),
-            Icon { name: door.icon().to_string(), size: 28, class: "door__icon" }
-            div { class: "door__text",
-                h2 { class: "door__title", "{door.label()}" }
-                p { class: "door__supporting", "{door.supporting()}" }
+            Card { class: if selected { "door door--selected" } else { "door" },
+                CardContent {
+                    {door.icon(28)}
+                    div { class: "door__text",
+                        h2 { class: "door__title", "{door.label()}" }
+                        p { class: "door__supporting", "{door.supporting()}" }
+                    }
+                }
             }
         }
     }
@@ -101,28 +112,38 @@ fn OpenPane() -> Element {
     rsx! {
         div { class: "estates__open",
             div { class: "estates__toolbar",
-                TextField {
+                Field {
                     label: "Folder",
                     value: typed(),
-                    leading_icon: "folder",
                     class: "estates__root",
                     supporting: "Every config.toml under it, six levels deep",
                     oninput: move |v| typed.set(v),
                     onenter: move |_| rescan(),
                 }
-                Button { icon: "folder_open", variant: ButtonVariant::Filled, onclick: move |_| pick_root(app, handle), "Choose folder" }
-                Button { icon: "refresh", variant: ButtonVariant::Tonal, disabled: discovering, onclick: move |_| rescan(), "Rescan" }
+                Button { onclick: move |_| pick_root(app, handle),
+                    FolderOpen { size: 16 }
+                    "Choose folder"
+                }
+                Button {
+                    variant: ButtonVariant::Secondary,
+                    disabled: discovering,
+                    onclick: move |_| rescan(),
+                    RefreshCw { size: 16 }
+                    "Rescan"
+                }
             }
             if discovering {
-                LinearProgress {}
+                Progress { value: None::<f64>, "aria-label": "working" }
             }
             if summaries.is_empty() && !discovering {
-                Card { variant: CardVariant::Filled, class: "estates__empty",
-                    Icon { name: "home_storage", size: 48, class: "placeholder__icon" }
-                    if root.is_some() {
-                        p { "No config.toml here. Choose another folder." }
-                    } else {
-                        p { "Choose the folder that holds your estates." }
+                Card {
+                    CardContent { class: "estates__empty",
+                        HardDrive { size: 48, class: "placeholder__icon" }
+                        if root.is_some() {
+                            p { "No config.toml here. Choose another folder." }
+                        } else {
+                            p { "Choose the folder that holds your estates." }
+                        }
                     }
                 }
             }
@@ -146,31 +167,38 @@ fn EstateCard(summary: EstateSummary, root: Option<PathBuf>) -> Element {
         .unwrap_or_else(|| summary.dir.display().to_string());
     let dir = summary.dir.clone();
     rsx! {
-        Card { variant: CardVariant::Outlined, class: "estate-card",
-            div { class: "estate-card__header",
-                Icon { name: "folder", class: "estate-card__folder" }
-                div { class: "estate-card__titles",
-                    h2 { class: "estate-card__title", "{title}" }
-                    span { class: "estate-card__path", "{summary.config.display()}" }
+        Card { class: "estate-card",
+            CardHeader {
+                div { class: "estate-card__header",
+                    Folder { size: 16, class: "estate-card__folder" }
+                    div { class: "estate-card__titles",
+                        h2 { class: "estate-card__title", "{title}" }
+                        span { class: "estate-card__path", "{summary.config.display()}" }
+                    }
+                    Button {
+                        variant: ButtonVariant::Ghost,
+                        size: ButtonSize::Icon,
+                        title: "Show in the file manager",
+                        "aria-label": "Show in the file manager",
+                        onclick: move |_| {
+                            if let Err(e) = open::that(&dir) {
+                                toast(app, ToastKind::Error, format!("{}: {e}", dir.display()));
+                            }
+                        },
+                        ExternalLink { size: 16 }
+                    }
                 }
-                IconButton {
-                    icon: "open_in_new",
-                    label: "Show in the file manager",
-                    onclick: move |_| {
-                        if let Err(e) = open::that(&dir) {
-                            toast(app, ToastKind::Error, format!("{}: {e}", dir.display()));
-                        }
-                    },
+            }
+            CardContent {
+                if let Some(error) = &summary.error {
+                    p { class: "estate-card__error", CircleAlert { size: 18 } "{error}" }
                 }
-            }
-            if let Some(error) = &summary.error {
-                p { class: "estate-card__error", Icon { name: "error", size: 18 } "{error}" }
-            }
-            if summary.estates.is_empty() && summary.error.is_none() {
-                p { class: "estate-card__none", "No .satz file here declares an estate." }
-            }
-            for estate in summary.estates.iter().cloned() {
-                EstateRow { key: "{estate.path.display()}", config: summary.config.clone(), estate }
+                if summary.estates.is_empty() && summary.error.is_none() {
+                    p { class: "estate-card__none", "No .satz file here declares an estate." }
+                }
+                for estate in summary.estates.iter().cloned() {
+                    EstateRow { key: "{estate.path.display()}", config: summary.config.clone(), estate }
+                }
             }
         }
     }
@@ -191,35 +219,48 @@ fn EstateRow(config: PathBuf, estate: EstateFile) -> Element {
     let path = estate.path.clone();
     let (mode_icon, mode_label, mode_error) = match &estate.deployment_mode {
         Ok(Some(mode)) => (
-            if mode == "cloud" { "cloud" } else { "computer" },
+            if mode == "cloud" {
+                rsx! { Cloud { size: 12 } }
+            } else {
+                rsx! { Laptop { size: 12 } }
+            },
             mode.clone(),
             false,
         ),
-        Ok(None) => ("help", "deployment mode not set".to_string(), false),
+        Ok(None) => (
+            rsx! { CircleQuestionMark { size: 12 } },
+            "deployment mode not set".to_string(),
+            false,
+        ),
         Err(e) => (
-            "error",
+            rsx! { CircleAlert { size: 12 } },
             e.lines().next().unwrap_or_default().to_string(),
             true,
         ),
     };
     rsx! {
         div { class: "estate-row", class: if is_open { "estate-row--open" },
-            Icon { name: "description", size: 20 }
+            FileText { size: 20 }
             span { class: "estate-row__name", "{estate.name}" }
-            Chip { kind: ChipKind::Assist, icon: mode_icon, label: mode_label, error: mode_error }
+            Badge { variant: if mode_error { BadgeVariant::Destructive } else { BadgeVariant::Outline },
+                {mode_icon}
+                "{mode_label}"
+            }
             span { class: "grow" }
             if opening {
-                CircularProgress { size: 24 }
+                LoaderCircle { size: 16, class: "spin" }
             }
             if is_open {
-                Chip { kind: ChipKind::Assist, icon: "check_circle", label: "open", class: "estate-row__open" }
-                Button { variant: ButtonVariant::Text, onclick: move |_| handle.send(AppAction::CloseEstate), "Close" }
+                Badge { variant: BadgeVariant::Outline, class: "estate-row__open",
+                    CircleCheck { size: 12 }
+                    "open"
+                }
+                Button { variant: ButtonVariant::Ghost, onclick: move |_| handle.send(AppAction::CloseEstate), "Close" }
             } else {
                 Button {
-                    variant: ButtonVariant::Filled,
-                    icon: "login",
                     disabled: busy,
                     onclick: move |_| handle.send(AppAction::OpenEstate { config: config.clone(), estate: path.clone() }),
+                    LogIn { size: 16 }
                     "Open"
                 }
             }

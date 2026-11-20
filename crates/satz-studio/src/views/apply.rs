@@ -21,9 +21,15 @@ use satz_studio_core::agent;
 use satz_studio_core::diag::Severity;
 use satz_studio_core::satz::reports::WhoamiReport;
 
-use crate::components::{
-    Button, ButtonVariant, Card, CardVariant, Chip, ChipKind, Icon, LinearProgress,
+use dioxus_icons::lucide::{
+    CircleAlert, CircleCheck, CircleDashed, CircleUser, FolderCog, LogIn, NotebookPen, RefreshCw,
+    ShieldUser, UserX,
 };
+
+use crate::components::badge::{Badge, BadgeVariant};
+use crate::components::button::{Button, ButtonVariant};
+use crate::components::card::{Card, CardContent, CardHeader};
+use crate::components::progress::Progress;
 use crate::state::{
     AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt, SignIn, ToastKind, toast,
 };
@@ -147,101 +153,104 @@ pub fn ApplyView() -> Element {
             h1 { class: "view__title", "Apply" }
             p { class: "view__lead", "The estate's way to the organization: who runs it, what state it is in, and the steps in the order they are walked." }
 
-            Card { variant: CardVariant::Outlined, class: "apply__signin",
-                header { class: "apply__head",
-                    Icon { name: if failed { "no_accounts" } else { "account_circle" }, size: 22 }
-                    h2 { class: "apply__title", class: if failed { "apply__title--error" }, "{headline}" }
-                    span { class: "grow" }
-                    Button {
-                        variant: ButtonVariant::Text,
-                        icon: "refresh",
-                        disabled: sign_in == Some(SignIn::Checking),
-                        onclick: move |_| handle.send(EstateAction::CheckSignIn),
-                        "Check again"
+            Card { class: "apply__signin",
+                CardHeader {
+                    header { class: "apply__head",
+                        if failed { UserX { size: 22 } } else { CircleUser { size: 22 } }
+                        h2 { class: "apply__title", class: if failed { "apply__title--error" }, "{headline}" }
+                        span { class: "grow" }
+                        Button {
+                            variant: ButtonVariant::Ghost,
+                            disabled: sign_in == Some(SignIn::Checking),
+                            onclick: move |_| handle.send(EstateAction::CheckSignIn),
+                            RefreshCw { size: 16 }
+                            "Check again"
+                        }
                     }
                 }
-                match &sign_in {
-                    None | Some(SignIn::Checking) => rsx! { LinearProgress {} },
-                    Some(SignIn::Refused(text)) => rsx! {
-                        p { class: "apply__line apply__line--error", "{text}" }
-                        p { class: "apply__note",
-                            "The steps that call Google will fail until you are signed in. \"Sign in\" runs "
-                            code { "{SIGN_IN}" }
-                            " in your terminal, which opens the browser; when it has finished, \"Check again\"."
-                        }
-                        div { class: "apply__actions",
-                            Button {
-                                variant: ButtonVariant::Filled,
-                                icon: "login",
-                                onclick: {
-                                    let dir = open.dir.clone();
-                                    move |_| match agent::start(SIGN_IN, &dir) {
-                                        Ok(_) => toast(app, ToastKind::Info, format!("{SIGN_IN} started in your terminal")),
-                                        Err(e) => toast(app, ToastKind::Error, e.to_string()),
-                                    }
-                                },
-                                "Sign in"
+                CardContent {
+                    match &sign_in {
+                        None | Some(SignIn::Checking) => rsx! { Progress { value: None::<f64>, "aria-label": "working" } },
+                        Some(SignIn::Refused(text)) => rsx! {
+                            p { class: "apply__line apply__line--error", "{text}" }
+                            p { class: "apply__note",
+                                "The steps that call Google will fail until you are signed in. \"Sign in\" runs "
+                                code { "{SIGN_IN}" }
+                                " in your terminal, which opens the browser; when it has finished, \"Check again\"."
                             }
-                        }
-                    },
-                    Some(SignIn::Known(report)) => rsx! {
-                        for (i, (line, ok)) in sign_in_lines(report).into_iter().enumerate() {
-                            p { key: "{i}", class: "apply__line", class: if !ok { "apply__line--error" },
-                                Icon { name: if ok { "check_circle" } else { "error" }, size: 18 }
-                                "{line}"
+                            div { class: "apply__actions",
+                                Button {
+                                    onclick: {
+                                        let dir = open.dir.clone();
+                                        move |_| match agent::start(SIGN_IN, &dir) {
+                                            Ok(_) => toast(app, ToastKind::Info, format!("{SIGN_IN} started in your terminal")),
+                                            Err(e) => toast(app, ToastKind::Error, e.to_string()),
+                                        }
+                                    },
+                                    LogIn { size: 16 }
+                                    "Sign in"
+                                }
                             }
-                        }
-                        if let Some(note) = &report.note {
-                            p { class: "apply__note", "{note}" }
-                        }
-                    },
+                        },
+                        Some(SignIn::Known(report)) => rsx! {
+                            for (i, (line, ok)) in sign_in_lines(report).into_iter().enumerate() {
+                                p { key: "{i}", class: "apply__line", class: if !ok { "apply__line--error" },
+                                    if ok { CircleCheck { size: 18 } } else { CircleAlert { size: 18 } }
+                                    "{line}"
+                                }
+                            }
+                            if let Some(note) = &report.note {
+                                p { class: "apply__note", "{note}" }
+                            }
+                        },
+                    }
                 }
             }
 
-            Card { variant: CardVariant::Filled, class: "apply__state",
-                Icon { name: "folder_special", size: 22 }
-                code { class: "apply__dir", "{dir.display()}" }
-                span { class: "grow" }
-                Chip {
-                    kind: ChipKind::Assist,
-                    icon: if compiles { "check_circle" } else { "error" },
-                    label: if compiles { "transpiles" } else { "does not transpile" },
-                    error: !compiles,
-                }
-                Chip {
-                    kind: ChipKind::Assist,
-                    icon: if prerequisites.is_empty() { "check_circle" } else { "pending" },
-                    label: if prerequisites.is_empty() { "rights declared" } else { "rights not declared" },
-                }
-                Chip {
-                    kind: ChipKind::Assist,
-                    icon: if hcl.transpiled { "check_circle" } else { "pending" },
-                    label: if hcl.transpiled { "main.tf written" } else { "not transpiled" },
-                }
-                Chip {
-                    kind: ChipKind::Assist,
-                    icon: if hcl.initialised { "check_circle" } else { "pending" },
-                    label: if hcl.initialised { "initialized" } else { "not initialized" },
+            Card {
+                CardContent { class: "apply__state",
+                    FolderCog { size: 22 }
+                    code { class: "apply__dir", "{dir.display()}" }
+                    span { class: "grow" }
+                    Badge { variant: if compiles { BadgeVariant::Outline } else { BadgeVariant::Destructive },
+                        if compiles { CircleCheck { size: 12 } } else { CircleAlert { size: 12 } }
+                        if compiles { "transpiles" } else { "does not transpile" }
+                    }
+                    Badge { variant: BadgeVariant::Outline,
+                        if prerequisites.is_empty() { CircleCheck { size: 12 } } else { CircleDashed { size: 12 } }
+                        if prerequisites.is_empty() { "rights declared" } else { "rights not declared" }
+                    }
+                    Badge { variant: BadgeVariant::Outline,
+                        if hcl.transpiled { CircleCheck { size: 12 } } else { CircleDashed { size: 12 } }
+                        if hcl.transpiled { "main.tf written" } else { "not transpiled" }
+                    }
+                    Badge { variant: BadgeVariant::Outline,
+                        if hcl.initialised { CircleCheck { size: 12 } } else { CircleDashed { size: 12 } }
+                        if hcl.initialised { "initialized" } else { "not initialized" }
+                    }
                 }
             }
 
             if !prerequisites.is_empty() {
-                Card { variant: CardVariant::Outlined, class: "apply__prerequisites",
-                    header { class: "apply__head",
-                        Icon { name: "admin_panel_settings", size: 22 }
-                        h2 { class: "apply__title", "The prerequisites are not declared" }
+                Card { class: "apply__prerequisites",
+                    CardHeader {
+                        header { class: "apply__head",
+                            ShieldUser { size: 22 }
+                            h2 { class: "apply__title", "The prerequisites are not declared" }
+                        }
                     }
-                    for (i, message) in prerequisites.iter().enumerate() {
-                        p { key: "{i}", class: "apply__finding", "{message}" }
-                    }
-                    p { class: "apply__note", "Writing them binds the roles on the estate account and each API on the project its calls are billed to — the infrastructure project, or the project a resource sits inside — in the estate file; an API for a project a pack declares is named, not written. satz works both out offline, from the resource types this estate transpiles to; the write goes through the same check and rollback as an answer." }
-                    div { class: "apply__actions",
-                        Button {
-                            variant: ButtonVariant::Filled,
-                            icon: "edit_note",
-                            disabled: loading,
-                            onclick: move |_| handle.send(EstateAction::WritePrerequisites),
-                            "Write them into the estate"
+                    CardContent {
+                        for (i, message) in prerequisites.iter().enumerate() {
+                            p { key: "{i}", class: "apply__finding", "{message}" }
+                        }
+                        p { class: "apply__note", "Writing them binds the roles on the estate account and each API on the project its calls are billed to — the infrastructure project, or the project a resource sits inside — in the estate file; an API for a project a pack declares is named, not written. satz works both out offline, from the resource types this estate transpiles to; the write goes through the same check and rollback as an answer." }
+                        div { class: "apply__actions",
+                            Button {
+                                disabled: loading,
+                                onclick: move |_| handle.send(EstateAction::WritePrerequisites),
+                                NotebookPen { size: 16 }
+                                "Write them into the estate"
+                            }
                         }
                     }
                 }

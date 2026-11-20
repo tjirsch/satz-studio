@@ -1,16 +1,21 @@
 use dioxus::prelude::*;
+use dioxus_icons::lucide::{
+    ArrowLeftRight, CircleCheck, ClipboardList, LoaderCircle, RefreshCw, SearchCheck, X,
+};
 
-use crate::components::{Badge, CircularProgress, IconButton, TopAppBar};
+use crate::components::badge::{Badge, BadgeVariant};
+use crate::components::button::{Button, ButtonSize, ButtonVariant};
+use crate::components::sidebar::SidebarTrigger;
 use crate::state::{AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt, View};
 use crate::views::overview::owed_now;
 
-/// The top bar: the open estate's name and directory, what acts on that estate beside
-/// them — reload, "Switch estate", "Close estate" — and at the far end the estate's status,
-/// whether it still owes anything, and the drawer toggle.
+/// The top bar: the button that folds the sidebar, the open estate's name and directory,
+/// what acts on that estate beside them — reload, "Switch estate", "Close estate" — and at
+/// the far end the estate's status, whether it still owes anything, and the drawer toggle.
 ///
 /// It carries the estate's ADDRESS and one status: whether the estate still owes anything,
-/// a button showing `task_alt` in the success color when nothing is owed and
-/// `assignment_late` with the count otherwise, which opens the Overview, where the list
+/// a button showing a check mark in the theme's success color when nothing is owed and
+/// a list icon with the count otherwise, which opens the Overview, where the list
 /// is. Hidden on the Start screen. Nothing else about the estate is here. What it IS — the
 /// customer it stands for, whom its commands run as, its deployment mode, its schema, how
 /// far its HCL has been taken — is the Overview's identity card, so each fact has one
@@ -34,48 +39,70 @@ pub fn TopBar() -> Element {
     };
 
     rsx! {
-        TopAppBar {
-            title,
-            subtitle,
-            beside: rsx! {
-                if let Some(estate_handle) = estate_handle {
-                    IconButton {
-                        icon: "refresh",
-                        label: "Reload estate",
+        header { class: "top-bar",
+            SidebarTrigger {}
+            div { class: "top-bar__title",
+                strong { "{title}" }
+                if !subtitle.is_empty() {
+                    span { class: "top-bar__subtitle", "{subtitle}" }
+                }
+            }
+            if let Some(estate_handle) = estate_handle {
+                div { class: "top-bar__estate",
+                    Button {
+                        variant: ButtonVariant::Ghost,
+                        size: ButtonSize::Icon,
+                        title: "Reload estate",
+                        "aria-label": "Reload estate",
                         onclick: move |_| estate_handle.send(EstateAction::Reload),
+                        RefreshCw { size: 16 }
                     }
-                    IconButton {
-                        icon: "swap_horiz",
-                        label: "Switch estate",
+                    Button {
+                        variant: ButtonVariant::Ghost,
+                        size: ButtonSize::Icon,
+                        title: "Switch estate",
+                        "aria-label": "Switch estate",
                         onclick: move |_| estate_handle.send(EstateAction::Switch),
+                        ArrowLeftRight { size: 16 }
                     }
-                    IconButton {
-                        icon: "close",
-                        label: "Close estate",
+                    Button {
+                        variant: ButtonVariant::Ghost,
+                        size: ButtonSize::Icon,
+                        title: "Close estate",
+                        "aria-label": "Close estate",
                         onclick: move |_| estate_handle.send(EstateAction::Close),
+                        X { size: 16 }
                     }
                     if loading {
-                        CircularProgress { size: 24 }
-                    }
-                }
-            },
-            if let Some(owes) = owes {
-                Badge { count: owes,
-                    IconButton {
-                        icon: if owes == 0 { "task_alt" } else { "assignment_late" },
-                        label: status_label(owes),
-                        filled: owes == 0,
-                        class: if owes == 0 { "top-bar__status--clear" } else { "" },
-                        onclick: move |_| app.nav().set(View::Overview),
+                        LoaderCircle { size: 16, class: "spin" }
                     }
                 }
             }
-            Badge { count: diagnostics,
-                IconButton {
-                    icon: "troubleshoot",
-                    label: "Findings",
-                    selected: drawer_open,
+            div { class: "top-bar__actions",
+                if let Some(owes) = owes {
+                    Button {
+                        variant: ButtonVariant::Ghost,
+                        title: status_label(owes),
+                        "aria-label": status_label(owes),
+                        onclick: move |_| app.nav().set(View::Overview),
+                        if owes == 0 {
+                            CircleCheck { size: 16, stroke: "var(--secondary-success-color)" }
+                        } else {
+                            ClipboardList { size: 16 }
+                            Badge { variant: BadgeVariant::Secondary, "{owes}" }
+                        }
+                    }
+                }
+                Button {
+                    variant: if drawer_open { ButtonVariant::Secondary } else { ButtonVariant::Ghost },
+                    title: "Findings",
+                    "aria-label": "Findings",
+                    "aria-pressed": if drawer_open { "true" } else { "false" },
                     onclick: move |_| app.drawer_open().toggle(),
+                    SearchCheck { size: 16 }
+                    if diagnostics > 0 {
+                        Badge { variant: BadgeVariant::Secondary, "{diagnostics}" }
+                    }
                 }
             }
         }

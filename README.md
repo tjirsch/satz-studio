@@ -41,7 +41,7 @@ translates nothing and always needs it.
 **Open** walks a folder for every `config.toml` under it and opens one of the estates
 beside it.
 
-Once an estate is open the window is ordered by the job, and the rail reads in that
+Once an estate is open the window is ordered by the job, and the sidebar reads in that
 order: **Overview**, which estate this is — its short name, the customer, the customer
 id and the organization id as its own file sets them, then the infrastructure it names,
 in its own answers — and what it still has to do; **Presets**, for an estate that holds the preset library — an organization's:
@@ -58,11 +58,11 @@ value must match. Delegated access is given to a team by an entry of the list pa
 `delegations` of satz's `presets/delegation.satz`, which writes the delegation's
 interface with the rest. Five of the six are a path, and a bar at the window's foot goes back to the step before and on to the next:
 what the estate is, its presets and workload packs, their questions, its way to the organization, its
-documents; Estate stands after them in the rail. **Apply**, its way to the organization — who is signed in, what state the estate is in,
+documents; Estate stands after them in the sidebar. **Apply**, its way to the organization — who is signed in, what state the estate is in,
 then the checks, the bootstrap, the HCL code, the plan and the apply, in that order;
 **Documents**, what goes to people as a file: the decisions sheet, the compliance reports,
 and the documents an agent writes, each started in the client Settings names. Agent and Settings sit at the
-foot of the rail, with Commands between them. Beside the estate the top bar names sit
+foot of the sidebar, with Commands between them. Beside the estate the top bar names sit
 reload, "Switch estate" — the Start screen with your estates listed — and "Close estate";
 at its far end a status button says whether the estate still owes anything — a green check
 when nothing is owed, the count of items otherwise — and opens the Overview;
@@ -139,7 +139,7 @@ The two documents a customer receives are `satz questions` in two renderings: th
 **decisions sheet** — every decision the estate rests on, what it is set to, whether it
 was chosen or taken as offered, and what changing it later costs — and the
 **workbook**, the same catalog as a spreadsheet the customer fills in and sends back.
-**Documents**, the last destination of the rail, carries them as one card: the sheet is
+**Documents**, the last destination of the sidebar, carries them as one card: the sheet is
 signed before an organization is touched and kept as the record after the apply. Pick a format, choose where
 the file goes, and satz writes it (`satz questions <estate> --format <format> --out
 <file>`); the app opens it once it is there. The formats are the ones the installed satz
@@ -219,10 +219,12 @@ Rust 1.88 or newer (`rust-toolchain.toml` selects stable). On Linux the build ne
 git clone --recurse-submodules https://github.com/tjirsch/satz-studio.git
 cd satz-studio
 cargo install dioxus-cli@0.7.10       # or: cargo binstall dioxus-cli@0.7.10
-dx serve --package satz-studio        # the app, with hot reload
-cargo run -p satz-studio              # the app, plain cargo
+dx serve --package satz-studio --hot-reload true   # the app, with hot reload
 cargo test -p satz-studio-core        # the headless tests: no window, no network
 ```
+
+The app is run through `dx`: it builds the component library's stylesheets into the app,
+and a plain `cargo run -p satz-studio` opens a window without them.
 
 A clone without `--recurse-submodules` has an empty `vendor/satz` and does not build;
 `git submodule update --init` fills it. The tests read the pinned satz checkout and
@@ -236,7 +238,7 @@ the suite needs a network or a sign-in.
 | `Cargo.toml` | the workspace: two crates, `vendor` excluded, every dependency pinned once under `[workspace.dependencies]` |
 | `release.toml` | cargo-release: the version bump, the commit, the tag `vX.Y.Z` and the push, in one step on `main` |
 | `crates/satz-studio-core/` | the headless half: the estate directory, the document layer, the edit primitives and the write discipline, the provider schema and the view model, the satz driver (binary, CLI, `satz mcp` session, the configuration `satz mcp-config` prints), the agentic client it starts, settings, findings. No GUI dependency; tested on every runner |
-| `crates/satz-studio/` | the Dioxus 0.7 desktop binary `satz-studio`: the window, the views, the Material 3 Expressive stylesheet |
+| `crates/satz-studio/` | the Dioxus 0.7 desktop binary `satz-studio`: the window, the views, the Dioxus component library's components and theme, and the layout stylesheet |
 | `vendor/satz/` | git submodule, pinned to a satz release tag. **The one pin:** satz-core as a path dependency, the presets, the smoke estates and the provider-schema fixture all come from this checkout |
 | `vendor/satz-tree-sitter/` | the generated tree-sitter parser for Satz (`src/`), copied from the grammar repository at the commit named in `COMMIT`; `scripts/sync-grammar.sh` refreshes it and `crates/satz-studio-core/build.rs` builds it |
 | `tests/fixtures/` | an estate directory over satz's smoke estates, its `config.toml` pointing into the submodule; a test that writes copies it first |
@@ -263,7 +265,7 @@ artifacts.
 | `satz-studio_<version>_amd64.deb`, `satz-studio_<version>_x86_64.AppImage` | `ubuntu-24.04` |
 | `SatzStudio_<version>_x64.msi` | `windows-2022` |
 
-Every bundle carries `LICENSE`, `NOTICE`, `THIRD-PARTY-LICENSES.md` (the license text of every crate the app is built from), `LICENSE-MaterialSymbols` (the icon font's) and `LICENSE-satz-tree-sitter` (the vendored grammar's): in `SatzStudio.app/Contents/Resources/`,
+Every bundle carries `LICENSE`, `NOTICE`, `THIRD-PARTY-LICENSES.md` (the license text of every crate the app is built from), `LICENSE-Geist` (the typeface's), `LICENSE-dioxus-components` (the component library's) and `LICENSE-satz-tree-sitter` (the vendored grammar's): in `SatzStudio.app/Contents/Resources/`,
 beside the executable in the MSI's install directory, and in `/usr/lib/SatzStudio/` from
 the `.deb` and the AppImage.
 
@@ -318,8 +320,8 @@ app does; what is still to do is planned outside the repository.
 ## License
 
 Apache License 2.0, see [`LICENSE`](LICENSE). [`NOTICE`](NOTICE) names the material
-this repository bundles under other terms — the Material Symbols font and the vendored
-tree-sitter grammar — ends with satz's own NOTICE verbatim, since satz-core is built
+this repository bundles under other terms — the Geist typeface, the Dioxus component
+library's components and theme, and the vendored tree-sitter grammar — ends with satz's own NOTICE verbatim, since satz-core is built
 into the app, and travels with a redistribution.
 [`THIRD-PARTY-LICENSES.md`](THIRD-PARTY-LICENSES.md) is the license text of every crate
 the app is built from, generated from `Cargo.lock` by

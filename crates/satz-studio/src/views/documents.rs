@@ -10,7 +10,10 @@
 use dioxus::prelude::*;
 use satz_studio_core::agent;
 
-use crate::components::{Button, ButtonVariant, Card, CardVariant, Icon};
+use dioxus_icons::lucide::{FileText, Play, ShieldCheck};
+
+use crate::components::button::{Button, ButtonVariant};
+use crate::components::card::{Card, CardContent, CardDescription, CardHeader};
 use crate::state::{AppStore, AppStoreStoreExt, EstateStoreStoreExt, ToastKind, toast};
 use crate::views::commands::{COMPLIANCE, CommandDeck};
 use crate::views::export::ExportCard;
@@ -21,7 +24,6 @@ use crate::views::export::ExportCard;
 pub struct AgentDocument {
     /// the skill's name, which is also the command that starts it in the client
     pub skill: &'static str,
-    pub icon: &'static str,
     pub title: &'static str,
     pub text: &'static str,
 }
@@ -29,17 +31,25 @@ pub struct AgentDocument {
 pub const AGENT_DOCUMENTS: &[AgentDocument] = &[
     AgentDocument {
         skill: "estate-documentation",
-        icon: "description",
         title: "Estate documentation",
         text: "The short documentation of the organization as Word documents, written from the estate: its main settings, the infrastructure project, and what is applied.",
     },
     AgentDocument {
         skill: "security-review",
-        icon: "verified_user",
         title: "Security review",
         text: "A review against the CIS Google Cloud Foundations benchmark with live evidence from the organization: the checklist of every control with its status, and the remediation plan.",
     },
 ];
+
+impl AgentDocument {
+    /// The Lucide icon of the document, by its skill.
+    fn icon(&self, size: u32) -> Element {
+        match self.skill {
+            "security-review" => rsx! { ShieldCheck { size } },
+            _ => rsx! { FileText { size } },
+        }
+    }
+}
 
 /// The command line that starts the configured client on a skill: the client's own
 /// command with the skill as its opening prompt, `claude "/estate-documentation"`.
@@ -93,16 +103,18 @@ pub fn DocumentsView() -> Element {
             }
             div { class: "documents__agent",
                 for doc in AGENT_DOCUMENTS {
-                    Card { key: "{doc.skill}", variant: CardVariant::Outlined, class: "export",
-                        header { class: "export__head",
-                            Icon { name: doc.icon, size: 22 }
-                            h3 { class: "export__title", "{doc.title}" }
+                    Card { key: "{doc.skill}", class: "export",
+                        CardHeader {
+                            header { class: "export__head",
+                                {doc.icon(22)}
+                                h3 { class: "export__title", "{doc.title}" }
+                            }
+                            CardDescription { "{doc.text}" }
                         }
-                        p { class: "export__text", "{doc.text}" }
+                        CardContent {
                         div { class: "export__actions",
                             Button {
-                                variant: ButtonVariant::Tonal,
-                                icon: "play_arrow",
+                                variant: ButtonVariant::Secondary,
                                 disabled: program.is_none(),
                                 onclick: {
                                     let dir = open.dir.clone();
@@ -115,12 +127,14 @@ pub fn DocumentsView() -> Element {
                                         }
                                     }
                                 },
+                                Play { size: 16 }
                                 match &program {
                                     Some(p) => format!("Start in {p}"),
                                     None => "No agent configured".to_string(),
                                 }
                             }
                             code { class: "export__last", "/{doc.skill}" }
+                        }
                         }
                     }
                 }

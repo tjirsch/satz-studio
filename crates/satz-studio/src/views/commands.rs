@@ -16,22 +16,34 @@
 //! the OS terminal ([ADR 0006](../../../../docs/adr/0006-apply-and-bootstrap-run-in-the-users-terminal.md),
 //! [ADR 0012](../../../../docs/adr/0012-migrate-hands-off-to-the-terminal.md)).
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use dioxus::prelude::*;
+use dioxus_icons::lucide::{
+    ArrowLeftRight, BadgeCheck, CircleAlert, CircleCheck, CirclePlay, Copy as CopyIcon, Diff,
+    Download, ExternalLink, Eye, Hammer, Landmark, ListChecks, ListTodo, Merge,
+    MessageCircleQuestionMark, MessageSquareText, Play, Rocket, ShieldUser, Square, Terminal,
+    UserSearch, UserX, Workflow, Wrench,
+};
 use satz_studio_core::satz::CliLine;
 use satz_studio_core::satz::export::extension;
 
-use crate::components::{
-    Button, ButtonVariant, Card, CardVariant, Chip, ChipKind, Dialog, Icon, LinearProgress, List,
-    ListItem, Segment, SegmentedButton, Switch, TextField, Tooltip,
+use crate::components::badge::{Badge, BadgeVariant};
+use crate::components::button::{Button, ButtonVariant};
+use crate::components::card::{Card, CardContent, CardDescription, CardHeader};
+use crate::components::dialog::{Dialog, DialogTitle};
+use crate::components::item::{
+    Item, ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemSize, ItemTitle,
 };
+use crate::components::progress::Progress;
+use crate::components::toggle_group::{ToggleGroup, ToggleItem};
 use crate::state::{
     AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt, ToastKind, command_line,
     reports_dir, toast,
 };
 use crate::views::review::PackReviewCard;
+use crate::widgets::{Field as TextInput, SwitchRow, Tip};
 
 /// Where the open estate's file goes on the command line.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -98,7 +110,6 @@ impl Field {
 pub struct CommandSpec {
     pub id: &'static str,
     pub label: &'static str,
-    pub icon: &'static str,
     pub description: &'static str,
     /// the leading words, `["transpile"]`
     pub head: &'static [&'static str],
@@ -115,6 +126,32 @@ pub struct CommandSpec {
     pub external: bool,
 }
 
+impl CommandSpec {
+    /// The Lucide icon of the entry, by its id; an id without one of its own shows the
+    /// terminal, and a test holds every entry of [`PALETTE`] to having its own.
+    pub fn icon(&self, size: u32) -> Element {
+        match self.id {
+            "transpile-check" | "bootstrap-check" => rsx! { ListChecks { size } },
+            "transpile" => rsx! { Wrench { size } },
+            "questions" => rsx! { MessageCircleQuestionMark { size } },
+            "check-presets" => rsx! { Diff { size } },
+            "update-prerequisites" => rsx! { ShieldUser { size } },
+            "whoami" => rsx! { UserSearch { size } },
+            "update-schema" => rsx! { Workflow { size } },
+            "hcl-init" => rsx! { CirclePlay { size } },
+            "plan" => rsx! { Eye { size } },
+            "require" => rsx! { ListTodo { size } },
+            "report-compliance" => rsx! { BadgeCheck { size } },
+            "get-presets" => rsx! { Download { size } },
+            "merge-presets" => rsx! { Merge { size } },
+            "apply" => rsx! { Rocket { size } },
+            "migrate" => rsx! { ArrowLeftRight { size } },
+            "bootstrap" => rsx! { Landmark { size } },
+            _ => rsx! { Terminal { size } },
+        }
+    }
+}
+
 /// The palette entries a deck with `tools` offers as one click each, at their default
 /// values: who the estate runs as, whether it transpiles, and what its packs ask. Each
 /// is satz's own command, so the log holds satz's own text.
@@ -125,7 +162,6 @@ pub const PALETTE: &[CommandSpec] = &[
     CommandSpec {
         id: "transpile-check",
         label: "transpile --check",
-        icon: "fact_check",
         description: "Transpile in memory and write nothing: the estate either transpiles or the error says why.",
         head: &["transpile"],
         estate: EstateArg::Positional,
@@ -137,7 +173,6 @@ pub const PALETTE: &[CommandSpec] = &[
     CommandSpec {
         id: "transpile",
         label: "transpile",
-        icon: "build",
         description: "Transpile the estate to HCL code in hcl_dir.",
         head: &["transpile"],
         estate: EstateArg::Positional,
@@ -165,7 +200,6 @@ pub const PALETTE: &[CommandSpec] = &[
     CommandSpec {
         id: "questions",
         label: "questions",
-        icon: "quiz",
         description: "What the estate's packs ask, joined with the answers its params carry.",
         head: &["questions"],
         estate: EstateArg::Positional,
@@ -190,7 +224,6 @@ pub const PALETTE: &[CommandSpec] = &[
     CommandSpec {
         id: "check-presets",
         label: "check-presets",
-        icon: "difference",
         description: "Which packs are clean, behind upstream, or edited locally.",
         head: &["check-presets"],
         estate: EstateArg::Positional,
@@ -216,7 +249,6 @@ pub const PALETTE: &[CommandSpec] = &[
     CommandSpec {
         id: "update-prerequisites",
         label: "update-prerequisites",
-        icon: "admin_panel_settings",
         description: "What the estate's resource types oblige it to declare and does not: the roles its estate account is missing, and the APIs a project its resources' calls are billed to does not enable.",
         // one of the two commands satz's ADR 0021 leaves on the console: the exit code
         // is the answer and the text is the diagnosis, so it takes no `--out`.
@@ -235,7 +267,6 @@ pub const PALETTE: &[CommandSpec] = &[
     CommandSpec {
         id: "whoami",
         label: "whoami",
-        icon: "person_search",
         description: "Who the estate's live commands run as: the signed-in identity, the estate account a cloud-mode estate impersonates, and — checked live — whether that identity may, whether the quota project is reachable, and which permissions the estate's resource types need.",
         head: &["whoami"],
         estate: EstateArg::Positional,
@@ -251,7 +282,6 @@ pub const PALETTE: &[CommandSpec] = &[
     CommandSpec {
         id: "update-schema",
         label: "update-schema",
-        icon: "schema",
         description: "Fetch the provider schema into schema_dir.",
         head: &["update-schema"],
         estate: EstateArg::None,
@@ -276,7 +306,6 @@ pub const PALETTE: &[CommandSpec] = &[
     CommandSpec {
         id: "hcl-init",
         label: "hcl-init",
-        icon: "play_circle",
         description: "Run the tool's init in hcl_dir.",
         head: &["hcl-init"],
         estate: EstateArg::None,
@@ -292,7 +321,6 @@ pub const PALETTE: &[CommandSpec] = &[
     CommandSpec {
         id: "plan",
         label: "plan",
-        icon: "preview",
         description: "Run the tool's plan in hcl_dir.",
         head: &["plan"],
         estate: EstateArg::None,
@@ -308,7 +336,6 @@ pub const PALETTE: &[CommandSpec] = &[
     CommandSpec {
         id: "require",
         label: "require",
-        icon: "rule",
         description: "Which controls of a catalog the declared estate satisfies.",
         head: &["require"],
         estate: EstateArg::Positional,
@@ -333,7 +360,6 @@ pub const PALETTE: &[CommandSpec] = &[
     CommandSpec {
         id: "report-compliance",
         label: "report-compliance",
-        icon: "verified",
         description: "The goal view joined with live verification, written as the evidence report.",
         head: &["report-compliance"],
         estate: EstateArg::Positional,
@@ -380,7 +406,6 @@ pub const PALETTE: &[CommandSpec] = &[
     CommandSpec {
         id: "get-presets",
         label: "get-presets",
-        icon: "download",
         description: "Fetch the upstream library: install what is missing, refresh what the estate does not use.",
         head: &["get-presets"],
         estate: EstateArg::None,
@@ -400,7 +425,6 @@ pub const PALETTE: &[CommandSpec] = &[
     CommandSpec {
         id: "merge-presets",
         label: "merge-presets",
-        icon: "merge",
         description: "What reconciling the presets with upstream would do: new packs installed, unmodified ones upgraded, edited ones forked — reported, nothing written.",
         // `--report-only` is fixed, as it is for `update-prerequisites`: the command writes
         // the estate file and the library by default, and a write from the palette would
@@ -430,7 +454,6 @@ pub const PALETTE: &[CommandSpec] = &[
     CommandSpec {
         id: "bootstrap-check",
         label: "bootstrap --dry-run",
-        icon: "fact_check",
         description: "The bootstrap, read-only: the plan satz would carry out, the identity you are signed in as, and the prerequisites. It creates nothing.",
         head: &["bootstrap"],
         estate: EstateArg::Positional,
@@ -442,7 +465,6 @@ pub const PALETTE: &[CommandSpec] = &[
     CommandSpec {
         id: "apply",
         label: "apply",
-        icon: "rocket_launch",
         description: "Run the tool's apply in hcl_dir — in your terminal, where its approval prompt is.",
         head: &["apply"],
         estate: EstateArg::None,
@@ -458,7 +480,6 @@ pub const PALETTE: &[CommandSpec] = &[
     CommandSpec {
         id: "migrate",
         label: "migrate",
-        icon: "swap_horiz",
         description: "Move the estate between local and cloud state: it binds deployment_mode in the estate's params, transpiles again and copies the state to the other backend — in your terminal.",
         head: &["migrate"],
         estate: EstateArg::Positional,
@@ -476,7 +497,6 @@ pub const PALETTE: &[CommandSpec] = &[
     CommandSpec {
         id: "bootstrap",
         label: "bootstrap",
-        icon: "foundation",
         description: "The bootstrap: folder, project, billing link, core APIs and the state bucket, created as you — in your terminal.",
         head: &["bootstrap"],
         estate: EstateArg::Positional,
@@ -712,17 +732,6 @@ pub fn CommandDeck(
     let mut values = use_signal(move || first.map(defaults).unwrap_or_default());
     let open = app.open().cloned();
     let reviewing = review && selected() == count;
-    let review_item = rsx! {
-        if review {
-            ListItem {
-                headline: REVIEW_LABEL.to_string(),
-                supporting: "satz review-preset".to_string(),
-                selected: reviewing,
-                leading: rsx! { Icon { name: "rate_review", size: 20 } },
-                onclick: move |_| selected.set(count),
-            }
-        }
-    };
     // the review's entry has no spec: the form below it stays the first command's
     let (Some(open), Some(spec)) = (open, specs.get(selected()).or(specs.first()).copied()) else {
         return rsx! {};
@@ -742,134 +751,169 @@ pub fn CommandDeck(
 
     rsx! {
         div { class: "commands__layout",
-            Card { variant: CardVariant::Filled, class: "commands__palette",
-                List {
-                    for (i, s) in specs.iter().enumerate() {
-                        ListItem {
-                            key: "{s.id}",
-                            headline: s.label.to_string(),
-                            supporting: if s.external { "in your terminal".to_string() } else { String::new() },
-                            selected: i == selected(),
-                            leading: rsx! { Icon { name: s.icon.to_string(), size: 20 } },
-                            onclick: {
-                                let spec = *s;
-                                move |_| {
-                                    selected.set(i);
-                                    values.set(defaults(spec));
+            Card { class: "commands__palette",
+                CardContent {
+                    ItemGroup {
+                        for (i, s) in specs.iter().enumerate() {
+                            Item {
+                                key: "{s.id}",
+                                size: ItemSize::Sm,
+                                "data-selected": if i == selected() { "true" } else { "false" },
+                                onclick: {
+                                    let spec = *s;
+                                    move |_| {
+                                        selected.set(i);
+                                        values.set(defaults(spec));
+                                    }
+                                },
+                                ItemMedia { {s.icon(20)} }
+                                ItemContent {
+                                    ItemTitle { "{s.label}" }
+                                    if s.external {
+                                        ItemDescription { "in your terminal" }
+                                    }
                                 }
-                            },
+                            }
+                        }
+                        if review {
+                            Item {
+                                size: ItemSize::Sm,
+                                "data-selected": if reviewing { "true" } else { "false" },
+                                onclick: move |_| selected.set(count),
+                                ItemMedia { MessageSquareText { size: 20 } }
+                                ItemContent {
+                                    ItemTitle { "{REVIEW_LABEL}" }
+                                    ItemDescription { "satz review-preset" }
+                                }
+                            }
                         }
                     }
-                    {review_item}
                 }
             }
             if reviewing {
                 div { class: "commands__work", PackReviewCard {} }
             } else {
             div { class: "commands__work",
-                Card { variant: CardVariant::Outlined, class: "commands__form",
-                    h2 { class: "commands__heading", Icon { name: spec.icon.to_string(), size: 22 } "{spec.label}" }
-                    p { class: "commands__description", "{spec.description}" }
-                    for f in spec.fields {
-                        {
-                            let key = f.key().to_string();
-                            let current = values().get(&key).cloned().unwrap_or_default();
-                            match *f {
-                                Field::Flag { label, .. } => rsx! {
-                                    Switch { key: "{key}", label: label.to_string(), checked: current == "true", onchange: move |v: bool| { values.write().insert(key.clone(), v.to_string()); } }
-                                },
-                                Field::Choice { label, options, .. } => rsx! {
-                                    p { key: "{key}", class: "commands__label", "{label}" }
-                                    SegmentedButton {
-                                        options: options.iter().map(|o| Segment::new(*o, *o)).collect::<Vec<_>>(),
-                                        selected: current,
-                                        onselect: move |v: String| { values.write().insert(key.clone(), v); },
-                                    }
-                                },
-                                Field::Option { label, placeholder, .. } => rsx! {
-                                    TextField { key: "{key}", label: label.to_string(), value: current, placeholder: placeholder.to_string(), monospace: true, oninput: move |v: String| { values.write().insert(key.clone(), v); } }
-                                },
-                                Field::Positional { label, .. } => rsx! {
-                                    TextField { key: "{key}", label: label.to_string(), value: current, monospace: true, error: values().get(&key).map(|v| v.trim().is_empty()).unwrap_or(true), oninput: move |v: String| { values.write().insert(key.clone(), v); } }
-                                },
-                                Field::Trailing { label, placeholder, .. } => rsx! {
-                                    TextField { key: "{key}", label: label.to_string(), value: current, placeholder: placeholder.to_string(), monospace: true, oninput: move |v: String| { values.write().insert(key.clone(), v); } }
-                                },
-                            }
-                        }
+                Card { class: "commands__form",
+                    CardHeader {
+                        h2 { class: "commands__heading", {spec.icon(22)} "{spec.label}" }
+                        CardDescription { "{spec.description}" }
                     }
-                    if not_signed_in {
-                        p { class: "commands__warning",
-                            Icon { name: "no_accounts", size: 18 }
-                            "Not signed in: a command that calls Google will fail. Apply says how to sign in."
-                        }
-                    }
-                    code { class: "commands__preview", "{preview}" }
-                    div { class: "commands__actions",
-                        if spec.external {
-                            Button {
-                                variant: ButtonVariant::Tonal,
-                                icon: "content_copy",
-                                disabled: built.is_err(),
-                                onclick: {
-                                    let preview = preview.clone();
-                                    move |_| copy_to_clipboard(app, &preview)
-                                },
-                                "Copy"
-                            }
-                            Button {
-                                variant: ButtonVariant::Filled,
-                                icon: "open_in_new",
-                                disabled: built.is_err(),
-                                onclick: {
-                                    let built = built.clone();
-                                    move |_| {
-                                        if let Ok(args) = &built {
-                                            handle.send(EstateAction::OpenInTerminal(args.clone()));
+                    CardContent {
+                        for f in spec.fields {
+                            {
+                                let key = f.key().to_string();
+                                let current = values().get(&key).cloned().unwrap_or_default();
+                                match *f {
+                                    Field::Flag { label, .. } => rsx! {
+                                        SwitchRow { key: "{key}", label: label.to_string(), checked: current == "true", onchange: move |v: bool| { values.write().insert(key.clone(), v.to_string()); } }
+                                    },
+                                    Field::Choice { label, options, .. } => {
+                                        let pressed: HashSet<usize> = options.iter().position(|o| *o == current).into_iter().collect();
+                                        rsx! {
+                                            p { key: "{key}", class: "commands__label", "{label}" }
+                                            ToggleGroup {
+                                                horizontal: true,
+                                                pressed: Some(pressed.clone()),
+                                                on_pressed_change: move |now: HashSet<usize>| {
+                                                    // a click on the pressed one leaves it pressed
+                                                    if let Some(option) = now.difference(&pressed).next().and_then(|i| options.get(*i)) {
+                                                        values.write().insert(key.clone(), (*option).to_string());
+                                                    }
+                                                },
+                                                for (i, option) in options.iter().enumerate() {
+                                                    ToggleItem { key: "{option}", index: i, "{option}" }
+                                                }
+                                            }
                                         }
                                     }
-                                },
-                                "Open in terminal"
+                                    Field::Option { label, placeholder, .. } => rsx! {
+                                        TextInput { key: "{key}", label: label.to_string(), value: current, placeholder: placeholder.to_string(), monospace: true, oninput: move |v: String| { values.write().insert(key.clone(), v); } }
+                                    },
+                                    Field::Positional { label, .. } => rsx! {
+                                        TextInput { key: "{key}", label: label.to_string(), value: current, monospace: true, error: values().get(&key).map(|v| v.trim().is_empty()).unwrap_or(true), oninput: move |v: String| { values.write().insert(key.clone(), v); } }
+                                    },
+                                    Field::Trailing { label, placeholder, .. } => rsx! {
+                                        TextInput { key: "{key}", label: label.to_string(), value: current, placeholder: placeholder.to_string(), monospace: true, oninput: move |v: String| { values.write().insert(key.clone(), v); } }
+                                    },
+                                }
                             }
-                        } else {
-                            Button {
-                                variant: ButtonVariant::Filled,
-                                icon: "play_arrow",
-                                disabled: running || built.is_err(),
-                                onclick: {
-                                    let built = built.clone();
-                                    move |_| {
-                                        if let Ok(args) = &built {
-                                            handle.send(EstateAction::RunCommand(args.clone()));
+                        }
+                        if not_signed_in {
+                            p { class: "commands__warning",
+                                UserX { size: 18 }
+                                "Not signed in: a command that calls Google will fail. Apply says how to sign in."
+                            }
+                        }
+                        code { class: "commands__preview", "{preview}" }
+                        div { class: "commands__actions",
+                            if spec.external {
+                                Button {
+                                    variant: ButtonVariant::Secondary,
+                                    disabled: built.is_err(),
+                                    onclick: {
+                                        let preview = preview.clone();
+                                        move |_| copy_to_clipboard(app, &preview)
+                                    },
+                                    CopyIcon { size: 16 }
+                                    "Copy"
+                                }
+                                Button {
+                                    disabled: built.is_err(),
+                                    onclick: {
+                                        let built = built.clone();
+                                        move |_| {
+                                            if let Ok(args) = &built {
+                                                handle.send(EstateAction::OpenInTerminal(args.clone()));
+                                            }
                                         }
-                                    }
-                                },
-                                "Run"
+                                    },
+                                    ExternalLink { size: 16 }
+                                    "Open in terminal"
+                                }
+                            } else {
+                                Button {
+                                    disabled: running || built.is_err(),
+                                    onclick: {
+                                        let built = built.clone();
+                                        move |_| {
+                                            if let Ok(args) = &built {
+                                                handle.send(EstateAction::RunCommand(args.clone()));
+                                            }
+                                        }
+                                    },
+                                    Play { size: 16 }
+                                    "Run"
+                                }
+                                Button { variant: ButtonVariant::Outline, disabled: !running, onclick: move |_| handle.send(EstateAction::CancelCommand), Square { size: 16 } "Cancel" }
                             }
-                            Button { variant: ButtonVariant::Outlined, icon: "stop", disabled: !running, onclick: move |_| handle.send(EstateAction::CancelCommand), "Cancel" }
                         }
                     }
                 }
                 if tools {
-                    Card { variant: CardVariant::Outlined, class: "commands__tools",
-                        h2 { class: "commands__heading", Icon { name: "handyman", size: 22 } "One click" }
-                        p { class: "commands__description", "Who the estate runs as, whether it transpiles, and what its packs ask: satz's own answer, in the log." }
-                        div { class: "commands__actions commands__actions--start",
-                            for s in ONE_CLICK.iter().filter_map(|id| spec_of(id)) {
-                                {
-                                    let args = one_click(s, &open.name);
-                                    rsx! {
-                                        Tooltip { key: "{s.id}", text: s.description.to_string(),
-                                            Button {
-                                                variant: ButtonVariant::Tonal,
-                                                icon: s.icon.to_string(),
-                                                disabled: running || args.is_err(),
-                                                onclick: move |_| {
-                                                    if let Ok(args) = &args {
-                                                        handle.send(EstateAction::RunCommand(args.clone()));
-                                                    }
-                                                },
-                                                "{s.label}"
+                    Card { class: "commands__tools",
+                        CardHeader {
+                            h2 { class: "commands__heading", Hammer { size: 22 } "One click" }
+                            CardDescription { "Who the estate runs as, whether it transpiles, and what its packs ask: satz's own answer, in the log." }
+                        }
+                        CardContent {
+                            div { class: "commands__actions commands__actions--start",
+                                for s in ONE_CLICK.iter().filter_map(|id| spec_of(id)) {
+                                    {
+                                        let args = one_click(s, &open.name);
+                                        rsx! {
+                                            Tip { key: "{s.id}", text: s.description,
+                                                Button {
+                                                    variant: ButtonVariant::Secondary,
+                                                    disabled: running || args.is_err(),
+                                                    onclick: move |_| {
+                                                        if let Ok(args) = &args {
+                                                            handle.send(EstateAction::RunCommand(args.clone()));
+                                                        }
+                                                    },
+                                                    {s.icon(16)}
+                                                    "{s.label}"
+                                                }
                                             }
                                         }
                                     }
@@ -896,26 +940,31 @@ pub fn CommandLog() -> Element {
     let last = app.estate().last_command().cloned();
     let outcome = app.estate().outcome().cloned();
     rsx! {
-        Card { variant: CardVariant::Filled, class: "commands__log-card",
-            div { class: "commands__log-header",
-                Icon { name: "terminal", size: 20 }
-                code { class: "commands__log-title", {last.unwrap_or_else(|| "no command run yet".to_string())} }
-                span { class: "grow" }
-                if let Some(o) = &outcome {
-                    Chip { kind: ChipKind::Assist, icon: if o.ok { "check_circle" } else { "error" }, label: o.text.clone(), error: !o.ok }
+        Card { class: "commands__log-card",
+            CardContent {
+                div { class: "commands__log-header",
+                    Terminal { size: 20 }
+                    code { class: "commands__log-title", {last.unwrap_or_else(|| "no command run yet".to_string())} }
+                    span { class: "grow" }
+                    if let Some(o) = &outcome {
+                        Badge { variant: if o.ok { BadgeVariant::Outline } else { BadgeVariant::Destructive },
+                            if o.ok { CircleCheck { size: 12 } } else { CircleAlert { size: 12 } }
+                            "{o.text}"
+                        }
+                    }
                 }
-            }
-            if running {
-                LinearProgress {}
-            }
-            pre { class: "log",
-                for (i, line) in log.iter().enumerate() {
-                    {
-                        let (class, text) = match line {
-                            CliLine::Stdout(s) => ("log__line", s),
-                            CliLine::Stderr(s) => ("log__line log__line--stderr", s),
-                        };
-                        rsx! { span { key: "{i}", class: "{class}", "{text}\n" } }
+                if running {
+                    Progress { value: None::<f64>, "aria-label": "working" }
+                }
+                pre { class: "log",
+                    for (i, line) in log.iter().enumerate() {
+                        {
+                            let (class, text) = match line {
+                                CliLine::Stdout(s) => ("log__line", s),
+                                CliLine::Stderr(s) => ("log__line log__line--stderr", s),
+                            };
+                            rsx! { span { key: "{i}", class: "{class}", "{text}\n" } }
+                        }
                     }
                 }
             }
@@ -924,7 +973,7 @@ pub fn CommandLog() -> Element {
 }
 
 /// The command palette: every satz command the app runs, over the window, opened with
-/// ⌘K / Ctrl+K or the rail's Commands button. It is not a destination — the work happens
+/// ⌘K / Ctrl+K or the sidebar's Commands entry. It is not a destination — the work happens
 /// in Apply and Documents — and it is where a command that belongs to neither still
 /// lives, and, for an estate that holds the preset library, the pack review.
 #[component]
@@ -940,10 +989,14 @@ pub fn CommandPalette() -> Element {
     rsx! {
         Dialog {
             open: true,
-            title: "Commands".to_string(),
-            class: "command-palette".to_string(),
-            ondismiss: move |_| app.palette_open().set(false),
-            CommandDeck { ids, tools: true, review }
+            on_open_change: move |now: bool| {
+                if !now {
+                    app.palette_open().set(false);
+                }
+            },
+            class: "command-palette",
+            DialogTitle { "Commands" }
+            div { class: "dialog-body", CommandDeck { ids, tools: true, review } }
         }
     }
 }
@@ -1001,6 +1054,16 @@ mod tests {
             keys.sort_unstable();
             keys.dedup();
             assert_eq!(keys.len(), s.fields.len(), "{}", s.id);
+        }
+    }
+
+    /// The terminal is what an id without an icon of its own shows, so no entry of the
+    /// palette may show it: a new entry takes its own line in [`CommandSpec::icon`].
+    #[test]
+    fn every_entry_has_an_icon_of_its_own() {
+        let terminal = dioxus_ssr::render_element(rsx! { Terminal { size: 16 } });
+        for s in PALETTE {
+            assert_ne!(dioxus_ssr::render_element(s.icon(16)), terminal, "{}", s.id);
         }
     }
 

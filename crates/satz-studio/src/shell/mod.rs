@@ -1,5 +1,5 @@
-//! The shell around every view: the navigation rail, the top bar, the satz banner,
-//! the path bar at the foot of a step, the Findings drawer and the snackbar host. While an estate is open the whole
+//! The shell around every view: the sidebar, the top bar, the satz banner, the path bar
+//! at the foot of a step, the Findings drawer and the toasts. While an estate is open the whole
 //! frame sits inside [`EstateHost`], which owns that estate's coroutine, so every part
 //! of the shell can reach it through `try_use_context::<Coroutine<EstateAction>>()`.
 
@@ -7,8 +7,8 @@ mod banner;
 mod drawer;
 mod notices;
 mod placeholder;
-mod rail;
-mod snackbar;
+mod sidebar;
+mod toasts;
 mod top_bar;
 
 use dioxus::desktop::{WindowEvent, tao, use_wry_event_handler};
@@ -18,10 +18,11 @@ pub use banner::SatzBanner;
 pub use drawer::DiagnosticsDrawer;
 pub use notices::NoticeDialog;
 pub use placeholder::NoEstate;
-pub use rail::NavigationRail;
-pub use snackbar::SnackbarHost;
+pub use sidebar::AppSidebar;
+pub use toasts::ToastHost;
 pub use top_bar::TopBar;
 
+use crate::components::sidebar::{SidebarInset, SidebarProvider};
 use crate::state::{AppStore, AppStoreStoreExt, EstateAction, OpenEstate, View, estate_coroutine};
 use crate::views::agent::AgentView;
 use crate::views::apply::ApplyView;
@@ -29,7 +30,6 @@ use crate::views::commands::CommandPalette;
 use crate::views::documents::DocumentsView;
 use crate::views::estate::EstateView;
 use crate::views::estates::EstatesView;
-use crate::views::gallery::GalleryView;
 use crate::views::interview::DecisionsView;
 use crate::views::map::PresetsView;
 use crate::views::overview::OverviewView;
@@ -70,23 +70,23 @@ fn EstateHost(open: OpenEstate) -> Element {
 fn Frame() -> Element {
     let app = use_context::<Store<AppStore>>();
     rsx! {
-        div { class: "shell",
-            NavigationRail {}
-            div { class: "shell__main",
+        SidebarProvider {
+            AppSidebar {}
+            SidebarInset { class: "shell__main",
                 TopBar {}
                 SatzBanner {}
-                main { class: "shell__content", Content {} }
+                div { class: "shell__content", Content {} }
                 PathBar {}
                 DiagnosticsDrawer {}
             }
-            if app.palette_open().cloned() && app.open().is_some() {
-                CommandPalette {}
-            }
-            if app.open().is_some() {
-                NoticeDialog {}
-            }
-            SnackbarHost {}
         }
+        if app.palette_open().cloned() && app.open().is_some() {
+            CommandPalette {}
+        }
+        if app.open().is_some() {
+            NoticeDialog {}
+        }
+        ToastHost {}
     }
 }
 
@@ -110,8 +110,5 @@ fn Content() -> Element {
         View::Documents => rsx! { DocumentsView {} },
         View::Agent => rsx! { AgentView {} },
         View::Settings => rsx! { SettingsView {} },
-        // a development route: the rail is its only door, and it offers it only with
-        // SATZ_STUDIO_DEBUG set
-        View::Gallery => rsx! { GalleryView {} },
     }
 }

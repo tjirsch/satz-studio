@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # e2e.sh — the verification harness, end to end: the installed satz is at least
 # MIN_SATZ, the e2e tests of the core crate pass against it, and, outside CI, the app
-# builds. One verdict line per step; the first failure ends the run.
+# builds the way it is run — through dx, which compiles the component library's
+# stylesheets into it. One verdict line per step; the first failure ends the run.
 #
-#   bash scripts/e2e.sh          # the satz gate, the e2e tests, a build of the app
+#   bash scripts/e2e.sh          # the satz gate, the e2e tests, a dx build of the app
 #   bash scripts/e2e.sh --ci     # the satz gate and the e2e tests (ci.yml builds the app)
 #
 # MIN_SATZ is read from crates/satz-studio-core/src/satz/binary.rs, the one place it
@@ -64,10 +65,13 @@ pass "satz $found at $satz_bin (MIN_SATZ $min)"
 cargo test -p satz-studio-core --locked --test 'e2e_*' || fail "the e2e tests"
 pass "cargo test -p satz-studio-core --locked --test 'e2e_*'"
 
-# 3. the app builds (ci.yml has its own build step)
+# 3. the app builds as it is run, through dx (ci.yml has its own build step)
 if [[ "$ci" -eq 0 ]]; then
-  cargo build -p satz-studio --locked || fail "cargo build -p satz-studio"
-  pass "cargo build -p satz-studio --locked"
+  command -v dx >/dev/null 2>&1 \
+    || fail "dx is not on PATH — cargo install dioxus-cli@0.7.10 (CONTRIBUTING.md)"
+  dx build --package satz-studio --platform desktop --locked \
+    || fail "dx build --package satz-studio --platform desktop"
+  pass "dx build --package satz-studio --platform desktop --locked"
 fi
 
 echo "e2e: every step passed"
