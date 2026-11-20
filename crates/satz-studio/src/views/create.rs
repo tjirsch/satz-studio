@@ -10,7 +10,7 @@
 use std::path::{Path, PathBuf};
 
 use dioxus::prelude::*;
-use satz_studio_core::satz::init::check_target;
+use satz_studio_core::satz::init::{check_target, existing};
 use satz_studio_core::satz::{CliLine, InitOptions};
 
 use crate::components::{
@@ -56,6 +56,24 @@ fn pick_target(mut target: Signal<String>) {
     });
 }
 
+/// The one warning line over a folder that already holds an estate's files: what is
+/// there, and what satz does with each kind — it keeps `config.toml` and `.gitignore`,
+/// rewrites an estate file only under `--force`, and replaces an interface folder's
+/// earlier copy.
+fn existing_warning(found: &[String]) -> String {
+    let copies = found
+        .iter()
+        .any(|f| Path::new(f).starts_with(Path::new("interfaces").join("incoming")));
+    let mut line = format!(
+        "This folder already holds an estate's files: {}. satz keeps config.toml and .gitignore, and writes over an estate file only with Overwrite existing files on — without it, an organization's estate file takes the values stated here and a workload's is refused.",
+        found.join(", ")
+    );
+    if copies {
+        line.push_str(" An interface folder's earlier copy is replaced.");
+    }
+    line
+}
+
 #[component]
 pub fn CreateEstate() -> Element {
     let app = use_context::<Store<AppStore>>();
@@ -76,15 +94,26 @@ pub fn CreateEstate() -> Element {
     let outcome = app.create().outcome().cloned();
 
     let dir = target().trim().to_string();
-    // the same refusal the run would give, said while the folder is being chosen
-    let problem = if dir.is_empty() {
-        None
+    // the same refusal the run would give, said while the folder is being chosen, and
+    // what the folder already holds that the run would meet
+    let (problem, found) = if dir.is_empty() {
+        (None, Vec::new())
     } else {
-        check_target(Path::new(&dir)).err().map(|e| e.to_string())
+        match check_target(Path::new(&dir)) {
+            Err(e) => (Some(e.to_string()), Vec::new()),
+            Ok(()) => match existing(Path::new(&dir), &options()) {
+                Ok(found) => (None, found),
+                Err(e) => (Some(e.to_string()), Vec::new()),
+            },
+        }
     };
+    // the switch belongs to a folder that holds something to write over: over an empty
+    // one it is not drawn, and the run does not carry it
+    let mut run = options();
+    run.force &= !found.is_empty();
     let ready =
         !dir.is_empty() && problem.is_none() && !running && (!team() || !options().from.is_empty());
-    let preview = run_line(Path::new(&dir), &options().argv());
+    let preview = run_line(Path::new(&dir), &run.argv());
     let google = options().defaults.iter().any(|d| d == GOOGLE_SET);
 
     rsx! {
@@ -112,6 +141,18 @@ pub fn CreateEstate() -> Element {
                         disabled: running,
                         onclick: move |_| pick_target(target),
                         "Choose folder"
+                    }
+                }
+                if !found.is_empty() {
+                    p { class: "create__warning",
+                        Icon { name: "warning", size: 18 }
+                        {existing_warning(&found)}
+                    }
+                    Switch {
+                        label: "Overwrite existing files",
+                        checked: options().force,
+                        disabled: running,
+                        onchange: move |on: bool| options.write().force = on,
                     }
                 }
 
@@ -236,7 +277,7 @@ pub fn CreateEstate() -> Element {
                         onclick: move |_| {
                             handle.send(AppAction::CreateEstate {
                                 dir: PathBuf::from(&dir),
-                                options: options(),
+                                options: run.clone(),
                             });
                         },
                         "Create"
@@ -256,8 +297,15 @@ pub fn CreateEstate() -> Element {
                     Icon { name: "terminal", size: 20 }
                     code { class: "create__log-title", {last.unwrap_or_else(|| "nothing created yet".to_string())} }
                     span { class: "grow" }
-                    if let Some(o) = &outcome {
-                        Chip { kind: ChipKind::Assist, icon: if o.ok { "check_circle" } else { "error" }, label: o.text.clone(), error: !o.ok }
+                    if let Some(o) = outcome.as_ref().filter(|o| o.ok) {
+                        Chip { kind: ChipKind::Assist, icon: "check_circle", label: o.text.clone() }
+                    }
+                }
+                // a refusal is satz's whole sentence, wrapped, never cut to fit a chip
+                if let Some(o) = outcome.as_ref().filter(|o| !o.ok) {
+                    p { class: "create__refusal",
+                        Icon { name: "error", size: 18 }
+                        "{o.text}"
                     }
                 }
                 if running {
@@ -302,6 +350,26 @@ mod tests {
         assert_eq!(
             run_line(Path::new(""), &options.argv()),
             "satz init --customer-shortname acme"
+        );
+    }
+
+    #[test]
+    fn the_warning_names_every_file_found() {
+        let line = existing_warning(&["config.toml".to_string(), ".gitignore".to_string()]);
+        assert!(
+            line.starts_with(
+                "This folder already holds an estate's files: config.toml, .gitignore."
+            )
+        );
+        assert!(line.contains("Overwrite existing files"));
+        assert!(!line.contains("interface folder"));
+        let copy = Path::new("interfaces")
+            .join("incoming")
+            .join("delegation-shop")
+            .to_string_lossy()
+            .into_owned();
+        assert!(
+            existing_warning(&[copy]).ends_with("An interface folder's earlier copy is replaced.")
         );
     }
 

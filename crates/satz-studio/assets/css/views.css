@@ -528,6 +528,21 @@
   user-select: text;
 }
 
+.create__warning,
+.create__refusal {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font: var(--md-sys-typescale-body-small);
+  color: var(--md-sys-color-error);
+  user-select: text;
+}
+
+.create__refusal {
+  font: var(--md-sys-typescale-body-medium);
+  overflow-wrap: anywhere;
+}
+
 .create__actions {
   display: flex;
   gap: 8px;

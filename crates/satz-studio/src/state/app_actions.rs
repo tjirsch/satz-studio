@@ -586,15 +586,13 @@ fn create_estate(
     create.outcome().set(None);
     create.running().set(true);
     spawn(async move {
-        let mut last_stderr = None;
+        let mut stderr = Vec::new();
         while let Some(line) = lines.recv().await {
             let clean = match line {
                 CliLine::Stdout(s) => CliLine::Stdout(strip_ansi(&s)),
                 CliLine::Stderr(s) => {
                     let s = strip_ansi(&s);
-                    if !s.trim().is_empty() {
-                        last_stderr = Some(s.clone());
-                    }
+                    stderr.push(s.clone());
                     CliLine::Stderr(s)
                 }
             };
@@ -604,11 +602,12 @@ fn create_estate(
         // a cancel is what the user asked for, so it is the outcome chip and not a toast
         let cancelled = matches!(ended, Ok(Err(SatzError::Cancelled)));
         let outcome = match ended {
-            // satz said why on its own stderr; a status line alone would replace that
-            // sentence with a number
+            // satz said why on its own stderr — its `error:` line, whole; a status line
+            // alone would replace that sentence with a number
             Ok(Ok(status)) if !status.success() => Some(CommandOutcome {
                 ok: false,
-                text: last_stderr.unwrap_or_else(|| format!("exited with {status}")),
+                text: satz_studio_core::satz::init::refusal(&stderr)
+                    .unwrap_or_else(|| format!("exited with {status}")),
             }),
             Ok(Ok(_)) => None,
             Ok(Err(SatzError::Cancelled)) => Some(CommandOutcome {

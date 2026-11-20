@@ -16,8 +16,11 @@ estate file, deriving the customer's domain, directory id, organization id, bill
 account and first administrator from the sign-in of the person signed in on this
 computer and saying where each value came from. The form asks for what satz cannot
 derive — the customer's short name above all — and offers the derivable values as
-overrides that are empty by default. The run streams into a log; when it made an estate,
-that estate opens.
+overrides that are empty by default. A folder that already holds an estate's files —
+`config.toml`, `.gitignore`, an estate file, an earlier copy of an interface folder — is
+named in one warning line before anything runs, with an "Overwrite existing files" switch
+that adds `--force`. The run streams into a log; when it made an estate, that estate
+opens, and when satz refused, its whole `error:` line stands under the log's head.
 
 **Import** runs `satz import` over infrastructure that already exists: a
 `tofu show -json` document, a live organization, folder or project, a Terraform HCL file

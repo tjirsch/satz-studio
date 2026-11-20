@@ -15,7 +15,7 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::estate::{EstateDir, EstateError};
+use crate::estate::{EstateDir, EstateError, ToolConfig};
 
 /// The arguments of one `satz init` run, as the form holds them.
 ///
@@ -24,9 +24,7 @@ use crate::estate::{EstateDir, EstateError};
 /// the value or fall back to its own default. The flags satz has that this does NOT
 /// carry are the ones the app has no business sending — `--interview`, which reads
 /// stdin and would hang a child with no terminal; `--from-live`, which satz accepts and
-/// ignores because deriving is already the default; `--force`, because Create refuses a
-/// directory that already holds a `config.toml` rather than writing over one
-/// ([`check_target`]); and `--customer-organization-id`, `--customer-domain`,
+/// ignores because deriving is already the default; and `--customer-organization-id`, `--customer-domain`,
 /// `--iac-user`, `--infra-project-name` and `--infra-bucket-name`, which the
 /// sign-in or the short name answer and `satz interview` edits afterwards.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -55,6 +53,10 @@ pub struct InitOptions {
     pub from: Vec<String>,
     /// `--name`, with `--from`: the estate's name. Left empty it is the delegation's.
     pub name: String,
+    /// `--force`: an estate file already in `yaml_dir` is rewritten — without it an
+    /// organization's takes the stated values merged in and a workload's is refused.
+    /// `config.toml` and `.gitignore` are kept either way ([`existing`]).
+    pub force: bool,
 }
 
 impl InitOptions {
@@ -103,25 +105,99 @@ impl InitOptions {
                 argv.push(joined);
             }
         }
+        if self.force {
+            argv.push("--force".to_string());
+        }
         argv
     }
 }
 
-/// Whether `dir` is a directory `init` may be run in.
-///
-/// It must exist — the child is spawned with `dir` as its working directory, and a
-/// directory that is not there is an unreadable spawn failure — and it must hold no
-/// `config.toml`. `satz init` MERGES the params it is given into an estate that is
-/// already there, which is a different act from making one; that door is Open, and
-/// this one refuses rather than writing into somebody's estate.
+/// Whether `dir` is a directory `init` may be run in: it must exist — the child is
+/// spawned with `dir` as its working directory, and a directory that is not there is an
+/// unreadable spawn failure. What the directory already holds is [`existing`]'s answer.
 pub fn check_target(dir: &Path) -> Result<(), super::SatzError> {
     if !dir.is_dir() {
         return Err(super::SatzError::TargetMissing(dir.to_path_buf()));
     }
-    if dir.join("config.toml").is_file() {
-        return Err(super::SatzError::AlreadyAnEstate(dir.to_path_buf()));
-    }
     Ok(())
+}
+
+/// The files and folders in `dir` that this `init` run would meet, relative to `dir`:
+/// `config.toml` and `.gitignore`, which satz keeps as they are; every estate file in the
+/// `yaml_dir` the run writes into — `config.toml`'s own when there is one, satz's default
+/// otherwise — which `--force` rewrites; and, for each `--from` folder, the copy under
+/// `interfaces/incoming/` that satz replaces, unless that copy IS the folder named.
+///
+/// The estate file's name is not knowable before the run (it follows the customer id the
+/// sign-in answers, or the delegation's name), so every estate file of `yaml_dir` is
+/// named. A `config.toml` that does not parse is an error, not an empty answer: satz
+/// would read that file before anything else.
+pub fn existing(dir: &Path, options: &InitOptions) -> Result<Vec<String>, EstateError> {
+    let config_path = dir.join("config.toml");
+    let mut found = Vec::new();
+    let estate_dir = if config_path.is_file() {
+        found.push("config.toml".to_string());
+        EstateDir::open(dir)?
+    } else {
+        let tool: ToolConfig = toml::from_str("").map_err(|e| EstateError::Parse {
+            path: config_path.clone(),
+            source: e,
+        })?;
+        EstateDir {
+            runtime: tool.resolved(dir),
+            tool,
+            config_path,
+            dir: dir.to_path_buf(),
+        }
+    };
+    if dir.join(".gitignore").is_file() {
+        found.push(".gitignore".to_string());
+    }
+    let relative = |p: &Path| {
+        p.strip_prefix(dir)
+            .unwrap_or(p)
+            .to_string_lossy()
+            .into_owned()
+    };
+    if Path::new(&estate_dir.runtime.yaml_dir).is_dir() {
+        found.extend(estate_dir.estates()?.iter().map(|p| relative(p)));
+    }
+    let incoming = Path::new(&estate_dir.runtime.interfaces_dir).join("incoming");
+    for folder in options
+        .from
+        .iter()
+        .map(|f| f.trim())
+        .filter(|f| !f.is_empty())
+    {
+        let folder = Path::new(folder)
+            .canonicalize()
+            .unwrap_or_else(|_| PathBuf::from(folder));
+        let Some(name) = folder.file_name() else {
+            continue;
+        };
+        let copy = incoming.join(name);
+        let in_place = copy.canonicalize().is_ok_and(|c| c == folder);
+        if copy.exists() && !in_place {
+            found.push(relative(&copy));
+        }
+    }
+    Ok(found)
+}
+
+/// The sentence a refused run is summed up by: satz's own `error: …` line, whole —
+/// the first one, since what follows it is consequence — or, when satz printed none,
+/// the last line of stderr. `None` when stderr was empty.
+pub fn refusal(stderr: &[String]) -> Option<String> {
+    let lines: Vec<&str> = stderr
+        .iter()
+        .map(|l| l.trim())
+        .filter(|l| !l.is_empty())
+        .collect();
+    lines
+        .iter()
+        .find(|l| l.starts_with("error:"))
+        .or(lines.last())
+        .map(|l| l.to_string())
 }
 
 /// What an `init` run left in `dir`: the estate directory it wrote, and the estate
@@ -165,6 +241,7 @@ mod tests {
             providers: vec!["google-beta".to_string(), "random".to_string()],
             from: Vec::new(),
             name: String::new(),
+            force: false,
         };
         assert_eq!(
             options.argv(),
@@ -203,6 +280,7 @@ mod tests {
             providers: Vec::new(),
             from: Vec::new(),
             name: String::new(),
+            force: false,
         };
         assert_eq!(options.argv(), ["init", "--customer-shortname", "acme"]);
     }
@@ -218,16 +296,167 @@ mod tests {
         );
     }
 
+    /// A folder a first run left half-made is no refusal: the run goes ahead, and what
+    /// it would meet is named — `config.toml`, `.gitignore`, the estate files in the
+    /// `yaml_dir` that `config.toml` names.
     #[test]
-    fn a_directory_that_already_holds_a_config_is_refused_by_name() {
+    fn a_directory_that_already_holds_a_config_names_what_is_there() {
         let tmp = tempfile::tempdir().unwrap();
         std::fs::write(tmp.path().join("config.toml"), "yaml_dir = \"yaml\"\n").unwrap();
-        let err = check_target(tmp.path()).unwrap_err();
-        assert!(
-            matches!(err, super::super::SatzError::AlreadyAnEstate(_)),
-            "{err:?}"
+        std::fs::write(tmp.path().join(".gitignore"), "hcl/\n").unwrap();
+        std::fs::create_dir_all(tmp.path().join("yaml")).unwrap();
+        std::fs::write(
+            tmp.path().join("yaml").join(format!("{CUSTOMER_ID}.satz")),
+            "estate acme\n",
+        )
+        .unwrap();
+        assert!(check_target(tmp.path()).is_ok());
+        assert_eq!(
+            existing(tmp.path(), &InitOptions::default()).unwrap(),
+            [
+                "config.toml".to_string(),
+                ".gitignore".to_string(),
+                Path::new("yaml")
+                    .join(format!("{CUSTOMER_ID}.satz"))
+                    .to_string_lossy()
+                    .into_owned(),
+            ]
         );
-        assert!(err.to_string().contains("open that estate"));
+    }
+
+    /// Without a `config.toml` the run writes into satz's default `satz/`, so an estate
+    /// file there is named too.
+    #[test]
+    fn without_a_config_the_default_estate_directory_is_read() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(tmp.path().join("satz")).unwrap();
+        std::fs::write(
+            tmp.path().join("satz").join("shop_dev.satz"),
+            "estate shop_dev\n",
+        )
+        .unwrap();
+        assert_eq!(
+            existing(tmp.path(), &InitOptions::default()).unwrap(),
+            [Path::new("satz")
+                .join("shop_dev.satz")
+                .to_string_lossy()
+                .into_owned()]
+        );
+    }
+
+    /// A `--from` folder's earlier copy under `interfaces/incoming/` is named — satz
+    /// replaces it — unless the folder named IS that copy.
+    #[test]
+    fn an_earlier_copy_of_an_interface_folder_is_named() {
+        let tmp = tempfile::tempdir().unwrap();
+        let source = tempfile::tempdir().unwrap();
+        let folder = source.path().join("delegation-shop");
+        std::fs::create_dir_all(&folder).unwrap();
+        let copy = tmp
+            .path()
+            .join("interfaces")
+            .join("incoming")
+            .join("delegation-shop");
+        std::fs::create_dir_all(&copy).unwrap();
+        let from = |f: &Path| InitOptions {
+            from: vec![f.display().to_string()],
+            ..Default::default()
+        };
+        assert_eq!(
+            existing(tmp.path(), &from(&folder)).unwrap(),
+            [Path::new("interfaces")
+                .join("incoming")
+                .join("delegation-shop")
+                .to_string_lossy()
+                .into_owned()]
+        );
+        assert!(existing(tmp.path(), &from(&copy)).unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_config_that_does_not_parse_is_an_error() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("config.toml"), "yaml_dir = [").unwrap();
+        assert!(matches!(
+            existing(tmp.path(), &InitOptions::default()),
+            Err(EstateError::Parse { .. })
+        ));
+    }
+
+    #[test]
+    fn an_empty_directory_holds_nothing() {
+        let tmp = tempfile::tempdir().unwrap();
+        assert!(
+            existing(tmp.path(), &InitOptions::default())
+                .unwrap()
+                .is_empty()
+        );
+    }
+
+    /// `--force` closes the command line, in both forms, and is absent when off.
+    #[test]
+    fn force_renders_its_flag_in_both_forms() {
+        let organization = InitOptions {
+            customer_shortname: "acme".to_string(),
+            force: true,
+            ..Default::default()
+        };
+        assert_eq!(
+            organization.argv(),
+            ["init", "--customer-shortname", "acme", "--force"]
+        );
+        let workload = InitOptions {
+            from: vec!["/org/interfaces/outgoing/delegation-shop".to_string()],
+            name: "shop-dev".to_string(),
+            force: true,
+            ..Default::default()
+        };
+        assert_eq!(
+            workload.argv(),
+            [
+                "init",
+                "--from",
+                "/org/interfaces/outgoing/delegation-shop",
+                "--name",
+                "shop-dev",
+                "--force"
+            ]
+        );
+        let off = InitOptions {
+            force: false,
+            ..workload
+        };
+        assert!(!off.argv().contains(&"--force".to_string()));
+        assert!(
+            !InitOptions {
+                force: false,
+                ..organization
+            }
+            .argv()
+            .contains(&"--force".to_string())
+        );
+    }
+
+    /// satz's `error:` line stands whole for the run, even when lines follow it; without
+    /// one, the last line of stderr does.
+    #[test]
+    fn the_refusal_is_satzs_first_error_line() {
+        let stderr = |l: &[&str]| l.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        assert_eq!(
+            refusal(&stderr(&[
+                "satz v0.106.0 (built 2026-11-01)",
+                "error: delegation-shop carries the names before the rename — copy it again",
+                "",
+                "hint: satz init --help",
+            ]))
+            .as_deref(),
+            Some("error: delegation-shop carries the names before the rename — copy it again")
+        );
+        assert_eq!(
+            refusal(&stderr(&["satz v0.106.0", "nothing could be derived", ""])).as_deref(),
+            Some("nothing could be derived")
+        );
+        assert_eq!(refusal(&[]), None);
     }
 
     #[test]

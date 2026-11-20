@@ -182,7 +182,8 @@ async fn a_run_that_hangs_is_cancelled() {
     drain.await.unwrap();
 }
 
-/// The guard in front of the run, against the two directories a Create must not touch.
+/// The guard in front of the run: a directory that is not there. One that holds an
+/// estate's files is no refusal — `existing` names them and the form warns.
 #[test]
 fn the_target_is_checked_before_anything_runs() {
     let tmp = tempfile::tempdir().unwrap();
@@ -195,10 +196,7 @@ fn the_target_is_checked_before_anything_runs() {
     ));
 
     std::fs::write(tmp.path().join("config.toml"), "yaml_dir = \"yaml\"\n").unwrap();
-    assert!(matches!(
-        check_target(tmp.path()),
-        Err(SatzError::AlreadyAnEstate(_))
-    ));
+    assert!(check_target(tmp.path()).is_ok());
 }
 
 /// What `created` answers over the directory a real `init` leaves behind, built here by
