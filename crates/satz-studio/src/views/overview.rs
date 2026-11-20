@@ -869,17 +869,26 @@ fn IdentityCard(facts: Vec<Fact>) -> Element {
                     }
                 }
         }
+        ExportsDialog { open: exports_open }
+    }
+}
+
+/// Every export of one interface folder, while `open` holds its line: the dialog "and N
+/// more" opens, on the Overview's "Delegated by" row and in Packs' interface folders.
+#[component]
+pub fn ExportsDialog(mut open: Signal<Option<DelegatedLine>>) -> Element {
+    rsx! {
         Dialog {
-            open: exports_open().is_some(),
-            title: exports_open().map(|l| l.folder).unwrap_or_default(),
+            open: open().is_some(),
+            title: open().map(|l| l.folder).unwrap_or_default(),
             icon: "output",
-            ondismiss: move |_| exports_open.set(None),
+            ondismiss: move |_| open.set(None),
             actions: rsx! {
-                Button { variant: ButtonVariant::Text, onclick: move |_| exports_open.set(None), "Close" }
+                Button { variant: ButtonVariant::Text, onclick: move |_| open.set(None), "Close" }
             },
             p { "What this interface folder exports:" }
             ul {
-                for name in exports_open().map(|l| l.exports).unwrap_or_default() {
+                for name in open().map(|l| l.exports).unwrap_or_default() {
                     li { key: "{name}", code { "{name}" } }
                 }
             }

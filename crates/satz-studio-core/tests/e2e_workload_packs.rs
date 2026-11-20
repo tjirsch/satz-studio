@@ -7,8 +7,10 @@
 //! pack the repository wrote is never one an update looks at; `detach-pack` makes a
 //! fetched pack the repository's own; `publish-pack` copies the repository's own pack into
 //! a folder source of its own, a temporary one, after review-pack's bar, and records it as
-//! fetched from there. The `use` line satz names goes into the estate file through the
-//! app's writer and satz's check.
+//! fetched from there. `satz packs --local` lists the packs here with their declarations
+//! and the interface folders the estate reads, with what each exports, and reads no
+//! source — a GitHub source that does not exist is no failure. The `use` line satz names
+//! goes into the estate file through the app's writer and satz's check.
 
 #[path = "fixtures/e2e/support.rs"]
 mod e2e;
@@ -211,6 +213,90 @@ async fn a_pack_is_fetched_kept_current_left_alone_when_edited_and_detached() {
         .unwrap();
     let after = e2e::within(workload::sources(&cli)).await.unwrap();
     assert_eq!(after, before);
+}
+
+/// A workload estate that reads the interface folder `payments` through satz's corpus
+/// interface file, checked in beside it as satz's corpus case does.
+const READS_PAYMENTS: &str = "estate wp\n\nuse \"interface.satz\"\n\nparams {\n  customer_organization_id = \"123456789012\"\n}\n\nterraform {\n  backend {\n    local { path = \"terraform.tfstate\" }\n  }\n}\n";
+
+#[tokio::test(flavor = "multi_thread")]
+async fn the_local_listing_reads_no_source_and_names_the_interface_folders() {
+    let estate = e2e::estate_dir(None);
+    let main = estate.file("wp.satz");
+    std::fs::copy(
+        e2e::vendor().join("tests/corpus/project/interface.satz"),
+        estate.file("interface.satz"),
+    )
+    .unwrap();
+    std::fs::write(&main, READS_PAYMENTS).unwrap();
+    let cli = estate.cli().await;
+    add_source(&cli).await;
+    e2e::within(workload::get(&cli, &Which::One(PACK.into()), SOURCE, &main))
+        .await
+        .unwrap();
+    std::fs::write(estate.root.join("packs").join("own.satz"), OWN).unwrap();
+    // a GitHub source that does not exist: any read of it would fail
+    let gone = NewSource {
+        name: "gone".into(),
+        place: NewPlace::Github {
+            repo: "acme/no-such-packs".into(),
+            git_ref: None,
+            path: None,
+        },
+    };
+    e2e::within(workload::add_source(&cli, &gone))
+        .await
+        .unwrap();
+
+    let local = e2e::within(workload::list_local(&cli, &main))
+        .await
+        .unwrap();
+    assert!(local.sources.is_empty(), "{:?}", local.sources);
+    let [folder] = local.interface_folders.as_slice() else {
+        panic!("one interface folder: {:?}", local.interface_folders);
+    };
+    assert_eq!(folder.name, "payments");
+    assert_eq!(folder.estate, "corpus_central");
+    assert!(
+        folder.exports.iter().any(|e| e == "payments_project"),
+        "{:?}",
+        folder.exports
+    );
+
+    // the fetched pack: unchanged since its fetch, its source not read, its declarations
+    let fetched = row(&local.packs, PACK);
+    assert_eq!(fetched.state, PackState::NotChecked);
+    assert_eq!(fetched.source.as_deref(), Some(SOURCE));
+    assert_eq!(fetched.upstream_version, None, "no source was read");
+    assert!(
+        fetched
+            .params
+            .iter()
+            .any(|p| p.name == "workload_project_parent"),
+        "{:?}",
+        fetched.params
+    );
+    assert!(
+        fetched
+            .reads
+            .iter()
+            .any(|r| r.value == "delegated_folder" && r.unmet()),
+        "{:?}",
+        fetched.reads
+    );
+    assert_eq!(row(&local.packs, "own").state, PackState::Own);
+    assert!(
+        local.packs.iter().all(|p| p.state != PackState::Available),
+        "nothing a source offers is listed"
+    );
+
+    // edited here: the sha256 of its row says so without a source
+    let file = estate.root.join("packs").join(format!("{PACK}.satz"));
+    std::fs::write(&file, format!("{}// edited here\n", e2e::read(&file))).unwrap();
+    let local = e2e::within(workload::list_local(&cli, &main))
+        .await
+        .unwrap();
+    assert_eq!(row(&local.packs, PACK).state, PackState::Edited);
 }
 
 #[tokio::test(flavor = "multi_thread")]

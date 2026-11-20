@@ -1064,7 +1064,8 @@ pub enum PackState {
     Edited,
     /// fetched, and the source holds it no longer
     Gone,
-    /// fetched from another pack source than the one that was read
+    /// fetched, and its source not read: another source was, or `--local` read none. From
+    /// a `--local` listing it also says the file is unchanged since its fetch.
     NotChecked,
     /// the source holds it and `packs_dir` does not
     Available,
@@ -1202,11 +1203,23 @@ pub struct WorkloadPacksReport {
     pub packs_dir: String,
     /// the estate the reads are matched against
     pub estate: String,
-    /// the interface folders that estate uses, by name
-    pub interface_folders: Vec<String>,
-    /// the pack sources read: every one, or the one `--source` names
+    /// the interface folders that estate uses; none for an organization's estate
+    pub interface_folders: Vec<InterfaceFolder>,
+    /// the pack sources read: every one, or the one `--source` names; none with `--local`
     pub sources: Vec<SourceRead>,
     pub packs: Vec<WorkloadPackRow>,
+}
+
+/// One interface folder an estate uses, as a workload-pack report lists it. satz's
+/// `InterfaceFolder` (`vendor/satz/src/workload_packs.rs`).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct InterfaceFolder {
+    /// the folder's name, the one a named read writes: `${{interface.<name>.<value>}}`
+    pub name: String,
+    /// the name of the organization's estate that wrote it
+    pub estate: String,
+    /// the names of the values it exports, as it writes them
+    pub exports: Vec<String>,
 }
 
 /// One pack source as `satz pack-source list --format json` prints it: the built-in
@@ -2062,19 +2075,21 @@ mod tests {
     }
 
     /// What `satz packs`, `get-pack`, `update-pack` and `detach-pack` print with
-    /// `--format json`, as satz v0.107.0 writes them over a folder source and a GitHub one:
+    /// `--format json`, as satz v0.108.0 writes them over a folder source and a GitHub one:
     /// each row with what the pack declares and its reads matched against the estate.
     #[test]
     fn the_workload_pack_reports_are_read() {
         let list: WorkloadPacksReport = serde_json::from_str(
-            r#"{"packs_dir":"packs","estate":"yaml/wp.satz","interface_folders":["shop"],"sources":[{"name":"up","location":"../up","commit":null}],"packs":[
+            r#"{"packs_dir":"packs","estate":"yaml/wp.satz","interface_folders":[{"name":"shop","estate":"c0example","exports":["project_id","region"]}],"sources":[{"name":"up","location":"../up","commit":null}],"packs":[
                 {"id":"demo","state":"edited","params":[{"name":"budget_project_id","default":"\"${{interface.project_id}}\"","question":false,"prompt":null},{"name":"budget_email","default":null,"question":true,"prompt":"The address that is told"}],"list_params":[{"param":"buckets","key":"name","fields":["name","location"],"defaults":{"location":"\"EU\""}}],"exports":[{"interface":null,"name":"budget_name"},{"interface":"ks-{each.id}","name":"bucket"}],"reads":[{"folder":null,"value":"project_id","param":"budget_project_id","bound_by_estate":false,"met_by":["shop"],"unmet_reason":null}],"version":"1.1","upstream_version":"1.2","source":"up","commit":null,"use_line":"use \"packs/demo.satz\""},
                 {"id":"own","state":"own","params":[],"list_params":[],"exports":[],"reads":[{"folder":"shop","value":"region","param":"own_region","bound_by_estate":true,"met_by":[],"unmet_reason":null}],"version":"9.0","upstream_version":null,"source":null,"commit":null,"use_line":"use \"packs/own.satz\""},
                 {"id":"sub/nested","state":"available","params":[],"list_params":[],"exports":[],"reads":[{"folder":"vm","value":"instance_name","param":null,"bound_by_estate":false,"met_by":[],"unmet_reason":"no folder vm"}],"version":null,"upstream_version":"0.3","source":"up","commit":null,"use_line":null},
                 {"id":"elsewhere","state":"not-checked","params":[],"list_params":[],"exports":[],"reads":[],"version":"1.0","upstream_version":null,"source":"satz","commit":"0123456789abcdef0123456789abcdef01234567","use_line":null}]}"#,
         )
         .unwrap();
-        assert_eq!(list.interface_folders, ["shop"]);
+        assert_eq!(list.interface_folders[0].name, "shop");
+        assert_eq!(list.interface_folders[0].estate, "c0example");
+        assert_eq!(list.interface_folders[0].exports, ["project_id", "region"]);
         assert_eq!(list.sources[0].name, "up");
         assert_eq!(list.packs[0].source.as_deref(), Some("up"));
         assert_eq!(
@@ -2155,6 +2170,26 @@ mod tests {
 
         // a state satz grows is refused, never read as another
         assert!(serde_json::from_str::<PackState>(r#""sideways""#).is_err());
+
+        // the folders of satz before v0.108.0, a list of names, are refused
+        assert!(
+            serde_json::from_str::<WorkloadPacksReport>(
+                r#"{"packs_dir":"packs","estate":"yaml/wp.satz","interface_folders":["shop"],"sources":[],"packs":[]}"#
+            )
+            .is_err()
+        );
+
+        // `satz packs --local`: no source read, the fetched pack `not-checked`, the folders
+        // with their exports
+        let local: WorkloadPacksReport = serde_json::from_str(
+            r#"{"packs_dir":"packs","estate":"yaml/wp.satz","interface_folders":[{"name":"shop","estate":"c0example","exports":[]}],"sources":[],"packs":[
+                {"id":"demo","state":"not-checked","params":[],"list_params":[],"exports":[],"reads":[],"version":"1.0","upstream_version":null,"source":"up","commit":null,"use_line":"use \"packs/demo.satz\""}]}"#,
+        )
+        .unwrap();
+        assert!(local.sources.is_empty());
+        assert_eq!(local.packs[0].state, PackState::NotChecked);
+        assert_eq!(local.packs[0].upstream_version, None);
+        assert!(local.interface_folders[0].exports.is_empty());
 
         // the report of satz before v0.103.0, one `source` string, is refused
         assert!(

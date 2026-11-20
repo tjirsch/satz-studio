@@ -173,6 +173,18 @@ pub async fn list(
     .await
 }
 
+/// `satz packs --local --estate <estate>`: the packs of `packs_dir` only, each with what it
+/// declares and its reads matched against `estate`, and the interface folders `estate`
+/// uses. No pack source is read, so it is no network read: a fetched pack is `edited` or
+/// `not-checked` by the sha256 its row in `origin.toml` records, and `sources` is empty.
+pub async fn list_local(cli: &SatzCli, estate: &Path) -> Result<WorkloadPacksReport, SatzError> {
+    cli.json_report(&argv(
+        "packs",
+        [vec!["--local".to_string()], estate_args(estate), Vec::new()],
+    ))
+    .await
+}
+
 /// `satz get-pack <id>|--all --source <name> --estate <estate>`: the pack fetched into
 /// `packs_dir` and its origin recorded, naming the source; each installed pack names the
 /// reads `estate` does not give, which satz warns of and fetches all the same.

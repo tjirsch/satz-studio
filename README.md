@@ -84,6 +84,11 @@ given in Estate → Interfaces: every list param a preset declares is shown with
 estate is created from the interface folders it was given, on the Start screen. Packs
 lists every workload pack the estate uses first, then the other files of `packs_dir`:
 the ones the repository wrote itself ("Own pack") and the ones `satz get-pack` fetched.
+When Packs opens, `satz packs --local` lists them without reading any pack source — no
+network — so each row has its state, where it came from and "Details" at once: a fetched
+pack is "Edited here" or "Unchanged since fetched". For a workload estate, the card
+"Interface folders" above them names each interface folder the estate uses, the
+organization's estate that wrote it and what it exports.
 Choosing a pack source — `satz`, the satz repository's `packs/`, then each source
 `config.toml` names, a GitHub repository or a folder — says how each fetched pack stands
 against it, with a badge where it needs you ("Update available", "Edited here", "Gone
@@ -152,7 +157,7 @@ that holds them up — in front of apply and bootstrap, which satz refuses.
 
 ## What it needs
 
-- **`satz` 0.107.0 or newer.** `MIN_SATZ` in `crates/satz-studio-core/src/satz/binary.rs`
+- **`satz` 0.108.0 or newer.** `MIN_SATZ` in `crates/satz-studio-core/src/satz/binary.rs`
   names the oldest satz this build works with. It rises when a satz release breaks the
   app or the app starts using something a later satz introduced, not with every satz
   release. Install satz with its installer or bring it up to date with `satz

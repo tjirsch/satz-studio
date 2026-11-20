@@ -143,6 +143,8 @@ pub enum SourceOp {
 /// What the Packs view asks of the workload packs.
 #[derive(Debug, Clone, PartialEq)]
 pub enum PackOp {
+    /// `satz packs --local`: the packs of `packs_dir` alone, no source read
+    ListLocal,
     /// `satz packs --source <name>`: the source a fetch reads too
     List(String),
     /// `satz get-pack <id>|--all --source <name>`, from the listed source
@@ -272,6 +274,7 @@ pub async fn estate_coroutine(
                 }
                 app.estate().packs_busy().set(true);
                 new_pack(&session, app, &id).await;
+                list_local(&session, app).await;
                 app.estate().packs_busy().set(false);
             }
             EstateAction::PackSources(op) => {
@@ -1374,11 +1377,12 @@ async fn check_sign_in(session: &Arc<EstateSession>) -> SignIn {
     }
 }
 
-/// One workload-pack operation, and the list read again from the same source after it.
-/// A fetch, an update, a detach and a publish write `packs_dir`, so they hold the write
-/// lock; what satz refuses is a toast carrying satz's sentence — a publish's refusal is
-/// kept for its dialog instead. Returns whether a pack file was
-/// written, which is when the estate is read again.
+/// One workload-pack operation, then the lists read again: the local one always, and the
+/// listed source's where one is chosen. A fetch, an update, a detach and a publish write
+/// `packs_dir`, so they hold the write lock; what satz refuses is a toast carrying satz's
+/// sentence — a publish's refusal is kept for its dialog instead. Only a fetch needs a
+/// listed source; an update and a detach go by each pack's recorded one. Returns whether
+/// a pack file was written, which is when the estate is read again.
 async fn workload_packs(session: &Arc<EstateSession>, app: Store<AppStore>, op: PackOp) -> bool {
     let estate = app.estate();
     let source = match &op {
@@ -1386,37 +1390,41 @@ async fn workload_packs(session: &Arc<EstateSession>, app: Store<AppStore>, op: 
             estate.pack_source().set(Some(source.clone()));
             estate.pack_update().set(None);
             estate.workload_packs().set(None);
-            source.clone()
+            Some(source.clone())
         }
         PackOp::Update {
             from: Some(source), ..
         } => {
             estate.pack_source().set(Some(source.clone()));
-            source.clone()
+            Some(source.clone())
         }
         // the list read after it is the listed source's, the published one's when none is
         PackOp::Publish { source, .. } => match estate.pack_source().cloned() {
-            Some(listed) => listed,
+            Some(listed) => Some(listed),
             None => {
                 estate.pack_source().set(Some(source.clone()));
-                source.clone()
+                Some(source.clone())
             }
         },
-        _ => match estate.pack_source().cloned() {
-            Some(source) => source,
+        PackOp::Get(_) => match estate.pack_source().cloned() {
+            Some(source) => Some(source),
             None => {
                 toast(app, ToastKind::Error, "choose a pack source first");
                 return false;
             }
         },
+        PackOp::ListLocal | PackOp::Update { from: None, .. } | PackOp::Detach(_) => {
+            estate.pack_source().cloned()
+        }
     };
     let cli = &session.cli;
     let mut wrote = false;
     match op {
-        PackOp::List(_) => {}
+        PackOp::ListLocal | PackOp::List(_) => {}
         PackOp::Get(which) => {
             let _lock = session.write_lock().await;
-            match workload::get(cli, &which, &source, &session.main).await {
+            let source = source.as_deref().expect("a fetch has a listed source");
+            match workload::get(cli, &which, source, &session.main).await {
                 Ok(report) if report.installed.is_empty() => {
                     toast(
                         app,
@@ -1520,11 +1528,23 @@ async fn workload_packs(session: &Arc<EstateSession>, app: Store<AppStore>, op: 
             }
         }
     }
-    let listed = workload::list(cli, &source, &session.main)
+    if let Some(source) = source {
+        let listed = workload::list(cli, &source, &session.main)
+            .await
+            .map_err(|e| project::said(&e));
+        estate.workload_packs().set(Some(listed));
+    }
+    list_local(session, app).await;
+    wrote
+}
+
+/// `satz packs --local` into the store: the packs of `packs_dir` with their state and
+/// declarations, and the interface folders the estate uses, no pack source read.
+async fn list_local(session: &Arc<EstateSession>, app: Store<AppStore>) {
+    let listed = workload::list_local(&session.cli, &session.main)
         .await
         .map_err(|e| project::said(&e));
-    estate.workload_packs().set(Some(listed));
-    wrote
+    app.estate().local_packs().set(Some(listed));
 }
 
 /// A new pack of the repository's own (`workload::create_pack`, under the write lock),

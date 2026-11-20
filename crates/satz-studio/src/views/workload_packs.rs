@@ -1,7 +1,10 @@
-//! The Packs view's pane: the estate's pack sources ([`PackSourcesCard`]), then the packs
-//! of the estate's `packs_dir` — first every one the estate `use`s, read from its own
-//! `use` lines, then the others — and, once a source is listed with `satz packs --source
-//! <name>`, how each stands against it and what the source holds beyond them. A fetch is
+//! The Packs view's pane: the estate's pack sources ([`PackSourcesCard`]), the interface
+//! folders the estate uses with what each exports ([`FoldersCard`]), then the packs of the
+//! estate's `packs_dir` — first every one the estate `use`s, read from its own `use`
+//! lines, then the others. `satz packs --local`, which reads no pack source, gives each its
+//! state and declarations as soon as the view stands; once a source is listed with `satz
+//! packs --source <name>`, its rows win, saying how each pack stands against it, and what
+//! the source holds beyond them is listed too. A fetch is
 //! `satz get-pack --source`, an update `satz update-pack` from each pack's recorded
 //! source, and a pack edited here is shown with its difference and written only when the
 //! operator says so (ADR 0024). A new pack is the repository's own: written and formatted,
@@ -21,8 +24,8 @@ use dioxus::prelude::*;
 use satz_studio_core::cst::UseState;
 use satz_studio_core::edit::Edit;
 use satz_studio_core::satz::reports::{
-    PackExport, PackRead, PackState, UpdateAction, UpdatePackReport, UpdatedPack, WorkloadPackRow,
-    WorkloadPacksReport,
+    InterfaceFolder, PackExport, PackRead, PackState, UpdateAction, UpdatePackReport, UpdatedPack,
+    WorkloadPackRow, WorkloadPacksReport,
 };
 use satz_studio_core::satz::workload::{Which, new_pack_id};
 
@@ -33,6 +36,7 @@ use crate::components::{
 use crate::state::{
     AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt, PackOp, SourceOp, edit_file,
 };
+use crate::views::overview::{DelegatedLine, ExportsDialog};
 use crate::views::pack_sources::{PackSourcesCard, Sheet};
 use crate::views::publish_pack::PublishDialog;
 
@@ -69,11 +73,14 @@ fn export_groups(exports: &[PackExport]) -> Vec<(Option<String>, Vec<String>)> {
 
 /// The badge a pack's state earns: the word, its icon, and whether it is in the error
 /// color. A pack that is current, the repository's own or only available needs no word.
-fn badge(state: PackState) -> Option<(&'static str, &'static str, bool)> {
+/// `local` says the row is `satz packs --local`'s, which read no source: its `not-checked`
+/// is a fetched file unchanged since its fetch, not a pack of another source.
+fn badge(state: PackState, local: bool) -> Option<(&'static str, &'static str, bool)> {
     match state {
         PackState::Behind => Some(("Update available", "update", false)),
         PackState::Edited => Some(("Edited here", "edit", false)),
         PackState::Gone => Some(("Gone from source", "cloud_off", true)),
+        PackState::NotChecked if local => Some(("Unchanged since fetched", "history", false)),
         PackState::NotChecked => Some(("Not checked", "pending", false)),
         PackState::Own | PackState::Current | PackState::Available => None,
     }
@@ -108,44 +115,60 @@ fn origin_text(row: &WorkloadPackRow) -> Option<String> {
 }
 
 /// One pack of `packs_dir`, as the card lists it: the `use` path the estate reads it by,
-/// where it does, and satz's row for it, once a source is listed.
+/// where it does, satz's row for it once a listing names it, and whether that row is the
+/// local listing's.
 #[derive(Debug, Clone, PartialEq)]
 struct HereRow {
     id: String,
     used: Option<String>,
     row: Option<WorkloadPackRow>,
+    local: bool,
 }
 
 /// The packs of `packs_dir`: every one the estate uses, in the order of its `use` lines,
-/// then the others the listed report names, by id. `used` is each used pack's id and the
-/// path of its line.
-fn here_rows(report: Option<&WorkloadPacksReport>, used: &[(String, String)]) -> Vec<HereRow> {
-    let listed: Vec<&WorkloadPackRow> = report
-        .map(|r| {
-            r.packs
-                .iter()
-                .filter(|p| p.state != PackState::Available)
-                .collect()
-        })
-        .unwrap_or_default();
-    let row_of = |id: &str| listed.iter().find(|p| p.id == id).map(|p| (*p).clone());
+/// then the others a listing names, by id. A pack's row is the source listing's where it
+/// names the pack, else the local listing's. `used` is each used pack's id and the path of
+/// its line.
+fn here_rows(
+    source: Option<&WorkloadPacksReport>,
+    local: Option<&WorkloadPacksReport>,
+    used: &[(String, String)],
+) -> Vec<HereRow> {
+    let here = |r: &WorkloadPacksReport, is_local: bool| -> Vec<(WorkloadPackRow, bool)> {
+        r.packs
+            .iter()
+            .filter(|p| p.state != PackState::Available)
+            .map(|p| (p.clone(), is_local))
+            .collect()
+    };
+    let mut listed: Vec<(WorkloadPackRow, bool)> =
+        source.map(|r| here(r, false)).unwrap_or_default();
+    for (row, is_local) in local.map(|r| here(r, true)).unwrap_or_default() {
+        if listed.iter().all(|(p, _)| p.id != row.id) {
+            listed.push((row, is_local));
+        }
+    }
+    let row_of = |id: &str| listed.iter().find(|(p, _)| p.id == id).cloned();
     let mut rows: Vec<HereRow> = Vec::new();
     for (id, path) in used {
         if rows.iter().all(|r| &r.id != id) {
+            let found = row_of(id);
             rows.push(HereRow {
                 id: id.clone(),
                 used: Some(path.clone()),
-                row: row_of(id),
+                local: found.as_ref().is_some_and(|(_, l)| *l),
+                row: found.map(|(p, _)| p),
             });
         }
     }
     let mut others: Vec<HereRow> = listed
         .iter()
-        .filter(|p| used.iter().all(|(id, _)| id != &p.id))
-        .map(|p| HereRow {
+        .filter(|(p, _)| used.iter().all(|(id, _)| id != &p.id))
+        .map(|(p, is_local)| HereRow {
             id: p.id.clone(),
             used: None,
-            row: Some((*p).clone()),
+            row: Some(p.clone()),
+            local: *is_local,
         })
         .collect();
     others.sort_by(|a, b| a.id.cmp(&b.id));
@@ -186,6 +209,13 @@ pub fn WorkloadPacksPane() -> Element {
         return rsx! {};
     };
     let report = app.estate().workload_packs().cloned();
+    let local_report = app.estate().local_packs().cloned();
+    // the local listing reads no source: run when the view first stands
+    use_hook(move || {
+        if app.estate().local_packs().peek().is_none() {
+            handle.send(EstateAction::Packs(PackOp::ListLocal));
+        }
+    });
     let busy = app.estate().packs_busy().cloned() || app.estate().loading().cloned();
     let update = app.estate().pack_update().cloned();
     // the packs the estate uses: its active `use` lines that read a file of packs_dir
@@ -215,7 +245,18 @@ pub fn WorkloadPacksPane() -> Element {
         Some(Err(e)) => (None, Some(e.clone())),
         None => (None, None),
     };
-    let rows = here_rows(listed.as_ref(), &used);
+    let (local, local_failed) = match &local_report {
+        Some(Ok(r)) => (Some(r.clone()), None),
+        Some(Err(e)) => (None, Some(e.clone())),
+        None => (None, None),
+    };
+    let rows = here_rows(listed.as_ref(), local.as_ref(), &used);
+    // the folders are the estate's, the same in either listing
+    let folders: Vec<InterfaceFolder> = local
+        .as_ref()
+        .or(listed.as_ref())
+        .map(|r| r.interface_folders.clone())
+        .unwrap_or_default();
     let available: Vec<WorkloadPackRow> = listed
         .as_ref()
         .map(|r| {
@@ -237,10 +278,14 @@ pub fn WorkloadPacksPane() -> Element {
                 sheet,
                 confirm_remove: move |name: String| confirm.set(Some(Confirm::RemoveSource(name))),
             }
+            if !folders.is_empty() {
+                FoldersCard { folders }
+            }
             HereCard {
                 rows,
                 listed: listed.is_some(),
-                failed,
+                local_listed: local.is_some(),
+                failed: failed.or(local_failed),
                 packs_dir: open.session.dir.tool.packs_dir.clone(),
                 files: packs_dir,
                 update,
@@ -256,7 +301,7 @@ pub fn WorkloadPacksPane() -> Element {
                         code { class: "interfaces__at", "{read_from(&report)}" }
                     }
                     for row in available {
-                        PackLine { key: "{row.id}", id: row.id.clone(), row: Some(row.clone()), used: true, file: None, edited: None, busy, confirm, publishing }
+                        PackLine { key: "{row.id}", id: row.id.clone(), row: Some(row.clone()), local: false, used: true, file: None, edited: None, busy, confirm, publishing }
                     }
                 }
             }
@@ -318,6 +363,7 @@ pub fn WorkloadPacksPane() -> Element {
 fn HereCard(
     rows: Vec<HereRow>,
     listed: bool,
+    local_listed: bool,
     failed: Option<String>,
     packs_dir: String,
     files: PathBuf,
@@ -379,16 +425,18 @@ fn HereCard(
                     disabled: busy,
                     onclick: move |_| {
                         handle.send(EstateAction::Reload);
-                        if let Some(source) = app.estate().pack_source().cloned() {
-                            handle.send(EstateAction::Packs(PackOp::List(source)));
-                        }
+                        handle.send(EstateAction::Packs(match app.estate().pack_source().cloned() {
+                            Some(source) => PackOp::List(source),
+                            None => PackOp::ListLocal,
+                        }));
                     },
                 }
                 HelpButton { title: "Workload packs",
                     p { "The packs this estate uses come first, then the other files of {packs_dir}. A fetched pack is recorded in origin.toml beside the packs with the name of its source; a pack without a row there is this repository's own, and no fetch and no update writes it." }
                     p { "Choosing a pack source runs satz packs against it, and each fetched pack says how it stands: Update available — unchanged here, and the source holds a newer file; Edited here — changed since it was fetched, so an update leaves it as it is and shows the difference; Gone from source — the source holds it no longer; Not checked — fetched from another source than the one listed." }
+                    p { "Before a source is chosen, satz packs --local lists the packs here without reading any source, so nothing goes over the network: Edited here — changed since it was fetched; Unchanged since fetched — the file is the one that was fetched, and whether its source holds a newer one is known once that source is chosen." }
                     p { "Details shows what a pack declares — its params with their defaults and the questions that ask for them, its list params, its exports by interface — and each value it reads from the interface folders this estate uses: the folders that give it, the param the estate sets in its place, or why none does. Unmet read marks a pack with a read this estate does not give; the transpile refuses it once the estate uses the pack." }
-                    p { "Reload reads the estate again, and the listed pack source with it: the way to see a pack after New pack or Edit, since the window cannot tell when the editor is done with the file." }
+                    p { "Reload reads the estate again, the packs here and the listed pack source with them: the way to see a pack after New pack or Edit, since the window cannot tell when the editor is done with the file." }
                     p { "New pack writes {packs_dir}/<name>.satz, adds its use line to the estate and opens the file in the application this computer gives .satz files; Edit opens a pack the same way. Keep as own forgets where a fetched pack came from. What a pack asks is answered in Decisions." }
                     p { "Store in a pack source, on your own pack, copies it into a folder pack source with satz publish-pack once it clears review-pack's bar inside this estate, and records it as fetched from there, so other estates fetch it and update-pack follows it here too." }
                 }
@@ -401,12 +449,12 @@ fn HereCard(
                         pre { "{e}" }
                     }
                 }
-            } else if !listed && !rows.is_empty() {
-                p { class: "interfaces__supporting", "Choose a pack source to see how each pack stands against it." }
+            } else if !listed && local_listed && !rows.is_empty() {
+                p { class: "interfaces__supporting", "Choose a pack source to check each fetched pack against it and see what it offers." }
             }
-            if rows.is_empty() {
+            if rows.is_empty() && (listed || local_listed) {
                 p { class: "interfaces__supporting",
-                    if listed { "No workload pack is here yet." } else { "The estate uses no workload pack. Choose a pack source to list what it offers." }
+                    if listed { "No workload pack is here yet." } else { "No workload pack is here yet. Choose a pack source to list what it offers." }
                 }
             }
             for here in rows {
@@ -417,6 +465,7 @@ fn HereCard(
                     edited: edited_of(&here.id),
                     file: Some(files.join(format!("{}.satz", here.id))),
                     row: here.row,
+                    local: here.local,
                     busy,
                     confirm,
                     publishing,
@@ -463,13 +512,75 @@ fn HereCard(
     }
 }
 
+/// The interface folders the estate uses, one row each: its name, the organization's
+/// estate that wrote it and the first [`crate::views::overview::EXPORTS_SHOWN`] of its exports, "and N more"
+/// opening the full list in the dialog the Overview's "Delegated by" row opens.
+#[component]
+fn FoldersCard(folders: Vec<InterfaceFolder>) -> Element {
+    let exports_open = use_signal(|| None::<DelegatedLine>);
+    rsx! {
+        Card { variant: CardVariant::Outlined, class: "interfaces__card",
+            div { class: "interfaces__card-head",
+                Icon { name: "folder_shared", size: 22 }
+                h2 { class: "interfaces__name", "Interface folders" }
+                span { class: "grow" }
+                HelpButton { title: "Interface folders",
+                    p { "Each interface folder this estate uses was written by an organization's estate and holds the values it exports for workloads. A pack reads them as ${{{{interface.<folder>.<value>}}}}, or by the value's name alone, and Details on a pack says which folder gives each read." }
+                }
+            }
+            for line in folders.iter().map(folder_line) {
+                {
+                    let (named, more) = line.shown();
+                    let all = line.clone();
+                    let mut exports_open = exports_open;
+                    rsx! {
+                        div { key: "{line.folder}", class: "interfaces__export",
+                            div { class: "interfaces__export-head",
+                                code { class: "interfaces__export-name", "{line.folder}" }
+                                span { class: "interfaces__supporting", "{line.said}" }
+                            }
+                            p { class: "interfaces__supporting",
+                                if line.exports.is_empty() {
+                                    "exports nothing"
+                                } else {
+                                    "exports {named}"
+                                }
+                                if more > 0 {
+                                    " "
+                                    Button {
+                                        variant: ButtonVariant::Text,
+                                        onclick: move |_| exports_open.set(Some(all.clone())),
+                                        "and {more} more"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        ExportsDialog { open: exports_open }
+    }
+}
+
+/// An interface folder as a [`DelegatedLine`]: its name, "written by <estate>", its
+/// exports.
+fn folder_line(folder: &InterfaceFolder) -> DelegatedLine {
+    DelegatedLine {
+        folder: folder.name.clone(),
+        said: format!("written by {}", folder.estate),
+        exports: folder.exports.clone(),
+    }
+}
+
 /// One pack: its id, version, badge, where it comes from and what can be done. `row` is
-/// satz's, once a source is listed; `used` says the estate reads it; `file` is where it
-/// is, for a pack that is here.
+/// satz's, once a listing names it, and `local` says that listing read no source; `used`
+/// says the estate reads it; `file` is where it is, for a pack that is here.
 #[component]
 fn PackLine(
     id: String,
     row: Option<WorkloadPackRow>,
+    local: bool,
     used: bool,
     file: Option<PathBuf>,
     edited: Option<UpdatedPack>,
@@ -492,7 +603,7 @@ fn PackLine(
                 if let Some(row) = &row {
                     span { class: "interfaces__supporting", {versions(row)} }
                 }
-                if let Some((word, icon, error)) = state.and_then(badge) {
+                if let Some((word, icon, error)) = state.and_then(|s| badge(s, local)) {
                     Chip { kind: ChipKind::Assist, icon, label: word, error }
                 }
                 if unmet {
@@ -784,22 +895,52 @@ mod tests {
 
     #[test]
     fn only_a_state_that_needs_attention_earns_a_badge() {
+        for local in [false, true] {
+            assert_eq!(
+                badge(PackState::Behind, local).map(|b| b.0),
+                Some("Update available")
+            );
+            assert_eq!(
+                badge(PackState::Edited, local).map(|b| b.0),
+                Some("Edited here")
+            );
+            assert_eq!(
+                badge(PackState::Gone, local),
+                Some(("Gone from source", "cloud_off", true))
+            );
+            for quiet in [PackState::Current, PackState::Own, PackState::Available] {
+                assert_eq!(badge(quiet, local), None, "{quiet:?}");
+            }
+        }
         assert_eq!(
-            badge(PackState::Behind).map(|b| b.0),
-            Some("Update available")
-        );
-        assert_eq!(badge(PackState::Edited).map(|b| b.0), Some("Edited here"));
-        assert_eq!(
-            badge(PackState::Gone),
-            Some(("Gone from source", "cloud_off", true))
-        );
-        assert_eq!(
-            badge(PackState::NotChecked).map(|b| b.0),
+            badge(PackState::NotChecked, false).map(|b| b.0),
             Some("Not checked")
         );
-        for quiet in [PackState::Current, PackState::Own, PackState::Available] {
-            assert_eq!(badge(quiet), None, "{quiet:?}");
-        }
+    }
+
+    /// The local listing read no source: its `not-checked` says the fetched file is the
+    /// one that was fetched, not that another source was read.
+    #[test]
+    fn a_local_not_checked_pack_is_unchanged_since_fetched() {
+        assert_eq!(
+            badge(PackState::NotChecked, true),
+            Some(("Unchanged since fetched", "history", false))
+        );
+    }
+
+    /// An interface folder's line names the estate that wrote it and its exports, cut at
+    /// the Overview's count with how many more.
+    #[test]
+    fn an_interface_folder_says_who_wrote_it_and_what_it_exports() {
+        let folder = InterfaceFolder {
+            name: "shop".into(),
+            estate: "c0example".into(),
+            exports: (1..=7).map(|i| format!("v{i}")).collect(),
+        };
+        let line = folder_line(&folder);
+        assert_eq!(line.folder, "shop");
+        assert_eq!(line.said, "written by c0example");
+        assert_eq!(line.shown(), ("v1, v2, v3, v4, v5".to_string(), 2));
     }
 
     #[test]
@@ -844,7 +985,7 @@ mod tests {
             ("zeta".to_string(), "packs/zeta.satz".to_string()),
             ("alpha".to_string(), "packs/alpha.satz".to_string()),
         ];
-        let unlisted = here_rows(None, &used);
+        let unlisted = here_rows(None, None, &used);
         assert_eq!(
             unlisted.iter().map(|r| r.id.as_str()).collect::<Vec<_>>(),
             ["zeta", "alpha"]
@@ -863,7 +1004,7 @@ mod tests {
                 with("aardvark", PackState::Current),
             ],
         };
-        let rows = here_rows(Some(&report), &used);
+        let rows = here_rows(Some(&report), None, &used);
         assert_eq!(
             rows.iter().map(|r| r.id.as_str()).collect::<Vec<_>>(),
             ["zeta", "alpha", "aardvark", "beta"]
@@ -871,5 +1012,53 @@ mod tests {
         assert_eq!(rows[0].row, None, "a used pack satz did not list");
         assert_eq!(rows[1].row.as_ref().map(|r| r.state), Some(PackState::Own));
         assert_eq!(rows[3].used, None);
+        assert!(rows.iter().all(|r| !r.local));
+    }
+
+    /// The local listing gives every pack here its row before a source is listed; once one
+    /// is, its rows win for the packs it names and the local listing keeps the rest.
+    #[test]
+    fn the_local_listing_fills_the_rows_and_a_source_listing_wins() {
+        let with = |id: &str, state: PackState| WorkloadPackRow {
+            id: id.into(),
+            ..row(state, Some("1.0"), None)
+        };
+        let report = |packs: Vec<WorkloadPackRow>| WorkloadPacksReport {
+            packs_dir: "packs".into(),
+            estate: "yaml/wp.satz".into(),
+            interface_folders: Vec::new(),
+            sources: Vec::new(),
+            packs,
+        };
+        let used = vec![("alpha".to_string(), "packs/alpha.satz".to_string())];
+        let local = report(vec![
+            with("alpha", PackState::NotChecked),
+            with("fresh", PackState::Own),
+        ]);
+        let rows = here_rows(None, Some(&local), &used);
+        assert_eq!(
+            rows.iter().map(|r| r.id.as_str()).collect::<Vec<_>>(),
+            ["alpha", "fresh"]
+        );
+        assert!(rows.iter().all(|r| r.local && r.row.is_some()));
+
+        let source = report(vec![
+            with("alpha", PackState::Behind),
+            with("offered", PackState::Available),
+        ]);
+        let rows = here_rows(Some(&source), Some(&local), &used);
+        assert_eq!(
+            rows.iter().map(|r| r.id.as_str()).collect::<Vec<_>>(),
+            ["alpha", "fresh"]
+        );
+        assert_eq!(
+            rows[0].row.as_ref().map(|r| r.state),
+            Some(PackState::Behind)
+        );
+        assert!(!rows[0].local, "the source's row wins");
+        assert!(
+            rows[1].local,
+            "a pack the source listing does not name keeps its local row"
+        );
     }
 }

@@ -375,6 +375,10 @@ pub struct EstateStore {
     /// been chosen, which happens only when the operator asks: a GitHub source is a
     /// network read
     pub workload_packs: Option<Result<WorkloadPacksReport, String>>,
+    /// the packs of `packs_dir` as `satz packs --local` listed them — no pack source read,
+    /// so no network — with the interface folders the estate uses; read when Packs first
+    /// stands and after every pack command; `None` until then
+    pub local_packs: Option<Result<WorkloadPacksReport, String>>,
     /// the name of the pack source the list was read from, and the one a fetch reads
     pub pack_source: Option<String>,
     /// what the last `satz update-pack` reported: the edited packs with their

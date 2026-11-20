@@ -12,11 +12,12 @@ use super::SatzError;
 /// The oldest satz this build works with; an older binary is refused. It may sit below the
 /// submodule's satz ([`SatzBinary::built_against`]), and rises only when a satz release
 /// breaks the app or the app starts using something a later satz introduced — a routine pin
-/// bump leaves it alone (ADR 0014). It is 0.107.0 because the app reads what that release
-/// introduced and drops what it removed: the kinds of estate `organization` and `workload`
-/// of `satz presets`, with the exports of each interface file the estate uses, and the
-/// declarations and matched reads of each row of `satz packs --estate` (satz's ADR 0100).
-pub const MIN_SATZ: &str = "0.107.0";
+/// bump leaves it alone (ADR 0014). It is 0.108.0 because the app reads what that release
+/// introduced: `satz packs --local`, the packs of `packs_dir` listed with their
+/// declarations and no pack source read, and the interface folders of every `satz packs`
+/// report as objects with the organization's estate that wrote each and its exports
+/// (satz's ADR 0100).
+pub const MIN_SATZ: &str = "0.108.0";
 
 /// The manifest of the submodule `vendor/satz`, whose version is the satz this build is
 /// built and tested against.
