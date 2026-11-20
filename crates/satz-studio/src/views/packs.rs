@@ -7,8 +7,6 @@
 
 use dioxus::prelude::*;
 
-use crate::state::View;
-use crate::views::path::NextStep;
 use crate::views::workload_packs::WorkloadPacksPane;
 
 #[component]
@@ -20,7 +18,6 @@ pub fn PacksView() -> Element {
                 "A pack is a template for a workload or a part of one: take it from a source, add it to the estate, and adapt it — a pack changed here is this repository's own. What a pack asks is in Decisions."
             }
             WorkloadPacksPane {}
-            NextStep { from: View::Packs }
         }
     }
 }

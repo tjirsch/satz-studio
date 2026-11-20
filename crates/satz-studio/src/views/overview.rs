@@ -32,7 +32,6 @@ use satz_studio_core::satz::reports::{PackLine, QuestionRow, QuestionState, Ques
 use crate::components::{Button, ButtonVariant, Card, CardVariant, Chip, ChipKind, Icon};
 use crate::state::{AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt, View};
 use crate::views::commands::CommandLog;
-use crate::views::path::NextStep;
 
 /// What the estate is, as the Overview reads it. Borrowed rather than cloned: this is
 /// built on every render.
@@ -592,21 +591,17 @@ pub fn runs_as_row<'a>(runs_as: Option<&'a str>, deployment_mode: Option<&str>) 
     }
 }
 
-#[component]
-pub fn OverviewView() -> Element {
-    let app = use_context::<Store<AppStore>>();
-    let handle = use_coroutine_handle::<EstateAction>();
-    let open = app.open().cloned();
-    let Some(open) = open else {
-        return rsx! {};
-    };
+/// What the open estate owes now, read from the store: `None` while no estate is open.
+/// The Overview lists it, the rail counts it on Overview and the top bar's status button
+/// says whether it is empty — one derivation, so the three cannot disagree.
+pub fn owed_now(app: Store<AppStore>) -> Option<Vec<Owed>> {
+    let open = app.open().cloned()?;
     let model = app.estate().model().cloned();
     let questions = app.estate().questions().cloned();
     let diagnostics = app.estate().diagnostics().cloned();
     let hcl = app.estate().hcl().cloned();
     let work_tree = app.estate().work_tree().cloned();
-    let last_command = app.estate().last_command().cloned();
-    let owed = owed(&Facts {
+    Some(owed(&Facts {
         estate: &open.name,
         deployment_mode: open.deployment_mode.as_deref(),
         hcl,
@@ -615,7 +610,19 @@ pub fn OverviewView() -> Element {
         model: model.as_deref(),
         diagnostics: &diagnostics,
         held_notices: app.estate().notices().read().len(),
-    });
+    }))
+}
+
+#[component]
+pub fn OverviewView() -> Element {
+    let app = use_context::<Store<AppStore>>();
+    let handle = use_coroutine_handle::<EstateAction>();
+    let Some(owed) = owed_now(app) else {
+        return rsx! {};
+    };
+    let model = app.estate().model().cloned();
+    let questions = app.estate().questions().cloned();
+    let last_command = app.estate().last_command().cloned();
 
     let facts = identity(
         model.as_deref().map(|m| m.params.as_slice()),
@@ -626,15 +633,7 @@ pub fn OverviewView() -> Element {
         div { class: "view overview",
             h1 { class: "view__title", "Overview" }
             IdentityCard { facts }
-            if owed.is_empty() {
-                Card { variant: CardVariant::Filled, class: "overview__clear",
-                    Icon { name: "task_alt", size: 32, filled: true, class: "overview__clear-icon" }
-                    div {
-                        h2 { class: "overview__clear-title", "Nothing left to do" }
-                        p { "The estate is in a git repository, every question is answered, every pack the map asks for has a line, the schema is there and the HCL directory has been through an init. What is left is the work you came for." }
-                    }
-                }
-            } else {
+            if !owed.is_empty() {
                 Card { variant: CardVariant::Outlined, class: "overview__owed",
                     header { class: "overview__owed-head",
                         Icon { name: "assignment_late", size: 22 }
@@ -709,7 +708,6 @@ pub fn OverviewView() -> Element {
                 }
             }
 
-            NextStep { from: View::Overview }
 
             if last_command.is_some() {
                 CommandLog {}

@@ -22,8 +22,7 @@ use crate::components::{
     Button, ButtonVariant, Card, CardVariant, Chip, ChipKind, ConnectorBranch, ConnectorLine,
     ConnectorTree, HelpButton, Icon, Switch,
 };
-use crate::state::{AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt, View};
-use crate::views::path::NextStep;
+use crate::state::{AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt};
 
 /// The header of the section for packs the file has no line for.
 pub const ABSENT_HEADER: &str = "Not in this file";
@@ -403,7 +402,6 @@ pub fn PresetsView() -> Element {
                     }
                 }
             }
-            NextStep { from: View::Presets }
         }
     }
 }

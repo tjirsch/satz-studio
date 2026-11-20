@@ -30,6 +30,9 @@ pub fn IconButton(
     label: String,
     #[props(default)] variant: IconButtonVariant,
     #[props(default)] selected: bool,
+    /// the glyph filled while not selected — a status the button states rather than a toggle
+    #[props(default)]
+    filled: bool,
     #[props(default)] disabled: bool,
     #[props(default)] class: String,
     onclick: EventHandler<MouseEvent>,
@@ -44,7 +47,7 @@ pub fn IconButton(
             title: "{label}",
             disabled,
             onclick: move |e| onclick.call(e),
-            Icon { name: icon.clone(), filled: selected }
+            Icon { name: icon.clone(), filled: selected || filled }
         }
     }
 }

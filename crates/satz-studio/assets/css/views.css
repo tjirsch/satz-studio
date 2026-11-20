@@ -32,19 +32,37 @@
   min-height: 100%;
 }
 
-/* the bar at the end of a step's view: what the next step is for, and the button there */
-.next-step {
+/* the path bar: the window's foot while a step of the path is showing, outside the
+   scrolling content — a docked toolbar holding Back, what the next step is for, and Next.
+   The description gives way to one ellipsized line; the buttons never shrink */
+.path-bar {
   flex: none;
-  flex-direction: row;
+  display: flex;
   align-items: center;
   gap: 12px;
-  flex-wrap: wrap;
-  padding: 8px 16px;
+  min-height: 64px;
+  padding: 0 16px;
+  background: var(--md-sys-color-surface-container);
   color: var(--md-sys-color-on-surface-variant);
 }
 
-.next-step__text {
+.path-bar__text {
+  flex: 1 1 auto;
+  min-width: 0;
   font: var(--md-sys-typescale-body-medium);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.path-bar__back,
+.path-bar__next {
+  flex: none;
+}
+
+/* the top bar's status: the estate owes nothing */
+.m-icon-button.top-bar__status--clear {
+  color: var(--app-color-success);
 }
 
 .view__title {
@@ -2013,20 +2031,6 @@
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
-}
-
-.overview__clear {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.overview__clear-icon {
-  color: var(--md-sys-color-primary);
-}
-
-.overview__clear-title {
-  font: var(--md-sys-typescale-title-medium);
 }
 
 .overview__facts {

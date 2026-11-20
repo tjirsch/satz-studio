@@ -208,8 +208,10 @@ separate palette entry that creates nothing and runs in the app, which is what t
 Overview's bootstrap row offers.
 
 The shell (`src/shell/`) is the navigation rail with its badges, the top bar with the
-estate's name and directory, the actions beside them (reload, switch, close) and the
-drawer toggle at its end, the `SatzBanner` while satz is missing, too old or does not run, and as a notice while it is
+estate's name and directory, the actions beside them (reload, switch, close) and at its
+end the estate's status — `owed_now` in `src/views/overview.rs`, the one derivation the
+rail's Overview badge and the Overview's card read too — and the drawer toggle, the path
+bar at the foot of a step's view (`PathBar` in `src/views/path.rs`), the `SatzBanner` while satz is missing, too old or does not run, and as a notice while it is
 newer than the build, the Findings drawer, the commands palette, the notice
 dialog and the snackbar host.
 

@@ -25,10 +25,9 @@ use crate::components::{
     Button, ButtonVariant, Card, CardVariant, Chip, ChipKind, Icon, LinearProgress,
 };
 use crate::state::{
-    AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt, SignIn, ToastKind, View, toast,
+    AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt, SignIn, ToastKind, toast,
 };
 use crate::views::commands::{APPLY, APPLY_DELEGATED, CommandDeck};
-use crate::views::path::NextStep;
 use satz_studio_core::satz::reports::EstateMode;
 
 /// The command that signs in, as satz's own refusal names it.
@@ -254,7 +253,6 @@ pub fn ApplyView() -> Element {
                 }
             }
             CommandDeck { key: "{delegated}", ids: steps(delegated).to_vec() }
-            NextStep { from: View::Apply }
         }
     }
 }

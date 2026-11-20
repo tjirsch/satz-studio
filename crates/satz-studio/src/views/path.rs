@@ -1,13 +1,14 @@
 //! The path through an estate, as the rail orders it: what the estate is, its presets and packs,
-//! their questions, its way to the organization, its documents. Each step's view ends
-//! with a bar that names the next one and goes there
+//! their questions, its way to the organization, its documents. While a step's view is
+//! showing, the window's foot carries a bar that goes back to the step before it and on to
+//! the next one, outside the view's scrolling content so it never scrolls away
 //! ([ADR 0028](../../../../docs/adr/0028-apply-is-one-destination-and-starts-with-who-is-signed-in.md)).
 //! The Estate destination is not a step: it is the estate file itself, for whoever wants
 //! a value the questions do not ask for.
 
 use dioxus::prelude::*;
 
-use crate::components::{Button, ButtonVariant, Card, CardVariant, Icon};
+use crate::components::{Button, ButtonVariant};
 use crate::state::{AppStore, AppStoreStoreExt, EstateStoreStoreExt, View};
 
 /// The steps, in order. An estate without a Presets destination skips that one.
@@ -29,6 +30,17 @@ pub fn next_after(from: View, presets: bool) -> Option<View> {
         .find(|v| presets || *v != View::Presets)
 }
 
+/// The step before `from`, or `None` for the first step and for a view that is not one.
+/// The inverse of [`next_after`]: an estate without presets skips them going back too.
+pub fn previous_before(from: View, presets: bool) -> Option<View> {
+    let at = STEPS.iter().position(|v| *v == from)?;
+    STEPS[..at]
+        .iter()
+        .rev()
+        .copied()
+        .find(|v| presets || *v != View::Presets)
+}
+
 /// What the next step is for, in one sentence.
 pub fn purpose(step: View) -> &'static str {
     match step {
@@ -41,30 +53,49 @@ pub fn purpose(step: View) -> &'static str {
     }
 }
 
-/// The bar at the end of a step's view: the next step's purpose and a button that goes
-/// there. Nothing at the last step.
+/// The bar at the window's foot while a step is showing: "Back: <step>" to the step
+/// before, what the next step is for, and "Next: <step>". The description gives way —
+/// one line, cut with an ellipsis — and the two buttons never do. Nothing on a view that
+/// is not a step, and nothing without an open estate.
 #[component]
-pub fn NextStep(from: View) -> Element {
+pub fn PathBar() -> Element {
     let app = use_context::<Store<AppStore>>();
+    let at = app.nav().cloned();
+    if app.open().is_none() || !STEPS.contains(&at) {
+        return rsx! {};
+    }
     let presets = app
         .estate()
         .model()
         .read()
         .as_deref()
         .is_none_or(|m| m.packs.has_presets());
-    let Some(next) = next_after(from, presets) else {
-        return rsx! {};
-    };
+    let previous = previous_before(at, presets);
+    let next = next_after(at, presets);
     rsx! {
-        Card { variant: CardVariant::Filled, class: "next-step",
-            Icon { name: next.icon(), size: 22 }
-            span { class: "next-step__text", "{purpose(next)}" }
-            span { class: "grow" }
-            Button {
-                variant: ButtonVariant::Filled,
-                icon: "arrow_forward",
-                onclick: move |_| app.nav().set(next),
-                "Next: {next.label()}"
+        div { class: "path-bar", role: "toolbar", "aria-label": "Path",
+            if let Some(previous) = previous {
+                Button {
+                    variant: ButtonVariant::Text,
+                    icon: "arrow_back",
+                    class: "path-bar__back",
+                    onclick: move |_| app.nav().set(previous),
+                    "Back: {previous.label()}"
+                }
+            }
+            span { class: "path-bar__text",
+                if let Some(next) = next {
+                    "{purpose(next)}"
+                }
+            }
+            if let Some(next) = next {
+                Button {
+                    variant: ButtonVariant::Filled,
+                    icon: "arrow_forward",
+                    class: "path-bar__next",
+                    onclick: move |_| app.nav().set(next),
+                    "Next: {next.label()}"
+                }
             }
         }
     }
@@ -101,6 +132,44 @@ mod tests {
         // not a step, and the last step
         assert_eq!(next_after(View::Estate, true), None);
         assert_eq!(next_after(View::Documents, true), None);
+    }
+
+    /// Going back walks the same steps the other way; an estate without presets goes from
+    /// its packs back to the Overview.
+    #[test]
+    fn the_steps_go_back_the_way_they_came_and_an_estate_without_presets_skips_them() {
+        let walk = |presets: bool| {
+            let mut at = View::Documents;
+            let mut out = vec![at];
+            while let Some(previous) = previous_before(at, presets) {
+                out.push(previous);
+                at = previous;
+            }
+            out.reverse();
+            out
+        };
+        assert_eq!(walk(true), STEPS);
+        assert_eq!(
+            walk(false),
+            [
+                View::Overview,
+                View::Packs,
+                View::Decisions,
+                View::Apply,
+                View::Documents
+            ]
+        );
+        // not a step, and the first step
+        assert_eq!(previous_before(View::Estate, true), None);
+        assert_eq!(previous_before(View::Overview, true), None);
+        // each step on the walk is the next of the step before it
+        for presets in [true, false] {
+            for step in STEPS.into_iter().filter(|v| presets || *v != View::Presets) {
+                if let Some(previous) = previous_before(step, presets) {
+                    assert_eq!(next_after(previous, presets), Some(step), "{step:?}");
+                }
+            }
+        }
     }
 
     /// Every step that can be gone to says what it is for, and is a primary destination.

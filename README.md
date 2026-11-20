@@ -52,7 +52,7 @@ where its packs declare `entries` statements — its list params: each list para
 field that keys an entry and the fields an entry carries, each with the pattern its
 value must match. Delegated access is given to a team by an entry of the list param
 `delegations` of satz's `presets/delegation.satz`, which writes the delegation's
-interface with the rest. Five of the six are a path, and each ends with a button to the next:
+interface with the rest. Five of the six are a path, and a bar at the window's foot goes back to the step before and on to the next:
 what the estate is, its presets and workload packs, their questions, its way to the organization, its
 documents; Estate stands after them in the rail. **Apply**, its way to the organization — who is signed in, what state the estate is in,
 then the checks, the bootstrap, the HCL code, the plan and the apply, in that order;
@@ -60,6 +60,8 @@ then the checks, the bootstrap, the HCL code, the plan and the apply, in that or
 and the documents an agent writes, each started in the client Settings names. Agent and Settings sit at the
 foot of the rail, with Commands between them. Beside the estate the top bar names sit
 reload, "Switch estate" — the Start screen with your estates listed — and "Close estate";
+at its far end a status button says whether the estate still owes anything — a green check
+when nothing is owed, the count of items otherwise — and opens the Overview;
 every satz command the app runs is one keystroke away in the commands palette (⌘K,
 Ctrl+K on Windows and Linux, or that footer button). The palette also holds "Review a
 pack for the preset library": a pack you wrote judged against the library's own bar with
@@ -102,8 +104,8 @@ graph finds wrong with the packs the estate uses, a `use` line without its `when
 which switches its pack on whatever the estate answers, no provider
 schema, a pack whose notice is open, prerequisites the transpile found undeclared, raw HCL
 nobody has reviewed, an HCL directory nothing has planned against. Every row is derived from the estate as it is on
-the screen, so it cannot go stale, and the card reads "Nothing left to do" when there is
-nothing in it. Documents exports the decisions sheet or the workbook, below.
+the screen, so it cannot go stale, and the card is not there when nothing is owed — the
+top bar's status says so. Documents exports the decisions sheet or the workbook, below.
 Nothing about how an estate reached the app is remembered: created, imported and opened
 estates show the same list, because the same facts are true of them.
 
