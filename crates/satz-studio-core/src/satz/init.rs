@@ -48,14 +48,15 @@ pub struct InitOptions {
     /// `--providers`: provider names to include beside the sets.
     pub providers: Vec<String>,
     /// `--from`: the interface folders an organization's estate wrote for a delegation — its own,
-    /// `delegation-<name>`, and that of the delegated resource the estate works in. With any, satz
+    /// `delegation-<name>`, and that of each delegated resource it was given. With any, satz
     /// writes a WORKLOAD estate from them and the organization's flags are not sent.
     pub from: Vec<String>,
     /// `--name`, with `--from`: the estate's name. Left empty it is the delegation's.
     pub name: String,
-    /// `--force`: an estate file already in `yaml_dir` is rewritten — without it an
-    /// organization's takes the stated values merged in and a workload's is refused.
-    /// `config.toml` and `.gitignore` are kept either way ([`existing`]).
+    /// `--force`: the estate file the run writes, when it is already in `yaml_dir`, is
+    /// rewritten — without it an organization's takes the stated values merged in and a
+    /// workload's is refused. No other file is: `config.toml`, `.gitignore` and the schemas
+    /// are kept either way ([`existing`]).
     pub force: bool,
 }
 
@@ -206,9 +207,8 @@ pub fn refusal(stderr: &[String]) -> Option<String> {
 /// The estate's file NAME is not knowable before the run — `init` names it after the
 /// customer id, which it reads from the sign-in when the command line states none —
 /// so it is read from the directory rather than predicted. An empty list is not a
-/// failure of this function: `init` writes the directories, `config.toml` and
-/// `.gitignore` whatever happens, and writes an estate file only when a customer id was
-/// stated or could be derived, so an empty list is the answer "no estate, and the run
+/// failure of this function: a refused `init` writes nothing, and a run that fails while
+/// writing removes what it wrote, so an empty list is the answer "no estate, and the run
 /// log says why".
 pub fn created(dir: &Path) -> Result<(EstateDir, Vec<PathBuf>), EstateError> {
     let estate_dir = EstateDir::open(dir)?;

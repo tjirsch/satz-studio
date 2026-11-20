@@ -27,15 +27,15 @@ use crate::components::{
 use crate::state::{
     AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt, SignIn, ToastKind, toast,
 };
-use crate::views::commands::{APPLY, APPLY_DELEGATED, CommandDeck};
+use crate::views::commands::{APPLY, APPLY_WORKLOAD, CommandDeck};
 use satz_studio_core::satz::reports::EstateMode;
 
 /// The command that signs in, as satz's own refusal names it.
 const SIGN_IN: &str = "gcloud auth application-default login";
 
 /// The steps of the walk: an organization's estate's, or those of a workload estate.
-pub fn steps(delegated: bool) -> &'static [&'static str] {
-    if delegated { APPLY_DELEGATED } else { APPLY }
+pub fn steps(workload: bool) -> &'static [&'static str] {
+    if workload { APPLY_WORKLOAD } else { APPLY }
 }
 
 /// What the sign-in card says in its first line, and whether it is an error.
@@ -135,12 +135,12 @@ pub fn ApplyView() -> Element {
         .map(|d| d.message.clone())
         .collect();
     let (headline, failed) = sign_in_headline(sign_in.as_ref());
-    let delegated = app
+    let workload = app
         .estate()
         .model()
         .read()
         .as_deref()
-        .is_some_and(|m| m.packs.works_in != EstateMode::Organization);
+        .is_some_and(|m| m.packs.works_in == EstateMode::Workload);
 
     rsx! {
         div { class: "view apply",
@@ -247,12 +247,12 @@ pub fn ApplyView() -> Element {
                 }
             }
 
-            if delegated {
+            if workload {
                 p { class: "view__lead",
                     "This is a workload estate: the bootstrap and the state's move to another backend are the organization's, and are not offered here."
                 }
             }
-            CommandDeck { key: "{delegated}", ids: steps(delegated).to_vec() }
+            CommandDeck { key: "{workload}", ids: steps(workload).to_vec() }
         }
     }
 }
@@ -319,23 +319,23 @@ mod tests {
         );
     }
 
-    /// A delegated estate walks the organization's steps without the bootstrap and without the
-    /// state's move, in the same order.
+    /// A workload estate walks the organization's steps without the bootstrap and without
+    /// the state's move, in the same order.
     #[test]
-    fn a_delegated_estate_has_no_bootstrap_and_no_migration() {
-        let delegated = steps(true);
+    fn a_workload_estate_has_no_bootstrap_and_no_migration() {
+        let workload = steps(true);
         for id in ["bootstrap", "bootstrap-check", "migrate"] {
             assert!(
-                steps(false).contains(&id) && !delegated.contains(&id),
+                steps(false).contains(&id) && !workload.contains(&id),
                 "{id}"
             );
         }
         let rest: Vec<&str> = steps(false)
             .iter()
             .copied()
-            .filter(|id| delegated.contains(id))
+            .filter(|id| workload.contains(id))
             .collect();
-        assert_eq!(rest, delegated);
+        assert_eq!(rest, workload);
     }
 
     /// Every line carries whether it is in order: the account, the billed project and

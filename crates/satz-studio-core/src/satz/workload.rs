@@ -129,6 +129,12 @@ fn source_args(source: &str) -> Vec<String> {
     vec!["--source".to_string(), source.to_string()]
 }
 
+/// `--estate <file>`: the estate a pack's reads are matched against. The open estate is
+/// passed always, so a `yaml_dir` that holds several is no refusal.
+fn estate_args(estate: &Path) -> Vec<String> {
+    vec!["--estate".to_string(), estate.display().to_string()]
+}
+
 /// One pack, or every pack the command covers with `--all`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Which {
@@ -151,23 +157,35 @@ fn argv(command: &str, parts: [Vec<String>; 3]) -> Vec<String> {
         .collect()
 }
 
-/// `satz packs --source <name>`: the packs of `packs_dir` with their state, and what the
-/// source holds beyond them. A GitHub source is a network read.
-pub async fn list(cli: &SatzCli, source: &str) -> Result<WorkloadPacksReport, SatzError> {
+/// `satz packs --source <name> --estate <estate>`: the packs of `packs_dir` with their
+/// state, and what the source holds beyond them, each with what it declares — params,
+/// list params, exports — and its interface reads matched against `estate` (satz's ADR
+/// 0100). A GitHub source is a network read.
+pub async fn list(
+    cli: &SatzCli,
+    source: &str,
+    estate: &Path,
+) -> Result<WorkloadPacksReport, SatzError> {
     cli.json_report(&argv(
         "packs",
-        [source_args(source), Vec::new(), Vec::new()],
+        [source_args(source), estate_args(estate), Vec::new()],
     ))
     .await
 }
 
-/// `satz get-pack <id>|--all --source <name>`: the pack fetched into `packs_dir` and its
-/// origin recorded, naming the source.
-pub async fn get(cli: &SatzCli, which: &Which, source: &str) -> Result<GetPackReport, SatzError> {
+/// `satz get-pack <id>|--all --source <name> --estate <estate>`: the pack fetched into
+/// `packs_dir` and its origin recorded, naming the source; each installed pack names the
+/// reads `estate` does not give, which satz warns of and fetches all the same.
+pub async fn get(
+    cli: &SatzCli,
+    which: &Which,
+    source: &str,
+    estate: &Path,
+) -> Result<GetPackReport, SatzError> {
     let (report, status) = cli
         .json_stdout(&argv(
             "get-pack",
-            [which.args(), source_args(source), Vec::new()],
+            [which.args(), source_args(source), estate_args(estate)],
         ))
         .await?;
     held(

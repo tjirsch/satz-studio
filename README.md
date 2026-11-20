@@ -18,8 +18,9 @@ computer and saying where each value came from. The form asks for what satz cann
 derive — the customer's short name above all — and offers the derivable values as
 overrides that are empty by default. A folder that already holds an estate's files —
 `config.toml`, `.gitignore`, an estate file, an earlier copy of an interface folder — is
-named in one warning line before anything runs, with an "Overwrite existing files" switch
-that adds `--force`. The run streams into a log; when it made an estate, that estate
+named in one warning line before anything runs, with a "Rewrite the estate file" switch
+that adds `--force`; satz keeps the other files either way, and a run it refuses writes
+nothing. The run streams into a log; when it made an estate, that estate
 opens, and when satz refused, its whole `error:` line stands under the log's head.
 
 **Import** runs `satz import` over infrastructure that already exists: a
@@ -72,11 +73,12 @@ pack for the preset library": a pack you wrote judged against the library's own 
 the estate's library as a `.local.satz` or handed upstream by a pull request. What a command prints lands in the
 log in the form satz writes for a person — text, or markdown for the evidence report;
 `json` is a format you pick when you want the file. **Packs**, for every estate, are workload packs: templates taken from a source and adapted
-here. satz says what an estate works in — the organization, a delegated folder or a
-delegated project — and the window follows it on the same path: an organization's estate
+here. satz says which kind of estate it is — an organization's estate or a workload
+estate — and the window follows it on the same path: an organization's estate
 has Presets and Packs, a workload estate Packs alone; Apply leaves the bootstrap to
 the organization; the compliance reports are offered where the library's catalogs are. The
-Overview names the mode and, for a workload estate, who delegated. Delegated access is
+Overview names the kind and, for a workload estate, each interface folder it uses: the
+organization's estate that wrote it, the estate account it carries and what it exports. Delegated access is
 given in Estate → Interfaces: every list param a preset declares is shown with its entries, and
 "Add" writes one through `satz add-entry` from a form of the declared fields. A workload
 estate is created from the interface folders it was given, on the Start screen. Packs
@@ -87,9 +89,15 @@ Choosing a pack source — `satz`, the satz repository's `packs/`, then each sou
 against it, with a badge where it needs you ("Update available", "Edited here", "Gone
 from source", "Not checked"), and what the source holds beyond them; each is fetched,
 updated from the source it came from, kept as your own or added to the estate from its
-row. "New pack…" writes a pack of your own into `packs_dir`, adds its `use` line to the
-estate and opens it in the application your system gives `.satz` files; Edit opens any
-pack the same way. A pack of your own is developed here, where the estate uses it, and
+row. "Details" on a listed pack — fetched or not yet — shows what it declares, as
+`satz packs --estate` reads it: its params with their defaults and the questions that ask
+for them, its list params, its exports by interface, and each value it reads from the
+interface folders, with the folders of this estate that give it, the param the estate
+sets in its place, or why none does; a pack with such a read is marked "Unmet read", so
+the list says before a fetch whether a pack fits. "New pack…" writes a pack of your own
+into `packs_dir`, adds its `use` line to the estate and opens it in the application your
+system gives `.satz` files; Edit opens any pack the same way, and Reload on the card reads
+the estate and the listed source again once the editor is done. A pack of your own is developed here, where the estate uses it, and
 once it works "Store in a pack source…" on its row copies it into a folder pack source
 (`satz publish-pack`): satz first checks it inside the estate against `review-pack`'s
 bar, then records it as fetched from that source, so other estates fetch it from there
@@ -142,7 +150,7 @@ that holds them up — in front of apply and bootstrap, which satz refuses.
 
 ## What it needs
 
-- **`satz` 0.106.0 or newer.** `MIN_SATZ` in `crates/satz-studio-core/src/satz/binary.rs`
+- **`satz` 0.107.0 or newer.** `MIN_SATZ` in `crates/satz-studio-core/src/satz/binary.rs`
   names the oldest satz this build works with. It rises when a satz release breaks the
   app or the app starts using something a later satz introduced, not with every satz
   release. Install satz with its installer or bring it up to date with `satz

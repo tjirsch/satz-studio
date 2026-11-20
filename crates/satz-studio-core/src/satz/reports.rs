@@ -464,28 +464,26 @@ pub struct Unmanaged {
     pub at_line: u32,
 }
 
-/// What an estate works in, as satz's presets report says it (`works_in`): the
-/// organization itself, or a place its account was delegated access to. satz reads it from
-/// the interface files the estate uses; the app derives none of it.
+/// Which kind of estate it is, as satz's presets report says it (`works_in`): an
+/// organization's estate, or a workload estate — one that uses interface files another
+/// estate wrote. What a workload estate was delegated is what those files export; satz
+/// sorts it into no further kind (satz's ADR 0100), and the app derives none of it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum EstateMode {
     /// it uses no interface file: an organization's estate, whose optional packs are
     /// the preset library's presets
     Organization,
-    /// an interface it uses publishes a delegated folder
-    Folder,
-    /// it uses an interface and none publishes a delegated folder: a delegated project
-    Project,
+    /// it uses interface files: a workload estate, built from workload packs
+    Workload,
 }
 
 impl EstateMode {
-    /// The mode in the words the window shows.
+    /// The kind in the words the window shows.
     pub fn label(self) -> &'static str {
         match self {
-            EstateMode::Organization => "Organization",
-            EstateMode::Folder => "Delegated folder",
-            EstateMode::Project => "Delegated project",
+            EstateMode::Organization => "Organization's estate",
+            EstateMode::Workload => "Workload estate",
         }
     }
 
@@ -493,28 +491,16 @@ impl EstateMode {
     pub fn icon(self) -> &'static str {
         match self {
             EstateMode::Organization => "corporate_fare",
-            EstateMode::Folder => "folder_shared",
-            EstateMode::Project => "deployed_code",
+            EstateMode::Workload => "deployed_code",
         }
     }
-}
-
-/// A delegated value a workload pack reads, as `satz packs` derives it. It is the default
-/// of a param of the pack; an estate without that value answers the param itself.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum PackNeed {
-    /// it reads the delegated folder
-    Folder,
-    /// it reads the delegated project
-    Project,
 }
 
 /// What `satz_presets` returns: every pack the pack graph offers, as this estate has it.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct PacksReport {
     pub estate: String,
-    /// what the estate works in: the organization, a delegated folder or a delegated project
+    /// which kind of estate it is: an organization's estate or a workload estate
     pub works_in: EstateMode,
     /// why the report has no packs: the presets carry no pack graph
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -531,9 +517,9 @@ pub struct PacksReport {
     pub findings: Vec<Finding>,
 }
 
-/// One interface file the estate uses, as satz's presets report reads it: the central
-/// estate that wrote it, and the identity and place it carries. A value the file does not
-/// carry is absent.
+/// One interface file the estate uses, as satz's presets report reads it: the
+/// organization's estate that wrote it, the account it carries, and the names of the
+/// values it exports. A value the file does not carry is absent.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct DelegatedBy {
     pub path: String,
@@ -554,11 +540,8 @@ pub struct DelegatedBy {
     /// the project the team's calls are billed to
     #[serde(default)]
     pub infrastructure_project: Option<String>,
-    /// the delegated project, when the file is one's
-    #[serde(default)]
-    pub project: Option<String>,
-    /// the file is a delegated folder's
-    pub folder: bool,
+    /// the names of the values the file exports, as it writes them
+    pub exports: Vec<String>,
 }
 
 /// The arguments of `satz_add_entry`, as the app sends them: the list, and the entry's
@@ -585,9 +568,9 @@ pub struct EntryAdded {
 impl PacksReport {
     /// Whether the estate holds a preset library: an organization's estate, and any
     /// estate with one in its `presets_dir`. The compliance catalogs are part of that
-    /// library, so this is where the compliance commands can run. An estate that works
-    /// in a delegated folder or project and holds no library has none — the library is
-    /// the organization's estate's, and this one's packs are workload packs.
+    /// library, so this is where the compliance commands can run. A workload estate that
+    /// holds no library has none — the library is the organization's estate's, and this
+    /// one's packs are workload packs.
     pub fn has_presets(&self) -> bool {
         self.works_in == EstateMode::Organization || !self.packs.is_empty()
     }
@@ -1093,9 +1076,14 @@ pub struct WorkloadPackRow {
     /// the pack's path under `packs/`, without `.satz`
     pub id: String,
     pub state: PackState,
-    /// what the pack needs of the estate that uses it; empty for a pack that reads
-    /// neither a delegated folder nor a delegated project
-    pub needs: Vec<PackNeed>,
+    /// the params the pack declares, in its order
+    pub params: Vec<PackParam>,
+    /// each `entries <list param> { … }` of the pack: what a team may add to a list param
+    pub list_params: Vec<PackListParam>,
+    /// the pack's exports, in its order
+    pub exports: Vec<PackExport>,
+    /// every interface value the pack reads, each matched against the estate
+    pub reads: Vec<PackRead>,
     /// the version the local file states; none for a pack that is only available
     pub version: Option<String>,
     /// the version the source's file states, where the source holds the pack
@@ -1109,7 +1097,80 @@ pub struct WorkloadPackRow {
     pub use_line: Option<String>,
 }
 
+/// One param a pack declares. satz's `ParamDecl` (`vendor/satz/src/workload_packs.rs`).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct PackParam {
+    pub name: String,
+    /// the value as the pack writes it, in Satz; none where it writes `""`, a value
+    /// nobody has given yet
+    pub default: Option<String>,
+    /// the pack asks for it: a `question` names it, or an option of a `oneof` one does
+    pub question: bool,
+    /// the question's prompt, where one asks for it
+    pub prompt: Option<String>,
+}
+
+/// One `entries <list param> { … }` of a pack. satz's `ListParamDecl`.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct PackListParam {
+    pub param: String,
+    /// the field that names an entry
+    pub key: String,
+    /// every field an entry may carry, `key` among them
+    pub fields: Vec<String>,
+    /// per field, the value an entry that does not carry it takes, in Satz
+    pub defaults: BTreeMap<String, String>,
+}
+
+/// One export of a pack. satz's `ExportDecl`.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct PackExport {
+    /// the `interface "<name>"` block it stands in, as written — an `each` one by its
+    /// pattern; none for a core export
+    pub interface: Option<String>,
+    pub name: String,
+}
+
+/// One interface value a pack reads, `${{interface.<folder>.<value>}}` or
+/// `${{interface.<value>}}`, matched against the estate by the transpile's rule. satz's
+/// `ReadDecl`.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct PackRead {
+    /// the interface folder a named read names; none for the bare form
+    pub folder: Option<String>,
+    pub value: String,
+    /// the param whose value the read is; none where a resource or an export reads it
+    pub param: Option<String>,
+    /// the estate binds `param`, so the read is not made and nothing is matched
+    pub bound_by_estate: bool,
+    /// the used interface folders that give the value; empty when the estate does not
+    pub met_by: Vec<String>,
+    /// why the estate does not give it, in the words the transpile refuses the read with
+    pub unmet_reason: Option<String>,
+}
+
+impl PackRead {
+    /// The read as the pack writes it, without the braces: `folder.value` or `value`.
+    pub fn written(&self) -> String {
+        match &self.folder {
+            Some(f) => format!("{f}.{}", self.value),
+            None => self.value.clone(),
+        }
+    }
+
+    /// The estate does not give it, and binds no param that would spare the read: satz
+    /// names why.
+    pub fn unmet(&self) -> bool {
+        !self.bound_by_estate && self.unmet_reason.is_some()
+    }
+}
+
 impl WorkloadPackRow {
+    /// Whether a read of the pack is one the estate does not give.
+    pub fn has_unmet_read(&self) -> bool {
+        self.reads.iter().any(PackRead::unmet)
+    }
+
     /// The path of [`Self::use_line`], without `use` and the quotes: what an
     /// [`crate::edit::Edit::AddUse`] carries.
     pub fn use_path(&self) -> Option<&str> {
@@ -1139,6 +1200,10 @@ pub struct SourceRead {
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct WorkloadPacksReport {
     pub packs_dir: String,
+    /// the estate the reads are matched against
+    pub estate: String,
+    /// the interface folders that estate uses, by name
+    pub interface_folders: Vec<String>,
     /// the pack sources read: every one, or the one `--source` names
     pub sources: Vec<SourceRead>,
     pub packs: Vec<WorkloadPackRow>,
@@ -1245,6 +1310,8 @@ pub struct InstalledPack {
     /// the file written
     pub path: String,
     pub use_line: String,
+    /// the interface values the pack reads that the estate does not give, each with why
+    pub unmet: Vec<String>,
 }
 
 /// What `satz get-pack --format json` prints.
@@ -1937,7 +2004,7 @@ mod tests {
     /// organization's estate has it, a workload estate has it only when it
     /// holds a library of its own.
     #[test]
-    fn the_mode_is_read_from_the_report_and_decides_the_presets_destination() {
+    fn the_kind_is_read_from_the_report_and_decides_the_presets_destination() {
         let library: PacksReport = serde_json::from_str(PACKS).unwrap();
         assert_eq!(library.works_in, EstateMode::Organization);
         assert!(library.has_presets());
@@ -1951,23 +2018,42 @@ mod tests {
         );
 
         value["interfaces"] = serde_json::json!([{"path": "interfaces/incoming/rag/rag/satz/interface.satz", "at": 57}]);
-        for (word, mode) in [
-            ("project", EstateMode::Project),
-            ("folder", EstateMode::Folder),
-        ] {
-            value["works_in"] = serde_json::json!(word);
-            let delegated: PacksReport = serde_json::from_value(value.clone()).unwrap();
-            assert_eq!(delegated.works_in, mode);
-            assert!(!delegated.has_presets(), "{word}: no library, no Presets");
-        }
+        value["works_in"] = serde_json::json!("workload");
+        let workload: PacksReport = serde_json::from_value(value.clone()).unwrap();
+        assert_eq!(workload.works_in, EstateMode::Workload);
+        assert!(!workload.has_presets(), "no library, no Presets");
 
         let mut both: serde_json::Value = serde_json::from_str(PACKS).unwrap();
-        both["works_in"] = serde_json::json!("folder");
+        both["works_in"] = serde_json::json!("workload");
         let both: PacksReport = serde_json::from_value(both).unwrap();
         assert!(
             both.has_presets(),
             "an estate with a library keeps its presets"
         );
+
+        // the kinds satz v0.107.0 removed are refused, never read as another
+        for gone in ["folder", "project"] {
+            value["works_in"] = serde_json::json!(gone);
+            assert!(
+                serde_json::from_value::<PacksReport>(value.clone()).is_err(),
+                "{gone}"
+            );
+        }
+
+        // a used interface file is named by what it exports; the fields satz removed with
+        // the kinds fail the read
+        let by = serde_json::json!({
+            "path": "interfaces/incoming/shop/interface.satz", "interface": "shop",
+            "estate": "acme", "organizations": ["organizations/123456789012"],
+            "estate_account": "svc@acme-deploy.iam.gserviceaccount.com",
+            "exports": ["project_id", "project_number"]
+        });
+        let read: DelegatedBy = serde_json::from_value(by.clone()).unwrap();
+        assert_eq!(read.exports, ["project_id", "project_number"]);
+        let mut old_by = by;
+        old_by.as_object_mut().unwrap().remove("exports");
+        old_by["folder"] = serde_json::json!(false);
+        assert!(serde_json::from_value::<DelegatedBy>(old_by).is_err());
 
         // a report without the field is an older satz's: refused, never guessed
         let mut old: serde_json::Value = serde_json::from_str(PACKS).unwrap();
@@ -1976,17 +2062,19 @@ mod tests {
     }
 
     /// What `satz packs`, `get-pack`, `update-pack` and `detach-pack` print with
-    /// `--format json`, as satz v0.104.0 writes them over a folder source and a GitHub one.
+    /// `--format json`, as satz v0.107.0 writes them over a folder source and a GitHub one:
+    /// each row with what the pack declares and its reads matched against the estate.
     #[test]
     fn the_workload_pack_reports_are_read() {
         let list: WorkloadPacksReport = serde_json::from_str(
-            r#"{"packs_dir":"packs","sources":[{"name":"up","location":"../up","commit":null}],"packs":[
-                {"id":"demo","state":"edited","version":"1.1","upstream_version":"1.2","source":"up","commit":null,"use_line":"use \"packs/demo.satz\"","needs":["project"]},
-                {"id":"own","state":"own","version":"9.0","upstream_version":null,"source":null,"commit":null,"use_line":"use \"packs/own.satz\"","needs":[]},
-                {"id":"sub/nested","state":"available","version":null,"upstream_version":"0.3","source":"up","commit":null,"use_line":null,"needs":["folder","project"]},
-                {"id":"elsewhere","state":"not-checked","version":"1.0","upstream_version":null,"source":"satz","commit":"0123456789abcdef0123456789abcdef01234567","use_line":null,"needs":[]}]}"#,
+            r#"{"packs_dir":"packs","estate":"yaml/wp.satz","interface_folders":["shop"],"sources":[{"name":"up","location":"../up","commit":null}],"packs":[
+                {"id":"demo","state":"edited","params":[{"name":"budget_project_id","default":"\"${{interface.project_id}}\"","question":false,"prompt":null},{"name":"budget_email","default":null,"question":true,"prompt":"The address that is told"}],"list_params":[{"param":"buckets","key":"name","fields":["name","location"],"defaults":{"location":"\"EU\""}}],"exports":[{"interface":null,"name":"budget_name"},{"interface":"ks-{each.id}","name":"bucket"}],"reads":[{"folder":null,"value":"project_id","param":"budget_project_id","bound_by_estate":false,"met_by":["shop"],"unmet_reason":null}],"version":"1.1","upstream_version":"1.2","source":"up","commit":null,"use_line":"use \"packs/demo.satz\""},
+                {"id":"own","state":"own","params":[],"list_params":[],"exports":[],"reads":[{"folder":"shop","value":"region","param":"own_region","bound_by_estate":true,"met_by":[],"unmet_reason":null}],"version":"9.0","upstream_version":null,"source":null,"commit":null,"use_line":"use \"packs/own.satz\""},
+                {"id":"sub/nested","state":"available","params":[],"list_params":[],"exports":[],"reads":[{"folder":"vm","value":"instance_name","param":null,"bound_by_estate":false,"met_by":[],"unmet_reason":"no folder vm"}],"version":null,"upstream_version":"0.3","source":"up","commit":null,"use_line":null},
+                {"id":"elsewhere","state":"not-checked","params":[],"list_params":[],"exports":[],"reads":[],"version":"1.0","upstream_version":null,"source":"satz","commit":"0123456789abcdef0123456789abcdef01234567","use_line":null}]}"#,
         )
         .unwrap();
+        assert_eq!(list.interface_folders, ["shop"]);
         assert_eq!(list.sources[0].name, "up");
         assert_eq!(list.packs[0].source.as_deref(), Some("up"));
         assert_eq!(
@@ -1997,18 +2085,32 @@ mod tests {
         assert_eq!(list.packs[0].use_path(), Some("packs/demo.satz"));
         assert_eq!(list.packs[2].use_path(), None);
         assert_eq!(list.packs[3].state, PackState::NotChecked);
-        assert_eq!(list.packs[0].needs, vec![PackNeed::Project]);
-        assert_eq!(
-            list.packs[2].needs,
-            vec![PackNeed::Folder, PackNeed::Project]
+        let demo = &list.packs[0];
+        assert_eq!(demo.params[1].default, None);
+        assert!(demo.params[1].question);
+        assert_eq!(demo.list_params[0].defaults["location"], "\"EU\"");
+        assert_eq!(demo.exports[0].interface, None);
+        assert_eq!(demo.reads[0].written(), "project_id");
+        assert!(!demo.has_unmet_read(), "a read a folder gives");
+        assert_eq!(list.packs[1].reads[0].written(), "shop.region");
+        assert!(!list.packs[1].has_unmet_read(), "a read the estate binds");
+        assert!(list.packs[2].has_unmet_read());
+        assert!(!list.packs[3].has_unmet_read());
+
+        // a row of satz before v0.107.0, `needs` and no declarations, is refused
+        assert!(
+            serde_json::from_str::<WorkloadPackRow>(
+                r#"{"id":"x","state":"own","needs":[],"version":"1.0","upstream_version":null,"source":null,"commit":null,"use_line":null}"#
+            )
+            .is_err()
         );
-        assert!(list.packs[1].needs.is_empty());
 
         let got: GetPackReport = serde_json::from_str(
-            r#"{"source":"up","location":"../up","commit":null,"installed":[{"id":"demo","version":"1.0","path":"packs/demo.satz","use_line":"use \"packs/demo.satz\""}],"present":[]}"#,
+            r#"{"source":"up","location":"../up","commit":null,"installed":[{"id":"demo","version":"1.0","path":"packs/demo.satz","use_line":"use \"packs/demo.satz\"","unmet":["no folder vm"]}],"present":[]}"#,
         )
         .unwrap();
         assert_eq!(got.installed[0].id, "demo");
+        assert_eq!(got.installed[0].unmet, ["no folder vm"]);
         assert_eq!(
             (got.source.as_str(), got.location.as_str()),
             ("up", "../up")

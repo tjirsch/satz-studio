@@ -133,7 +133,7 @@ pub fn entry_fields(
 }
 
 /// The list params the estate's packs declare, each with the entries it holds and a form that
-/// adds one: a delegation, a delegated folder or project, a subnet. The form is built from
+/// adds one: a delegation, a delegated resource, a subnet. The form is built from
 /// the declaration — one field per declared field, its pattern under it, its default as
 /// the value an untouched field keeps — and the entry is written by satz's own writer
 /// (`satz_add_entry`), which checks it against the same declaration.

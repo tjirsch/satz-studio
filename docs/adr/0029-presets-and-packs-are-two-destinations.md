@@ -34,8 +34,8 @@ commands, which are made from the catalogs of the preset library.
 
 **Presets and packs in the rail**
 
-1. One destination for presets and workload packs together, whose content follows what
-   the estate works in.
+1. One destination for presets and workload packs together, whose content follows which
+   kind of estate it is.
    Cost: it shows one of two different things under one word, and an organization, which
    has both, sees only one.
 2. **Two destinations: Presets, for an estate that holds the library, and Packs, for
@@ -70,7 +70,7 @@ commands, which are made from the catalogs of the preset library.
   folder on disk to create it in; it runs `satz init --from`.
 - **The Overview says who delegated**: one sentence per interface file the estate reads,
   from `delegated_by` of satz's presets report.
-- **Apply follows what the estate works in.** A workload estate walks
+- **Apply follows which kind of estate it is.** A workload estate walks
   `transpile --check`, `update-prerequisites`, `transpile`, `hcl-init`, `plan`, `apply`;
   the bootstrap, its dry run and the state's move are the organization's and are named, not offered.
 - **The compliance commands are offered where the catalogs are**: an estate that holds

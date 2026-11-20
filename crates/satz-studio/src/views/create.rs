@@ -57,15 +57,15 @@ fn pick_target(mut target: Signal<String>) {
 }
 
 /// The one warning line over a folder that already holds an estate's files: what is
-/// there, and what satz does with each kind — it keeps `config.toml` and `.gitignore`,
-/// rewrites an estate file only under `--force`, and replaces an interface folder's
-/// earlier copy.
+/// there, and what satz does with each kind — it keeps `config.toml`, `.gitignore` and the
+/// schemas, rewrites the estate file it writes only under `--force`, replaces an interface
+/// folder's earlier copy, and writes nothing when it refuses (satz v0.107.0).
 fn existing_warning(found: &[String]) -> String {
     let copies = found
         .iter()
         .any(|f| Path::new(f).starts_with(Path::new("interfaces").join("incoming")));
     let mut line = format!(
-        "This folder already holds an estate's files: {}. satz keeps config.toml and .gitignore, and writes over an estate file only with Overwrite existing files on — without it, an organization's estate file takes the values stated here and a workload's is refused.",
+        "This folder already holds an estate's files: {}. satz keeps config.toml, .gitignore and the schemas as they are, and rewrites the estate file it writes only with Rewrite the estate file on — without it, an organization's estate file takes the values stated here and a workload's is refused. A refused run writes nothing.",
         found.join(", ")
     );
     if copies {
@@ -149,7 +149,7 @@ pub fn CreateEstate() -> Element {
                         {existing_warning(&found)}
                     }
                     Switch {
-                        label: "Overwrite existing files",
+                        label: "Rewrite the estate file",
                         checked: options().force,
                         disabled: running,
                         onchange: move |on: bool| options.write().force = on,
@@ -171,7 +171,7 @@ pub fn CreateEstate() -> Element {
                 }
                 if team() {
                     p { class: "create__note",
-                        "A workload estate is written from the folders an organization's estate wrote for a delegation, under its interfaces/outgoing/: the delegation's own, delegation-<name>, and that of the folder or project this estate works in. satz copies them into interfaces/incoming/ here and writes an estate that runs as the delegation's account."
+                        "A workload estate is written from the folders an organization's estate wrote for a delegation, under its interfaces/outgoing/: the delegation's own, delegation-<name>, and that of each delegated resource it was given. satz copies them into interfaces/incoming/ here and writes an estate that runs as the delegation's account."
                     }
                     ChipList {
                         label: "Interface folders",
@@ -361,7 +361,8 @@ mod tests {
                 "This folder already holds an estate's files: config.toml, .gitignore."
             )
         );
-        assert!(line.contains("Overwrite existing files"));
+        assert!(line.contains("Rewrite the estate file"));
+        assert!(line.contains("A refused run writes nothing."));
         assert!(!line.contains("interface folder"));
         let copy = Path::new("interfaces")
             .join("incoming")

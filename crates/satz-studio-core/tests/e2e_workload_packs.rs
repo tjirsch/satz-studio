@@ -52,7 +52,8 @@ fn row<'a>(rows: &'a [WorkloadPackRow], id: &str) -> &'a WorkloadPackRow {
 #[tokio::test(flavor = "multi_thread")]
 async fn a_pack_is_fetched_kept_current_left_alone_when_edited_and_detached() {
     let estate = e2e::estate_dir(None);
-    std::fs::write(estate.file("wp.satz"), ESTATE).unwrap();
+    let main = estate.file("wp.satz");
+    std::fs::write(&main, ESTATE).unwrap();
     let cli = estate.cli().await;
     let source = SOURCE;
     let file = estate.root.join("packs").join(format!("{PACK}.satz"));
@@ -77,23 +78,48 @@ async fn a_pack_is_fetched_kept_current_left_alone_when_edited_and_detached() {
         other => panic!("a folder source was listed as {other:?}"),
     }
 
-    // nothing here yet: the source's pack is available
-    let report = e2e::within(workload::list(&cli, source)).await.unwrap();
-    assert_eq!(row(&report.packs, PACK).state, PackState::Available);
-    assert_eq!(row(&report.packs, PACK).use_line, None);
+    // nothing here yet: the source's pack is available, with what it declares, and its
+    // read of the interface folders is unmet — the estate uses none
+    let report = e2e::within(workload::list(&cli, source, &main))
+        .await
+        .unwrap();
+    assert!(report.interface_folders.is_empty());
+    let available = row(&report.packs, PACK);
+    assert_eq!(available.state, PackState::Available);
+    assert_eq!(available.use_line, None);
+    let parent = available
+        .params
+        .iter()
+        .find(|p| p.name == "workload_project_parent")
+        .expect("the pack declares its parent");
+    assert!(parent.question && parent.prompt.is_some(), "{parent:?}");
+    let read = available
+        .reads
+        .iter()
+        .find(|r| r.value == "delegated_folder")
+        .expect("the pack reads the delegated folder");
+    assert_eq!(read.param.as_deref(), Some("workload_project_parent"));
+    assert!(read.met_by.is_empty() && read.unmet(), "{read:?}");
+    assert!(available.has_unmet_read());
 
     // fetched: the file, the row, the line an estate reads it with
-    let got = e2e::within(workload::get(&cli, &Which::One(PACK.into()), source))
+    let got = e2e::within(workload::get(&cli, &Which::One(PACK.into()), source, &main))
         .await
         .unwrap();
     assert_eq!(got.installed.len(), 1);
     assert_eq!(got.installed[0].id, PACK);
     let use_line = format!("use \"packs/{PACK}.satz\"");
     assert_eq!(got.installed[0].use_line, use_line);
+    assert!(
+        !got.installed[0].unmet.is_empty(),
+        "the unmet read is warned of"
+    );
     let fetched = e2e::read(&file);
     assert!(estate.root.join("packs").join("origin.toml").is_file());
 
-    let report = e2e::within(workload::list(&cli, source)).await.unwrap();
+    let report = e2e::within(workload::list(&cli, source, &main))
+        .await
+        .unwrap();
     let fetched_row = row(&report.packs, PACK);
     assert_eq!(fetched_row.state, PackState::Current);
     assert_eq!(fetched_row.source.as_deref(), Some(SOURCE));
@@ -117,7 +143,7 @@ async fn a_pack_is_fetched_kept_current_left_alone_when_edited_and_detached() {
     );
 
     // a second fetch is satz's refusal, not a report
-    let again = e2e::within(workload::get(&cli, &Which::One(PACK.into()), source)).await;
+    let again = e2e::within(workload::get(&cli, &Which::One(PACK.into()), source, &main)).await;
     match again {
         Err(SatzError::Exit { stderr, .. }) => {
             assert!(stderr.contains("update-pack"), "{stderr}")
@@ -127,7 +153,9 @@ async fn a_pack_is_fetched_kept_current_left_alone_when_edited_and_detached() {
 
     // the repository's own pack beside it: listed as own, and no update looks at it
     std::fs::write(estate.root.join("packs").join("own.satz"), OWN).unwrap();
-    let report = e2e::within(workload::list(&cli, source)).await.unwrap();
+    let report = e2e::within(workload::list(&cli, source, &main))
+        .await
+        .unwrap();
     assert_eq!(row(&report.packs, "own").state, PackState::Own);
     assert_eq!(row(&report.packs, "own").source, None);
 
@@ -148,7 +176,9 @@ async fn a_pack_is_fetched_kept_current_left_alone_when_edited_and_detached() {
         .expect("an edited pack carries its diff");
     assert!(diff.contains("-// edited here"), "{diff}");
     assert_eq!(e2e::read(&file), edited);
-    let report = e2e::within(workload::list(&cli, source)).await.unwrap();
+    let report = e2e::within(workload::list(&cli, source, &main))
+        .await
+        .unwrap();
     assert_eq!(row(&report.packs, PACK).state, PackState::Edited);
 
     // overwritten only when asked
@@ -166,7 +196,9 @@ async fn a_pack_is_fetched_kept_current_left_alone_when_edited_and_detached() {
         (PACK, SOURCE)
     );
     assert_eq!(e2e::read(&file), fetched);
-    let report = e2e::within(workload::list(&cli, source)).await.unwrap();
+    let report = e2e::within(workload::list(&cli, source, &main))
+        .await
+        .unwrap();
     assert_eq!(row(&report.packs, PACK).state, PackState::Own);
     let update = e2e::within(workload::update(&cli, &Which::All, None, false))
         .await
@@ -191,7 +223,9 @@ async fn the_use_line_satz_names_goes_into_the_estate_through_the_writer() {
     let cli = estate.cli().await;
     add_source(&cli).await;
 
-    let report = e2e::within(workload::list(&cli, SOURCE)).await.unwrap();
+    let report = e2e::within(workload::list(&cli, SOURCE, &main))
+        .await
+        .unwrap();
     let path = row(&report.packs, "own")
         .use_path()
         .expect("a pack that is here has a use line")
@@ -253,7 +287,9 @@ async fn a_new_pack_is_the_repositorys_own_and_the_estate_uses_it_through_the_wr
 
     // satz lists it as the repository's own
     add_source(&cli).await;
-    let report = e2e::within(workload::list(&cli, SOURCE)).await.unwrap();
+    let report = e2e::within(workload::list(&cli, SOURCE, &main))
+        .await
+        .unwrap();
     let own = row(&report.packs, "team-notes");
     assert_eq!(own.state, PackState::Own);
     assert_eq!(own.use_path(), Some(path.as_str()));
@@ -331,7 +367,9 @@ async fn an_own_pack_is_published_to_a_folder_source_and_follows_it_from_then_on
     );
     assert_eq!(published.version, "1.0");
     assert_eq!(e2e::read(&target), NOTES);
-    let report = e2e::within(workload::list(&cli, "shared")).await.unwrap();
+    let report = e2e::within(workload::list(&cli, "shared", &main))
+        .await
+        .unwrap();
     let listed = row(&report.packs, id);
     assert_eq!(listed.state, PackState::Current);
     assert_eq!(listed.source.as_deref(), Some("shared"));
@@ -362,6 +400,8 @@ async fn an_own_pack_is_published_to_a_folder_source_and_follows_it_from_then_on
         .unwrap();
     assert_eq!(forced.action, PublishAction::Overwritten);
     assert_eq!(e2e::read(&target), changed);
-    let report = e2e::within(workload::list(&cli, "shared")).await.unwrap();
+    let report = e2e::within(workload::list(&cli, "shared", &main))
+        .await
+        .unwrap();
     assert_eq!(row(&report.packs, id).state, PackState::Current);
 }

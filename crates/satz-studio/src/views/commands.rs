@@ -513,9 +513,9 @@ pub const APPLY: &[&str] = &[
     "migrate",
 ];
 
-/// The same walk for an estate in a delegated folder or project: the bootstrap and the state's
-/// move to the other backend are the organization's, and are not its steps.
-pub const APPLY_DELEGATED: &[&str] = &[
+/// The same walk for a workload estate: the bootstrap and the state's move to the other
+/// backend are the organization's, and are not its steps.
+pub const APPLY_WORKLOAD: &[&str] = &[
     "transpile-check",
     "update-prerequisites",
     "transpile",
@@ -1117,7 +1117,7 @@ mod tests {
     fn the_destinations_name_entries_that_exist() {
         for id in APPLY
             .iter()
-            .chain(APPLY_DELEGATED.iter())
+            .chain(APPLY_WORKLOAD.iter())
             .chain(COMPLIANCE.iter())
         {
             assert!(spec_of(id).is_some(), "{id}");

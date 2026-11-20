@@ -29,7 +29,7 @@ use satz_studio_core::model::{EstateModel, ParamRow, SchemaStatus, SourceValue, 
 use satz_studio_core::satz::reports::{DelegatedBy, EstateMode};
 use satz_studio_core::satz::reports::{PackLine, QuestionRow, QuestionState, QuestionsReport};
 
-use crate::components::{Button, ButtonVariant, Card, CardVariant, Chip, ChipKind, Icon};
+use crate::components::{Button, ButtonVariant, Card, CardVariant, Chip, ChipKind, Dialog, Icon};
 use crate::state::{AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt, View};
 use crate::views::commands::CommandLog;
 
@@ -97,7 +97,7 @@ pub fn owed(f: &Facts) -> Vec<Owed> {
     // from the first minute and would otherwise surface at the first preset update.
     // An estate without a preset library has none to update, so it owes no repository for it.
     let no_presets = f.model.is_some_and(|m| !m.packs.has_presets());
-    // What the estate works in. Until the model is read it is taken for an organization's.
+    // Which kind of estate it is. Until the model is read it is taken for an organization's.
     let mode = f
         .model
         .map(|m| m.packs.works_in)
@@ -129,9 +129,8 @@ pub fn owed(f: &Facts) -> Vec<Owed> {
     // rests on what is here: a cloud estate keeps its state in the bucket `bootstrap`
     // creates, and an HCL directory that was never initialized has never reached it.
     // The bootstrap is an organization's: `satz bootstrap` creates its folder, its
-    // infrastructure project and its estate account. An estate in a delegated folder or
-    // project was given all three by the organization's estate, and has no bootstrap of
-    // its own.
+    // infrastructure project and its estate account. A workload estate was given all
+    // three by the organization's estate, and has no bootstrap of its own.
     if mode == EstateMode::Organization && f.deployment_mode == Some("cloud") && !f.hcl.initialised
     {
         out.push(Owed {
@@ -529,33 +528,58 @@ fn label_for(subject: &str) -> String {
     }
 }
 
-/// Who delegated, in sentences: one per interface file the estate reads, as satz's presets
-/// report gives them. The delegation's own file names the organization's estate, the
-/// account and who may act as it; a place's file names the project or says it is a folder.
-pub fn delegated_by_lines(by: &[DelegatedBy]) -> Vec<String> {
+/// How many exports a "Delegated by" line names before "and N more".
+pub const EXPORTS_SHOWN: usize = 5;
+
+/// One interface folder the estate reads, as the "Delegated by" row says it: its name,
+/// the organization's estate that wrote it with the estate account it carries, and the
+/// names of the values it exports.
+#[derive(Debug, Clone, PartialEq)]
+pub struct DelegatedLine {
+    pub folder: String,
+    pub said: String,
+    pub exports: Vec<String>,
+}
+
+impl DelegatedLine {
+    /// The exports the line names, and how many more it leaves to the full list.
+    pub fn shown(&self) -> (String, usize) {
+        let shown = self.exports.len().min(EXPORTS_SHOWN);
+        (self.exports[..shown].join(", "), self.exports.len() - shown)
+    }
+}
+
+/// Who delegated, one line per interface folder the estate reads, as satz's presets
+/// report gives them: the organization's estate that wrote it, the estate account it
+/// carries — with who may act as it and where its calls are billed — when it carries one,
+/// and its exports.
+pub fn delegated_by_lines(by: &[DelegatedBy]) -> Vec<DelegatedLine> {
     by.iter()
         .map(|d| {
-            let whose = match (&d.customer_shortname, d.organizations.as_slice()) {
-                (Some(short), _) => format!("the estate {} of {}", d.estate, short),
-                (None, [org, ..]) => format!("the estate {} of {}", d.estate, org),
-                (None, []) => format!("the estate {}", d.estate),
+            let mut said = match (&d.customer_shortname, d.organizations.as_slice()) {
+                (Some(short), _) => format!(
+                    "written by the organization's estate {} of {}",
+                    d.estate, short
+                ),
+                (None, [org, ..]) => format!(
+                    "written by the organization's estate {} of {}",
+                    d.estate, org
+                ),
+                (None, []) => format!("written by the organization's estate {}", d.estate),
             };
-            match (&d.estate_account, &d.project, d.folder) {
-                (Some(account), _, _) => {
-                    let mut s = format!("{whose}: the account {account}");
-                    if let Some(group) = &d.estate_account_user_group {
-                        s.push_str(&format!(", which the members of {group} may act as"));
-                    }
-                    if let Some(project) = &d.infrastructure_project {
-                        s.push_str(&format!("; calls are billed to {project}"));
-                    }
-                    s
+            if let Some(account) = &d.estate_account {
+                said.push_str(&format!("; the estate account {account}"));
+                if let Some(group) = &d.estate_account_user_group {
+                    said.push_str(&format!(", which the members of {group} may act as"));
                 }
-                (None, Some(project), _) => {
-                    format!("{whose}: the project {project} ({})", d.interface)
+                if let Some(project) = &d.infrastructure_project {
+                    said.push_str(&format!("; calls are billed to {project}"));
                 }
-                (None, None, true) => format!("{whose}: the folder {}", d.interface),
-                (None, None, false) => format!("{whose}: {}", d.interface),
+            }
+            DelegatedLine {
+                folder: d.interface.clone(),
+                said,
+                exports: d.exports.clone(),
             }
         })
         .collect()
@@ -721,6 +745,7 @@ pub fn OverviewView() -> Element {
 #[component]
 fn IdentityCard(facts: Vec<Fact>) -> Element {
     let app = use_context::<Store<AppStore>>();
+    let mut exports_open = use_signal(|| None::<DelegatedLine>);
     let open = app.open().cloned();
     let model = app.estate().model().cloned();
     let hcl = app.estate().hcl().cloned();
@@ -766,16 +791,11 @@ fn IdentityCard(facts: Vec<Fact>) -> Element {
                         }
                     }
                 }
-                dt { "Works in" }
+                dt { "Kind" }
                     dd {
                         match model.as_deref().map(|m| m.packs.works_in) {
                             Some(mode) => rsx! {
                                 Chip { kind: ChipKind::Assist, icon: mode.icon(), label: mode.label().to_string() }
-                                {match mode {
-                                    EstateMode::Organization => " — the organization itself; it is built from presets and may take workload packs",
-                                    EstateMode::Folder => " — a folder the organization delegated access to; it is built from workload packs",
-                                    EstateMode::Project => " — a project the organization delegated access to; it is built from workload packs",
-                                }}
                             },
                             None => rsx! { span { class: "overview__unanswered", "not read yet" } },
                         }
@@ -784,7 +804,27 @@ fn IdentityCard(facts: Vec<Fact>) -> Element {
                     dt { "Delegated by" }
                     dd { class: "overview__delegated",
                         for (i, line) in lines.into_iter().enumerate() {
-                            p { key: "{i}", "{line}" }
+                            {
+                                let (named, more) = line.shown();
+                                let all = line.clone();
+                                rsx! {
+                                    p { key: "{i}",
+                                        code { "{line.folder}" }
+                                        " — {line.said}"
+                                        if !line.exports.is_empty() {
+                                            "; exports {named}"
+                                        }
+                                        if more > 0 {
+                                            " "
+                                            Button {
+                                                variant: ButtonVariant::Text,
+                                                onclick: move |_| exports_open.set(Some(all.clone())),
+                                                "and {more} more"
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -828,6 +868,21 @@ fn IdentityCard(facts: Vec<Fact>) -> Element {
                         }
                     }
                 }
+        }
+        Dialog {
+            open: exports_open().is_some(),
+            title: exports_open().map(|l| l.folder).unwrap_or_default(),
+            icon: "output",
+            ondismiss: move |_| exports_open.set(None),
+            actions: rsx! {
+                Button { variant: ButtonVariant::Text, onclick: move |_| exports_open.set(None), "Close" }
+            },
+            p { "What this interface folder exports:" }
+            ul {
+                for name in exports_open().map(|l| l.exports).unwrap_or_default() {
+                    li { key: "{name}", code { "{name}" } }
+                }
+            }
         }
     }
 }
@@ -1603,10 +1658,11 @@ mod tests {
         assert!(why.contains("declares no estate account"), "{why}");
         assert!(!why.contains("migrate"), "{why}");
     }
-    /// The delegation's own file names the organization's estate, the account and who may
-    /// act as it; a place's file names the project, or that it is a folder.
+    /// Each interface folder is named with the organization's estate that wrote it, the
+    /// estate account when it carries one, and its exports; a long list of exports is cut
+    /// at [`EXPORTS_SHOWN`] with how many more there are.
     #[test]
-    fn who_delegated_is_said_per_interface_file() {
+    fn who_delegated_is_said_per_interface_folder() {
         let base = DelegatedBy {
             path: "interfaces/incoming/delegation-shop/delegation-shop/satz/interface.satz".into(),
             interface: "delegation-shop".into(),
@@ -1616,33 +1672,49 @@ mod tests {
             estate_account: Some("svc-deploy-shop@acme-deploy-shop.iam.gserviceaccount.com".into()),
             estate_account_user_group: Some("gcp-shop-admins@example.com".into()),
             infrastructure_project: Some("acme-deploy-shop".into()),
-            project: None,
-            folder: false,
+            exports: vec!["estate_account".into(), "infrastructure_project_id".into()],
         };
-        let project = DelegatedBy {
+        let plain = DelegatedBy {
             interface: "shop-backend".into(),
             estate_account: None,
             estate_account_user_group: None,
             infrastructure_project: None,
-            project: Some("acme-shop-backend-001".into()),
             customer_shortname: None,
+            exports: (1..=8).map(|i| format!("value_{i}")).collect(),
             ..base.clone()
         };
-        let folder = DelegatedBy {
+        let bare = DelegatedBy {
             interface: "shop".into(),
-            project: None,
-            folder: true,
             organizations: Vec::new(),
-            ..project.clone()
+            exports: Vec::new(),
+            ..plain.clone()
         };
+        let lines = delegated_by_lines(&[base, plain, bare]);
         assert_eq!(
-            delegated_by_lines(&[base, project, folder]),
-            [
-                "the estate c0example of acme: the account svc-deploy-shop@acme-deploy-shop.iam.gserviceaccount.com, which the members of gcp-shop-admins@example.com may act as; calls are billed to acme-deploy-shop",
-                "the estate c0example of organizations/123456789012: the project acme-shop-backend-001 (shop-backend)",
-                "the estate c0example: the folder shop",
-            ]
+            lines.iter().map(|l| l.folder.as_str()).collect::<Vec<_>>(),
+            ["delegation-shop", "shop-backend", "shop"]
         );
+        assert_eq!(
+            lines[0].said,
+            "written by the organization's estate c0example of acme; the estate account svc-deploy-shop@acme-deploy-shop.iam.gserviceaccount.com, which the members of gcp-shop-admins@example.com may act as; calls are billed to acme-deploy-shop"
+        );
+        assert_eq!(
+            lines[0].shown(),
+            ("estate_account, infrastructure_project_id".to_string(), 0)
+        );
+        assert_eq!(
+            lines[1].said,
+            "written by the organization's estate c0example of organizations/123456789012"
+        );
+        assert_eq!(
+            lines[1].shown(),
+            ("value_1, value_2, value_3, value_4, value_5".to_string(), 3)
+        );
+        assert_eq!(
+            lines[2].said,
+            "written by the organization's estate c0example"
+        );
+        assert_eq!(lines[2].shown(), (String::new(), 0));
         assert!(delegated_by_lines(&[]).is_empty());
     }
 }

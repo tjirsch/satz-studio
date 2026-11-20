@@ -145,8 +145,8 @@ impl View {
     ];
 
     /// The primary destinations of the open estate. An estate that holds no preset
-    /// library, as satz's presets report says ([`PacksReport::has_presets`]) — one in a
-    /// delegated folder or project — has no Presets destination: the library is the
+    /// library, as satz's presets report says ([`PacksReport::has_presets`]) — a workload
+    /// estate without one of its own — has no Presets destination: the library is the
     /// organization's estate's.
     pub fn primary(presets: bool) -> Vec<View> {
         View::PRIMARY
@@ -685,9 +685,9 @@ mod tests {
     #[test]
     fn an_estate_without_presets_has_every_primary_destination_but_presets() {
         assert_eq!(View::primary(true), View::PRIMARY);
-        let delegated = View::primary(false);
-        assert!(!delegated.contains(&View::Presets) && delegated.contains(&View::Packs));
-        assert_eq!(delegated.len(), View::PRIMARY.len() - 1);
+        let workload = View::primary(false);
+        assert!(!workload.contains(&View::Presets) && workload.contains(&View::Packs));
+        assert_eq!(workload.len(), View::PRIMARY.len() - 1);
         assert_eq!(
             (View::Presets.label(), View::Packs.label()),
             ("Presets", "Packs")

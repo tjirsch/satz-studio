@@ -2429,7 +2429,7 @@
 }
 
 /* ---- Packs: the Interfaces tab's cards, plus the actions of a pack, the difference of
-        an edited one and the Add a source form ------------------------------------------ */
+        an edited one, the Add a source form and a pack's details ------------------------ */
 
 .wpacks__actions {
   display: flex;
@@ -2442,6 +2442,37 @@
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+/* a pack's details: four sections, each a title-small head over a list of declarations */
+.wpacks__details {
+  min-width: min(640px, 92vw);
+  max-width: min(880px, 92vw);
+}
+
+.wpacks__section h3 {
+  margin: 16px 0 4px;
+  font: var(--md-sys-typescale-title-small);
+  color: var(--md-sys-color-on-surface);
+}
+
+.wpacks__section:first-child h3 {
+  margin-top: 0;
+}
+
+.wpacks__decls {
+  margin: 0;
+  padding-left: 20px;
+  font: var(--md-sys-typescale-body-medium);
+  user-select: text;
+}
+
+.wpacks__decls li + li {
+  margin-top: 4px;
+}
+
+.wpacks__unmet {
+  color: var(--md-sys-color-error);
 }
 
 .wpacks__diff {

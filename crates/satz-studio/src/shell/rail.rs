@@ -23,8 +23,8 @@ pub fn NavigationRail() -> Element {
         .map(|q| q.summary.unanswered)
         .unwrap_or(0);
     let owes = owed_now(app).map_or(0, |owed| owed.len());
-    // an estate in a delegated folder or project holds no preset library and has no
-    // Presets destination; until the model is read the rail shows every destination
+    // a workload estate without a preset library of its own has no Presets
+    // destination; until the model is read the rail shows every destination
     let presets = app
         .estate()
         .model()

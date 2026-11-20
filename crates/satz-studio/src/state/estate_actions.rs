@@ -87,7 +87,7 @@ pub enum EstateAction {
     /// `satz_remove_preset`: the pack's gate bound false, its line left as it is
     RemovePack(RemovePackArgs),
     /// `satz_add_entry`: one entry added to a list a pack declares, by satz's own writer —
-    /// a delegation, a delegated folder or project, a subnet
+    /// a delegation, a delegated resource, a subnet
     AddEntry(AddEntryArgs),
     /// `satz_merge_presets`: the line for a pack the library gained
     MergePresets,
@@ -1415,7 +1415,7 @@ async fn workload_packs(session: &Arc<EstateSession>, app: Store<AppStore>, op: 
         PackOp::List(_) => {}
         PackOp::Get(which) => {
             let _lock = session.write_lock().await;
-            match workload::get(cli, &which, &source).await {
+            match workload::get(cli, &which, &source, &session.main).await {
                 Ok(report) if report.installed.is_empty() => {
                     toast(
                         app,
@@ -1431,6 +1431,18 @@ async fn workload_packs(session: &Arc<EstateSession>, app: Store<AppStore>, op: 
                         ToastKind::Info,
                         format!("fetched {} from {}", ids.join(", "), report.source),
                     );
+                    // satz fetches a pack whose read the estate does not give, and warns
+                    for pack in report.installed.iter().filter(|p| !p.unmet.is_empty()) {
+                        toast(
+                            app,
+                            ToastKind::Error,
+                            format!(
+                                "{} reads what this estate does not give: {}",
+                                pack.id,
+                                pack.unmet.join("; ")
+                            ),
+                        );
+                    }
                 }
                 Err(e) => toast(
                     app,
@@ -1507,7 +1519,7 @@ async fn workload_packs(session: &Arc<EstateSession>, app: Store<AppStore>, op: 
             }
         }
     }
-    let listed = workload::list(cli, &source)
+    let listed = workload::list(cli, &source, &session.main)
         .await
         .map_err(|e| project::said(&e));
     estate.workload_packs().set(Some(listed));

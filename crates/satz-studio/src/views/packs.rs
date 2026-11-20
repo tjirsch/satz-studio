@@ -2,8 +2,8 @@
 //! taken once from a source and then the repository's own to adapt — where a preset is
 //! part of the one library every organization keeps current
 //! ([ADR 0029](../../../../docs/adr/0029-presets-and-packs-are-two-destinations.md)). An
-//! organization's estate has both destinations; an estate in a delegated folder or project
-//! has this one alone. What a pack asks is Decisions'.
+//! organization's estate has both destinations; a workload estate without a preset
+//! library of its own has this one alone. What a pack asks is Decisions'.
 
 use dioxus::prelude::*;
 
