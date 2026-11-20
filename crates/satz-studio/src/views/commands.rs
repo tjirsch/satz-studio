@@ -973,7 +973,7 @@ pub fn CommandLog() -> Element {
 }
 
 /// The command palette: every satz command the app runs, over the window, opened with
-/// ⌘K / Ctrl+K or the sidebar's Commands entry. It is not a destination — the work happens
+/// ⌘K / Ctrl+K; the sidebar has no entry for it. It is not a destination — the work happens
 /// in Apply and Documents — and it is where a command that belongs to neither still
 /// lives, and, for an estate that holds the preset library, the pack review.
 #[component]

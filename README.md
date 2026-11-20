@@ -62,7 +62,7 @@ documents; Estate stands after them in the sidebar. **Apply**, its way to the or
 then the checks, the bootstrap, the HCL code, the plan and the apply, in that order;
 **Documents**, what goes to people as a file: the decisions sheet, the compliance reports,
 and the documents an agent writes, each started in the client Settings names. Agent and Settings sit at the
-foot of the sidebar, with Commands between them. Beside the estate the top bar names sit
+foot of the sidebar; ⌘K (Ctrl+K on Windows and Linux) opens the commands palette. Beside the estate the top bar names sit
 reload, "Switch estate" — the Start screen with your estates listed — and "Close estate";
 at its far end a status button says whether the estate still owes anything — a green check
 when nothing is owed, the count of items otherwise — and opens the Overview;

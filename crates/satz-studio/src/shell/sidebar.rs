@@ -1,5 +1,4 @@
 use dioxus::prelude::*;
-use dioxus_icons::lucide::{Command, Keyboard};
 
 use crate::components::sidebar::{
     Sidebar, SidebarCollapsible, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent,
@@ -8,11 +7,9 @@ use crate::components::sidebar::{
 use crate::state::{AppStore, AppStoreStoreExt, EstateStoreStoreExt, View};
 use crate::views::overview::owed_now;
 
-/// The sidebar: the primary destinations in the order the work happens, and Agent,
-/// Commands and Settings in its foot. Commands is not a destination — it toggles the
-/// palette over whatever is showing — and it stands in the foot because that is where
-/// the things that are not places stand. It needs an estate, like Agent: the palette's
-/// entries all act on one. With no estate open there is nothing to work on, so the
+/// The sidebar: the primary destinations in the order the work happens, and Agent and
+/// Settings in its foot. The commands palette has no entry here: ⌘K on macOS, Ctrl+K
+/// elsewhere, opens it over whatever is showing. With no estate open there is nothing to work on, so the
 /// sidebar carries Settings alone and the window stands on the Start screen — the doors.
 /// Overview carries the count of what the estate owes and Decisions the count of
 /// unanswered questions. Folded, the sidebar shows the icons, and each one its name on
@@ -45,14 +42,6 @@ pub fn AppSidebar() -> Element {
         .into_iter()
         .filter(|v| has_estate || !v.needs_estate())
         .collect();
-
-    // the shortcut is ⌘K on macOS and Ctrl+K elsewhere, and the button says which of the
-    // two this machine takes
-    let palette_label = if cfg!(target_os = "macos") {
-        "Commands (⌘K)"
-    } else {
-        "Commands (Ctrl+K)"
-    };
 
     rsx! {
         Sidebar { collapsible: SidebarCollapsible::Icon,
@@ -95,21 +84,6 @@ pub fn AppSidebar() -> Element {
                                 is_active: view == current,
                                 onclick: move |_| app.nav().set(view),
                                 {view.icon(16)}
-                            }
-                        }
-                        if view == View::Agent {
-                            SidebarMenuItem { key: "{palette_label}",
-                                Destination {
-                                    label: palette_label,
-                                    is_active: app.palette_open().cloned(),
-                                    onclick: move |_| app.palette_open().toggle(),
-                                    // the shortcut is ⌘K on macOS and Ctrl+K elsewhere
-                                    if cfg!(target_os = "macos") {
-                                        Command { size: 16 }
-                                    } else {
-                                        Keyboard { size: 16 }
-                                    }
-                                }
                             }
                         }
                     }

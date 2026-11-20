@@ -13,7 +13,7 @@ App (src/app.rs)            the stores, the app coroutine, the library's theme, 
 └─ Shell (src/shell/)
    └─ EstateHost             one per open estate: owns the estate coroutine
       └─ Frame               the library's SidebarProvider
-         ├─ AppSidebar       the primary destinations; Agent, the Commands entry and Settings at the foot
+         ├─ AppSidebar       the primary destinations; Agent and Settings at the foot
          ├─ TopBar           the sidebar's fold, estate name and directory, reload, switch, close; the estate's status
          ├─ SatzBanner       satz missing, too old or not running; a notice while newer than the build
          ├─ Content          the view of `AppStore.nav`
@@ -395,7 +395,7 @@ arrangements of library `Button`s and `Card`s, laid out in `assets/app.css`.
   Presets `Boxes` (an estate with the preset library only), Packs `Package`, Decisions
   `MessageCircleQuestionMark`, Apply `Rocket`, Documents `ScrollText`, Estate `FileText` —
   and, in the sidebar's footer, two secondary destinations, Agent `Bot` and Settings
-  `Settings`, with the Commands entry between them. Overview carries the count of what
+  `Settings`. Overview carries the count of what
   the estate owes and Decisions the count of unanswered questions. With no estate open
   the primary group is empty and the footer carries Settings alone: there is nothing to
   work on, and the window stands on the Start screen. Opening an estate is what the Start
@@ -434,9 +434,7 @@ arrangements of library `Button`s and `Card`s, laid out in `assets/app.css`.
   Presets in both. The first step has no previous button, the last no next. Estate,
   Agent, Settings and the Start screen have no bar.
 - **Commands palette:** every entry of `PALETTE` in a dialog over the window, opened
-  with ⌘K (Ctrl+K on Windows and Linux) or the sidebar footer's Commands entry — which
-  sits between Agent and Settings, because the footer is where what is not a destination
-  stands — and closed with
+  with ⌘K (Ctrl+K on Windows and Linux) — it has no entry in the sidebar — and closed with
   Escape, a click outside it or the same key. The listener is installed on the window in
   `src/app.rs`, which mounts once: a keydown inside a text field never reaches a handler
   above it, and a listener per estate would leave one behind on every switch.
