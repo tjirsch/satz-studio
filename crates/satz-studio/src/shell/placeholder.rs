@@ -1,6 +1,8 @@
 use dioxus::prelude::*;
+use dioxus_icons::lucide::HardDrive;
 
-use crate::components::{Button, Card, CardVariant, Icon};
+use crate::components::button::Button;
+use crate::components::card::{Card, CardContent, CardDescription, CardHeader, CardTitle};
 use crate::state::{AppStore, AppStoreStoreExt, View};
 
 /// A destination that works on an open estate, shown while none is open.
@@ -9,11 +11,18 @@ pub fn NoEstate(view: View) -> Element {
     let app = use_context::<Store<AppStore>>();
     rsx! {
         div { class: "placeholder",
-            Card { variant: CardVariant::Filled, class: "placeholder__card",
-                Icon { name: view.icon().to_string(), size: 48, class: "placeholder__icon" }
-                h2 { "{view.label()}" }
-                p { "This destination works on an open estate." }
-                Button { icon: "home_storage", onclick: move |_| app.nav().set(View::Start), "Open an estate" }
+            Card { class: "placeholder__card",
+                CardHeader {
+                    {view.icon(32)}
+                    CardTitle { "{view.label()}" }
+                    CardDescription { "This destination works on an open estate." }
+                }
+                CardContent {
+                    Button { onclick: move |_| app.nav().set(View::Start),
+                        HardDrive { size: 16 }
+                        "Open an estate"
+                    }
+                }
             }
         }
     }

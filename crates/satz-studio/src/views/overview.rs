@@ -29,7 +29,16 @@ use satz_studio_core::model::{EstateModel, ParamRow, SchemaStatus, SourceValue, 
 use satz_studio_core::satz::reports::{DelegatedBy, EstateMode};
 use satz_studio_core::satz::reports::{PackLine, QuestionRow, QuestionState, QuestionsReport};
 
-use crate::components::{Button, ButtonVariant, Card, CardVariant, Chip, ChipKind, Dialog, Icon};
+use dioxus_icons::lucide::{
+    Boxes, Building2, CircleAlert, ClipboardList, CodeXml, Download, ExternalLink, Eye, FileText,
+    GitCommitHorizontal, Landmark, ListChecks, MessageCircleQuestionMark, Network, Package, Play,
+    ShieldUser, Unlink, Workflow, Wrench,
+};
+
+use crate::components::badge::{Badge, BadgeVariant};
+use crate::components::button::{Button, ButtonVariant};
+use crate::components::card::{Card, CardContent, CardHeader};
+use crate::components::dialog::{Dialog, DialogTitle};
 use crate::state::{AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt, View};
 use crate::views::commands::CommandLog;
 
@@ -59,13 +68,11 @@ pub enum Remedy {
     /// a satz command, run in the app and streamed into the log below
     Run {
         label: &'static str,
-        icon: &'static str,
         args: Vec<String>,
     },
     /// a satz command handed to the OS terminal
     Terminal {
         label: &'static str,
-        icon: &'static str,
         args: Vec<String>,
     },
     /// `git init -b main`, `git add -A` and one commit in the estate directory, run when
@@ -80,10 +87,48 @@ pub enum Remedy {
 pub struct Owed {
     /// stable, so a test names a row without matching its prose
     pub id: &'static str,
-    pub icon: &'static str,
     pub title: String,
     pub detail: String,
     pub remedies: Vec<Remedy>,
+}
+
+impl Owed {
+    /// The Lucide icon of the row, `size` pixels square, chosen by the row's id.
+    pub fn icon(&self, size: u32) -> Element {
+        match self.id {
+            "repository" => rsx! { GitCommitHorizontal { size, class: "overview__row-icon" } },
+            "bootstrap" => rsx! { Landmark { size, class: "overview__row-icon" } },
+            "questions" => rsx! { MessageCircleQuestionMark { size, class: "overview__row-icon" } },
+            "map-off" | "map-absent" => rsx! { Boxes { size, class: "overview__row-icon" } },
+            "pack-findings" => rsx! { Network { size, class: "overview__row-icon" } },
+            "ungated-lines" => rsx! { Unlink { size, class: "overview__row-icon" } },
+            "schema" => rsx! { Workflow { size, class: "overview__row-icon" } },
+            "hcl-trust" => rsx! { CodeXml { size, class: "overview__row-icon" } },
+            "notices" => rsx! { ClipboardList { size, class: "overview__row-icon" } },
+            "prerequisites" => rsx! { ShieldUser { size, class: "overview__row-icon" } },
+            "not-transpiled" => rsx! { Wrench { size, class: "overview__row-icon" } },
+            "not-planned" => rsx! { Eye { size, class: "overview__row-icon" } },
+            // a row without an icon of its own is still a row that is owed
+            _ => rsx! { CircleAlert { size, class: "overview__row-icon" } },
+        }
+    }
+}
+
+/// The Lucide icon of a satz command a row runs, chosen by the command's name.
+fn run_icon(args: &[String], size: u32) -> Element {
+    match args.first().map(String::as_str) {
+        Some("bootstrap") => rsx! { ListChecks { size } },
+        Some("update-schema") => rsx! { Download { size } },
+        _ => rsx! { Play { size } },
+    }
+}
+
+/// The Lucide icon of the kind of estate.
+fn mode_icon(mode: EstateMode, size: u32) -> Element {
+    match mode {
+        EstateMode::Organization => rsx! { Building2 { size } },
+        EstateMode::Workload => rsx! { Package { size } },
+    }
 }
 
 /// Everything the estate owes, in the order the work happens. Each row rests on a fact
@@ -106,7 +151,6 @@ pub fn owed(f: &Facts) -> Vec<Owed> {
         _ if no_presets => {}
         Some(WorkTree::Outside(said)) => out.push(Owed {
             id: "repository",
-            icon: "commit",
             title: "The estate is not in a git repository".to_string(),
             detail: format!(
                 "`satz merge-presets` edits the estate in place and uses git as the undo of that edit, so outside a repository it refuses and the estate cannot take preset updates. git says: {said}\nThe button runs `git init -b main`, `git add -A` and one commit in the estate directory, with the identity git is configured with. `git add -A` commits everything the directory's `.gitignore` does not exclude, which is why it refuses a directory without one."
@@ -115,7 +159,6 @@ pub fn owed(f: &Facts) -> Vec<Owed> {
         }),
         Some(WorkTree::NoGit(error)) => out.push(Owed {
             id: "repository",
-            icon: "commit",
             title: "git is not available".to_string(),
             detail: format!(
                 "`satz merge-presets` uses git as the undo of its edit to the estate and refuses without it, so the estate cannot take preset updates until git is installed and on the PATH. {error}"
@@ -135,7 +178,6 @@ pub fn owed(f: &Facts) -> Vec<Owed> {
     {
         out.push(Owed {
             id: "bootstrap",
-            icon: "foundation",
             title: "The bootstrap is not confirmed".to_string(),
             detail: format!(
                 "This estate keeps its state in a bucket that `satz bootstrap` creates, together with the folder, the infrastructure project and the billing link. Nothing has been initialized against that bucket from this checkout, so the bootstrap is either still owed or was done elsewhere. The dry run answers it: it prints the plan, resolves the identity you are signed in as and checks the prerequisites, and creates nothing. The real run creates that infrastructure as you — the estate account does not exist yet — so it stays in your terminal.\nsatz bootstrap {} --dry-run",
@@ -144,7 +186,6 @@ pub fn owed(f: &Facts) -> Vec<Owed> {
             remedies: vec![
                 Remedy::Run {
                     label: "Check the bootstrap",
-                    icon: "fact_check",
                     args: vec![
                         "bootstrap".to_string(),
                         f.estate.to_string(),
@@ -153,7 +194,6 @@ pub fn owed(f: &Facts) -> Vec<Owed> {
                 },
                 Remedy::Terminal {
                     label: "Bootstrap in your terminal",
-                    icon: "open_in_new",
                     args: vec!["bootstrap".to_string(), f.estate.to_string()],
                 },
             ],
@@ -166,7 +206,6 @@ pub fn owed(f: &Facts) -> Vec<Owed> {
         let blocking = q.summary.blocking;
         out.push(Owed {
             id: "questions",
-            icon: "quiz",
             title: match q.summary.unanswered {
                 1 => "1 question is unanswered".to_string(),
                 n => format!("{n} questions are unanswered"),
@@ -185,14 +224,12 @@ pub fn owed(f: &Facts) -> Vec<Owed> {
         match model.packs.map().map(|m| m.line) {
             Some(PackLine::Commented) => out.push(Owed {
                 id: "map-off",
-                icon: "inventory_2",
                 title: "The estate map is switched off".to_string(),
                 detail: "`use \"presets/estate-map.satz\"` is commented out, so no pack asks this estate anything. Switching it on is what opens the questions the library declares.".to_string(),
                 remedies: vec![Remedy::Go(View::Presets)],
             }),
             Some(PackLine::Absent) => out.push(Owed {
                 id: "map-absent",
-                icon: "inventory_2",
                 title: "The estate has no estate map".to_string(),
                 detail: "The file carries no line for `presets/estate-map.satz`, the map of pack choices every other question hangs from. Switching it on in Presets writes the line where the pack graph places it.".to_string(),
                 remedies: vec![Remedy::Go(View::Presets)],
@@ -204,7 +241,6 @@ pub fn owed(f: &Facts) -> Vec<Owed> {
         if let Some(first) = findings.first() {
             out.push(Owed {
                 id: "pack-findings",
-                icon: "account_tree",
                 title: match findings.len() {
                     1 => "The pack graph has 1 finding".to_string(),
                     n => format!("The pack graph has {n} findings"),
@@ -232,7 +268,6 @@ pub fn owed(f: &Facts) -> Vec<Owed> {
         if ungated > 0 {
             out.push(Owed {
                 id: "ungated-lines",
-                icon: "link_off",
                 title: match ungated {
                     1 => "1 pack line has no gate".to_string(),
                     n => format!("{n} pack lines have no gate"),
@@ -245,7 +280,6 @@ pub fn owed(f: &Facts) -> Vec<Owed> {
         if let SchemaStatus::Missing(dir) = &model.schema {
             out.push(Owed {
                 id: "schema",
-                icon: "schema",
                 title: "There is no provider schema".to_string(),
                 detail: format!(
                     "{} holds none, so every attribute is untyped and locked: the app cannot tell a required argument from a typo. `satz update-schema` fetches the provider's own.",
@@ -253,7 +287,6 @@ pub fn owed(f: &Facts) -> Vec<Owed> {
                 ),
                 remedies: vec![Remedy::Run {
                     label: "Run update-schema",
-                    icon: "download",
                     args: vec!["update-schema".to_string()],
                 }],
             });
@@ -263,7 +296,6 @@ pub fn owed(f: &Facts) -> Vec<Owed> {
         if untrusted > 0 {
             out.push(Owed {
                 id: "hcl-trust",
-                icon: "code_off",
                 title: match untrusted {
                     1 => "1 raw HCL block has not been reviewed".to_string(),
                     n => format!("{n} raw HCL blocks have not been reviewed"),
@@ -285,7 +317,6 @@ pub fn owed(f: &Facts) -> Vec<Owed> {
     if notices > 0 {
         out.push(Owed {
             id: "notices",
-            icon: "assignment_late",
             title: match notices {
                 1 => "1 pack asks for a command to be run".to_string(),
                 n => format!("{n} packs ask for a command to be run"),
@@ -308,7 +339,6 @@ pub fn owed(f: &Facts) -> Vec<Owed> {
     {
         out.push(Owed {
             id: "prerequisites",
-            icon: "admin_panel_settings",
             title: "The prerequisites are not declared".to_string(),
             detail: "The transpile found roles this estate's own resource types need and its estate account is not granted, or APIs a project its resources' calls are billed to does not enable. Findings carries each of them; `satz update-prerequisites` writes them into the file. In a workload estate satz writes nothing at the organization: each line says what to ask the organization's estate for, or what the estate grants its own account on its project.".to_string(),
             remedies: vec![Remedy::Go(View::Apply)],
@@ -321,7 +351,6 @@ pub fn owed(f: &Facts) -> Vec<Owed> {
     if !f.hcl.transpiled {
         out.push(Owed {
             id: "not-transpiled",
-            icon: "build",
             title: "The estate has not been transpiled here".to_string(),
             detail: "There is no `main.tf` in the HCL directory: nothing has been transpiled from this checkout, so nothing has been planned against it either. `satz transpile` writes it, `hcl-init` prepares the directory and `plan` is what reads it back.".to_string(),
             remedies: vec![Remedy::Go(View::Apply)],
@@ -329,7 +358,6 @@ pub fn owed(f: &Facts) -> Vec<Owed> {
     } else if !f.hcl.initialised {
         out.push(Owed {
             id: "not-planned",
-            icon: "preview",
             title: "Not verified by a plan".to_string(),
             detail: "The HCL code is written and the directory is not initialized, and a plan needs an initialized directory — so nothing here has been through one. Whatever the estate says about the live organization is still a claim. `hcl-init`, then `plan`.".to_string(),
             remedies: vec![Remedy::Go(View::Apply)],
@@ -616,7 +644,7 @@ pub fn runs_as_row<'a>(runs_as: Option<&'a str>, deployment_mode: Option<&str>) 
 }
 
 /// What the open estate owes now, read from the store: `None` while no estate is open.
-/// The Overview lists it, the rail counts it on Overview and the top bar's status button
+/// The Overview lists it, the sidebar counts it on Overview and the top bar's status button
 /// says whether it is empty — one derivation, so the three cannot disagree.
 pub fn owed_now(app: Store<AppStore>) -> Option<Vec<Owed>> {
     let open = app.open().cloned()?;
@@ -658,71 +686,78 @@ pub fn OverviewView() -> Element {
             h1 { class: "view__title", "Overview" }
             IdentityCard { facts }
             if !owed.is_empty() {
-                Card { variant: CardVariant::Outlined, class: "overview__owed",
-                    header { class: "overview__owed-head",
-                        Icon { name: "assignment_late", size: 22 }
-                        h2 { class: "overview__owed-title", "Still to do" }
-                        span { class: "grow" }
-                        Chip { kind: ChipKind::Assist, label: match owed.len() { 1 => "1 item".to_string(), n => format!("{n} items") } }
-                    }
-                    for row in owed {
-                        div { key: "{row.id}", class: "overview__row",
-                            Icon { name: row.icon, size: 22, class: "overview__row-icon" }
-                            div { class: "overview__row-text",
-                                h3 { class: "overview__row-title", "{row.title}" }
-                                for line in row.detail.lines() {
-                                    p { key: "{line}", class: "overview__row-detail", "{line}" }
-                                }
+                Card { class: "overview__owed",
+                    CardHeader {
+                        header { class: "overview__owed-head",
+                            ClipboardList { size: 22 }
+                            h2 { class: "overview__owed-title", "Still to do" }
+                            span { class: "grow" }
+                            Badge { variant: BadgeVariant::Outline,
+                                {match owed.len() { 1 => "1 item".to_string(), n => format!("{n} items") }}
                             }
-                            div { class: "overview__row-actions",
-                                for (i, remedy) in row.remedies.into_iter().enumerate() {
-                                    {
-                                        match remedy {
-                                            Remedy::Go(view) => rsx! {
-                                                Button {
-                                                    key: "{i}",
-                                                    variant: if i == 0 { ButtonVariant::Filled } else { ButtonVariant::Tonal },
-                                                    icon: view.icon(),
-                                                    onclick: move |_| app.nav().set(view),
-                                                    "{view.label()}"
-                                                }
-                                            },
-                                            Remedy::Run { label, icon, args } => rsx! {
-                                                Button {
-                                                    key: "{i}",
-                                                    variant: if i == 0 { ButtonVariant::Filled } else { ButtonVariant::Tonal },
-                                                    icon,
-                                                    onclick: move |_| handle.send(EstateAction::RunCommand(args.clone())),
-                                                    "{label}"
-                                                }
-                                            },
-                                            Remedy::Terminal { label, icon, args } => rsx! {
-                                                Button {
-                                                    key: "{i}",
-                                                    variant: ButtonVariant::Tonal,
-                                                    icon,
-                                                    onclick: move |_| handle.send(EstateAction::OpenInTerminal(args.clone())),
-                                                    "{label}"
-                                                }
-                                            },
-                                            Remedy::InitRepository => rsx! {
-                                                Button {
-                                                    key: "{i}",
-                                                    variant: ButtonVariant::Filled,
-                                                    icon: "commit",
-                                                    onclick: move |_| handle.send(EstateAction::InitRepository),
-                                                    "Create the repository"
-                                                }
-                                            },
-                                            Remedy::ShowNotices => rsx! {
-                                                Button {
-                                                    key: "{i}",
-                                                    variant: ButtonVariant::Filled,
-                                                    icon: "assignment_late",
-                                                    onclick: move |_| app.estate().notices_open().set(true),
-                                                    "Show the notices"
-                                                }
-                                            },
+                        }
+                    }
+                    CardContent {
+                        for row in owed {
+                            div { key: "{row.id}", class: "overview__row",
+                                {row.icon(22)}
+                                div { class: "overview__row-text",
+                                    h3 { class: "overview__row-title", "{row.title}" }
+                                    for line in row.detail.lines() {
+                                        p { key: "{line}", class: "overview__row-detail", "{line}" }
+                                    }
+                                }
+                                div { class: "overview__row-actions",
+                                    for (i, remedy) in row.remedies.into_iter().enumerate() {
+                                        {
+                                            match remedy {
+                                                Remedy::Go(view) => rsx! {
+                                                    Button {
+                                                        key: "{i}",
+                                                        variant: if i == 0 { ButtonVariant::Primary } else { ButtonVariant::Secondary },
+                                                        onclick: move |_| app.nav().set(view),
+                                                        {view.icon(16)}
+                                                        "{view.label()}"
+                                                    }
+                                                },
+                                                Remedy::Run { label, args } => rsx! {
+                                                    Button {
+                                                        key: "{i}",
+                                                        variant: if i == 0 { ButtonVariant::Primary } else { ButtonVariant::Secondary },
+                                                        onclick: {
+                                                            let args = args.clone();
+                                                            move |_| handle.send(EstateAction::RunCommand(args.clone()))
+                                                        },
+                                                        {run_icon(&args, 16)}
+                                                        "{label}"
+                                                    }
+                                                },
+                                                Remedy::Terminal { label, args } => rsx! {
+                                                    Button {
+                                                        key: "{i}",
+                                                        variant: ButtonVariant::Secondary,
+                                                        onclick: move |_| handle.send(EstateAction::OpenInTerminal(args.clone())),
+                                                        ExternalLink { size: 16 }
+                                                        "{label}"
+                                                    }
+                                                },
+                                                Remedy::InitRepository => rsx! {
+                                                    Button {
+                                                        key: "{i}",
+                                                        onclick: move |_| handle.send(EstateAction::InitRepository),
+                                                        GitCommitHorizontal { size: 16 }
+                                                        "Create the repository"
+                                                    }
+                                                },
+                                                Remedy::ShowNotices => rsx! {
+                                                    Button {
+                                                        key: "{i}",
+                                                        onclick: move |_| app.estate().notices_open().set(true),
+                                                        ClipboardList { size: 16 }
+                                                        "Show the notices"
+                                                    }
+                                                },
+                                            }
                                         }
                                     }
                                 }
@@ -731,7 +766,6 @@ pub fn OverviewView() -> Element {
                     }
                 }
             }
-
 
             if last_command.is_some() {
                 CommandLog {}
@@ -763,21 +797,23 @@ fn IdentityCard(facts: Vec<Fact>) -> Element {
         .count();
 
     rsx! {
-        Card { variant: CardVariant::Outlined, class: "overview__identity",
-            header { class: "overview__owed-head",
-                Icon { name: "description", size: 22 }
-                h2 { class: "overview__owed-title", "{open.name}" }
-                span { class: "grow" }
-                if missing > 0 {
-                    Chip {
-                        kind: ChipKind::Assist,
-                        label: match missing {
-                            1 => "1 without a value".to_string(),
-                            n => format!("{n} without a value"),
-                        },
+        Card { class: "overview__identity",
+            CardHeader {
+                header { class: "overview__owed-head",
+                    FileText { size: 22 }
+                    h2 { class: "overview__owed-title", "{open.name}" }
+                    span { class: "grow" }
+                    if missing > 0 {
+                        Badge { variant: BadgeVariant::Outline,
+                            {match missing {
+                                1 => "1 without a value".to_string(),
+                                n => format!("{n} without a value"),
+                            }}
+                        }
                     }
                 }
             }
+            CardContent {
             dl { class: "overview__facts",
                 for fact in facts {
                     dt { key: "{fact.label}", "{fact.label}" }
@@ -795,7 +831,10 @@ fn IdentityCard(facts: Vec<Fact>) -> Element {
                     dd {
                         match model.as_deref().map(|m| m.packs.works_in) {
                             Some(mode) => rsx! {
-                                Chip { kind: ChipKind::Assist, icon: mode.icon(), label: mode.label().to_string() }
+                                Badge { variant: BadgeVariant::Outline,
+                                    {mode_icon(mode, 12)}
+                                    "{mode.label()}"
+                                }
                             },
                             None => rsx! { span { class: "overview__unanswered", "not read yet" } },
                         }
@@ -817,7 +856,7 @@ fn IdentityCard(facts: Vec<Fact>) -> Element {
                                         if more > 0 {
                                             " "
                                             Button {
-                                                variant: ButtonVariant::Text,
+                                                variant: ButtonVariant::Link,
                                                 onclick: move |_| exports_open.set(Some(all.clone())),
                                                 "and {more} more"
                                             }
@@ -868,6 +907,7 @@ fn IdentityCard(facts: Vec<Fact>) -> Element {
                         }
                     }
                 }
+            }
         }
         ExportsDialog { open: exports_open }
     }
@@ -880,17 +920,22 @@ fn ExportsDialog(mut open: Signal<Option<DelegatedLine>>) -> Element {
     rsx! {
         Dialog {
             open: open().is_some(),
-            title: open().map(|l| l.folder).unwrap_or_default(),
-            icon: "output",
-            ondismiss: move |_| open.set(None),
-            actions: rsx! {
-                Button { variant: ButtonVariant::Text, onclick: move |_| open.set(None), "Close" }
-            },
-            p { "What this interface folder exports:" }
-            ul {
-                for name in open().map(|l| l.exports).unwrap_or_default() {
-                    li { key: "{name}", code { "{name}" } }
+            on_open_change: move |now: bool| {
+                if !now {
+                    open.set(None);
                 }
+            },
+            DialogTitle { {open().map(|l| l.folder).unwrap_or_default()} }
+            div { class: "dialog-body",
+                p { "What this interface folder exports:" }
+                ul {
+                    for name in open().map(|l| l.exports).unwrap_or_default() {
+                        li { key: "{name}", code { "{name}" } }
+                    }
+                }
+            }
+            div { class: "dialog-actions",
+                Button { variant: ButtonVariant::Ghost, onclick: move |_| open.set(None), "Close" }
             }
         }
     }

@@ -1,21 +1,21 @@
-//! The root Dioxus component: the stores, the app coroutine, the stylesheets and the font,
+//! The root component: the stores, the app coroutine, the component library's theme, the
+//! app's own layout stylesheet and the Geist typeface,
 //! the theme attribute on the document root, the window's title, and the shell around the
 //! current view.
 
 use dioxus::prelude::*;
 use satz_studio_core::settings::{Settings, Theme, settings_path};
 
+use crate::components::toast::ToastProvider;
 use crate::shell::Shell;
 use crate::state::{
     AppStore, AppStoreStoreExt, DiagnosticSelection, StudioLookStoreStoreExt, UpdateStoreStoreExt,
     app_coroutine, satz_available, studio_available, window_title,
 };
 
-const TOKENS: Asset = asset!("/assets/css/tokens.css");
-const BASE: Asset = asset!("/assets/css/base.css");
-const COMPONENTS: Asset = asset!("/assets/css/components.css");
-const VIEWS: Asset = asset!("/assets/css/views.css");
-const SYMBOLS: Asset = asset!("/assets/fonts/MaterialSymbolsRounded.woff2");
+const THEME: Asset = asset!("/assets/dx-components-theme.css");
+const APP: Asset = asset!("/assets/app.css");
+const GEIST: Asset = asset!("/assets/fonts/Geist-Variable.ttf");
 
 #[component]
 pub fn App() -> Element {
@@ -33,8 +33,8 @@ fn Fatal(error: String) -> Element {
         .map(|p| p.display().to_string())
         .unwrap_or_else(|e| e.to_string());
     rsx! {
-        document::Stylesheet { href: TOKENS }
-        document::Stylesheet { href: BASE }
+        document::Stylesheet { href: THEME }
+        document::Stylesheet { href: APP }
         main { class: "fatal",
             h1 { "satz-studio cannot start" }
             p { "{error}" }
@@ -86,7 +86,8 @@ fn Studio(settings: Settings) -> Element {
         dioxus::desktop::window().set_title(&window_title(studio.as_ref(), satz_update.as_ref()));
     });
 
-    // The theme lives on the document root so `body` and every portal see the same tokens.
+    // The component library's theme reads light or dark from `data-theme` on the document
+    // root, and follows the system while the attribute is absent.
     use_effect(move || {
         let theme = app.settings().read().theme;
         let script = match theme {
@@ -102,15 +103,13 @@ fn Studio(settings: Settings) -> Element {
     });
 
     let font_face = format!(
-        "@font-face {{ font-family: 'Material Symbols Rounded'; font-style: normal; font-weight: 100 700; font-display: block; src: url('{SYMBOLS}') format('woff2'); }}"
+        "@font-face {{ font-family: 'Geist'; font-style: normal; font-weight: 100 900; font-display: block; src: url('{GEIST}') format('truetype'); }}"
     );
 
     rsx! {
-        document::Stylesheet { href: TOKENS }
-        document::Stylesheet { href: BASE }
-        document::Stylesheet { href: COMPONENTS }
-        document::Stylesheet { href: VIEWS }
+        document::Stylesheet { href: THEME }
+        document::Stylesheet { href: APP }
         document::Style { "{font_face}" }
-        Shell {}
+        ToastProvider { Shell {} }
     }
 }

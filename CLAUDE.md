@@ -25,8 +25,10 @@ the rules that apply to every change, whoever or whatever makes it.
   gate cannot see is a NAME in prose — that is what review is for.
 - **The repository is under the Apache License 2.0** (`LICENSE`), and `NOTICE` is what
   a redistribution carries with it: the copyright line, the license paragraph, and
-  every piece of material bundled here under other terms — the Material Symbols font
-  (`crates/satz-studio/assets/fonts/`, Apache-2.0), the vendored grammar
+  every piece of material bundled here under other terms — the Geist typeface
+  (`crates/satz-studio/assets/fonts/`, OFL-1.1), the Dioxus component library's components
+  and theme (`crates/satz-studio/src/components/`,
+  `crates/satz-studio/assets/dx-components-theme.css`, MIT or Apache-2.0), the vendored grammar
   (`vendor/satz-tree-sitter/`, MIT, a separate repository) and the tree-sitter runtime
   headers beside it (`vendor/satz-tree-sitter/src/tree_sitter/`, MIT, from the
   tree-sitter project) — and, at its end, satz's own `NOTICE` verbatim, since satz-core is
@@ -135,6 +137,13 @@ the rules that apply to every change, whoever or whatever makes it.
   app adds gets one word, proposed for the glossary in the satz repository.
   `scripts/check-wording.sh` reports what a pattern finds (`scripts/check-wording.txt`,
   satz's list; an `allow` line exempts a narrow second use); the third rule is review's.
-- **The window follows Material 3 Expressive.** The tokens and anatomies are
-  `crates/satz-studio/assets/css/`; `docs/ui.md` says how far each UI component follows
-  the guidelines and where it departs. A new UI component states which anatomy it is.
+- **The window is built from the Dioxus component library and takes its look (ADR
+  0034).** `crates/satz-studio/src/components/` is the library's own code, copied by
+  `dx components add` and replaced by `dx components update`: never edited by hand. Its
+  theme is `crates/satz-studio/assets/dx-components-theme.css`, its icons are Lucide
+  (`dioxus-icons`), its typeface is Geist. `crates/satz-studio/assets/app.css` lays the
+  UI components out and never repaints or re-pads one. What the library has no UI component for
+  is the app's own, built from library parts, in `crates/satz-studio/src/widgets/`;
+  `docs/ui.md` says which library component each part of the window is. A new control is
+  a library component first. The app is run through `dx` (`dx serve --package satz-studio
+  --hot-reload true`), which builds the components' stylesheets into it.

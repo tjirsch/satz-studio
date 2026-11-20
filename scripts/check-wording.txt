@@ -44,7 +44,7 @@ allow	0071-each-expands-a-list-into-labelled-bodies-at-compile-time
 allow	Prowler-CLI via ADC, SCC-MCP-
 allow	IAM Credentials|Corporate login credentials
 allow	grep -qi 'credential|"credential", "token"
-allow	(Dioxus|Material( 3)?|UI) components?|[Cc]omponent library|m3\.material\.io/components|components\.css|src/components
+allow	(Dioxus|Material( 3)?|UI|library('s)?) components?|[Cc]omponents?'|[Cc]omponent library|dx components|dx-components|DioxusLabs/components|dioxuslabs\.github\.io/components|src/components
 allow	`(Diagnostic(::[a-z_]+)?|diagnostics)`|DiagnosticSelection\(Signal<Option<Diagnostic>>\)
 allow	0011-the-licence-is-apache-2-0
 allow	`suppression`, `emit`, `prerequisites`

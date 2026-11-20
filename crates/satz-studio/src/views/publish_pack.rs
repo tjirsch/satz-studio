@@ -9,7 +9,12 @@
 use dioxus::prelude::*;
 use satz_studio_core::satz::workload::{PublishRefusal, folder_sources};
 
-use crate::components::{Button, ButtonVariant, Dialog, Icon, LinearProgress, Radio};
+use dioxus_icons::lucide::{CircleAlert, FolderUp, Plus, TriangleAlert};
+
+use crate::components::button::{Button, ButtonVariant};
+use crate::components::dialog::{Dialog, DialogTitle};
+use crate::components::progress::Progress;
+use crate::components::radio_group::{RadioGroup, RadioItem};
 use crate::state::{AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt, PackOp};
 use crate::views::pack_sources::{Refused, Sheet};
 
@@ -75,31 +80,31 @@ pub fn PublishDialog(
 
     let actions = match (&folders, &exists) {
         (Some(f), _) if f.is_empty() => rsx! {
-            Button { variant: ButtonVariant::Text, onclick: move |_| close(), "Cancel" }
+            Button { variant: ButtonVariant::Ghost, onclick: move |_| close(), "Cancel" }
             Button {
-                variant: ButtonVariant::Tonal,
-                icon: "add",
+                variant: ButtonVariant::Secondary,
                 onclick: move |_| {
                     app.estate().source_change().set(None);
                     close();
                     sheet.set(Sheet::Add);
                 },
+                Plus { size: 16 }
                 "Add a source…"
             }
         },
         (_, Some(_)) if confirming() => {
             let (id, target) = (id.clone(), target.clone());
             rsx! {
-                Button { variant: ButtonVariant::Text, onclick: move |_| confirming.set(false), "Cancel" }
+                Button { variant: ButtonVariant::Ghost, onclick: move |_| confirming.set(false), "Cancel" }
                 Button {
-                    variant: ButtonVariant::Filled,
-                    icon: "warning",
+                    variant: ButtonVariant::Destructive,
                     disabled: busy || target.is_none(),
                     onclick: move |_| {
                         if let Some(source) = target.clone() {
                             run(id.clone(), source, true);
                         }
                     },
+                    TriangleAlert { size: 16 }
                     "Overwrite"
                 }
             }
@@ -107,25 +112,24 @@ pub fn PublishDialog(
         _ => {
             let (id, target) = (id.clone(), target.clone());
             rsx! {
-                Button { variant: ButtonVariant::Text, onclick: move |_| close(), "Cancel" }
+                Button { variant: ButtonVariant::Ghost, onclick: move |_| close(), "Cancel" }
                 if exists.is_some() {
                     Button {
-                        variant: ButtonVariant::Text,
-                        icon: "warning",
+                        variant: ButtonVariant::Ghost,
                         disabled: busy,
                         onclick: move |_| confirming.set(true),
+                        TriangleAlert { size: 16 }
                         "Overwrite…"
                     }
                 }
                 Button {
-                    variant: ButtonVariant::Filled,
-                    icon: "drive_folder_upload",
                     disabled: busy || target.is_none(),
                     onclick: move |_| {
                         if let Some(source) = target.clone() {
                             run(id.clone(), source, false);
                         }
                     },
+                    FolderUp { size: 16 }
                     "Store"
                 }
             }
@@ -135,11 +139,14 @@ pub fn PublishDialog(
     rsx! {
         Dialog {
             open: true,
-            title: "Store {id} in a pack source",
-            icon: "drive_folder_upload",
+            on_open_change: move |now: bool| {
+                if !now {
+                    close();
+                }
+            },
             class: "interfaces__add",
-            ondismiss: move |_| close(),
-            actions,
+            DialogTitle { "Store {id} in a pack source" }
+            div { class: "dialog-body",
             match &folders {
                 None => rsx! {
                     p { class: "interfaces__supporting", "The pack sources are being read." }
@@ -151,19 +158,17 @@ pub fn PublishDialog(
                     p { class: "interfaces__supporting",
                         "satz publish-pack checks the pack inside this estate against review-pack's bar, copies it into the folder and records it in origin.toml as fetched from there: from then on update-pack follows the source."
                     }
-                    div { class: "wpacks__form",
-                        for (name, dir) in f.iter().cloned() {
-                            Radio {
-                                key: "{name}",
-                                checked: target.as_deref() == Some(name.as_str()),
-                                label: "{name} · {dir}",
-                                disabled: busy,
-                                onselect: move |_| {
-                                    chosen.set(Some(name.clone()));
-                                    confirming.set(false);
-                                    app.estate().pack_publish().set(None);
-                                },
-                            }
+                    RadioGroup {
+                        class: "wpacks__form",
+                        value: target.clone(),
+                        disabled: busy,
+                        on_value_change: move |name: String| {
+                            chosen.set(Some(name));
+                            confirming.set(false);
+                            app.estate().pack_publish().set(None);
+                        },
+                        for (i, (name, dir)) in f.iter().cloned().enumerate() {
+                            RadioItem { key: "{name}", value: name.clone(), index: i, "{name} · {dir}" }
                         }
                     }
                 },
@@ -171,7 +176,7 @@ pub fn PublishDialog(
             match (&refusal, &refused) {
                 (Some(PublishRefusal::Bar { lines, command }), _) => rsx! {
                     div { class: "interfaces__error",
-                        Icon { name: "error", size: 20 }
+                        CircleAlert { size: 20 }
                         div {
                             p { "{id} does not clear review-pack's bar inside this estate:" }
                             ul {
@@ -197,8 +202,10 @@ pub fn PublishDialog(
                 }
             }
             if busy {
-                LinearProgress {}
+                Progress { value: None::<f64>, "aria-label": "working" }
             }
+            }
+            div { class: "dialog-actions", {actions} }
         }
     }
 }

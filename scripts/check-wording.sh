@@ -17,7 +17,8 @@
 # `presets/docs/`, which satz generates from the presets and their changelog; the
 # German-language skill files (`skills/estate-documentation/`,
 # `skills/security-review/scripts/build_audit.py`), which follow German usage; and
-# third-party trees.
+# third-party trees — the vendored ones and the Dioxus component library's code copied
+# into `crates/satz-studio/src/components/`.
 #
 # The word list holds two kinds of line. `<extended regex><TAB><what to say>` is a
 # wording that is not allowed (case-insensitive). `allow<TAB><extended regex>` exempts a
@@ -34,7 +35,7 @@ case "${1:-}" in
   *) files=$(printf '%s\n' "$@") ;;
 esac
 files=$(printf '%s\n' "$files" | grep -E '\.(md|satz|rs|sh|py|toml)$' \
-  | grep -Ev '^(docs/adr/00([01][0-9]|2[0-8])-|vendor/|target/|.*CHANGELOG\.md$|scripts/check-wording\.(sh|txt)$|THIRD-PARTY|NOTICE$|LICENSE$|crates/satz-studio-core/tests/fixtures/)' || true)
+  | grep -Ev '^(docs/adr/00([01][0-9]|2[0-8])-|vendor/|target/|.*CHANGELOG\.md$|scripts/check-wording\.(sh|txt)$|THIRD-PARTY|NOTICE$|LICENSE$|crates/satz-studio-core/tests/fixtures/|crates/satz-studio/src/components/)' || true)
 [ -n "$files" ] || { echo "check-wording: OK (0 files)"; exit 0; }
 
 # The text that is judged, one line per source line as `path:line:text`. A Rust source

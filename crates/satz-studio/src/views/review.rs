@@ -18,15 +18,25 @@ use satz_studio_core::diag::Diagnostic;
 use satz_studio_core::satz::reports::FindingSeverity;
 use satz_studio_core::satz::review::{self, ReviewedPack};
 
-use crate::components::{
-    Button, ButtonVariant, Card, CardVariant, Chip, ChipKind, Icon, LinearProgress, List, ListItem,
-    Switch,
+use dioxus_icons::lucide::{
+    CircleAlert, CircleCheck, Copy as CopyIcon, FileInput, FileText, FolderOpen,
+    History as HistoryIcon, Info, ListPlus, Lock, MessageSquareText, RefreshCw, Shield,
+    TriangleAlert, Upload, X as XIcon,
 };
+
+use crate::components::badge::{Badge, BadgeVariant};
+use crate::components::button::{Button, ButtonVariant};
+use crate::components::card::{Card, CardContent, CardHeader};
+use crate::components::item::{
+    Item, ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemSize, ItemTitle,
+};
+use crate::components::progress::Progress;
 use crate::state::{
     AppStore, AppStoreStoreExt, DiagnosticSelection, EstateAction, EstateStoreStoreExt,
     PackReviewState,
 };
 use crate::views::commands::{REVIEW_LABEL, copy_to_clipboard};
+use crate::widgets::SwitchRow;
 
 /// The OS open dialog for the pack, in the directory of the last pack reviewed, else the
 /// estate's library; the chosen file goes to the estate coroutine.
@@ -90,61 +100,64 @@ pub fn PackReviewCard() -> Element {
     });
 
     rsx! {
-        Card { variant: CardVariant::Outlined, class: "review",
-            div { class: "review__head",
-                Icon { name: "rate_review", size: 24 }
-                h2 { class: "review__title", "{REVIEW_LABEL}" }
-                span { class: "grow" }
-                Switch {
-                    checked: against(),
-                    label: "Judge it inside {open.name}",
-                    disabled: reviewing,
-                    onchange: move |v: bool| against.set(v),
-                }
-                Button {
-                    variant: ButtonVariant::Filled,
-                    icon: "file_open",
-                    disabled: reviewing,
-                    onclick: {
-                        let start = start.clone();
-                        move |_| choose_and_review(handle, start.clone(), against())
-                    },
-                    "Choose a pack…"
-                }
-            }
-            p { class: "review__lead",
-                "satz review-preset holds a pack to the library's own bar: it parses, it is formatted, its header says what it is, its version has a changelog row, it declares no membership, it runs no legacy constraint beside its managed replacement, every type it creates has a prerequisite row, and it transpiles. The pack is folded into an estate made of the documented example values, or into "
-                code { "{open.name}" }
-                " with the switch on — for a pack that estate uses. Each finding is in the drawer at its line."
-            }
-            if reviewing {
-                LinearProgress {}
-            }
-            match review {
-                None => rsx! {},
-                Some(PackReviewState::Failed { pack, error }) => rsx! {
-                    div { class: "review__failed", role: "alert",
-                        Icon { name: "error", size: 20 }
-                        div { class: "grow",
-                            code { "{pack.display()}" }
-                            p { "{error}" }
-                        }
-                        Button {
-                            variant: ButtonVariant::Tonal,
-                            icon: "refresh",
-                            disabled: reviewing,
-                            onclick: {
-                                let pack = pack.clone();
-                                move |_| handle.send(EstateAction::ReviewPack { pack: pack.clone(), against: against() })
-                            },
-                            "Review again"
-                        }
-                        Button { variant: ButtonVariant::Text, icon: "close", onclick: move |_| handle.send(EstateAction::CloseReview), "Close" }
+        Card { class: "review",
+            CardHeader {
+                div { class: "review__head",
+                    MessageSquareText { size: 24 }
+                    h2 { class: "review__title", "{REVIEW_LABEL}" }
+                    span { class: "grow" }
+                    SwitchRow {
+                        checked: against(),
+                        label: "Judge it inside {open.name}",
+                        disabled: reviewing,
+                        onchange: move |v: bool| against.set(v),
                     }
-                },
-                Some(PackReviewState::Reviewed(reviewed)) => rsx! {
-                    Reviewed { reviewed, presets: presets.clone(), reviewing }
-                },
+                    Button {
+                        disabled: reviewing,
+                        onclick: {
+                            let start = start.clone();
+                            move |_| choose_and_review(handle, start.clone(), against())
+                        },
+                        FileInput { size: 16 }
+                        "Choose a pack…"
+                    }
+                }
+            }
+            CardContent {
+                p { class: "review__lead",
+                    "satz review-preset holds a pack to the library's own bar: it parses, it is formatted, its header says what it is, its version has a changelog row, it declares no membership, it runs no legacy constraint beside its managed replacement, every type it creates has a prerequisite row, and it transpiles. The pack is folded into an estate made of the documented example values, or into "
+                    code { "{open.name}" }
+                    " with the switch on — for a pack that estate uses. Each finding is in the drawer at its line."
+                }
+                if reviewing {
+                    Progress { value: None::<f64>, "aria-label": "working" }
+                }
+                match review {
+                    None => rsx! {},
+                    Some(PackReviewState::Failed { pack, error }) => rsx! {
+                        div { class: "review__failed", role: "alert",
+                            CircleAlert { size: 20 }
+                            div { class: "grow",
+                                code { "{pack.display()}" }
+                                p { "{error}" }
+                            }
+                            Button {
+                                variant: ButtonVariant::Secondary,
+                                disabled: reviewing,
+                                onclick: {
+                                    let pack = pack.clone();
+                                    move |_| handle.send(EstateAction::ReviewPack { pack: pack.clone(), against: against() })
+                                },
+                                RefreshCw { size: 16 }
+                                "Review again"
+                            }
+                            Button { variant: ButtonVariant::Ghost, onclick: move |_| handle.send(EstateAction::CloseReview), XIcon { size: 16 } "Close" }
+                        }
+                    },
+                    Some(PackReviewState::Reviewed(reviewed)) => rsx! {
+                        Reviewed { reviewed, presets: presets.clone(), reviewing }
+                    },
+                }
             }
         }
     }
@@ -179,37 +192,50 @@ fn Reviewed(reviewed: ReviewedPack, presets: PathBuf, reviewing: bool) -> Elemen
         div { class: "review__summary",
             code { class: "review__path", "{reviewed.path.display()}" }
             span { class: "grow" }
-            Chip {
-                kind: ChipKind::Assist,
-                icon: if passed { "check_circle" } else { "error" },
-                label: if passed { "clears the bar" } else { "does not clear the bar yet" },
-                error: !passed,
+            Badge { variant: if passed { BadgeVariant::Outline } else { BadgeVariant::Destructive },
+                if passed { CircleCheck { size: 12 } } else { CircleAlert { size: 12 } }
+                if passed { "clears the bar" } else { "does not clear the bar yet" }
             }
-            Chip { kind: ChipKind::Assist, icon: "error", label: format!("{errors} errors"), error: errors > 0 }
-            Chip { kind: ChipKind::Assist, icon: "warning", label: format!("{warnings} warnings") }
-            Chip { kind: ChipKind::Assist, icon: "info", label: format!("{infos} notes") }
+            Badge { variant: if errors > 0 { BadgeVariant::Destructive } else { BadgeVariant::Outline },
+                CircleAlert { size: 12 }
+                "{errors} errors"
+            }
+            Badge { variant: BadgeVariant::Outline,
+                TriangleAlert { size: 12 }
+                "{warnings} warnings"
+            }
+            Badge { variant: BadgeVariant::Outline,
+                Info { size: 12 }
+                "{infos} notes"
+            }
             Button {
-                variant: ButtonVariant::Tonal,
-                icon: "refresh",
+                variant: ButtonVariant::Secondary,
                 disabled: reviewing,
                 onclick: {
                     let path = path.clone();
                     let against = reviewed.against;
                     move |_| handle.send(EstateAction::ReviewPack { pack: path.clone(), against })
                 },
+                RefreshCw { size: 16 }
                 "Review again"
             }
-            Button { variant: ButtonVariant::Text, icon: "close", onclick: move |_| handle.send(EstateAction::CloseReview), "Close" }
+            Button { variant: ButtonVariant::Ghost, onclick: move |_| handle.send(EstateAction::CloseReview), XIcon { size: 16 } "Close" }
         }
         p { class: "review__emits", "{folded} · creates {creates}" }
         div { class: "review__panes",
-            List { class: "review__findings",
+            ItemGroup { class: "review__findings",
                 for (i, d) in diagnostics.into_iter().enumerate() {
                     {
                         let icon = match d.severity {
-                            satz_studio_core::diag::Severity::Error => "error",
-                            satz_studio_core::diag::Severity::Warning => "warning",
-                            satz_studio_core::diag::Severity::Info => "info",
+                            satz_studio_core::diag::Severity::Error => rsx! {
+                                CircleAlert { size: 20, class: "drawer__icon drawer__icon--error" }
+                            },
+                            satz_studio_core::diag::Severity::Warning => rsx! {
+                                TriangleAlert { size: 20, class: "drawer__icon drawer__icon--warning" }
+                            },
+                            satz_studio_core::diag::Severity::Info => rsx! {
+                                Info { size: 20, class: "drawer__icon drawer__icon--info" }
+                            },
                         };
                         let headline = d.message.lines().next().unwrap_or_default().to_string();
                         let fix = r.findings.get(i).and_then(|f| f.fix.clone());
@@ -222,13 +248,16 @@ fn Reviewed(reviewed: ReviewedPack, presets: PathBuf, reviewing: bool) -> Elemen
                         let is_selected = selected.as_ref() == Some(&d);
                         let mut select = selection.0;
                         rsx! {
-                            ListItem {
+                            Item {
                                 key: "{i}",
-                                headline,
-                                supporting,
-                                selected: is_selected,
-                                leading: rsx! { Icon { name: icon, size: 20, class: "drawer__icon drawer__icon--{icon}" } },
+                                size: ItemSize::Sm,
                                 onclick: move |_| select.set(Some(d.clone())),
+                                "data-selected": if is_selected { "true" } else { "false" },
+                                ItemMedia { {icon} }
+                                ItemContent {
+                                    ItemTitle { "{headline}" }
+                                    ItemDescription { "{supporting}" }
+                                }
                             }
                         }
                     }
@@ -268,50 +297,54 @@ fn Upstream(reviewed: ReviewedPack) -> Element {
     let path = reviewed.path.display().to_string();
     let folder = reviewed.path.parent().map(Path::to_path_buf);
     rsx! {
-        Card { variant: CardVariant::Filled, class: "review__destination",
-            div { class: "review__destination-head",
-                Icon { name: "publish", size: 24 }
-                h3 { class: "review__destination-title", "Upstream" }
+        Card { class: "review__destination",
+            CardHeader {
+                div { class: "review__destination-head",
+                    Upload { size: 24 }
+                    h3 { class: "review__destination-title", "Upstream" }
+                }
             }
-            p { "The pack joins satz's library, for every estate. Sending it is manual until satz ships contribute-pack: a pull request to the satz repository with" }
-            ul { class: "review__steps",
-                li {
-                    Icon { name: "description", size: 18 }
-                    match &name {
-                        Ok(n) => rsx! { span { "the file as " code { "{n}" } ", or in the folder of its kind under " code { "presets/" } } },
-                        Err(e) => rsx! { span { "{e}" } },
+            CardContent {
+                p { "The pack joins satz's library, for every estate. Sending it is manual until satz ships contribute-pack: a pull request to the satz repository with" }
+                ul { class: "review__steps",
+                    li {
+                        FileText { size: 18 }
+                        match &name {
+                            Ok(n) => rsx! { span { "the file as " code { "{n}" } ", or in the folder of its kind under " code { "presets/" } } },
+                            Err(e) => rsx! { span { "{e}" } },
+                        }
+                    }
+                    li { class: if !passed { "review__step--open" },
+                        if passed { CircleCheck { size: 18 } } else { CircleAlert { size: 18 } }
+                        span { if passed { "a clean review: this pack clears the bar" } else { "a clean review: every error above answered first" } }
+                    }
+                    li {
+                        HistoryIcon { size: 18 }
+                        span { "a row for its version under " code { "## Changelog" } " in " code { "presets/README.md" } }
+                    }
+                    li {
+                        Shield { size: 18 }
+                        span { "no organization in the file: the review reads every organization and project id, e-mail address and domain that is not a documented example value as an error above, and each one becomes a param before the pack goes upstream." }
                     }
                 }
-                li { class: if !passed { "review__step--open" },
-                    Icon { name: if passed { "check_circle" } else { "error" }, size: 18 }
-                    span { if passed { "a clean review: this pack clears the bar" } else { "a clean review: every error above answered first" } }
-                }
-                li {
-                    Icon { name: "history", size: 18 }
-                    span { "a row for its version under " code { "## Changelog" } " in " code { "presets/README.md" } }
-                }
-                li {
-                    Icon { name: "shield", size: 18 }
-                    span { "no organization in the file: the review reads every organization and project id, e-mail address and domain that is not a documented example value as an error above, and each one becomes a param before the pack goes upstream." }
-                }
-            }
-            div { class: "review__actions",
-                Button {
-                    variant: ButtonVariant::Tonal,
-                    icon: "content_copy",
-                    onclick: move |_| copy_to_clipboard(app, &path),
-                    "Copy the path"
-                }
-                if let Some(folder) = folder {
+                div { class: "review__actions",
                     Button {
-                        variant: ButtonVariant::Text,
-                        icon: "folder_open",
-                        onclick: move |_| {
-                            if let Err(e) = open::that(&folder) {
-                                crate::state::toast(app, crate::state::ToastKind::Error, format!("{}: {e}", folder.display()));
-                            }
-                        },
-                        "Open the folder"
+                        variant: ButtonVariant::Secondary,
+                        onclick: move |_| copy_to_clipboard(app, &path),
+                        CopyIcon { size: 16 }
+                        "Copy the path"
+                    }
+                    if let Some(folder) = folder {
+                        Button {
+                            variant: ButtonVariant::Ghost,
+                            onclick: move |_| {
+                                if let Err(e) = open::that(&folder) {
+                                    crate::state::toast(app, crate::state::ToastKind::Error, format!("{}: {e}", folder.display()));
+                                }
+                            },
+                            FolderOpen { size: 16 }
+                            "Open the folder"
+                        }
                     }
                 }
             }
@@ -326,33 +359,36 @@ fn Private(reviewed: ReviewedPack, presets: PathBuf, reviewing: bool) -> Element
     let target = review::local_target(&presets, &reviewed.path);
     let placed = reviewed.is_in_library(&presets);
     rsx! {
-        Card { variant: CardVariant::Filled, class: "review__destination",
-            div { class: "review__destination-head",
-                Icon { name: "lock", size: 24 }
-                h3 { class: "review__destination-title", "Private" }
+        Card { class: "review__destination",
+            CardHeader {
+                div { class: "review__destination-head",
+                    Lock { size: 24 }
+                    h3 { class: "review__destination-title", "Private" }
+                }
             }
-            p { "The pack stays with this estate, in its library, under the " code { ".local.satz" } " name satz's updates never touch. A " code { "use" } " line in the estate is what switches it on." }
-            p { class: "review__note", "A type satz's prerequisite table has no row for is an error either way: that row goes upstream, into satz's " code { "src/prerequisites.rs" } ", even for a pack that stays here." }
-            match target {
-                Err(e) => rsx! { p { class: "review__refused", role: "alert", "{e}" } },
-                Ok(target) if placed => rsx! {
-                    p { class: "review__placed",
-                        Icon { name: "check_circle", size: 18 }
-                        span { "This is the library's own " code { "{target.display()}" } "." }
-                    }
-                },
-                Ok(target) => rsx! {
-                    p { class: "review__target", "Goes to " code { "{target.display()}" } }
-                    div { class: "review__actions",
-                        Button {
-                            variant: ButtonVariant::Filled,
-                            icon: "library_add",
-                            disabled: reviewing,
-                            onclick: move |_| handle.send(EstateAction::PlacePrivate),
-                            "Place in the library"
+            CardContent {
+                p { "The pack stays with this estate, in its library, under the " code { ".local.satz" } " name satz's updates never touch. A " code { "use" } " line in the estate is what switches it on." }
+                p { class: "review__note", "A type satz's prerequisite table has no row for is an error either way: that row goes upstream, into satz's " code { "src/prerequisites.rs" } ", even for a pack that stays here." }
+                match target {
+                    Err(e) => rsx! { p { class: "review__refused", role: "alert", "{e}" } },
+                    Ok(target) if placed => rsx! {
+                        p { class: "review__placed",
+                            CircleCheck { size: 18 }
+                            span { "This is the library's own " code { "{target.display()}" } "." }
                         }
-                    }
-                },
+                    },
+                    Ok(target) => rsx! {
+                        p { class: "review__target", "Goes to " code { "{target.display()}" } }
+                        div { class: "review__actions",
+                            Button {
+                                disabled: reviewing,
+                                onclick: move |_| handle.send(EstateAction::PlacePrivate),
+                                ListPlus { size: 16 }
+                                "Place in the library"
+                            }
+                        }
+                    },
+                }
             }
         }
     }

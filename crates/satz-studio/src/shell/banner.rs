@@ -1,6 +1,9 @@
 use dioxus::prelude::*;
 
-use crate::components::{Button, ButtonVariant, Icon, LinearProgress};
+use dioxus_icons::lucide::{BadgeAlert, CircleAlert, ExternalLink};
+
+use crate::components::button::{Button, ButtonVariant};
+use crate::components::progress::Progress;
 use crate::state::{
     AppAction, AppStore, AppStoreStoreExt, InstallStoreStoreExt, SatzStatus,
     StudioLookStoreStoreExt, ToastKind, UpdateStoreStoreExt, View, install_offer,
@@ -27,7 +30,7 @@ pub fn SatzBanner() -> Element {
             None => rsx! {},
         },
         SatzStatus::Unknown => rsx! {
-            div { class: "banner banner--progress", LinearProgress {} }
+            div { class: "banner banner--progress", Progress { value: None::<f64>, "aria-label": "locating satz" } }
         },
         SatzStatus::TooOld {
             found, required, ..
@@ -64,11 +67,10 @@ fn ErrorBanner(text: String, update: bool, install: bool) -> Element {
     let installing = app.install().running().cloned();
     rsx! {
         div { class: "banner banner--error", role: "alert",
-            Icon { name: "error", filled: true }
+            CircleAlert { size: 16 }
             span { class: "banner__text", "{text}" }
             if update {
                 Button {
-                    variant: ButtonVariant::Filled,
                     class: "banner__action",
                     disabled: updating,
                     onclick: move |_| handle.send(AppAction::UpdateSatz { check_only: false }),
@@ -77,18 +79,17 @@ fn ErrorBanner(text: String, update: bool, install: bool) -> Element {
             }
             if install {
                 Button {
-                    variant: ButtonVariant::Filled,
                     class: "banner__action",
                     disabled: installing,
                     onclick: move |_| handle.send(AppAction::InstallSatz),
                     if installing { "Installing satz…" } else { "Install satz" }
                 }
                 if installing {
-                    Button { variant: ButtonVariant::Text, class: "banner__action", onclick: move |_| handle.send(AppAction::CancelInstall), "Cancel" }
+                    Button { variant: ButtonVariant::Ghost, class: "banner__action", onclick: move |_| handle.send(AppAction::CancelInstall), "Cancel" }
                 }
             }
-            Button { variant: ButtonVariant::Text, class: "banner__action", onclick: move |_| handle.send(AppAction::LocateSatz), "Try again" }
-            Button { variant: ButtonVariant::Tonal, class: "banner__action", onclick: move |_| app.nav().set(View::Settings), "Settings" }
+            Button { variant: ButtonVariant::Ghost, class: "banner__action", onclick: move |_| handle.send(AppAction::LocateSatz), "Try again" }
+            Button { variant: ButtonVariant::Secondary, class: "banner__action", onclick: move |_| app.nav().set(View::Settings), "Settings" }
         }
     }
 }
@@ -107,7 +108,7 @@ fn NoticeBanner(version: String, text: String) -> Element {
     let look_again = !looking && !matches!(look, Some(Ok(_)));
     rsx! {
         div { class: "banner banner--notice", role: "status",
-            Icon { name: "new_releases", filled: true }
+            BadgeAlert { size: 16 }
             div { class: "banner__text",
                 p { "{text}" }
                 if looking {
@@ -118,27 +119,26 @@ fn NoticeBanner(version: String, text: String) -> Element {
             }
             if let Some((version, page)) = release {
                 Button {
-                    variant: ButtonVariant::Filled,
                     class: "banner__action",
-                    icon: "open_in_new",
                     onclick: move |_| {
                         if let Err(e) = open::that(&page) {
                             toast(app, ToastKind::Error, format!("{page}: {e}"));
                         }
                     },
+                    ExternalLink { size: 16 }
                     "Open satz-studio {version}"
                 }
             }
             if look_again {
                 Button {
-                    variant: ButtonVariant::Tonal,
+                    variant: ButtonVariant::Secondary,
                     class: "banner__action",
                     onclick: move |_| handle.send(AppAction::LookForStudioUpdate),
                     "Look for a satz-studio update"
                 }
             }
             Button {
-                variant: ButtonVariant::Text,
+                variant: ButtonVariant::Ghost,
                 class: "banner__action",
                 onclick: move |_| handle.send(AppAction::DismissSatzNotice(version.clone())),
                 "Dismiss"

@@ -7,8 +7,8 @@
 //! nothing. An unanswered question reads Accept whether or not its value was changed —
 //! accepting the offered default writes it — and carries a text Skip, which moves on
 //! without writing. An answered question reads Next while its field holds the written
-//! value, or its chips the bound option, and Accept as soon as the value differs from it;
-//! it has no Skip. Editing the field or picking a chip writes nothing, and neither does
+//! value, or its option buttons the bound one, and Accept as soon as the value differs from it;
+//! it has no Skip. Editing the field or picking an option writes nothing, and neither does
 //! the field losing focus; Enter in a text or number field is the keyboard form of the
 //! filled button. The walk follows its question by subject and remembers the questions
 //! it moved away from, so Back returns to one whether it is answered by then or not; with
@@ -19,16 +19,24 @@
 //! list.
 
 use dioxus::prelude::*;
+use dioxus_icons::lucide::{
+    ArrowLeft, ArrowRight, Ban, Boxes, Check, CheckCheck, Circle, CircleCheck, CircleCheckBig,
+    DoorOpen, History, Lightbulb, MessageCircleQuestionMark, OctagonAlert, PencilLine, Sparkles,
+};
 use satz_studio_core::model::answer_kind;
 use satz_studio_core::satz::reports::{
     Blast, NO_BRANCH, QuestionKind, QuestionRow, QuestionState, Reversal,
 };
 
-use crate::components::{
-    Button, ButtonVariant, Card, CardVariant, Chip, ChipKind, Draft, FieldKind, Icon,
-    LinearProgress, List, ListItem, Switch, TypedField,
+use crate::components::badge::{Badge, BadgeVariant};
+use crate::components::button::{Button, ButtonSize, ButtonVariant};
+use crate::components::card::{Card, CardContent};
+use crate::components::item::{
+    Item, ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemSize, ItemTitle,
 };
+use crate::components::progress::Progress;
 use crate::state::{AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt};
+use crate::widgets::{Draft, FieldKind, SwitchRow, Tip, TypedField};
 
 /// The questions in the order the view walks them: the unanswered ones as the report
 /// lists them, then — when asked for — the answered ones and the ones not asked.
@@ -187,7 +195,7 @@ pub fn initial_option(q: &QuestionRow) -> Option<String> {
     })
 }
 
-/// The chips of a choice: each option's param and label, then [`NO_BRANCH`] where the
+/// The option buttons of a choice: each option's param and label, then [`NO_BRANCH`] where the
 /// choice is not required.
 pub fn choices(q: &QuestionRow) -> Vec<(String, String)> {
     let mut out: Vec<(String, String)> = q
@@ -208,20 +216,29 @@ pub enum PrimaryAction {
     Next,
 }
 
-/// The card's filled button: its words, its icon, what a click does and whether it can be
-/// clicked.
+/// The card's filled button: its words, what a click does and whether it can be clicked.
+/// Its icon follows from what a click does.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Primary {
     pub label: &'static str,
-    pub icon: &'static str,
     pub action: PrimaryAction,
     pub enabled: bool,
 }
 
-/// The filled button of a card with a field or chips. `changed` is the card's value
+impl Primary {
+    /// The Lucide icon of the button, `size` pixels square.
+    pub fn icon(self, size: u32) -> Element {
+        match self.action {
+            PrimaryAction::Accept => rsx! { Check { size } },
+            PrimaryAction::Next => rsx! { ArrowRight { size } },
+        }
+    }
+}
+
+/// The filled button of a card with a field or option buttons. `changed` is the card's value
 /// differing from the one the estate binds — for a question that is not answered it
 /// does not matter; `valid` is the value being one that can be written: no problem in
-/// the field, and not empty where the question offers nothing, or a chip chosen.
+/// the field, and not empty where the question offers nothing, or an option chosen.
 ///
 /// A question not answered reads Accept, which writes what the card holds, the offered
 /// default included. An answered one — or one not asked — reads Next while its value is
@@ -231,14 +248,12 @@ pub fn primary(state: QuestionState, changed: bool, valid: bool, loading: bool) 
     if state != QuestionState::Unanswered && !changed {
         Primary {
             label: "Next",
-            icon: "arrow_forward",
             action: PrimaryAction::Next,
             enabled: true,
         }
     } else {
         Primary {
             label: "Accept",
-            icon: "check",
             action: PrimaryAction::Accept,
             enabled: valid && !loading,
         }
@@ -289,7 +304,7 @@ pub fn held_param(
     }
 }
 
-/// A `oneof`'s chips. `chosen` is the chip picked on the card, `bound` the option the
+/// A `oneof`'s option buttons. `chosen` is the option picked on the card, `bound` the option the
 /// estate binds.
 pub fn held_oneof(chosen: Option<&str>, bound: Option<&str>) -> Held {
     Held {
@@ -318,24 +333,35 @@ pub fn recommends_otherwise(q: &QuestionRow) -> Option<&str> {
     }
 }
 
-/// A question's state as the card's chip and the list say it: an icon and the words. A
-/// choice says its bound option's label, or `none`.
-pub fn state_of(q: &QuestionRow) -> (&'static str, String) {
+/// A question's state in words, as the card's badge and the list say it. A choice says
+/// its bound option's label, or `none`.
+pub fn state_of(q: &QuestionRow) -> String {
     let answer = match q.kind {
         QuestionKind::Oneof => q.bound_label().unwrap_or_default(),
         QuestionKind::Param => q.current.as_ref().map(|v| q.shown(v)).unwrap_or_default(),
     };
     match q.state {
-        QuestionState::Unanswered if q.blocking => ("priority_high", "needs a value".to_string()),
-        QuestionState::Unanswered => ("radio_button_unchecked", "open".to_string()),
-        QuestionState::Answered => ("check_circle", format!("answered: {answer}")),
-        QuestionState::NotApplicable => ("block", "not asked: its ask_when is false".to_string()),
+        QuestionState::Unanswered if q.blocking => "needs a value".to_string(),
+        QuestionState::Unanswered => "open".to_string(),
+        QuestionState::Answered => format!("answered: {answer}"),
+        QuestionState::NotApplicable => "not asked: its ask_when is false".to_string(),
+    }
+}
+
+/// The Lucide icon of a question's state, `size` pixels square, beside the words of
+/// [`state_of`].
+pub fn state_icon(q: &QuestionRow, size: u32) -> Element {
+    match q.state {
+        QuestionState::Unanswered if q.blocking => rsx! { OctagonAlert { size } },
+        QuestionState::Unanswered => rsx! { Circle { size } },
+        QuestionState::Answered => rsx! { CircleCheck { size } },
+        QuestionState::NotApplicable => rsx! { Ban { size } },
     }
 }
 
 /// The list's supporting line for a question: its subject, then its state.
 pub fn listed(q: &QuestionRow) -> String {
-    format!("{} · {}", q.subject, state_of(q).1)
+    format!("{} · {}", q.subject, state_of(q))
 }
 
 /// The card's identity: its question, its field's shape and the value it starts on. A
@@ -363,9 +389,11 @@ pub fn DecisionsView() -> Element {
         return rsx! {
             div { class: "view decisions interview",
                 h1 { class: "view__title", "Decisions" }
-                Card { variant: CardVariant::Filled, class: "interview__empty",
-                    Icon { name: "quiz", size: 48, class: "placeholder__icon" }
-                    p { "The questions report is not available — the drawer says why." }
+                Card {
+                    CardContent { class: "interview__empty",
+                        MessageCircleQuestionMark { size: 48, class: "placeholder__icon" }
+                        p { "The questions report is not available — the drawer says why." }
+                    }
                 }
             }
         };
@@ -419,7 +447,7 @@ pub fn DecisionsView() -> Element {
             div { class: "interview__head",
                 h1 { class: "view__title", "Decisions" }
                 span { class: "grow" }
-                Switch {
+                SwitchRow {
                     label: "Show answered",
                     checked: show_answered(),
                     onchange: move |v| {
@@ -428,15 +456,15 @@ pub fn DecisionsView() -> Element {
                     },
                 }
                 Button {
-                    variant: ButtonVariant::Tonal,
-                    icon: "done_all",
+                    variant: ButtonVariant::Secondary,
                     disabled: loading || offered_defaults == 0,
                     onclick: move |_| handle.send(EstateAction::AcceptDefaults),
+                    CheckCheck { size: 16 }
                     "Accept {offered_defaults} defaults"
                 }
             }
             div { class: "interview__progress",
-                LinearProgress { value: progress }
+                Progress { value: Some(f64::from(progress) * 100.0) }
                 span { class: "interview__progress-text",
                     if s.complete {
                         "{s.answered} of {s.total} answered · nothing open — bootstrap and apply will not refuse this estate for an open question"
@@ -446,11 +474,13 @@ pub fn DecisionsView() -> Element {
                 }
             }
             if let Some(name) = rename_to {
-                Card { variant: CardVariant::Outlined, class: "interview__rename",
-                    Icon { name: "drive_file_rename_outline", size: 24, class: "placeholder__icon" }
-                    p {
-                        "init would have named this file " code { "{name}" }
-                        ": rename it (" code { "git mv" } ") and change its " code { "estate" } " line to match."
+                Card {
+                    CardContent { class: "interview__rename",
+                        PencilLine { size: 24, class: "placeholder__icon" }
+                        p {
+                            "init would have named this file " code { "{name}" }
+                            ": rename it (" code { "git mv" } ") and change its " code { "estate" } " line to match."
+                        }
                     }
                 }
             }
@@ -478,15 +508,17 @@ pub fn DecisionsView() -> Element {
                         }
                     },
                     None => rsx! {
-                        Card { variant: CardVariant::Outlined, class: "interview__empty",
-                            Icon { name: "quiz", size: 48, class: "placeholder__icon" }
-                            if s.total == 0 {
-                                p { "No pack this estate uses asks a question." }
-                            } else {
-                                p { "Nothing is open. Switch on \"Show answered\" to revisit an answer." }
-                            }
-                            if can_back {
-                                Button { variant: ButtonVariant::Text, icon: "arrow_back", onclick: move |_| go_back(), "Back" }
+                        Card {
+                            CardContent { class: "interview__empty",
+                                MessageCircleQuestionMark { size: 48, class: "placeholder__icon" }
+                                if s.total == 0 {
+                                    p { "No pack this estate uses asks a question." }
+                                } else {
+                                    p { "Nothing is open. Switch on \"Show answered\" to revisit an answer." }
+                                }
+                                if can_back {
+                                    Button { variant: ButtonVariant::Ghost, onclick: move |_| go_back(), ArrowLeft { size: 16 } "Back" }
+                                }
                             }
                         }
                     },
@@ -494,32 +526,37 @@ pub fn DecisionsView() -> Element {
                 // The list stands beside the walk whatever the switch says: the switch
                 // decides what is IN it, not whether it is there. It keeps its own
                 // height and its own scrollbar, so a long list moves nothing else.
-                Card { variant: CardVariant::Outlined, class: "interview__list",
-                    if list.is_empty() {
-                        div { class: "interview__list-empty",
-                            Icon { name: "task_alt", size: 24 }
-                            p {
-                                if s.total == 0 {
-                                    "No pack this estate uses asks a question."
-                                } else if show_answered() {
-                                    "No question to list."
-                                } else {
-                                    "No unanswered question. Switch on \"Show answered\" to list the answered ones."
+                Card { class: "interview__list",
+                    CardContent {
+                        if list.is_empty() {
+                            div { class: "interview__list-empty",
+                                CircleCheckBig { size: 24 }
+                                p {
+                                    if s.total == 0 {
+                                        "No pack this estate uses asks a question."
+                                    } else if show_answered() {
+                                        "No question to list."
+                                    } else {
+                                        "No unanswered question. Switch on \"Show answered\" to list the answered ones."
+                                    }
                                 }
                             }
-                        }
-                    } else {
-                        List {
-                            for (n, q) in list.iter().enumerate() {
-                                ListItem {
-                                    key: "{q.subject}",
-                                    headline: q.prompt.clone(),
-                                    supporting: listed(q),
-                                    selected: n == i,
-                                    leading: rsx! { Icon { name: state_of(q).0, size: 20 } },
-                                    onclick: move |_| {
-                                        walk.write().open(&questions_now(), show_answered(), n);
-                                    },
+                        } else {
+                            ItemGroup {
+                                for (n, q) in list.iter().enumerate() {
+                                    Item {
+                                        key: "{q.subject}",
+                                        size: ItemSize::Sm,
+                                        "data-selected": if n == i { "true" } else { "false" },
+                                        onclick: move |_| {
+                                            walk.write().open(&questions_now(), show_answered(), n);
+                                        },
+                                        ItemMedia { {state_icon(q, 20)} }
+                                        ItemContent {
+                                            ItemTitle { "{q.prompt}" }
+                                            ItemDescription { "{listed(q)}" }
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -546,10 +583,57 @@ fn blast_label(b: Blast) -> &'static str {
     }
 }
 
+/// What a question's state badge means, as its tooltip says it: satz's `answered`,
+/// `unanswered` and `not-applicable`, and `blocking` for an unanswered question with no
+/// usable default.
+pub fn state_tip(q: &QuestionRow) -> &'static str {
+    match q.state {
+        QuestionState::Unanswered if q.blocking => {
+            "No usable default: the pack cannot guess this answer, so a value has to be typed."
+        }
+        QuestionState::Unanswered => {
+            "Not answered yet: the value the pack offers applies until the estate binds one."
+        }
+        QuestionState::Answered => "Answered: the estate binds a value for this question.",
+        QuestionState::NotApplicable => {
+            "Not asked: the question's ask_when param is false, so it does not apply to this estate."
+        }
+    }
+}
+
+/// What changing the answer later does to the estate, in satz's words for `reversal`.
+pub fn reversal_tip(r: Reversal) -> &'static str {
+    match r {
+        Reversal::Edit => "Changing this answer later is an edit: one line, one apply.",
+        Reversal::StateSurgery => {
+            "Changing this answer later is state surgery: a rename plus state mv, and whatever the old name is wired into. Done with care."
+        }
+        Reversal::Recreate => {
+            "Changing this answer later destroys and recreates resources: globally unique ids, mail addresses, buckets."
+        }
+    }
+}
+
+/// What changing the answer later costs the running organization, in satz's words for
+/// `blast`. Independent of the reversal: one boolean to reverse can cut every existing
+/// SSH path.
+pub fn blast_tip(b: Blast) -> &'static str {
+    match b {
+        Blast::None => "Changing this answer later costs the running organization nothing.",
+        Blast::Low => "Changing this answer later costs the running organization little.",
+        Blast::High => {
+            "Changing this answer later hits the running organization hard: what runs on the old answer can stop working."
+        }
+    }
+}
+
+/// What the one-way door chip means.
+pub const ONE_WAY_TIP: &str = "Changing this answer later is a recreate or hits a high blast radius. Decide it with the reason above in view.";
+
 /// An answer is written by the filled button and by Enter in a text or number field, and
 /// by nothing else: not when the field loses focus — the button's own click blurs the
 /// field first, so a blur that wrote would send a second answer — and not on a switch
-/// flip or a chip added to or removed from a list, which change what the card holds and
+/// flip or a tag added to or removed from a list, which change what the card holds and
 /// turn its button into Accept. Params and Resources keep both, where saving what is
 /// typed into the file being edited IS the contract.
 const ON_BLUR: bool = false;
@@ -561,7 +645,7 @@ const _: () = assert!(
 
 /// One question: the pack header and the card, which scroll, and below them the bar with
 /// Back, Skip and the filled button, which does not. The card owns what it holds — the
-/// field's draft or the chosen chip — so the bar can read it; a card of another question,
+/// field's draft or the chosen option — so the bar can read it; a card of another question,
 /// shape or starting value is a new card (`card_key`).
 #[component]
 fn QuestionCard(
@@ -578,7 +662,8 @@ fn QuestionCard(
     let new_pack = previous_pack.as_deref() != Some(q.pack.as_str());
     let one_way = q.one_way_door();
     let recommend = recommends_otherwise(&q).map(str::to_string);
-    let (state_icon, state_text) = state_of(&q);
+    let state_text = state_of(&q);
+    let needs_value = q.blocking && q.state == QuestionState::Unanswered;
     let subject = q.subject.clone();
     let kind = match q.kind {
         QuestionKind::Param => field,
@@ -652,119 +737,135 @@ fn QuestionCard(
             div { class: "interview__scroll",
                 if new_pack {
                     div { class: "interview__pack",
-                        Icon { name: "inventory_2", size: 20 }
+                        Boxes { size: 20 }
                         div {
                             span { class: "interview__pack-name", "{q.pack}" }
                             p { class: "interview__pack-description", "{q.pack_description}" }
                         }
                     }
                 }
-                Card { variant: CardVariant::Outlined, class: "interview__card",
-                    div { class: "interview__card-head",
-                        code { class: "interview__subject", "{q.subject}" }
-                        span { class: "grow" }
-                        Chip { kind: ChipKind::Assist, icon: state_icon, label: state_text, error: q.blocking && q.state == QuestionState::Unanswered }
-                    }
-                    h2 { class: "interview__prompt", "{q.prompt}" }
-                    if let Some(why) = &q.why {
-                        p { class: "interview__why", "{why}" }
-                    }
-                    div { class: "interview__chips",
-                        Chip { kind: ChipKind::Assist, icon: "history", label: reversal_label(q.reversal) }
-                        Chip { kind: ChipKind::Assist, icon: "flare", label: blast_label(q.blast), error: q.blast == Blast::High }
-                        if one_way {
-                            Chip { kind: ChipKind::Assist, icon: "door_front", label: "one-way door", error: true }
-                        }
-                        span { class: "grow" }
-                        span { class: "interview__from", "{q.from}" }
-                    }
-                    if one_way {
-                        div { class: "interview__banner", role: "alert",
-                            Icon { name: "warning", filled: true }
-                            span { "A one-way door: changing this answer later is a recreate or hits a high blast radius. Decide it with the reason above in view." }
-                        }
-                    }
-                    if let Some(r) = recommend {
-                        div { class: "interview__recommend",
-                            Icon { name: "lightbulb", size: 20 }
-                            span { "The pack recommends: " code { "{r}" } ". The offered value still applies unless you change it." }
-                        }
-                    }
-                    div { class: "interview__answer",
-                        match (q.kind, kind, initial) {
-                            (QuestionKind::Param, Some(kind), Some(initial)) => rsx! {
-                                    TypedField {
-                                        kind,
-                                        draft: initial,
-                                        label: q.subject.clone(),
-                                        subject: q.subject.clone(),
-                                        disabled: loading,
-                                        supporting: field_hint,
-                                        // Enter always reaches the card, which decides what it does
-                                        commit_unchanged: true,
-                                        commit_on_blur: ON_BLUR,
-                                        commit_on_change: ON_CHANGE,
-                                        onchange: move |d: Draft| draft.set(Some(d)),
-                                        oncommit: move |_| enter(),
-                                    }
-                            },
-                            (QuestionKind::Param, _, _) => rsx! {
-                                p { class: "interview__hint",
-                                    "There is no field for this answer: its param is declared as a map, or with no shape satz names. Write the value into the estate's params block."
+                Card { class: "interview__card",
+                    CardContent {
+                        div { class: "interview__card-head",
+                            code { class: "interview__subject", "{q.subject}" }
+                            span { class: "grow" }
+                            Tip { text: state_tip(&q),
+                                Badge { variant: if needs_value { BadgeVariant::Destructive } else { BadgeVariant::Outline },
+                                    {state_icon(&q, 12)}
+                                    "{state_text}"
                                 }
-                            },
-                            (QuestionKind::Oneof, _, _) => rsx! {
-                                div { class: "interview__options",
-                                    for (param, label) in choices(&q) {
-                                        {
-                                            let is_chosen = chosen().as_deref() == Some(param.as_str());
-                                            rsx! {
-                                                Chip {
-                                                    key: "{param}",
-                                                    kind: ChipKind::Filter,
-                                                    label,
-                                                    selected: is_chosen,
-                                                    onclick: move |_| chosen.set(Some(param.clone())),
+                            }
+                        }
+                        h2 { class: "interview__prompt", "{q.prompt}" }
+                        if let Some(why) = &q.why {
+                            p { class: "interview__why", "{why}" }
+                        }
+                        div { class: "interview__tags",
+                            Tip { text: reversal_tip(q.reversal),
+                                Badge { variant: BadgeVariant::Outline,
+                                    History { size: 12 }
+                                    "{reversal_label(q.reversal)}"
+                                }
+                            }
+                            Tip { text: blast_tip(q.blast),
+                                Badge { variant: if q.blast == Blast::High { BadgeVariant::Destructive } else { BadgeVariant::Outline },
+                                    Sparkles { size: 12 }
+                                    "{blast_label(q.blast)}"
+                                }
+                            }
+                            if one_way {
+                                Tip { text: ONE_WAY_TIP,
+                                    Badge { variant: BadgeVariant::Destructive,
+                                        DoorOpen { size: 12 }
+                                        "one-way door"
+                                    }
+                                }
+                            }
+                            span { class: "grow" }
+                            span { class: "interview__from", "{q.from}" }
+                        }
+                        if let Some(r) = recommend {
+                            div { class: "interview__recommend",
+                                Lightbulb { size: 20 }
+                                span { "The pack recommends: " code { "{r}" } ". The offered value still applies unless you change it." }
+                            }
+                        }
+                        div { class: "interview__answer",
+                            match (q.kind, kind, initial) {
+                                (QuestionKind::Param, Some(kind), Some(initial)) => rsx! {
+                                        TypedField {
+                                            kind,
+                                            draft: initial,
+                                            label: q.subject.clone(),
+                                            subject: q.subject.clone(),
+                                            disabled: loading,
+                                            supporting: field_hint,
+                                            // Enter always reaches the card, which decides what it does
+                                            commit_unchanged: true,
+                                            commit_on_blur: ON_BLUR,
+                                            commit_on_change: ON_CHANGE,
+                                            onchange: move |d: Draft| draft.set(Some(d)),
+                                            oncommit: move |_| enter(),
+                                        }
+                                },
+                                (QuestionKind::Param, _, _) => rsx! {
+                                    p { class: "interview__hint",
+                                        "There is no field for this answer: its param is declared as a map, or with no shape satz names. Write the value into the estate's params block."
+                                    }
+                                },
+                                (QuestionKind::Oneof, _, _) => rsx! {
+                                    div { class: "interview__options",
+                                        for (param, label) in choices(&q) {
+                                            {
+                                                let is_chosen = chosen().as_deref() == Some(param.as_str());
+                                                rsx! {
+                                                    Button {
+                                                        key: "{param}",
+                                                        variant: if is_chosen { ButtonVariant::Secondary } else { ButtonVariant::Outline },
+                                                        size: ButtonSize::Xs,
+                                                        "aria-pressed": if is_chosen { "true" } else { "false" },
+                                                        onclick: move |_| chosen.set(Some(param.clone())),
+                                                        "{label}"
+                                                    }
                                                 }
                                             }
                                         }
                                     }
-                                }
-                                if let Some(o) = &picked {
-                                    p { class: "interview__option-why",
-                                        code { "{o.param}" }
-                                        if let Some(why) = &o.why {
-                                            " — {why}"
+                                    if let Some(o) = &picked {
+                                        p { class: "interview__option-why",
+                                            code { "{o.param}" }
+                                            if let Some(why) = &o.why {
+                                                " — {why}"
+                                            }
+                                        }
+                                    } else if chosen().as_deref() == Some(NO_BRANCH) {
+                                        p { class: "interview__option-why",
+                                            code { "{NO_BRANCH}" }
+                                            " — every option is bound false"
                                         }
                                     }
-                                } else if chosen().as_deref() == Some(NO_BRANCH) {
-                                    p { class: "interview__option-why",
-                                        code { "{NO_BRANCH}" }
-                                        " — every option is bound false"
-                                    }
-                                }
-                            },
+                                },
+                            }
                         }
-                    }
-                    if q.kind == QuestionKind::Param {
-                        p { class: "interview__hint",
-                            "Accept writes " code { "{subject} = …" } " into the estate's params through satz's own writer; a pack line the answer switches on is uncommented by satz."
+                        if q.kind == QuestionKind::Param {
+                            p { class: "interview__hint",
+                                "Accept writes " code { "{subject} = …" } " into the estate's params through satz's own writer; a pack line the answer switches on is uncommented by satz."
+                            }
                         }
                     }
                 }
             }
             div { class: "interview__actions",
-                Button { variant: ButtonVariant::Text, icon: "arrow_back", disabled: !can_back, onclick: move |_| onback.call(()), "Back" }
+                Button { variant: ButtonVariant::Ghost, disabled: !can_back, onclick: move |_| onback.call(()), ArrowLeft { size: 16 } "Back" }
                 span { class: "grow" }
                 if let Some(label) = forward {
-                    Button { variant: ButtonVariant::Text, onclick: move |_| onnext.call(()), "{label}" }
+                    Button { variant: ButtonVariant::Ghost, onclick: move |_| onnext.call(()), "{label}" }
                 }
                 if let Some(p) = now {
                     Button {
-                        variant: ButtonVariant::Filled,
-                        icon: p.icon,
                         disabled: !p.enabled,
                         onclick: move |_| press(),
+                        {p.icon(16)}
                         "{p.label}"
                     }
                 }
@@ -776,7 +877,7 @@ fn QuestionCard(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::components::typed_field::{Commit, commits};
+    use crate::widgets::typed_field::{Commit, commits};
     use serde_json::json;
 
     fn q(subject: &str, state: QuestionState) -> QuestionRow {
@@ -796,20 +897,18 @@ mod tests {
         list[walk.position(list)].subject.clone()
     }
 
-    fn button(p: Primary) -> (&'static str, &'static str, PrimaryAction, bool) {
-        (p.label, p.icon, p.action, p.enabled)
+    fn button(p: Primary) -> (&'static str, PrimaryAction, bool) {
+        (p.label, p.action, p.enabled)
     }
 
-    const ACCEPT: (&str, &str, PrimaryAction) = ("Accept", "check", PrimaryAction::Accept);
-    const NEXT: (&str, &str, PrimaryAction, bool) =
-        ("Next", "arrow_forward", PrimaryAction::Next, true);
+    const NEXT: (&str, PrimaryAction, bool) = ("Next", PrimaryAction::Next, true);
 
-    fn accept(enabled: bool) -> (&'static str, &'static str, PrimaryAction, bool) {
-        (ACCEPT.0, ACCEPT.1, ACCEPT.2, enabled)
+    fn accept(enabled: bool) -> (&'static str, PrimaryAction, bool) {
+        ("Accept", PrimaryAction::Accept, enabled)
     }
 
     /// Nothing the field does on its own writes: not losing focus, and not a switch flip
-    /// or a chip change either (`ON_CHANGE`), where Params and Resources save.
+    /// or a tag change either (`ON_CHANGE`), where Params and Resources save.
     #[test]
     fn only_enter_reaches_the_card_from_its_field() {
         assert!(!commits(Commit::Blur, true, true, ON_BLUR));
@@ -872,7 +971,7 @@ mod tests {
 
     #[test]
     fn an_empty_field_on_a_question_that_offers_nothing_cannot_be_accepted() {
-        let kind = FieldKind::List(crate::components::typed_field::ListElem::Text);
+        let kind = FieldKind::List(crate::widgets::typed_field::ListElem::Text);
         let h = held_param(kind, "emails", None, false, &Draft::of_json(None, kind));
         assert!(!h.valid);
         assert_eq!(
@@ -914,7 +1013,7 @@ mod tests {
         );
     }
 
-    /// A choice that is not required has a None chip, starts on it when satz offers it,
+    /// A choice that is not required has a None button, starts on it when satz offers it,
     /// and reads Next on it once the estate binds every option false.
     #[test]
     fn a_choice_that_is_not_required_offers_none() {
@@ -940,7 +1039,7 @@ mod tests {
         assert_eq!(listed(&c), "interface_notice · answered: None");
         c.required = true;
         c.state = QuestionState::Unanswered;
-        assert_eq!(choices(&c).len(), 1, "a required choice has no None chip");
+        assert_eq!(choices(&c).len(), 1, "a required choice has no None button");
     }
 
     #[test]
@@ -955,7 +1054,7 @@ mod tests {
         let u = QuestionState::Unanswered;
         assert_eq!(on(a, s1, s1), NEXT);
         assert_eq!(on(a, s2, s1), accept(true));
-        // the default chip on an unanswered question: Accept writes it
+        // the default option on an unanswered question: Accept writes it
         assert_eq!(on(u, s1, None), accept(true));
         assert_eq!(on(u, None, None), accept(false));
         assert_eq!(held_oneof(s2, s1).value, json!("security_model_s2"));
@@ -1132,6 +1231,58 @@ mod tests {
         assert_eq!(walk.back(&questions, true), Some(true));
         assert_eq!(subject_at(&walk, &list), "region");
         assert!(!walk.can_go_back());
+    }
+
+    /// A click on the list's n-th item calls `open(n)`; the card then shows that question
+    /// and the list marks it, since both read the same position.
+    #[test]
+    fn a_click_on_any_listed_question_puts_it_on_the_card() {
+        let questions = vec![
+            q("region", QuestionState::Unanswered),
+            q("billing", QuestionState::Answered),
+            q("domain", QuestionState::Unanswered),
+            q("labels", QuestionState::Answered),
+        ];
+        for show in [false, true] {
+            let list = ordered(&questions, show);
+            let mut walk = Walk::default();
+            for n in (0..list.len()).rev().chain(0..list.len()) {
+                walk.open(&questions, show, n);
+                assert_eq!(walk.position(&list), n);
+                assert_eq!(subject_at(&walk, &list), list[n].subject);
+            }
+        }
+    }
+
+    /// Every badge on the card explains itself: each state, reversal and blast has its own
+    /// tooltip.
+    #[test]
+    fn every_badge_says_what_it_means() {
+        let mut blocking = q("domain", QuestionState::Unanswered);
+        blocking.blocking = true;
+        let states: Vec<&str> = [
+            q("a", QuestionState::Unanswered),
+            blocking,
+            q("b", QuestionState::Answered),
+            q("c", QuestionState::NotApplicable),
+        ]
+        .iter()
+        .map(state_tip)
+        .collect();
+        let reversals: Vec<&str> = [Reversal::Edit, Reversal::StateSurgery, Reversal::Recreate]
+            .into_iter()
+            .map(reversal_tip)
+            .collect();
+        let blasts: Vec<&str> = [Blast::None, Blast::Low, Blast::High]
+            .into_iter()
+            .map(blast_tip)
+            .collect();
+        for tips in [&states, &reversals, &blasts] {
+            assert!(tips.iter().all(|t| !t.is_empty()));
+            let distinct: std::collections::HashSet<_> = tips.iter().collect();
+            assert_eq!(distinct.len(), tips.len(), "{tips:?}");
+        }
+        assert!(!ONE_WAY_TIP.is_empty());
     }
 
     #[test]

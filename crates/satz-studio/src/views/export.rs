@@ -10,18 +10,21 @@
 //! renders nothing satz cannot produce. The sheet is derived from the estate, so after an
 //! edit "Export again" writes the same format over the same file in one click.
 
+use std::collections::HashSet;
 use std::path::PathBuf;
 
 use dioxus::prelude::*;
+use dioxus_icons::lucide::{ClipboardCheck, FileOutput, RefreshCw};
 use satz_studio_core::satz::QuestionsFormat;
 use satz_studio_core::satz::export;
 
-use crate::components::{Button, ButtonVariant, Card, CardVariant, Icon, Segment, SegmentedButton};
+use crate::components::button::{Button, ButtonVariant};
+use crate::components::card::{Card, CardContent, CardDescription, CardHeader};
+use crate::components::toggle_group::{ToggleGroup, ToggleItem};
 use crate::state::{AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt};
 
-/// The card's title, icon and explanation.
+/// The card's title and explanation.
 const TITLE: &str = "Decisions sheet";
-const ICON: &str = "assignment_turned_in";
 const TEXT: &str = "Every decision this estate rests on — what it is set to, whether it was chosen or taken as offered, and what changing it later costs. Before an organization is touched it is the sheet the customer signs, or the workbook they fill in and send back; after the apply it is the record the customer keeps.";
 
 /// The format the card starts on: the decisions sheet, `markdown`, when satz offers it;
@@ -82,37 +85,50 @@ pub fn ExportCard() -> Element {
                 .as_deref()
                 .and_then(|c| formats.iter().find(|f| f.name == c))
                 .and_then(|f| f.description.clone());
-            let options: Vec<Segment> = formats
-                .iter()
-                .map(|f| Segment::new(f.name.clone(), f.name.clone()))
-                .collect();
+            let names: Vec<String> = formats.iter().map(|f| f.name.clone()).collect();
+            let current_index = current
+                .as_deref()
+                .and_then(|c| names.iter().position(|n| n == c));
             let dir = open.dir.clone();
             let estate = open.name.clone();
             rsx! {
-                SegmentedButton {
-                    options,
-                    selected: current.clone().unwrap_or_default(),
-                    onselect: move |v: String| chosen.set(Some(v)),
+                ToggleGroup {
+                    horizontal: true,
+                    pressed: Some(current_index.into_iter().collect::<HashSet<usize>>()),
+                    on_pressed_change: {
+                        let names = names.clone();
+                        move |now: HashSet<usize>| {
+                            // a click on the pressed one leaves it pressed
+                            if let Some(name) = now
+                                .into_iter()
+                                .find(|i| Some(*i) != current_index)
+                                .and_then(|i| names.get(i))
+                            {
+                                chosen.set(Some(name.clone()));
+                            }
+                        }
+                    },
+                    for (i, name) in names.iter().enumerate() {
+                        ToggleItem { key: "{name}", index: i, "{name}" }
+                    }
                 }
                 if let Some(d) = description {
                     p { class: "export__note", "{d}" }
                 }
                 div { class: "export__actions",
                     Button {
-                        variant: ButtonVariant::Filled,
-                        icon: "file_export",
                         disabled: running || current.is_none(),
                         onclick: move |_| {
                             if let Some(format) = current.clone() {
                                 choose_and_export(handle, dir.clone(), estate.clone(), format);
                             }
                         },
+                        FileOutput { size: 16 }
                         "Export…"
                     }
                     if let Some(last) = last {
                         Button {
-                            variant: ButtonVariant::Tonal,
-                            icon: "refresh",
+                            variant: ButtonVariant::Secondary,
                             disabled: running,
                             onclick: {
                                 let last = last.clone();
@@ -121,6 +137,7 @@ pub fn ExportCard() -> Element {
                                     out: last.path.clone(),
                                 })
                             },
+                            RefreshCw { size: 16 }
                             "Export again"
                         }
                         span { class: "export__last",
@@ -134,13 +151,15 @@ pub fn ExportCard() -> Element {
     };
 
     rsx! {
-        Card { variant: CardVariant::Outlined, class: "export",
-            header { class: "export__head",
-                Icon { name: ICON, size: 22 }
-                h2 { class: "export__title", "{TITLE}" }
+        Card { class: "export",
+            CardHeader {
+                header { class: "export__head",
+                    ClipboardCheck { size: 22 }
+                    h2 { class: "export__title", "{TITLE}" }
+                }
+                CardDescription { "{TEXT}" }
             }
-            p { class: "export__text", "{TEXT}" }
-            {body}
+            CardContent { {body} }
         }
     }
 }

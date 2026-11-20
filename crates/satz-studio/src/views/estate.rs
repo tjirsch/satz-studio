@@ -9,7 +9,9 @@
 
 use dioxus::prelude::*;
 
-use crate::components::{Tab, Tabs};
+use dioxus_icons::lucide::{Network, SlidersHorizontal, Waypoints};
+
+use crate::components::tabs::{TabList, TabTrigger, Tabs};
 use crate::state::{AppStore, AppStoreStoreExt, DiagnosticSelection, EstateStoreStoreExt};
 use crate::views::interfaces::InterfacesPane;
 use crate::views::params::ParamsPane;
@@ -20,6 +22,19 @@ enum Pane {
     Params,
     Resources,
     Interfaces,
+}
+
+impl Pane {
+    const ALL: [Pane; 3] = [Pane::Params, Pane::Resources, Pane::Interfaces];
+
+    /// The value the pane's tab carries.
+    fn key(self) -> &'static str {
+        match self {
+            Pane::Params => "params",
+            Pane::Resources => "resources",
+            Pane::Interfaces => "interfaces",
+        }
+    }
 }
 
 #[component]
@@ -60,23 +75,26 @@ pub fn EstateView() -> Element {
                 code { class: "estate__file", "{open.name}" }
             }
             Tabs {
-                Tab {
-                    label: format!("Params ({params})"),
-                    icon: "tune",
-                    selected: pane() == Pane::Params,
-                    onclick: move |_| pane.set(Pane::Params),
-                }
-                Tab {
-                    label: format!("Resources ({resources})"),
-                    icon: "account_tree",
-                    selected: pane() == Pane::Resources,
-                    onclick: move |_| pane.set(Pane::Resources),
-                }
-                Tab {
-                    label: format!("Interfaces ({interfaces})"),
-                    icon: "hub",
-                    selected: pane() == Pane::Interfaces,
-                    onclick: move |_| pane.set(Pane::Interfaces),
+                value: Some(pane().key().to_string()),
+                on_value_change: move |key: String| {
+                    if let Some(chosen) = Pane::ALL.into_iter().find(|p| p.key() == key) {
+                        pane.set(chosen);
+                    }
+                },
+                horizontal: true,
+                TabList {
+                    TabTrigger { value: Pane::Params.key(), index: 0usize,
+                        SlidersHorizontal { size: 16 }
+                        "Params ({params})"
+                    }
+                    TabTrigger { value: Pane::Resources.key(), index: 1usize,
+                        Network { size: 16 }
+                        "Resources ({resources})"
+                    }
+                    TabTrigger { value: Pane::Interfaces.key(), index: 2usize,
+                        Waypoints { size: 16 }
+                        "Interfaces ({interfaces})"
+                    }
                 }
             }
             match pane() {

@@ -11,24 +11,31 @@ use satz_studio_core::satz::reports::{
     AddEntryArgs, EntryField, ExportHow, ExportRow, InterfaceRow, InterfacesReport, RequestRow,
 };
 
-use crate::components::{
-    Button, ButtonVariant, Card, CardVariant, Chip, ChipKind, Dialog, Icon, LinearProgress, Switch,
-    TextField,
+use dioxus_icons::lucide::{
+    Braces, Check, CircleAlert, FolderOpen, Globe, Inbox, Key as KeyIcon, Link as LinkIcon,
+    Package, Plus, Search, Tag, Type as TypeIcon, Waypoints,
 };
+
+use crate::components::badge::{Badge, BadgeVariant};
+use crate::components::button::{Button, ButtonVariant};
+use crate::components::card::{Card, CardContent, CardHeader};
+use crate::components::dialog::{Dialog, DialogTitle};
+use crate::components::progress::Progress;
 use crate::state::{
     AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt, ToastKind, toast,
 };
+use crate::widgets::{Field, SwitchRow};
 
-/// The icon of an export's `how` chip.
-fn how_icon(how: ExportHow) -> &'static str {
+/// The icon of an export's `how` badge.
+fn how_icon(how: ExportHow) -> Element {
     match how {
-        ExportHow::Static => "text_fields",
-        ExportHow::Lookup => "search",
-        ExportHow::Map => "data_object",
+        ExportHow::Static => rsx! { TypeIcon { size: 12 } },
+        ExportHow::Lookup => rsx! { Search { size: 12 } },
+        ExportHow::Map => rsx! { Braces { size: 12 } },
     }
 }
 
-/// The label of an export's `how` chip: the word satz writes, and the type of an `all` map.
+/// The label of an export's `how` badge: the word satz writes, and the type of an `all` map.
 fn how_label(row: &ExportRow) -> String {
     match &row.all {
         Some(t) => format!("{} · {t}", row.how.as_str()),
@@ -43,14 +50,16 @@ pub fn InterfacesPane() -> Element {
 
     let body = match interfaces {
         None => rsx! {
-            Card { variant: CardVariant::Filled, class: "interfaces__empty",
-                LinearProgress {}
-                p { "Reading what the estate publishes…" }
+            Card {
+                CardContent { class: "interfaces__empty",
+                    Progress { value: None }
+                    p { "Reading what the estate publishes…" }
+                }
             }
         },
         Some(Err(e)) => rsx! {
             div { class: "interfaces__error",
-                Icon { name: "error", size: 20 }
+                CircleAlert { size: 20 }
                 div {
                     p { "satz interfaces could not say what the estate publishes:" }
                     pre { "{e}" }
@@ -79,25 +88,31 @@ pub fn InterfacesPane() -> Element {
 fn ReportCards(report: InterfacesReport) -> Element {
     if report.exports.is_empty() && report.interfaces.is_empty() {
         return rsx! {
-            Card { variant: CardVariant::Filled, class: "interfaces__empty",
-                Icon { name: "hub", size: 48, class: "placeholder__icon" }
-                p { "The estate publishes nothing to a project: it declares no export and no interface." }
+            Card {
+                CardContent { class: "interfaces__empty",
+                    Waypoints { size: 48, class: "placeholder__icon" }
+                    p { "The estate publishes nothing to a project: it declares no export and no interface." }
+                }
             }
         };
     }
     let core: Vec<ExportRow> = report.core().cloned().collect();
     rsx! {
-        Card { variant: CardVariant::Outlined, class: "interfaces__card",
-            div { class: "interfaces__card-head",
-                Icon { name: "deployed_code", size: 22 }
-                h2 { class: "interfaces__name", "core" }
-                span { class: "interfaces__supporting", "every interface carries these" }
+        Card { class: "interfaces__card",
+            CardHeader {
+                div { class: "interfaces__card-head",
+                    Package { size: 22 }
+                    h2 { class: "interfaces__name", "core" }
+                    span { class: "interfaces__supporting", "every interface carries these" }
+                }
             }
-            if core.is_empty() {
-                p { class: "interfaces__supporting", "No core export." }
-            }
-            for row in core {
-                ExportLine { key: "{row.name}", row: row.clone() }
+            CardContent {
+                if core.is_empty() {
+                    p { class: "interfaces__supporting", "No core export." }
+                }
+                for row in core {
+                    ExportLine { key: "{row.name}", row: row.clone() }
+                }
             }
         }
         for iface in report.interfaces.clone() {
@@ -147,52 +162,62 @@ fn RequestsCard(requests: Vec<RequestRow>) -> Element {
     let mut typed = use_signal(BTreeMap::<String, String>::new);
     let current = adding();
     rsx! {
-        Card { variant: CardVariant::Outlined, class: "interfaces__card",
-            div { class: "interfaces__card-head",
-                Icon { name: "move_to_inbox", size: 22 }
-                h2 { class: "interfaces__name", "Lists that take entries" }
+        Card { class: "interfaces__card",
+            CardHeader {
+                div { class: "interfaces__card-head",
+                    Inbox { size: 22 }
+                    h2 { class: "interfaces__name", "Lists that take entries" }
+                }
             }
-            p { class: "interfaces__supporting",
-                "A pack declares what an entry of its list is: delegated access, a subnet, a budget. \"Add\" writes one into this estate ("
-                code { "satz add-entry" }
-                "); a workload's team asks for one in a request file, "
-                code { "contributes_<list param>" }
-                ", checked with "
-                code { "satz check-request" }
-                "."
-            }
-            for r in requests {
-                div { key: "{r.param}", class: "interfaces__export",
-                    div { class: "interfaces__export-head",
-                        code { class: "interfaces__export-name", "{r.param}" }
-                        Chip { kind: ChipKind::Assist, icon: "key", label: format!("key {}", r.key) }
-                        span { class: "interfaces__supporting",
-                            {format!("{} entr{}", r.entries, if r.entries == 1 { "y" } else { "ies" })}
+            CardContent {
+                p { class: "interfaces__supporting",
+                    "A pack declares what an entry of its list is: delegated access, a subnet, a budget. \"Add\" writes one into this estate ("
+                    code { "satz add-entry" }
+                    "); a workload's team asks for one in a request file, "
+                    code { "contributes_<list param>" }
+                    ", checked with "
+                    code { "satz check-request" }
+                    "."
+                }
+                for r in requests {
+                    div { key: "{r.param}", class: "interfaces__export",
+                        div { class: "interfaces__export-head",
+                            code { class: "interfaces__export-name", "{r.param}" }
+                            Badge { variant: BadgeVariant::Outline,
+                                KeyIcon { size: 12 }
+                                "key {r.key}"
+                            }
+                            span { class: "interfaces__supporting",
+                                {format!("{} entr{}", r.entries, if r.entries == 1 { "y" } else { "ies" })}
+                            }
+                            span { class: "grow" }
+                            code { class: "interfaces__at", "{r.file}:{r.line}" }
+                            Button {
+                                variant: ButtonVariant::Secondary,
+                                disabled: loading,
+                                onclick: {
+                                    let r = r.clone();
+                                    move |_| {
+                                        typed.set(BTreeMap::new());
+                                        adding.set(Some(r.clone()));
+                                    }
+                                },
+                                Plus { size: 16 }
+                                "Add"
+                            }
                         }
-                        span { class: "grow" }
-                        code { class: "interfaces__at", "{r.file}:{r.line}" }
-                        Button {
-                            variant: ButtonVariant::Tonal,
-                            icon: "add",
-                            disabled: loading,
-                            onclick: {
-                                let r = r.clone();
-                                move |_| {
-                                    typed.set(BTreeMap::new());
-                                    adding.set(Some(r.clone()));
+                        code { class: "interfaces__value", {r.fields_shown()} }
+                        if let Some(d) = r.description.clone() {
+                            p { class: "interfaces__supporting", "{d}" }
+                        }
+                        if !r.keys().is_empty() {
+                            div { class: "interfaces__entries",
+                                for k in r.keys() {
+                                    Badge { key: "{k}", variant: BadgeVariant::Outline,
+                                        Tag { size: 12 }
+                                        "{k}"
+                                    }
                                 }
-                            },
-                            "Add"
-                        }
-                    }
-                    code { class: "interfaces__value", {r.fields_shown()} }
-                    if let Some(d) = r.description.clone() {
-                        p { class: "interfaces__supporting", "{d}" }
-                    }
-                    if !r.keys().is_empty() {
-                        div { class: "interfaces__entries",
-                            for k in r.keys() {
-                                Chip { key: "{k}", kind: ChipKind::Assist, icon: "label", label: k.clone() }
                             }
                         }
                     }
@@ -201,15 +226,55 @@ fn RequestsCard(requests: Vec<RequestRow>) -> Element {
         }
         Dialog {
             open: current.is_some(),
-            title: current.as_ref().map(|r| format!("Add an entry to {}", r.param)).unwrap_or_default(),
-            icon: "add",
+            on_open_change: move |now: bool| {
+                if !now {
+                    adding.set(None);
+                }
+            },
             class: "interfaces__add",
-            ondismiss: move |_| adding.set(None),
-            actions: rsx! {
-                Button { variant: ButtonVariant::Text, onclick: move |_| adding.set(None), "Cancel" }
+            DialogTitle {
+                {current.as_ref().map(|r| format!("Add an entry to {}", r.param)).unwrap_or_default()}
+            }
+            div { class: "dialog-body",
+                if let Some(r) = current.clone() {
+                    if let Some(d) = r.description.clone() {
+                        p { class: "interfaces__supporting", "{d}" }
+                    }
+                    for f in r.fields.clone() {
+                        {
+                            let key = f.clone();
+                            let value = typed().get(&f).cloned().unwrap_or_else(|| r.default_text(&f).unwrap_or_default());
+                            match r.field_kind(&f) {
+                                EntryField::Bool => rsx! {
+                                    SwitchRow {
+                                        key: "{f}",
+                                        label: f.clone(),
+                                        checked: value == "true",
+                                        onchange: move |v: bool| { typed.write().insert(key.clone(), v.to_string()); },
+                                    }
+                                },
+                                kind => rsx! {
+                                    Field {
+                                        key: "{f}",
+                                        label: if f == r.key { format!("{f} (names the entry)") } else { f.clone() },
+                                        value,
+                                        monospace: true,
+                                        supporting: match (r.patterns.get(&f), kind) {
+                                            (Some(p), _) => format!("matches {p}"),
+                                            (None, EntryField::List) => "several values, separated by commas".to_string(),
+                                            _ => String::new(),
+                                        },
+                                        oninput: move |v: String| { typed.write().insert(key.clone(), v); },
+                                    }
+                                },
+                            }
+                        }
+                    }
+                }
+            }
+            div { class: "dialog-actions",
+                Button { variant: ButtonVariant::Ghost, onclick: move |_| adding.set(None), "Cancel" }
                 Button {
-                    variant: ButtonVariant::Filled,
-                    icon: "check",
                     onclick: move |_| {
                         if let Some(r) = adding() {
                             let fields = entry_fields(&r, &typed());
@@ -221,42 +286,8 @@ fn RequestsCard(requests: Vec<RequestRow>) -> Element {
                             adding.set(None);
                         }
                     },
+                    Check { size: 16 }
                     "Add"
-                }
-            },
-            if let Some(r) = current.clone() {
-                if let Some(d) = r.description.clone() {
-                    p { class: "interfaces__supporting", "{d}" }
-                }
-                for f in r.fields.clone() {
-                    {
-                        let key = f.clone();
-                        let value = typed().get(&f).cloned().unwrap_or_else(|| r.default_text(&f).unwrap_or_default());
-                        match r.field_kind(&f) {
-                            EntryField::Bool => rsx! {
-                                Switch {
-                                    key: "{f}",
-                                    label: f.clone(),
-                                    checked: value == "true",
-                                    onchange: move |v: bool| { typed.write().insert(key.clone(), v.to_string()); },
-                                }
-                            },
-                            kind => rsx! {
-                                TextField {
-                                    key: "{f}",
-                                    label: if f == r.key { format!("{f} (names the entry)") } else { f.clone() },
-                                    value,
-                                    monospace: true,
-                                    supporting: match (r.patterns.get(&f), kind) {
-                                        (Some(p), _) => format!("matches {p}"),
-                                        (None, EntryField::List) => "several values, separated by commas".to_string(),
-                                        _ => String::new(),
-                                    },
-                                    oninput: move |v: String| { typed.write().insert(key.clone(), v); },
-                                }
-                            },
-                        }
-                    }
                 }
             }
         }
@@ -272,50 +303,60 @@ fn InterfaceCard(iface: InterfaceRow, rows: Vec<ExportRow>) -> Element {
         .cloned()
         .map(|o| o.session.dir.outgoing_dir().join(&iface.name));
     rsx! {
-        Card { variant: CardVariant::Outlined, class: "interfaces__card",
-            div { class: "interfaces__card-head",
-                Icon { name: "hub", size: 22 }
-                h2 { class: "interfaces__name", "{iface.name}" }
+        Card { class: "interfaces__card",
+            CardHeader {
+                div { class: "interfaces__card-head",
+                    Waypoints { size: 22 }
+                    h2 { class: "interfaces__name", "{iface.name}" }
+                    if iface.common {
+                        Badge { variant: BadgeVariant::Outline, class: "interfaces__common",
+                            Globe { size: 12 }
+                            "common"
+                        }
+                    }
+                    span { class: "grow" }
+                    code { class: "interfaces__at", "{iface.file}:{iface.line}" }
+                    if let Some(folder) = folder.filter(|_| !iface.common) {
+                        Button {
+                            variant: ButtonVariant::Ghost,
+                            onclick: move |_| {
+                                if !folder.is_dir() {
+                                    toast(app, ToastKind::Info, format!("{} is not written yet: Apply → transpile writes it", folder.display()));
+                                } else if let Err(e) = open::that(&folder) {
+                                    toast(app, ToastKind::Error, format!("{}: {e}", folder.display()));
+                                }
+                            },
+                            FolderOpen { size: 16 }
+                            "Show folder"
+                        }
+                    }
+                }
+            }
+            CardContent {
                 if iface.common {
-                    Chip { kind: ChipKind::Assist, icon: "public", label: "common", class: "interfaces__common" }
+                    p { class: "interfaces__supporting",
+                        "In the library every project's folder carries."
+                    }
                 }
-                span { class: "grow" }
-                code { class: "interfaces__at", "{iface.file}:{iface.line}" }
-                if let Some(folder) = folder.filter(|_| !iface.common) {
-                    Button {
-                        variant: ButtonVariant::Text,
-                        icon: "folder_open",
-                        onclick: move |_| {
-                            if !folder.is_dir() {
-                                toast(app, ToastKind::Info, format!("{} is not written yet: Apply → transpile writes it", folder.display()));
-                            } else if let Err(e) = open::that(&folder) {
-                                toast(app, ToastKind::Error, format!("{}: {e}", folder.display()));
+                if !iface.uses.is_empty() {
+                    div { class: "interfaces__uses",
+                        span { class: "interfaces__supporting", "uses" }
+                        for u in iface.uses.clone() {
+                            Badge { key: "{u}", variant: BadgeVariant::Outline,
+                                Waypoints { size: 12 }
+                                "{u}"
                             }
-                        },
-                        "Show folder"
+                        }
                     }
                 }
-            }
-            if iface.common {
-                p { class: "interfaces__supporting",
-                    "In the library every project's folder carries."
-                }
-            }
-            if !iface.uses.is_empty() {
-                div { class: "interfaces__uses",
-                    span { class: "interfaces__supporting", "uses" }
-                    for u in iface.uses.clone() {
-                        Chip { key: "{u}", kind: ChipKind::Assist, icon: "hub", label: u.clone() }
+                if rows.is_empty() {
+                    p { class: "interfaces__supporting",
+                        "Declares no export of its own: it carries the core exports and those of the interfaces it uses."
                     }
                 }
-            }
-            if rows.is_empty() {
-                p { class: "interfaces__supporting",
-                    "Declares no export of its own: it carries the core exports and those of the interfaces it uses."
+                for row in rows {
+                    ExportLine { key: "{row.name}", row: row.clone() }
                 }
-            }
-            for row in rows {
-                ExportLine { key: "{row.name}", row: row.clone() }
             }
         }
     }
@@ -329,9 +370,15 @@ fn ExportLine(row: ExportRow) -> Element {
         div { class: "interfaces__export",
             div { class: "interfaces__export-head",
                 code { class: "interfaces__export-name", "{row.name}" }
-                Chip { kind: ChipKind::Assist, icon: how_icon(row.how), label: how_label(&row) }
+                Badge { variant: BadgeVariant::Outline,
+                    {how_icon(row.how)}
+                    {how_label(&row)}
+                }
                 for a in row.attach.clone() {
-                    Chip { key: "{a}", kind: ChipKind::Assist, icon: "link", label: format!("attach {a}") }
+                    Badge { key: "{a}", variant: BadgeVariant::Outline,
+                        LinkIcon { size: 12 }
+                        "attach {a}"
+                    }
                 }
                 span { class: "grow" }
                 code { class: "interfaces__at", "{row.file}:{row.line}" }

@@ -3,12 +3,17 @@ use std::path::Path;
 use dioxus::prelude::*;
 use satz_studio_core::diag::{DiagSource, Diagnostic, Severity};
 
-use crate::components::{Chip, ChipKind, Icon, List, ListItem};
+use dioxus_icons::lucide::{ChevronDown, ChevronUp, CircleAlert, Info, TriangleAlert};
+
+use crate::components::badge::{Badge, BadgeVariant};
+use crate::components::item::{
+    Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemSize, ItemTitle,
+};
 use crate::state::{AppStore, AppStoreStoreExt, DiagnosticSelection, EstateStoreStoreExt, View};
 
 /// The bottom drawer, Findings: the open estate's findings, and those of the pack the
 /// palette's pack review judged, grouped by severity, each with its `file:line`, its source, and —
-/// for one of satz's findings — a chip naming the check that raised it; clicking one sets
+/// for one of satz's findings — a badge naming the check that raised it; clicking one sets
 /// [`DiagnosticSelection`] and opens the destination where its line is ([`destination`]).
 #[component]
 pub fn DiagnosticsDrawer() -> Element {
@@ -32,25 +37,38 @@ pub fn DiagnosticsDrawer() -> Element {
     rsx! {
         section { class: "drawer", class: if open { "drawer--open" }, "aria-label": "findings",
             header { class: "drawer__header", onclick: move |_| app.drawer_open().toggle(),
-                Icon { name: if open { "expand_more" } else { "expand_less" }, size: 20 }
+                if open {
+                    ChevronDown { size: 16 }
+                } else {
+                    ChevronUp { size: 16 }
+                }
                 span { class: "drawer__title", "Findings" }
-                Chip { kind: ChipKind::Assist, icon: "error", label: format!("{errors} errors"), error: errors > 0 }
-                Chip { kind: ChipKind::Assist, icon: "warning", label: format!("{warnings} warnings") }
-                Chip { kind: ChipKind::Assist, icon: "info", label: format!("{notes} notes") }
+                Badge { variant: if errors > 0 { BadgeVariant::Destructive } else { BadgeVariant::Outline },
+                    CircleAlert { size: 12 }
+                    "{errors} errors"
+                }
+                Badge { variant: BadgeVariant::Outline,
+                    TriangleAlert { size: 12 }
+                    "{warnings} warnings"
+                }
+                Badge { variant: BadgeVariant::Outline,
+                    Info { size: 12 }
+                    "{notes} notes"
+                }
             }
             if open {
                 div { class: "drawer__body",
                     if diagnostics.is_empty() {
                         p { class: "drawer__empty", "No findings." }
                     }
-                    for (severity, title, icon) in [(Severity::Error, "Errors", "error"), (Severity::Warning, "Warnings", "warning"), (Severity::Info, "Info", "info")] {
+                    for (severity, title) in [(Severity::Error, "Errors"), (Severity::Warning, "Warnings"), (Severity::Info, "Info")] {
                         {
                             let group: Vec<Diagnostic> = diagnostics.iter().filter(|d| d.severity == severity).cloned().collect();
                             let base = base.clone();
                             rsx! {
                                 if !group.is_empty() {
                                     h3 { class: "drawer__group", "{title}" }
-                                    List {
+                                    ItemGroup {
                                         for (i, d) in group.into_iter().enumerate() {
                                             {
                                                 let is_selected = selected.as_ref() == Some(&d);
@@ -61,13 +79,10 @@ pub fn DiagnosticsDrawer() -> Element {
                                                 let go = destination(&d, main.as_deref(), reviewed.as_deref());
                                                 let mut select = selection.0;
                                                 rsx! {
-                                                    ListItem {
+                                                    Item {
                                                         key: "{title}-{i}",
-                                                        headline,
-                                                        supporting: location,
-                                                        selected: is_selected,
-                                                        leading: rsx! { Icon { name: icon, size: 20, class: "drawer__icon drawer__icon--{icon}" } },
-                                                        trailing: kind.map(|kind| rsx! { Chip { kind: ChipKind::Assist, label: kind } }),
+                                                        size: ItemSize::Sm,
+                                                        "data-selected": if is_selected { "true" } else { "false" },
                                                         onclick: move |_| {
                                                             select.set(Some(item.clone()));
                                                             match go {
@@ -79,6 +94,22 @@ pub fn DiagnosticsDrawer() -> Element {
                                                                 None => {}
                                                             }
                                                         },
+                                                        ItemMedia {
+                                                            match severity {
+                                                                Severity::Error => rsx! { CircleAlert { size: 16, class: "drawer__icon--error" } },
+                                                                Severity::Warning => rsx! { TriangleAlert { size: 16, class: "drawer__icon--warning" } },
+                                                                Severity::Info => rsx! { Info { size: 16, class: "drawer__icon--info" } },
+                                                            }
+                                                        }
+                                                        ItemContent {
+                                                            ItemTitle { "{headline}" }
+                                                            ItemDescription { "{location}" }
+                                                        }
+                                                        if let Some(kind) = kind {
+                                                            ItemActions {
+                                                                Badge { variant: BadgeVariant::Outline, "{kind}" }
+                                                            }
+                                                        }
                                                     }
                                                 }
                                             }

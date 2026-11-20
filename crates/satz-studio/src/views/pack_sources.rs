@@ -13,18 +13,33 @@ use dioxus::prelude::*;
 use satz_studio_core::satz::reports::{PackPlace, PackSourceRow};
 use satz_studio_core::satz::workload::{NewPlace, NewSource, Which};
 
-use crate::components::{
-    Button, ButtonVariant, Card, CardVariant, Dialog, HelpButton, Icon, IconButton, LinearProgress,
-    List, ListItem, Segment, SegmentedButton, TextField,
+use std::collections::HashSet;
+
+use dioxus_icons::lucide::{
+    Check, CircleAlert, Cloud, Folder, FolderOpen, Library, Plus, RefreshCw, Settings2, Trash2,
 };
+
+use crate::components::button::{Button, ButtonSize, ButtonVariant};
+use crate::components::card::{Card, CardHeader};
+use crate::components::dialog::{Dialog, DialogTitle};
+use crate::components::item::{
+    Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemSize, ItemTitle,
+};
+use crate::components::progress::Progress;
+use crate::components::toggle_group::{ToggleGroup, ToggleItem};
 use crate::state::{
     AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt, PackOp, SourceOp,
 };
+use crate::widgets::{Field, HelpButton};
+
+/// The kinds of source the form adds, in the order their buttons stand.
+const KINDS: [&str; 2] = ["github", "folder"];
+
 /// The leading icon of a source: a repository or a folder.
-fn place_icon(row: &PackSourceRow) -> &'static str {
+fn place_icon(row: &PackSourceRow, size: u32) -> Element {
     match row.place {
-        PackPlace::Github { .. } => "cloud",
-        PackPlace::Folder(_) => "folder",
+        PackPlace::Github { .. } => rsx! { Cloud { size } },
+        PackPlace::Folder(_) => rsx! { Folder { size } },
     }
 }
 
@@ -85,7 +100,7 @@ pub enum Sheet {
 pub fn Refused(said: String) -> Element {
     rsx! {
         div { class: "interfaces__error",
-            Icon { name: "error", size: 20 }
+            CircleAlert { size: 20 }
             div {
                 p { "satz refused:" }
                 pre { "{said}" }
@@ -156,7 +171,7 @@ pub fn PackSourcesCard(
             String::new(),
             rsx! {
                 div { class: "interfaces__error",
-                    Icon { name: "error", size: 20 }
+                    CircleAlert { size: 20 }
                     div {
                         p { "satz pack-source list could not list the pack sources:" }
                         pre { "{e}" }
@@ -173,7 +188,7 @@ pub fn PackSourcesCard(
                     .collect::<Vec<_>>(),
             ),
             rsx! {
-                List {
+                ItemGroup {
                     for row in report.sources {
                         {
                             let chosen = listed.as_deref() == Some(row.name.as_str());
@@ -186,22 +201,27 @@ pub fn PackSourcesCard(
                                 row.location()
                             };
                             rsx! {
-                                ListItem {
+                                Item {
                                     key: "{row.name}",
-                                    headline: row.name.clone(),
-                                    supporting,
-                                    selected: chosen,
-                                    leading: rsx! { Icon { name: place_icon(&row), size: 22 } },
+                                    size: ItemSize::Sm,
+                                    "data-selected": if chosen { "true" } else { "false" },
                                     onclick: move |_| {
                                         if !busy {
                                             handle.send(EstateAction::Packs(PackOp::List(list_name.clone())));
                                             sheet.set(Sheet::Closed);
                                         }
                                     },
-                                    trailing: rsx! {
-                                        IconButton {
-                                            icon: "update",
-                                            label: "Update the packs fetched from {row.name}",
+                                    ItemMedia { {place_icon(&row, 22)} }
+                                    ItemContent {
+                                        ItemTitle { "{row.name}" }
+                                        ItemDescription { "{supporting}" }
+                                    }
+                                    ItemActions {
+                                        Button {
+                                            variant: ButtonVariant::Ghost,
+                                            size: ButtonSize::Icon,
+                                            title: "Update the packs fetched from {row.name}",
+                                            "aria-label": "Update the packs fetched from {row.name}",
                                             disabled: busy,
                                             onclick: move |e: MouseEvent| {
                                                 e.stop_propagation();
@@ -211,19 +231,23 @@ pub fn PackSourcesCard(
                                                     take_upstream: false,
                                                 }));
                                             },
+                                            RefreshCw { size: 16 }
                                         }
                                         if !row.builtin {
-                                            IconButton {
-                                                icon: "delete",
-                                                label: "Remove the pack source",
+                                            Button {
+                                                variant: ButtonVariant::Ghost,
+                                                size: ButtonSize::Icon,
+                                                title: "Remove the pack source",
+                                                "aria-label": "Remove the pack source",
                                                 disabled: busy,
                                                 onclick: move |e: MouseEvent| {
                                                     e.stop_propagation();
                                                     confirm_remove.call(remove_name.clone());
                                                 },
+                                                Trash2 { size: 16 }
                                             }
                                         }
-                                    },
+                                    }
                                 }
                             }
                         }
@@ -237,99 +261,101 @@ pub fn PackSourcesCard(
         .map(|l| format!(" · packs listed from {l}"))
         .unwrap_or_default();
 
+    let kind_pressed: HashSet<usize> = KINDS
+        .iter()
+        .position(|k| *k == kind())
+        .into_iter()
+        .collect();
+
     rsx! {
-        Card { variant: CardVariant::Outlined, class: "interfaces__card",
-            div { class: "interfaces__card-head",
-                Icon { name: "source", size: 22 }
-                h2 { class: "interfaces__name", "Pack sources" }
-                span { class: "interfaces__supporting", "{summary}{listing}" }
-                span { class: "grow" }
-                Button {
-                    variant: ButtonVariant::Text,
-                    icon: "tune",
-                    onclick: move |_| {
-                        app.estate().source_change().set(None);
-                        sheet.set(Sheet::Manage);
-                    },
-                    "Manage"
-                }
-                HelpButton { title: "Pack sources",
-                    p { "A pack source is where workload packs are fetched from: satz, the satz repository's packs folder, built in; and each source config.toml lists, a GitHub repository or a folder." }
-                    p { "Manage lists them. Choose one to list its packs against this estate: a GitHub source is read over the network, so it is read only when you choose it. Update fetches every pack that came from that source again, leaving a pack edited here as it is." }
-                    p { "The sources are config.toml's, and satz pack-source writes them: Add runs satz pack-source add, and Remove runs satz pack-source remove, which satz refuses while origin.toml names the source for a fetched pack." }
+        Card { class: "interfaces__card",
+            CardHeader {
+                div { class: "interfaces__card-head",
+                    Library { size: 22 }
+                    h2 { class: "interfaces__name", "Pack sources" }
+                    span { class: "interfaces__supporting", "{summary}{listing}" }
+                    span { class: "grow" }
+                    Button {
+                        variant: ButtonVariant::Ghost,
+                        onclick: move |_| {
+                            app.estate().source_change().set(None);
+                            sheet.set(Sheet::Manage);
+                        },
+                        Settings2 { size: 16 }
+                        "Manage"
+                    }
+                    HelpButton { title: "Pack sources",
+                        p { "A pack source is where workload packs are fetched from: satz, the satz repository's packs folder, built in; and each source config.toml lists, a GitHub repository or a folder." }
+                        p { "Manage lists them. Choose one to list its packs against this estate: a GitHub source is read over the network, so it is read only when you choose it. Update fetches every pack that came from that source again, leaving a pack edited here as it is." }
+                        p { "The sources are config.toml's, and satz pack-source writes them: Add runs satz pack-source add, and Remove runs satz pack-source remove, which satz refuses while origin.toml names the source for a fetched pack." }
+                    }
                 }
             }
         }
         Dialog {
             open: sheet() == Sheet::Manage,
-            title: "Pack sources",
-            icon: "source",
+            on_open_change: move |now: bool| {
+                if !now {
+                    sheet.set(Sheet::Closed);
+                }
+            },
             class: "interfaces__add",
-            ondismiss: move |_| sheet.set(Sheet::Closed),
-            actions: rsx! {
+            DialogTitle { "Pack sources" }
+            div { class: "dialog-body",
+                p { class: "interfaces__supporting", "Choose a source to list its packs; update or remove it from its row." }
+                {rows}
+                if let Some(said) = &refused {
+                    Refused { said: said.clone() }
+                }
+                if busy {
+                    Progress { value: None::<f64>, "aria-label": "working" }
+                }
+            }
+            div { class: "dialog-actions",
                 Button {
-                    variant: ButtonVariant::Text,
-                    icon: "add",
+                    variant: ButtonVariant::Ghost,
                     disabled: busy,
                     onclick: move |_| {
                         app.estate().source_change().set(None);
                         sheet.set(Sheet::Add);
                     },
+                    Plus { size: 16 }
                     "Add a source…"
                 }
-                Button { variant: ButtonVariant::Text, onclick: move |_| sheet.set(Sheet::Closed), "Close" }
-            },
-            p { class: "interfaces__supporting", "Choose a source to list its packs; update or remove it from its row." }
-            {rows}
-            if let Some(said) = &refused {
-                Refused { said: said.clone() }
-            }
-            if busy {
-                LinearProgress {}
+                Button { variant: ButtonVariant::Ghost, onclick: move |_| sheet.set(Sheet::Closed), "Close" }
             }
         }
         Dialog {
             open: sheet() == Sheet::Add,
-            title: "Add a pack source",
-            icon: "add",
-            class: "interfaces__add",
-            ondismiss: move |_| sheet.set(Sheet::Manage),
-            actions: rsx! {
-                Button { variant: ButtonVariant::Text, onclick: move |_| sheet.set(Sheet::Manage), "Cancel" }
-                Button {
-                    variant: ButtonVariant::Filled,
-                    icon: "check",
-                    disabled: busy || ready.is_none(),
-                    onclick: {
-                        let ready = ready.clone();
-                        move |_| {
-                            if let Some(source) = ready.clone() {
-                                asked.set(Some(source.name.clone()));
-                                handle.send(EstateAction::PackSources(SourceOp::Add(source)));
-                            }
-                        }
-                    },
-                    "Add"
+            on_open_change: move |now: bool| {
+                if !now {
+                    sheet.set(Sheet::Manage);
                 }
             },
-            div { class: "wpacks__form",
-                TextField {
+            class: "interfaces__add",
+            DialogTitle { "Add a pack source" }
+            div { class: "dialog-body wpacks__form",
+                Field {
                     label: "Name",
                     value: name(),
                     monospace: true,
                     supporting: "a lowercase letter, then lowercase letters, digits and -; origin.toml records it for every pack fetched from the source",
                     oninput: move |v: String| name.set(v),
                 }
-                SegmentedButton {
-                    options: vec![
-                        Segment::new("github", "GitHub repository").with_icon("cloud"),
-                        Segment::new("folder", "Folder").with_icon("folder"),
-                    ],
-                    selected: kind(),
-                    onselect: move |v: String| kind.set(v),
+                ToggleGroup {
+                    horizontal: true,
+                    pressed: Some(kind_pressed.clone()),
+                    on_pressed_change: move |now: HashSet<usize>| {
+                        // a click on the pressed one leaves it pressed
+                        if let Some(k) = now.difference(&kind_pressed).next().and_then(|i| KINDS.get(*i)) {
+                            kind.set((*k).to_string());
+                        }
+                    },
+                    ToggleItem { index: 0usize, Cloud { size: 16 } "GitHub repository" }
+                    ToggleItem { index: 1usize, Folder { size: 16 } "Folder" }
                 }
                 if kind() == "github" {
-                    TextField {
+                    Field {
                         label: "Repository",
                         value: repo(),
                         monospace: true,
@@ -337,14 +363,14 @@ pub fn PackSourcesCard(
                         supporting: "a private repository is read with this machine's GitHub sign-in (gh auth login)",
                         oninput: move |v: String| repo.set(v),
                     }
-                    TextField {
+                    Field {
                         label: "Branch or tag",
                         value: git_ref(),
                         monospace: true,
                         supporting: "the repository's default branch when empty",
                         oninput: move |v: String| git_ref.set(v),
                     }
-                    TextField {
+                    Field {
                         label: "Folder of the repository",
                         value: path(),
                         monospace: true,
@@ -354,8 +380,7 @@ pub fn PackSourcesCard(
                 } else {
                     div { class: "wpacks__actions",
                         Button {
-                            variant: ButtonVariant::Outlined,
-                            icon: "folder_open",
+                            variant: ButtonVariant::Outline,
                             onclick: move |_| {
                                 spawn(async move {
                                     let dialog = rfd::AsyncFileDialog::new()
@@ -365,6 +390,7 @@ pub fn PackSourcesCard(
                                     }
                                 });
                             },
+                            FolderOpen { size: 16 }
                             "Choose a folder…"
                         }
                         if let Some(dir) = folder() {
@@ -379,7 +405,24 @@ pub fn PackSourcesCard(
                     Refused { said: said.clone() }
                 }
                 if busy {
-                    LinearProgress {}
+                    Progress { value: None::<f64>, "aria-label": "working" }
+                }
+            }
+            div { class: "dialog-actions",
+                Button { variant: ButtonVariant::Ghost, onclick: move |_| sheet.set(Sheet::Manage), "Cancel" }
+                Button {
+                    disabled: busy || ready.is_none(),
+                    onclick: {
+                        let ready = ready.clone();
+                        move |_| {
+                            if let Some(source) = ready.clone() {
+                                asked.set(Some(source.name.clone()));
+                                handle.send(EstateAction::PackSources(SourceOp::Add(source)));
+                            }
+                        }
+                    },
+                    Check { size: 16 }
+                    "Add"
                 }
             }
         }

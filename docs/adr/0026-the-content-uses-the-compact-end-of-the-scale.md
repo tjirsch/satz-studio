@@ -1,6 +1,6 @@
 # 0026 — the content uses the compact end of the scale
 
-- **Status:** accepted
+- **Status:** superseded by ADR-0034
 - **Date:** 2026-11-18; amended the same day — text fields and the rows of the Estate tabs
 - **Deciders:** the maintainer
 

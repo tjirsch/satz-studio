@@ -1,6 +1,6 @@
 //! The stores and the two coroutines. [`AppStore`] is the whole application state,
 //! provided at the root and read through the accessors `#[derive(Store)]` generates, so
-//! a log line does not re-render the rail. Every side effect — locating satz, walking a
+//! a log line does not re-render the sidebar. Every side effect — locating satz, walking a
 //! folder, opening a session, running a command — happens in [`app_coroutine`] or in
 //! the per-estate coroutine ([`estate_coroutine`]); the stores are written from there,
 //! and nothing blocks in an event handler.
@@ -17,6 +17,10 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use dioxus::prelude::*;
+use dioxus_icons::lucide::{
+    Bot, Boxes, FileText, FolderOpen, HardDrive, HousePlus, Inbox, LayoutDashboard,
+    MessageCircleQuestionMark, Package, Rocket, ScrollText,
+};
 use satz_studio_core::cst::Cst;
 use satz_studio_core::diag::Diagnostic;
 use satz_studio_core::estate::HclState;
@@ -41,7 +45,7 @@ pub use pace::{
     ahead_sentence, install_offer, newer_satz_sentence, satz_available, satz_notice,
     satz_release_sentence, studio_available, studio_look_sentence, window_title,
 };
-pub use toast::{Toast, ToastKind, dismiss, enqueue};
+pub use toast::{Toast, ToastKind};
 
 /// Where the satz binary stands, as the app coroutine found it at startup and after
 /// every settings save.
@@ -87,12 +91,12 @@ impl SatzStatus {
     }
 }
 
-/// Where the window can stand. The rail's order is the order of the work on an estate:
+/// Where the window can stand. The sidebar's order is the order of the work on an estate:
 /// which estate it is and what it still has to do, which packs it runs, what those packs
 /// leave undecided, what it declares, what judges it, what hands it off — then the two
-/// secondary destinations at the foot of the rail.
+/// secondary destinations at the foot of the sidebar.
 ///
-/// [`View::Start`] is not a rail destination: it is the screen with the three doors,
+/// [`View::Start`] is not a sidebar destination: it is the screen with the three doors,
 /// where the window stands while no estate is open. Switching estates is the top bar's
 /// action, not a place.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -120,20 +124,17 @@ pub enum View {
     /// setting an external agent up on this estate, and starting it
     Agent,
     Settings,
-    /// a development route, reachable only with `SATZ_STUDIO_DEBUG` set
-    Gallery,
 }
 
 impl View {
-    /// The primary destinations, in rail order: the order the work happens, which runs
+    /// The primary destinations, in sidebar order: the order the work happens, which runs
     /// from what the estate HAS to what it still has to decide. A pack is what declares a
     /// question, and `merge-presets` — the command that brings new pack lines in — is in
     /// Packs, so Packs is where the questions in Decisions come from and it stands before
     /// them. Apply is the estate's way to the organization, and Documents is what is given
     /// to people once the rest is settled. Those five are the path, each ending with a
     /// bar that leads to the next (`views/path.rs`); Estate stands after them, because
-    /// the estate file itself is not a step of the walk. Six; Material 3 puts up to seven
-    /// in a navigation rail (ADR 0027, ADR 0028).
+    /// the estate file itself is not a step of the walk (ADR 0027, ADR 0028).
     pub const PRIMARY: [View; 7] = [
         View::Overview,
         View::Presets,
@@ -155,7 +156,7 @@ impl View {
             .collect()
     }
 
-    /// The secondary group, bottom-aligned in the rail. Agent needs an estate — it
+    /// The secondary group, in the foot of the sidebar. Agent needs an estate — it
     /// configures an agent for the one that is open; Settings is the one destination
     /// that stands without one.
     pub const SECONDARY: [View; 2] = [View::Agent, View::Settings];
@@ -172,24 +173,22 @@ impl View {
             View::Documents => "Documents",
             View::Agent => "Agent",
             View::Settings => "Settings",
-            View::Gallery => "Gallery",
         }
     }
 
-    /// The Material Symbols ligature of the destination.
-    pub fn icon(self) -> &'static str {
+    /// The Lucide icon of the destination, `size` pixels square.
+    pub fn icon(self, size: u32) -> Element {
         match self {
-            View::Start => "home_storage",
-            View::Overview => "dashboard",
-            View::Decisions => "quiz",
-            View::Presets => "inventory_2",
-            View::Packs => "package_2",
-            View::Estate => "description",
-            View::Apply => "rocket_launch",
-            View::Documents => "article",
-            View::Agent => "smart_toy",
-            View::Settings => "settings",
-            View::Gallery => "palette",
+            View::Start => rsx! { HardDrive { size } },
+            View::Overview => rsx! { LayoutDashboard { size } },
+            View::Decisions => rsx! { MessageCircleQuestionMark { size } },
+            View::Presets => rsx! { Boxes { size } },
+            View::Packs => rsx! { Package { size } },
+            View::Estate => rsx! { FileText { size } },
+            View::Apply => rsx! { Rocket { size } },
+            View::Documents => rsx! { ScrollText { size } },
+            View::Agent => rsx! { Bot { size } },
+            View::Settings => rsx! { dioxus_icons::lucide::Settings { size } },
         }
     }
 
@@ -207,12 +206,6 @@ impl View {
                 | View::Agent
         )
     }
-}
-
-/// The development routes — the Gallery — are behind `SATZ_STUDIO_DEBUG`: the UI
-/// checklist is for whoever changes the Material widgets, not for an operator's rail.
-pub fn debug_routes() -> bool {
-    std::env::var_os("SATZ_STUDIO_DEBUG").is_some_and(|v| !v.is_empty())
 }
 
 /// The ways an estate reaches the app: the doors of the Start screen. Each is one card
@@ -244,12 +237,12 @@ impl Door {
         }
     }
 
-    /// The Material Symbols ligature of the door.
-    pub fn icon(self) -> &'static str {
+    /// The Lucide icon of the door, `size` pixels square.
+    pub fn icon(self, size: u32) -> Element {
         match self {
-            Door::Create => "add_home",
-            Door::Import => "move_to_inbox",
-            Door::Open => "folder_open",
+            Door::Create => rsx! { HousePlus { size } },
+            Door::Import => rsx! { Inbox { size } },
+            Door::Open => rsx! { FolderOpen { size } },
         }
     }
 
@@ -557,7 +550,8 @@ pub struct AppStore {
     /// the palette opens on the pack review rather than its first command: a finding of
     /// the reviewed pack was chosen in the drawer
     pub palette_review: bool,
-    pub snackbar: VecDeque<Toast>,
+    /// what waits to be shown as a toast
+    pub toasts: VecDeque<Toast>,
     pub drawer_open: bool,
     pub estate: EstateStore,
     /// the `satz init` run behind the Create door
@@ -588,7 +582,7 @@ impl AppStore {
             door: Door::default(),
             palette_open: false,
             palette_review: false,
-            snackbar: VecDeque::new(),
+            toasts: VecDeque::new(),
             drawer_open: false,
             estate: EstateStore::default(),
             create: CreateStore::default(),
@@ -604,37 +598,17 @@ impl AppStore {
 #[derive(Clone, Copy, PartialEq)]
 pub struct DiagnosticSelection(pub Signal<Option<Diagnostic>>);
 
-/// Push a toast and schedule its removal. Errors stay longer than notices.
+/// Hand the window one thing to say; it shows it as a toast.
 pub fn toast(app: Store<AppStore>, kind: ToastKind, text: impl Into<String>) {
-    let id = enqueue(&mut app.snackbar().write(), kind, text.into());
-    let after = match kind {
-        ToastKind::Info => std::time::Duration::from_secs(5),
-        ToastKind::Error => std::time::Duration::from_secs(12),
-    };
-    spawn(async move {
-        tokio::time::sleep(after).await;
-        dismiss(&mut app.snackbar().write(), id);
+    app.toasts().write().push_back(Toast {
+        kind,
+        text: text.into(),
     });
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// Material 3 puts three to seven destinations in a navigation rail, and the app uses
-    /// six (ADR 0028): six primary ones and a bottom-aligned footer of two secondary ones
-    /// is inside the pattern because the footer's are not peers of the six. An eighth
-    /// PRIMARY destination is a navigation drawer's, not a smaller font's (`docs/ui.md`), so
-    /// the Interfaces view is a tab of Estate and not a destination (ADR 0023).
-    #[test]
-    fn the_rail_stays_inside_the_navigation_rail_pattern() {
-        assert!(
-            (3..=7).contains(&View::PRIMARY.len()),
-            "{} primary destinations",
-            View::PRIMARY.len()
-        );
-        assert_eq!(View::SECONDARY.len(), 2);
-    }
 
     #[test]
     fn every_primary_destination_works_on_an_estate_and_settings_is_the_one_that_does_not() {
@@ -648,19 +622,16 @@ mod tests {
         assert_eq!(without, [View::Settings]);
     }
 
-    /// The Start screen and the Gallery are places the window can stand and not
-    /// destinations of the rail: the first is where it stands with no estate open, the
-    /// second is a development route.
+    /// The Start screen is where the window stands with no estate open, not a
+    /// destination of the sidebar.
     #[test]
-    fn the_start_screen_and_the_gallery_are_in_neither_group() {
-        for view in [View::Start, View::Gallery] {
-            assert!(!View::PRIMARY.contains(&view), "{view:?}");
-            assert!(!View::SECONDARY.contains(&view), "{view:?}");
-        }
+    fn the_start_screen_is_in_neither_group() {
+        assert!(!View::PRIMARY.contains(&View::Start));
+        assert!(!View::SECONDARY.contains(&View::Start));
     }
 
     #[test]
-    fn no_two_destinations_share_a_label_or_an_icon() {
+    fn no_two_destinations_share_a_label() {
         let all = [
             View::Start,
             View::Overview,
@@ -672,16 +643,11 @@ mod tests {
             View::Documents,
             View::Agent,
             View::Settings,
-            View::Gallery,
         ];
         let mut labels: Vec<&str> = all.iter().map(|v| v.label()).collect();
         labels.sort_unstable();
         labels.dedup();
         assert_eq!(labels.len(), all.len());
-        let mut icons: Vec<&str> = all.iter().map(|v| v.icon()).collect();
-        icons.sort_unstable();
-        icons.dedup();
-        assert_eq!(icons.len(), all.len());
     }
 
     /// An organization's estate has Presets and Packs; an estate without a preset library
