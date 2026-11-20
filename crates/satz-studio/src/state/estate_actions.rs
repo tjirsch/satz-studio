@@ -105,6 +105,10 @@ pub enum EstateAction {
     /// a workload-pack command on the estate's `packs_dir`: `satz packs`, `get-pack`,
     /// `update-pack` or `detach-pack`, then the list read again from the same source
     Packs(PackOp),
+    /// a new pack of the repository's own: `packs_dir/<id>.satz` written and formatted
+    /// by `satz fmt`, its `use` line added through the app's writer, and the file
+    /// opened in the application the system gives `.satz` files
+    NewPack(String),
     /// a command on the estate's pack sources: `satz pack-source list`, `add` or
     /// `remove`, the last two followed by the list read again
     PackSources(SourceOp),
@@ -141,8 +145,14 @@ pub enum PackOp {
     List(String),
     /// `satz get-pack <id>|--all --source <name>`, from the listed source
     Get(Which),
-    /// `satz update-pack <id>|--all [--take-upstream]`: each pack from its recorded source
-    Update { which: Which, take_upstream: bool },
+    /// `satz update-pack <id>|--all [--source <from>] [--take-upstream]`: each pack from
+    /// its recorded source — only the ones fetched from `from`, where it names one, and
+    /// that source is listed after it
+    Update {
+        which: Which,
+        from: Option<String>,
+        take_upstream: bool,
+    },
     /// `satz detach-pack <id>`
     Detach(String),
 }
@@ -244,6 +254,15 @@ pub async fn estate_coroutine(
                 if wrote {
                     reload(&session, app).await;
                 }
+            }
+            EstateAction::NewPack(id) => {
+                if app.estate().packs_busy().cloned() {
+                    toast(app, ToastKind::Info, "a pack command is already running");
+                    continue;
+                }
+                app.estate().packs_busy().set(true);
+                new_pack(&session, app, &id).await;
+                app.estate().packs_busy().set(false);
             }
             EstateAction::PackSources(op) => {
                 if app.estate().packs_busy().cloned() {
@@ -1358,6 +1377,12 @@ async fn workload_packs(session: &Arc<EstateSession>, app: Store<AppStore>, op: 
             estate.workload_packs().set(None);
             source.clone()
         }
+        PackOp::Update {
+            from: Some(source), ..
+        } => {
+            estate.pack_source().set(Some(source.clone()));
+            source.clone()
+        }
         _ => match estate.pack_source().cloned() {
             Some(source) => source,
             None => {
@@ -1398,10 +1423,11 @@ async fn workload_packs(session: &Arc<EstateSession>, app: Store<AppStore>, op: 
         }
         PackOp::Update {
             which,
+            from,
             take_upstream,
         } => {
             let _lock = session.write_lock().await;
-            match workload::update(cli, &which, take_upstream).await {
+            match workload::update(cli, &which, from.as_deref(), take_upstream).await {
                 Ok(report) => {
                     let written = report
                         .packs
@@ -1452,6 +1478,48 @@ async fn workload_packs(session: &Arc<EstateSession>, app: Store<AppStore>, op: 
         .map_err(|e| project::said(&e));
     estate.workload_packs().set(Some(listed));
     wrote
+}
+
+/// A new pack of the repository's own (`workload::create_pack`, under the write lock),
+/// then its `use` line — the path satz names for a file of `packs_dir` — through the
+/// app's writer like every other edit, then the file opened for its author. A refused
+/// line leaves the pack where it is, opened all the same: the file is the author's.
+async fn new_pack(session: &Arc<EstateSession>, app: Store<AppStore>, id: &str) {
+    let created = {
+        let _lock = session.write_lock().await;
+        workload::create_pack(&session.cli, &session.dir.packs_dir(), id).await
+    };
+    let file = match created {
+        Ok(file) => file,
+        Err(e) => {
+            toast(app, ToastKind::Error, format!("no new pack: {e}"));
+            return;
+        }
+    };
+    match session.dir.use_path_of(&file) {
+        Some(path) => commit_edit(session, app, Edit::AddUse { path }).await,
+        None => toast(
+            app,
+            ToastKind::Error,
+            format!(
+                "{} is written, and no use line reaches it: packs_dir is under none of config.toml's include_dirs",
+                file.display()
+            ),
+        ),
+    }
+    open_file(app, &file);
+}
+
+/// A file opened in the application the system gives its type — `open` on macOS,
+/// `start` on Windows, `xdg-open` on Linux; one that does not open is a toast.
+pub fn open_file(app: Store<AppStore>, file: &Path) {
+    if let Err(e) = open::that(file) {
+        toast(
+            app,
+            ToastKind::Error,
+            format!("{} did not open: {e}", file.display()),
+        );
+    }
 }
 
 /// One pack-source operation. An add and a remove write `config.toml` through satz under

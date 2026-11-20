@@ -177,19 +177,21 @@ pub async fn get(cli: &SatzCli, which: &Which, source: &str) -> Result<GetPackRe
     )
 }
 
-/// `satz update-pack <id>|--all [--take-upstream]`: each pack read from the source its
-/// row in `origin.toml` names. A non-zero exit with a report is satz's verdict that a
-/// pack needs attention, and the report says so itself; the two are held together.
+/// `satz update-pack <id>|--all [--source <name>] [--take-upstream]`: each pack read
+/// from the source its row in `origin.toml` names — only the packs fetched from `only`,
+/// where it names one, the others reported as not checked. A non-zero exit with a report
+/// is satz's verdict that a pack needs attention, and the report says so itself; the two
+/// are held together.
 pub async fn update(
     cli: &SatzCli,
     which: &Which,
+    only: Option<&str>,
     take_upstream: bool,
 ) -> Result<UpdatePackReport, SatzError> {
-    let flags = if take_upstream {
-        vec!["--take-upstream".to_string()]
-    } else {
-        Vec::new()
-    };
+    let mut flags = only.map(source_args).unwrap_or_default();
+    if take_upstream {
+        flags.push("--take-upstream".to_string());
+    }
     let (report, status): (UpdatePackReport, _) = cli
         .json_stdout(&argv("update-pack", [which.args(), flags, Vec::new()]))
         .await?;
@@ -211,6 +213,64 @@ pub async fn detach(cli: &SatzCli, id: &str) -> Result<DetachedPack, SatzError> 
         ))
         .await?;
     held(report, status, true, "detach-pack", "it removed the row")
+}
+
+/// Whether `id` can name a new pack of the repository: a lowercase letter, then
+/// lowercase letters, digits and `-`. It is the file's name in `packs_dir` and, with
+/// `_` for `-`, the name its `pack` statement declares. `Err` says what is wrong.
+pub fn new_pack_id(id: &str) -> Result<(), String> {
+    let mut chars = id.chars();
+    match chars.next() {
+        None => Err("a pack needs a name".to_string()),
+        Some(c) if !c.is_ascii_lowercase() => {
+            Err(format!("`{id}` does not start with a lowercase letter"))
+        }
+        _ if chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-') => Ok(()),
+        _ => Err(format!(
+            "`{id}` holds more than lowercase letters, digits and -"
+        )),
+    }
+}
+
+/// The text a new pack starts as: its `pack` statement at version 0.1 and an empty
+/// `params` block, which `satz fmt` leaves as it is and an estate that uses it
+/// transpiles with.
+pub fn new_pack_text(id: &str) -> String {
+    format!(
+        "pack {} version \"0.1\"\n\nparams {{\n}}\n",
+        id.replace('-', "_")
+    )
+}
+
+/// A new pack of the repository's own, `packs_dir/<id>.satz`, written with
+/// [`new_pack_text`] — refused when the file is there — and formatted by `satz fmt`. It
+/// has no row in `origin.toml`, so no fetch and no update ever writes it. A file `satz
+/// fmt` refuses is removed again, since nothing but this call wrote it.
+pub async fn create_pack(cli: &SatzCli, packs_dir: &Path, id: &str) -> Result<PathBuf, String> {
+    new_pack_id(id)?;
+    std::fs::create_dir_all(packs_dir).map_err(|e| format!("{}: {e}", packs_dir.display()))?;
+    let file = packs_dir.join(format!("{id}.satz"));
+    let mut out = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&file)
+        .map_err(|e| match e.kind() {
+            std::io::ErrorKind::AlreadyExists => {
+                format!("{} is there already", file.display())
+            }
+            _ => format!("{}: {e}", file.display()),
+        })?;
+    std::io::Write::write_all(&mut out, new_pack_text(id).as_bytes())
+        .map_err(|e| format!("{}: {e}", file.display()))?;
+    drop(out);
+    let fmt = cli
+        .output(&["fmt".to_string(), file.display().to_string()])
+        .await;
+    if let Err(e) = fmt {
+        let _ = std::fs::remove_file(&file);
+        return Err(format!("satz fmt refused the new pack: {e}"));
+    }
+    Ok(file)
 }
 
 /// The report, when the exit status says what the report says: a zero exit exactly when
@@ -272,6 +332,27 @@ mod tests {
                 "--path",
                 "workloads"
             ]
+        );
+    }
+
+    #[test]
+    fn a_new_pack_is_named_in_lowercase_and_declares_its_name_with_underscores() {
+        assert_eq!(new_pack_id("team-access2"), Ok(()));
+        assert_eq!(new_pack_id("a"), Ok(()));
+        for wrong in [
+            "",
+            "Team",
+            "2team",
+            "-team",
+            "team_access",
+            "team.access",
+            "team/x",
+        ] {
+            assert!(new_pack_id(wrong).is_err(), "{wrong}");
+        }
+        assert_eq!(
+            new_pack_text("team-access"),
+            "pack team_access version \"0.1\"\n\nparams {\n}\n"
         );
     }
 

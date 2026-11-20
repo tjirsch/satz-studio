@@ -1,5 +1,6 @@
-//! The pack review in Presets: `satz review-preset` over a pack the operator chooses, and the
-//! two places a reviewed pack goes.
+//! The pack review, an entry of the commands palette ("Review a pack for the preset
+//! library", ADR 0031): `satz review-preset` over a pack the operator chooses, and the two
+//! places a reviewed pack goes.
 //!
 //! The rules are satz's; the view runs the command ([`EstateAction::ReviewPack`]) and
 //! shows what it said: the verdict, what the pack creates, each finding — clickable, and
@@ -25,7 +26,7 @@ use crate::state::{
     AppStore, AppStoreStoreExt, DiagnosticSelection, EstateAction, EstateStoreStoreExt,
     PackReviewState,
 };
-use crate::views::commands::copy_to_clipboard;
+use crate::views::commands::{REVIEW_LABEL, copy_to_clipboard};
 
 /// The OS open dialog for the pack, in the directory of the last pack reviewed, else the
 /// estate's library; the chosen file goes to the estate coroutine.
@@ -92,7 +93,7 @@ pub fn PackReviewCard() -> Element {
         Card { variant: CardVariant::Outlined, class: "review",
             div { class: "review__head",
                 Icon { name: "rate_review", size: 24 }
-                h2 { class: "review__title", "Review a pack" }
+                h2 { class: "review__title", "{REVIEW_LABEL}" }
                 span { class: "grow" }
                 Switch {
                     checked: against(),

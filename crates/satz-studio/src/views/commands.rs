@@ -10,7 +10,9 @@
 //! The commands are grouped by the job: [`APPLY`] is the estate's way to the organization,
 //! in the order it is walked, and [`COMPLIANCE`] is what the Documents destination runs
 //! for a report. The palette holds every entry, including the ones neither gathers, and opens on ⌘K /
-//! Ctrl+K. `apply`, `bootstrap` and `migrate` are command lines to copy or to open in
+//! Ctrl+K. For an estate that holds the preset library it also holds "Review a pack for the
+//! preset library" ([`REVIEW_LABEL`]), the pack review of [`crate::views::review`], which is a
+//! card of its own rather than a command line. `apply`, `bootstrap` and `migrate` are command lines to copy or to open in
 //! the OS terminal ([ADR 0006](../../../../docs/adr/0006-apply-and-bootstrap-run-in-the-users-terminal.md),
 //! [ADR 0012](../../../../docs/adr/0012-migrate-hands-off-to-the-terminal.md)).
 
@@ -29,6 +31,7 @@ use crate::state::{
     AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt, ToastKind, command_line,
     reports_dir, toast,
 };
+use crate::views::review::PackReviewCard;
 
 /// Where the open estate's file goes on the command line.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -674,19 +677,54 @@ pub fn build_args(
     Ok(args)
 }
 
+/// The palette entry of the pack review, after the commands.
+pub const REVIEW_LABEL: &str = "Review a pack for the preset library";
+
 /// One group of palette entries: the list of them, the argument form of the chosen
 /// one, its command line as it will run, and the shared log. Apply and Documents each
-/// hold one over their own ids; the palette is one over every id.
+/// hold one over their own ids; the palette is one over every id, and with `review` a
+/// last entry, [`REVIEW_LABEL`], whose work area is the pack review card.
 #[component]
-pub fn CommandDeck(ids: Vec<&'static str>, #[props(default)] tools: bool) -> Element {
+pub fn CommandDeck(
+    ids: Vec<&'static str>,
+    #[props(default)] tools: bool,
+    #[props(default)] review: bool,
+) -> Element {
     let app = use_context::<Store<AppStore>>();
     let handle = use_coroutine_handle::<EstateAction>();
     let specs: Vec<&'static CommandSpec> = ids.iter().filter_map(|id| spec_of(id)).collect();
-    let mut selected = use_signal(|| 0usize);
+    let count = specs.len();
+    // a finding of the reviewed pack chosen in the drawer opens the palette on the review
+    let mut selected = use_signal(move || {
+        if review && *app.palette_review().peek() {
+            count
+        } else {
+            0
+        }
+    });
+    // read once: the next time the palette opens, it opens on its first command again
+    use_effect(move || {
+        if *app.palette_review().peek() {
+            app.palette_review().set(false);
+        }
+    });
     let first = specs.first().copied();
     let mut values = use_signal(move || first.map(defaults).unwrap_or_default());
     let open = app.open().cloned();
-    let (Some(open), Some(spec)) = (open, specs.get(selected()).copied()) else {
+    let reviewing = review && selected() == count;
+    let review_item = rsx! {
+        if review {
+            ListItem {
+                headline: REVIEW_LABEL.to_string(),
+                supporting: "satz review-preset".to_string(),
+                selected: reviewing,
+                leading: rsx! { Icon { name: "rate_review", size: 20 } },
+                onclick: move |_| selected.set(count),
+            }
+        }
+    };
+    // the review's entry has no spec: the form below it stays the first command's
+    let (Some(open), Some(spec)) = (open, specs.get(selected()).or(specs.first()).copied()) else {
         return rsx! {};
     };
     let running = app.estate().running().cloned();
@@ -722,8 +760,12 @@ pub fn CommandDeck(ids: Vec<&'static str>, #[props(default)] tools: bool) -> Ele
                             },
                         }
                     }
+                    {review_item}
                 }
             }
+            if reviewing {
+                div { class: "commands__work", PackReviewCard {} }
+            } else {
             div { class: "commands__work",
                 Card { variant: CardVariant::Outlined, class: "commands__form",
                     h2 { class: "commands__heading", Icon { name: spec.icon.to_string(), size: 22 } "{spec.label}" }
@@ -838,6 +880,7 @@ pub fn CommandDeck(ids: Vec<&'static str>, #[props(default)] tools: bool) -> Ele
                 }
                 CommandLog {}
             }
+            }
         }
     }
 }
@@ -881,19 +924,26 @@ pub fn CommandLog() -> Element {
 }
 
 /// The command palette: every satz command the app runs, over the window, opened with
-/// ⌘K / Ctrl+K or the top bar's button. It is not a destination — the work happens in
-/// Checks and Apply — and it is where a command that belongs to neither still lives.
+/// ⌘K / Ctrl+K or the rail's Commands button. It is not a destination — the work happens
+/// in Apply and Documents — and it is where a command that belongs to neither still
+/// lives, and, for an estate that holds the preset library, the pack review.
 #[component]
 pub fn CommandPalette() -> Element {
     let app = use_context::<Store<AppStore>>();
     let ids: Vec<&'static str> = PALETTE.iter().map(|s| s.id).collect();
+    let review = app
+        .estate()
+        .model()
+        .read()
+        .as_deref()
+        .is_none_or(|m| m.packs.has_presets());
     rsx! {
         Dialog {
             open: true,
             title: "Commands".to_string(),
             class: "command-palette".to_string(),
             ondismiss: move |_| app.palette_open().set(false),
-            CommandDeck { ids, tools: true }
+            CommandDeck { ids, tools: true, review }
         }
     }
 }

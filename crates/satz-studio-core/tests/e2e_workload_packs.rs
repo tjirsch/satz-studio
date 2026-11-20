@@ -12,6 +12,7 @@
 mod e2e;
 
 use satz_studio_core::edit::{CliChecker, Edit, EditSession};
+use satz_studio_core::estate::EstateDir;
 use satz_studio_core::satz::SatzCli;
 use satz_studio_core::satz::SatzError;
 use satz_studio_core::satz::project;
@@ -129,7 +130,7 @@ async fn a_pack_is_fetched_kept_current_left_alone_when_edited_and_detached() {
     // edited here: reported with its difference, attention, and the file as it was
     let edited = format!("{fetched}// edited here\n");
     std::fs::write(&file, &edited).unwrap();
-    let update = e2e::within(workload::update(&cli, &Which::All, false))
+    let update = e2e::within(workload::update(&cli, &Which::All, Some(SOURCE), false))
         .await
         .unwrap();
     assert!(update.attention);
@@ -147,7 +148,7 @@ async fn a_pack_is_fetched_kept_current_left_alone_when_edited_and_detached() {
     assert_eq!(row(&report.packs, PACK).state, PackState::Edited);
 
     // overwritten only when asked
-    let update = e2e::within(workload::update(&cli, &Which::One(PACK.into()), true))
+    let update = e2e::within(workload::update(&cli, &Which::One(PACK.into()), None, true))
         .await
         .unwrap();
     assert!(!update.attention);
@@ -163,7 +164,7 @@ async fn a_pack_is_fetched_kept_current_left_alone_when_edited_and_detached() {
     assert_eq!(e2e::read(&file), fetched);
     let report = e2e::within(workload::list(&cli, source)).await.unwrap();
     assert_eq!(row(&report.packs, PACK).state, PackState::Own);
-    let update = e2e::within(workload::update(&cli, &Which::All, false))
+    let update = e2e::within(workload::update(&cli, &Which::All, None, false))
         .await
         .unwrap();
     assert!(update.packs.is_empty() && !update.attention, "{update:?}");
@@ -212,4 +213,44 @@ async fn the_use_line_satz_names_goes_into_the_estate_through_the_writer() {
     assert!(passed, "{lines:?}");
     let es = EditSession::open(&main).unwrap();
     assert!(es.apply(&[Edit::AddUse { path }]).is_err());
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_new_pack_is_the_repositorys_own_and_the_estate_uses_it_through_the_writer() {
+    let estate = e2e::estate_dir(None);
+    let main = estate.file("wp.satz");
+    std::fs::write(&main, ESTATE).unwrap();
+    let cli = estate.cli().await;
+    let dir = EstateDir::open(&estate.root).unwrap();
+
+    // written, formatted as satz formats it, and never written over
+    let file = e2e::within(workload::create_pack(&cli, &dir.packs_dir(), "team-notes"))
+        .await
+        .unwrap();
+    assert_eq!(e2e::read(&file), workload::new_pack_text("team-notes"));
+    let again = e2e::within(workload::create_pack(&cli, &dir.packs_dir(), "team-notes")).await;
+    assert!(again.unwrap_err().contains("there already"));
+    assert!(
+        e2e::within(workload::create_pack(&cli, &dir.packs_dir(), "Team"))
+            .await
+            .is_err()
+    );
+
+    // the line satz would name, through the writer and satz's check
+    let path = dir
+        .use_path_of(&file)
+        .expect("packs_dir is under include_dirs");
+    assert_eq!(path, "packs/team-notes.satz");
+    let es = EditSession::open(&main).unwrap();
+    let proposed = es.apply(&[Edit::AddUse { path: path.clone() }]).unwrap();
+    let checker = CliChecker { cli: cli.clone() };
+    e2e::within(proposed.commit(&checker)).await.unwrap();
+    assert_eq!(dir.pack_of_use(&main, &path).as_deref(), Some("team-notes"));
+
+    // satz lists it as the repository's own
+    add_source(&cli).await;
+    let report = e2e::within(workload::list(&cli, SOURCE)).await.unwrap();
+    let own = row(&report.packs, "team-notes");
+    assert_eq!(own.state, PackState::Own);
+    assert_eq!(own.use_path(), Some(path.as_str()));
 }

@@ -35,7 +35,7 @@ use satz_studio_core::settings::Settings;
 pub use ansi::strip_ansi;
 pub use app_actions::{AppAction, app_coroutine, run_line};
 pub use estate_actions::{
-    EstateAction, PackOp, SourceOp, command_line, estate_coroutine, quote, reports_dir,
+    EstateAction, PackOp, SourceOp, command_line, estate_coroutine, open_file, quote, reports_dir,
 };
 pub use pace::{
     ahead_sentence, install_offer, newer_satz_sentence, satz_available, satz_notice,
@@ -547,6 +547,9 @@ pub struct AppStore {
     pub door: Door,
     /// the command palette is over the window
     pub palette_open: bool,
+    /// the palette opens on the pack review rather than its first command: a finding of
+    /// the reviewed pack was chosen in the drawer
+    pub palette_review: bool,
     pub snackbar: VecDeque<Toast>,
     pub drawer_open: bool,
     pub estate: EstateStore,
@@ -577,6 +580,7 @@ impl AppStore {
             nav: View::default(),
             door: Door::default(),
             palette_open: false,
+            palette_review: false,
             snackbar: VecDeque::new(),
             drawer_open: false,
             estate: EstateStore::default(),

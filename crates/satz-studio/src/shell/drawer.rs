@@ -7,7 +7,7 @@ use crate::components::{Chip, ChipKind, Icon, List, ListItem};
 use crate::state::{AppStore, AppStoreStoreExt, DiagnosticSelection, EstateStoreStoreExt, View};
 
 /// The bottom drawer, Findings: the open estate's findings, and those of the pack the
-/// Presets view reviewed, grouped by severity, each with its `file:line`, its source, and —
+/// palette's pack review judged, grouped by severity, each with its `file:line`, its source, and —
 /// for one of satz's findings — a chip naming the check that raised it; clicking one sets
 /// [`DiagnosticSelection`] and opens the destination where its line is ([`destination`]).
 #[component]
@@ -70,8 +70,13 @@ pub fn DiagnosticsDrawer() -> Element {
                                                         trailing: kind.map(|kind| rsx! { Chip { kind: ChipKind::Assist, label: kind } }),
                                                         onclick: move |_| {
                                                             select.set(Some(item.clone()));
-                                                            if let Some(view) = go {
-                                                                app.nav().set(view);
+                                                            match go {
+                                                                Some(Go::View(view)) => app.nav().set(view),
+                                                                Some(Go::Review) => {
+                                                                    app.palette_review().set(true);
+                                                                    app.palette_open().set(true);
+                                                                }
+                                                                None => {}
                                                             }
                                                         },
                                                     }
@@ -89,15 +94,24 @@ pub fn DiagnosticsDrawer() -> Element {
     }
 }
 
+/// Where a click on a finding takes the window.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Go {
+    /// a destination
+    View(View),
+    /// the commands palette, on the pack review
+    Review,
+}
+
 /// Where a click on `d` takes the window: a line of the main file is in Estate; a finding
-/// about the reviewed pack is in Presets, where the review shows the pack's text with the
-/// line marked; anything else stays where it is.
-pub fn destination(d: &Diagnostic, main: Option<&Path>, reviewed: Option<&Path>) -> Option<View> {
+/// about the reviewed pack is in the palette's pack review, which shows the pack's text
+/// with the line marked; anything else stays where it is.
+pub fn destination(d: &Diagnostic, main: Option<&Path>, reviewed: Option<&Path>) -> Option<Go> {
     let file = d.file.as_deref()?;
     if Some(file) == main && d.line.is_some() {
-        Some(View::Estate)
+        Some(Go::View(View::Estate))
     } else if Some(file) == reviewed {
-        Some(View::Presets)
+        Some(Go::Review)
     } else {
         None
     }
@@ -137,7 +151,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_line_of_the_main_file_is_in_estate_and_one_of_the_reviewed_pack_in_packs() {
+    fn a_line_of_the_main_file_is_in_estate_and_one_of_the_reviewed_pack_in_the_review() {
         let main = Path::new("/e/yaml/C0example.satz");
         let pack = Path::new("/home/packs/team-access.satz");
         let at = |file: &str, line: Option<u32>| Diagnostic {
@@ -150,7 +164,7 @@ mod tests {
                 Some(main),
                 Some(pack)
             ),
-            Some(View::Estate)
+            Some(Go::View(View::Estate))
         );
         assert_eq!(
             destination(
@@ -158,7 +172,7 @@ mod tests {
                 Some(main),
                 Some(pack)
             ),
-            Some(View::Presets)
+            Some(Go::Review)
         );
         // a finding about the whole pack still stands in the review
         assert_eq!(
@@ -167,7 +181,7 @@ mod tests {
                 Some(main),
                 Some(pack)
             ),
-            Some(View::Presets)
+            Some(Go::Review)
         );
         assert_eq!(
             destination(&at("/e/yaml/C0example.satz", None), Some(main), Some(pack)),

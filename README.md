@@ -42,10 +42,7 @@ order: **Overview**, which estate this is — its short name, the customer, the 
 id and the organization id as its own file sets them, then the infrastructure it names,
 in its own answers — and what it still has to do; **Presets**, for an estate that holds the preset library — an organization's:
 every pack satz's pack graph offers, as the estate has it, the packs that need another
-hung below it, each switched on and off by satz's own `add-preset` and `remove-preset`,
-and a pack you wrote reviewed against the library's own bar with `satz review-preset` —
-each finding in the Findings drawer at its line — then placed in the estate's
-library as a `.local.satz` or handed upstream by a pull request;
+hung below it, each switched on and off by satz's own `add-preset` and `remove-preset`;
 **Decisions**, the
 questions those packs declare and it has not answered; **Estate**, the file
 itself — its params, its resource tree, and the interfaces it publishes for other estates
@@ -64,7 +61,10 @@ and the documents an agent writes, each started in the client Settings names. Ag
 foot of the rail, with Commands between them. Beside the estate the top bar names sit
 reload, "Switch estate" — the Start screen with your estates listed — and "Close estate";
 every satz command the app runs is one keystroke away in the commands palette (⌘K,
-Ctrl+K on Windows and Linux, or that footer button). What a command prints lands in the
+Ctrl+K on Windows and Linux, or that footer button). The palette also holds "Review a
+pack for the preset library": a pack you wrote judged against the library's own bar with
+`satz review-preset` — each finding in the Findings drawer at its line — then placed in
+the estate's library as a `.local.satz` or handed upstream by a pull request. What a command prints lands in the
 log in the form satz writes for a person — text, or markdown for the evidence report;
 `json` is a format you pick when you want the file. **Packs**, for every estate, are workload packs: templates taken from a source and adapted
 here. satz says what an estate works in — the organization, a delegated folder or a
@@ -74,16 +74,22 @@ the organization; the compliance reports are offered where the library's catalog
 Overview names the mode and, for a workload estate, who delegated. Delegated access is
 given in Estate → Interfaces: every list param a preset declares is shown with its entries, and
 "Add" writes one through `satz add-entry` from a form of the declared fields. A workload
-estate is created from the interface folders it was given, on the Start screen. The workload packs are the ones the repository wrote
-itself and the ones `satz get-pack` fetched, listed against the pack source you choose
-from the estate's sources — `satz`, the satz repository's `packs/`, then each source
-`config.toml` names, a GitHub repository or a folder — each fetched, updated from the
-source it came from, kept as your own or added to the estate from its row; a fetched
-pack's row names its source and, for a GitHub source, the commit. "Add a source…" runs
-`satz pack-source add` from a name and a repository (with an optional branch or tag and
-folder) or a folder you choose, and a source no fetched pack names is removed with
-`satz pack-source remove`; satz writes `config.toml`, and what it refuses is shown as
-it says it.
+estate is created from the interface folders it was given, on the Start screen. Packs
+lists every workload pack the estate uses first, then the other files of `packs_dir`:
+the ones the repository wrote itself ("Own pack") and the ones `satz get-pack` fetched.
+Choosing a pack source — `satz`, the satz repository's `packs/`, then each source
+`config.toml` names, a GitHub repository or a folder — says how each fetched pack stands
+against it, with a badge where it needs you ("Update available", "Edited here", "Gone
+from source", "Not checked"), and what the source holds beyond them; each is fetched,
+updated from the source it came from, kept as your own or added to the estate from its
+row. "New pack…" writes a pack of your own into `packs_dir`, adds its `use` line to the
+estate and opens it in the application your system gives `.satz` files; Edit opens any
+pack the same way. The sources card names them in one line; "Manage" lists them all,
+updates the packs fetched from one, removes one no fetched pack names (`satz pack-source
+remove`) and adds one (`satz pack-source add`, from a name and a repository with an
+optional branch or tag and folder, or a folder you choose); satz writes `config.toml`,
+and what it refuses is shown as it says it. What each card means beyond its two lines is
+behind its help button.
 
 The Overview is three cards. The identity card says which estate this is — its short
 name, the customer, the customer id and the organization id, the estate's other answers,

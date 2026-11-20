@@ -51,6 +51,24 @@
   font: var(--md-sys-typescale-headline-small);
 }
 
+/* a view's title with the help button at its top-right corner */
+.view__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* the dialog a help button opens: one paragraph after another */
+.help-dialog .m-dialog__body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.help-dialog p {
+  margin: 0;
+}
+
 .view__lead {
   font: var(--md-sys-typescale-body-medium);
   color: var(--md-sys-color-on-surface-variant);

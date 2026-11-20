@@ -5,8 +5,10 @@
 //! the cards of the packs that need it hung below by right-angle connectors, whatever
 //! phase their lines stand under. A switch is `satz_add_preset` or `satz_remove_preset`: what
 //! a pack needs, what it creates and what a switch does are satz's pack graph, and the
-//! view derives none of it. Above the sections stands the pack review
-//! ([`crate::views::review`]), for a pack the operator writes rather than switches.
+//! view derives none of it. The lead is two lines, and the rest of what the view says
+//! about itself is behind the help button at its top-right corner, as a question's `why`
+//! is behind the one on its pack's card. The pack review of a pack the operator writes
+//! rather than switches is in the commands palette ([`crate::views::review`]).
 
 use std::collections::BTreeMap;
 
@@ -18,11 +20,10 @@ use satz_studio_core::satz::reports::{
 
 use crate::components::{
     Button, ButtonVariant, Card, CardVariant, Chip, ChipKind, ConnectorBranch, ConnectorLine,
-    ConnectorTree, Icon, Switch,
+    ConnectorTree, HelpButton, Icon, Switch,
 };
 use crate::state::{AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt, View};
 use crate::views::path::NextStep;
-use crate::views::review::PackReviewCard;
 
 /// The header of the section for packs the file has no line for.
 pub const ABSENT_HEADER: &str = "Not in this file";
@@ -296,7 +297,6 @@ pub fn PresetsView() -> Element {
                     Icon { name: "map", size: 48, class: "placeholder__icon" }
                     p { "The estate model is not available — the drawer says why." }
                 }
-                PackReviewCard {}
             }
         };
     };
@@ -308,7 +308,14 @@ pub fn PresetsView() -> Element {
 
     rsx! {
         div { class: "view packs",
-            h1 { class: "view__title", "Presets" }
+            div { class: "view__head",
+                h1 { class: "view__title", "Presets" }
+                span { class: "grow" }
+                HelpButton { title: "Presets",
+                    p { "A switch is satz's add-preset or remove-preset: satz binds the gate, writes the line where the pack graph places it, and refuses a switch while a pack it needs is off or a pack that needs it is on." }
+                    p { "merge-presets reconciles this estate's library with upstream: a pack that is missing is installed, an unmodified one is upgraded, an edited one is forked rather than overwritten. Its flags are in the commands palette, beside the review of a pack written for the preset library." }
+                }
+            }
             if let Some(note) = &report.note {
                 Card { variant: CardVariant::Filled, class: "map__map-card",
                     Icon { name: "map", size: 32, class: "placeholder__icon" }
@@ -354,8 +361,7 @@ pub fn PresetsView() -> Element {
                     }
                 }
             }
-            p { class: "view__lead", "A switch is satz's add-preset or remove-preset: satz binds the gate, writes the line where the pack graph places it, and refuses a switch while a pack it needs is off or a pack that needs it is on. merge-presets reconciles this estate's library with upstream: a pack that is missing is installed, an unmodified one is upgraded, an edited one is forked rather than overwritten. Its flags are in the commands palette." }
-            PackReviewCard {}
+            p { class: "view__lead", "Switch the presets this organization is built from on or off: satz writes each line where the pack graph places it." }
             for (i, f) in loose.iter().enumerate() {
                 div { key: "loose-{i}", class: "pack-card__diag",
                     Icon { name: "error", size: 18 }
@@ -609,12 +615,14 @@ fn PackCard(
                 code { class: "pack-card__path", "{row.path}" }
                 span { class: "grow" }
                 {line_chip(&row)}
-            }
-            if let Some((prompt, why)) = &prompt {
-                p { class: "pack-card__prompt", "{prompt}" }
-                if let Some(why) = why {
-                    p { class: "pack-card__why", "{why}" }
+                if let Some((prompt, Some(why))) = &prompt {
+                    HelpButton { title: prompt.clone(),
+                        p { "{why}" }
+                    }
                 }
+            }
+            if let Some((prompt, _)) = &prompt {
+                p { class: "pack-card__prompt", "{prompt}" }
             }
             if let Some(gate) = &gate {
                 p { class: "pack-card__note", code { "{gate}" } }
