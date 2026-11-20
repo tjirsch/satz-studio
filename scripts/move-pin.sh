@@ -5,8 +5,8 @@
 #   2. the vendored grammar to the commit that satz names in its
 #      editors/zed/extension.toml (tests/grammar_pin.rs holds the two together);
 #   3. the recorded reports under crates/satz-studio-core/tests/fixtures/ that one satz
-#      command writes: the presets report, the two reviews, the interfaces report and the
-#      two questions reports.
+#      command writes: the presets report, the interfaces report and the two questions
+#      reports.
 #
 #   scripts/move-pin.sh v0.95.2
 #
@@ -82,10 +82,6 @@ record presets-smoke.json presets vendor/satz/tests/smoke/yaml/smoke.satz
 record interfaces-showcase.json interfaces showcase.satz
 record questions-smoke.json questions vendor/satz/tests/smoke/yaml/smoke.satz
 record questions-showcase.json questions showcase.satz
-record review/organization-budget.json review-preset vendor/satz/presets/organization-budget.satz
-record review/team-access.json review-preset "$fixtures/review/team-access.satz"
-# the broken pack is recorded as standing in an estate's packs/, where the test reads it
-sed -i.bak "s#/e/$fixtures/review/#/e/packs/#g" "$fixtures/review/team-access.json" && rm -f "$fixtures/review/team-access.json.bak"
 
 cat <<EOF
 

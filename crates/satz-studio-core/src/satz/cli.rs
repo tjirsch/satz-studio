@@ -145,27 +145,6 @@ impl SatzCli {
         run.typed()
     }
 
-    /// Run a reporting command whose exit status is a VERDICT on what it judged — `satz
-    /// review-preset` exits non-zero when the pack does not clear the bar, and writes its
-    /// report either way — and type the report with the status beside it. A non-zero exit
-    /// that wrote no file is an error carrying stderr: satz failed before it judged
-    /// anything. The caller holds the status to the report's own verdict.
-    pub async fn json_verdict<T: DeserializeOwned>(
-        &self,
-        args: &[String],
-    ) -> Result<(T, ExitStatus), SatzError> {
-        let run = self.report_run(args).await?;
-        if !run.status.success() && run.written.is_err() {
-            return Err(SatzError::Exit {
-                command: run.command,
-                status: run.status,
-                stderr: run.stderr,
-            });
-        }
-        let status = run.status;
-        Ok((run.typed()?, status))
-    }
-
     /// Run a command that prints its report as JSON on stdout — `satz get-pack`, `satz
     /// update-pack`, `satz detach-pack` take `--format json` and no `--out` — and type it
     /// with the exit status beside it: `update-pack` exits non-zero when a pack needs
@@ -234,8 +213,7 @@ impl SatzCli {
     }
 }
 
-/// One reporting command, run: what [`SatzCli::json_report`] and
-/// [`SatzCli::json_verdict`] each hold to their own rule.
+/// One reporting command, run: what [`SatzCli::json_report`] holds to its rule.
 struct ReportRun {
     status: ExitStatus,
     stderr: String,

@@ -1,12 +1,18 @@
-//! The Packs view's pane: the estate's pack sources ([`PackSourcesCard`]), then the packs
-//! in the estate's `packs_dir` as `satz packs --source <name>` lists them against the
-//! chosen source — the repository's own, the ones fetched and how each stands — and what
-//! the source holds beyond them. A fetch is `satz get-pack --source`, an update `satz
-//! update-pack` from each pack's recorded source, and a pack edited here is shown with its
-//! difference and written only when the operator says so (ADR 0024). The rows are satz's
-//! report; the app derives no state of its own.
+//! The Packs view's pane: a two-line lead with the rest of the explanation behind a help
+//! button, the packs the estate's file uses, the estate's pack sources
+//! ([`PackSourcesCard`]), then the packs in the estate's `packs_dir` as `satz packs
+//! --source <name>` lists them against the chosen source — the repository's own, the ones
+//! fetched and how each stands — and what the source holds beyond them. A fetch is `satz
+//! get-pack --source`, an update `satz update-pack` from each pack's recorded source, and
+//! a pack edited here is shown with its difference and written only when the operator
+//! says so (ADR 0024). The rows are satz's report; the app derives no state of its own.
+//! A row says only what is worth acting on: no chip for a pack that is current, "update
+//! available" for one that is behind, and its actions as icon buttons (ADR 0031).
+
+use std::path::{Path, PathBuf};
 
 use dioxus::prelude::*;
+use satz_studio_core::cst::UseState;
 use satz_studio_core::edit::Edit;
 use satz_studio_core::satz::reports::{
     PackNeed, PackState, UpdateAction, UpdatedPack, WorkloadPackRow, WorkloadPacksReport,
@@ -14,37 +20,42 @@ use satz_studio_core::satz::reports::{
 use satz_studio_core::satz::workload::Which;
 
 use crate::components::{
-    Button, ButtonVariant, Card, CardVariant, Chip, ChipKind, Dialog, Icon, LinearProgress,
+    Button, ButtonVariant, Card, CardVariant, Chip, ChipKind, Dialog, Icon, IconButton,
+    IconButtonVariant, LinearProgress, Tooltip,
 };
 use crate::state::{
-    AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt, PackOp, SourceOp,
+    AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt, PackOp, SourceOp, ToastKind,
+    toast,
 };
 use crate::views::pack_sources::PackSourcesCard;
 
-/// Which delegated values a pack reads, in the words its row shows; none for a pack that
+/// Which delegated values a pack reads, as its chip names them; none for a pack that
 /// reads neither. Each is the default of a param of the pack: an estate that was not
 /// delegated that value answers the param itself, so no pack is left out for it.
 fn needs_text(needs: &[PackNeed]) -> Option<String> {
     let words: Vec<&str> = needs
         .iter()
         .map(|n| match n {
-            PackNeed::Folder => "the delegated folder",
-            PackNeed::Project => "the delegated project",
+            PackNeed::Folder => "folder",
+            PackNeed::Project => "project",
         })
         .collect();
-    (!words.is_empty()).then(|| format!("reads {}", words.join(" and ")))
+    (!words.is_empty()).then(|| format!("delegated {}", words.join(" · ")))
 }
 
-/// The word and the icon of a pack's state chip.
-fn state_chip(state: PackState) -> (&'static str, &'static str) {
+/// What the "delegated …" chip means, as its tooltip says it.
+const NEEDS_MEANING: &str = "Some of the pack's params default to the folder or project the organization delegated to this estate. An estate without that delegation answers them itself.";
+
+/// The word and the icon of a pack's state chip; none where the state asks for nothing —
+/// a pack that is current, or one the Available card already says is available.
+fn state_chip(state: PackState) -> Option<(&'static str, &'static str)> {
     match state {
-        PackState::Own => ("own", "edit_document"),
-        PackState::Current => ("current", "check_circle"),
-        PackState::Behind => ("behind", "update"),
-        PackState::Edited => ("edited", "edit"),
-        PackState::Gone => ("gone from the source", "cloud_off"),
-        PackState::NotChecked => ("not checked", "help"),
-        PackState::Available => ("available", "cloud_download"),
+        PackState::Own => Some(("own", "edit_document")),
+        PackState::Current | PackState::Available => None,
+        PackState::Behind => Some(("update available", "update")),
+        PackState::Edited => Some(("edited here", "edit")),
+        PackState::Gone => Some(("gone from the source", "cloud_off")),
+        PackState::NotChecked => Some(("not checked", "help")),
     }
 }
 
@@ -58,7 +69,8 @@ fn versions(row: &WorkloadPackRow) -> String {
     }
 }
 
-/// What a state means for the operator, in one sentence.
+/// What a state means for the operator, in one sentence: a chip's tooltip, and the list
+/// in the help dialog.
 fn meaning(state: PackState) -> &'static str {
     match state {
         PackState::Own => {
@@ -74,6 +86,26 @@ fn meaning(state: PackState) -> &'static str {
             "Fetched from another pack source than the one listed. Choose that source to check it."
         }
         PackState::Available => "The source holds it and this estate does not.",
+    }
+}
+
+/// Every state, in the order the help dialog explains them.
+const STATES: [PackState; 7] = [
+    PackState::Own,
+    PackState::Current,
+    PackState::Behind,
+    PackState::Edited,
+    PackState::Gone,
+    PackState::NotChecked,
+    PackState::Available,
+];
+
+/// The word the help dialog gives a state: its chip's, or what a row without a chip is.
+fn state_word(state: PackState) -> &'static str {
+    match state_chip(state) {
+        Some((word, _)) => word,
+        None if state == PackState::Current => "no chip",
+        None => "in Available",
     }
 }
 
@@ -103,6 +135,12 @@ fn origin_text(row: &WorkloadPackRow) -> Option<String> {
     })
 }
 
+/// The file of a pack in `packs_dir`, which satz names `<id>.satz`; `packs_dir` is the
+/// estate's, relative to the estate's directory unless it is absolute.
+fn pack_file(estate_dir: &Path, packs_dir: &str, id: &str) -> PathBuf {
+    estate_dir.join(packs_dir).join(format!("{id}.satz"))
+}
+
 #[component]
 pub fn WorkloadPacksPane() -> Element {
     let app = use_context::<Store<AppStore>>();
@@ -111,19 +149,17 @@ pub fn WorkloadPacksPane() -> Element {
     let listed = app.estate().pack_source().cloned();
     let busy = app.estate().packs_busy().cloned() || app.estate().loading().cloned();
     let update = app.estate().pack_update().cloned();
-    let used: Vec<String> = app
+    let uses = app
         .estate()
         .cst()
         .read()
         .as_deref()
-        .map(|cst| {
-            satz_studio_core::cst::scan_uses(cst)
-                .into_iter()
-                .map(|u| u.path)
-                .collect()
-        })
+        .map(satz_studio_core::cst::scan_uses)
         .unwrap_or_default();
+    let used: Vec<String> = uses.iter().map(|u| u.path.clone()).collect();
+    let estate_dir = app.open().read().as_ref().map(|o| o.dir.clone());
     let mut confirm = use_signal(|| None::<Confirm>);
+    let mut help = use_signal(|| false);
 
     let body = match report {
         None if listed.is_some() => rsx! {},
@@ -143,25 +179,55 @@ pub fn WorkloadPacksPane() -> Element {
             }
         },
         Some(Ok(report)) => rsx! {
-            PackCards { report, used, update, busy, confirm }
+            PackCards { report, used, estate_dir, update, busy, confirm }
         },
     };
 
     rsx! {
         div { class: "pane interfaces",
-            div { class: "interfaces__head",
-                p { class: "view__lead",
-                    "The workload packs of this estate, as satz packs lists them against the pack source you choose: the ones this repository wrote itself, the ones fetched and how each stands against its source, and what the source holds beyond them. A fetched pack is recorded in origin.toml beside the packs, with the name of its source; a pack without a row there is this repository's own."
+            div { class: "wpacks__head",
+                p { class: "view__lead grow",
+                    "A pack is a template for a workload or a part of one: take it from a source, add it to the estate, and adapt it — a pack changed here is this repository's own. What a pack asks is in Decisions."
                 }
-                if busy {
-                    LinearProgress {}
+                IconButton {
+                    icon: "help",
+                    label: "About workload packs",
+                    onclick: move |_| help.set(true),
                 }
             }
+            if busy {
+                LinearProgress {}
+            }
+            UsedPacks { uses: uses.iter().map(|u| (u.path.clone(), u.state == UseState::Active)).collect::<Vec<_>>() }
             PackSourcesCard {
                 busy,
                 confirm_remove: move |name: String| confirm.set(Some(Confirm::RemoveSource(name))),
             }
             {body}
+        }
+        Dialog {
+            open: help(),
+            title: "About workload packs",
+            icon: "help",
+            class: "interfaces__add",
+            ondismiss: move |_| help.set(false),
+            actions: rsx! {
+                Button { variant: ButtonVariant::Text, onclick: move |_| help.set(false), "Close" }
+            },
+            div { class: "wpacks__help",
+                p { "satz packs lists the packs of this estate's packs_dir against the pack source you choose: the ones this repository wrote itself, the ones fetched and how each stands against its source, and what the source holds beyond them." }
+                p { "A fetched pack is recorded in origin.toml beside the packs, with the name of its source; a pack without a row there is this repository's own. Update reads each pack from the source it was fetched from; a pack edited here is never overwritten without asking." }
+                p { "The pack sources are config.toml's, and satz pack-source writes them. A GitHub source is a network read, so it is read only when you choose it." }
+                h3 { class: "wpacks__help-title", "What a row says" }
+                dl { class: "wpacks__states",
+                    for state in STATES {
+                        dt { "{state_word(state)}" }
+                        dd { {meaning(state)} }
+                    }
+                    dt { "delegated folder · project" }
+                    dd { {NEEDS_MEANING} }
+                }
+            }
         }
         Dialog {
             open: confirm().is_some(),
@@ -212,6 +278,35 @@ pub fn WorkloadPacksPane() -> Element {
     }
 }
 
+/// Every pack the estate's file reads — each `use` line, active or switched off — as one
+/// row of chips. It needs no pack source: it is the file's own text.
+#[component]
+fn UsedPacks(uses: Vec<(String, bool)>) -> Element {
+    rsx! {
+        Card { variant: CardVariant::Outlined, class: "interfaces__card",
+            div { class: "interfaces__card-head",
+                Icon { name: "link", size: 22 }
+                h2 { class: "interfaces__name", "Used by this estate" }
+                span { class: "interfaces__supporting", "{uses.len()}" }
+            }
+            if uses.is_empty() {
+                p { class: "interfaces__supporting", "The estate's file has no use line." }
+            } else {
+                div { class: "interfaces__entries",
+                    for (path, active) in uses {
+                        Chip {
+                            key: "{path}",
+                            kind: ChipKind::Assist,
+                            icon: if active { "link" } else { "link_off" },
+                            label: if active { path.clone() } else { format!("{path} · off") },
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 /// The sources a list read, as the report names them: each one's location, with the
 /// commit of a GitHub source shortened.
 fn read_from(report: &WorkloadPacksReport) -> String {
@@ -231,6 +326,7 @@ fn read_from(report: &WorkloadPacksReport) -> String {
 fn PackCards(
     report: WorkloadPacksReport,
     used: Vec<String>,
+    estate_dir: Option<PathBuf>,
     update: Option<satz_studio_core::satz::reports::UpdatePackReport>,
     busy: bool,
     confirm: Signal<Option<Confirm>>,
@@ -258,6 +354,11 @@ fn PackCards(
             .find(|p| p.id == id && p.action == UpdateAction::Edited)
             .cloned()
     };
+    let file = |id: &str| {
+        estate_dir
+            .as_deref()
+            .map(|dir| pack_file(dir, &report.packs_dir, id))
+    };
     rsx! {
         Card { variant: CardVariant::Outlined, class: "interfaces__card",
             div { class: "interfaces__card-head",
@@ -283,6 +384,7 @@ fn PackCards(
                     key: "{row.id}",
                     in_use: row.use_path().is_some_and(|p| used.iter().any(|u| u == p)),
                     edited: updated(&row.id),
+                    file: file(&row.id),
                     row: row.clone(),
                     busy,
                     confirm,
@@ -297,107 +399,121 @@ fn PackCards(
                     code { class: "interfaces__at", "{read_from(&report)}" }
                 }
                 for row in available {
-                    PackLine { key: "{row.id}", row: row.clone(), in_use: false, edited: None, busy, confirm }
+                    PackLine { key: "{row.id}", row: row.clone(), in_use: false, edited: None, file: None, busy, confirm }
                 }
             }
         }
     }
 }
 
-/// One pack: its id, version and state, what the state means, and what can be done.
+/// One pack on one line: its id and version, a chip only where its state asks for
+/// something, where it came from, and what can be done as icon buttons whose tooltip
+/// names the action. An edited pack's difference stands below once it was asked for.
 #[component]
 fn PackLine(
     row: WorkloadPackRow,
     in_use: bool,
     edited: Option<UpdatedPack>,
+    /// the pack's file, for a pack that is here
+    file: Option<PathBuf>,
     busy: bool,
     confirm: Signal<Option<Confirm>>,
 ) -> Element {
+    let app = use_context::<Store<AppStore>>();
     let handle = use_coroutine_handle::<EstateAction>();
-    let (word, icon) = state_chip(row.state);
     let id = row.id.clone();
     let use_path = row.use_path().map(str::to_string);
     rsx! {
-        div { class: "interfaces__export",
+        div { class: "interfaces__export wpacks__row",
             div { class: "interfaces__export-head",
                 code { class: "interfaces__export-name", "{row.id}" }
                 span { class: "interfaces__supporting", {versions(&row)} }
-                Chip { kind: ChipKind::Assist, icon, label: word }
+                if let Some((word, icon)) = state_chip(row.state) {
+                    Tooltip { text: meaning(row.state),
+                        Chip { kind: ChipKind::Assist, icon, label: word, selected: row.state == PackState::Behind }
+                    }
+                }
                 if let Some(needs) = needs_text(&row.needs) {
-                    Chip { kind: ChipKind::Assist, icon: "rule", label: needs }
+                    Tooltip { text: NEEDS_MEANING,
+                        Chip { kind: ChipKind::Assist, icon: "rule", label: needs }
+                    }
                 }
                 if in_use {
-                    Chip { kind: ChipKind::Assist, icon: "link", label: "used by the estate" }
+                    Chip { kind: ChipKind::Assist, icon: "link", label: "in use" }
                 }
                 span { class: "grow" }
                 if let Some(origin) = origin_text(&row) {
                     code { class: "interfaces__at", "{origin}" }
                 }
-            }
-            p { class: "interfaces__supporting", {meaning(row.state)} }
-            if let Some(line) = &row.use_line {
-                code { class: "interfaces__value", "{line}" }
+                div { class: "wpacks__actions",
+                    if row.state == PackState::Available {
+                        IconButton {
+                            icon: "download",
+                            label: "Fetch",
+                            variant: IconButtonVariant::Tonal,
+                            disabled: busy,
+                            onclick: { let id = id.clone(); move |_| handle.send(EstateAction::Packs(PackOp::Get(Which::One(id.clone())))) },
+                        }
+                    }
+                    if row.state == PackState::Behind {
+                        IconButton {
+                            icon: "update",
+                            label: "Update",
+                            variant: IconButtonVariant::Tonal,
+                            disabled: busy,
+                            onclick: { let id = id.clone(); move |_| handle.send(EstateAction::Packs(PackOp::Update { which: Which::One(id.clone()), take_upstream: false })) },
+                        }
+                    }
+                    if row.state == PackState::Edited {
+                        IconButton {
+                            icon: "difference",
+                            label: "Show the difference",
+                            disabled: busy,
+                            onclick: { let id = id.clone(); move |_| handle.send(EstateAction::Packs(PackOp::Update { which: Which::One(id.clone()), take_upstream: false })) },
+                        }
+                        IconButton {
+                            icon: "cloud_download",
+                            label: "Take the source's file…",
+                            disabled: busy,
+                            onclick: { let id = id.clone(); move |_| confirm.set(Some(Confirm::TakeUpstream(id.clone()))) },
+                        }
+                    }
+                    if matches!(row.state, PackState::Edited | PackState::Gone | PackState::Current | PackState::Behind | PackState::NotChecked) {
+                        IconButton {
+                            icon: "link_off",
+                            label: "Keep as own…",
+                            disabled: busy,
+                            onclick: { let id = id.clone(); move |_| confirm.set(Some(Confirm::Detach(id.clone()))) },
+                        }
+                    }
+                    if let Some(file) = file {
+                        IconButton {
+                            icon: "open_in_new",
+                            label: "Open in your editor",
+                            onclick: move |_| {
+                                if let Err(e) = open::that(&file) {
+                                    toast(app, ToastKind::Error, format!("{}: {e}", file.display()));
+                                }
+                            },
+                        }
+                    }
+                    if let Some(path) = use_path {
+                        if !in_use {
+                            IconButton {
+                                icon: "add_link",
+                                label: "Add to the estate: {path}",
+                                variant: IconButtonVariant::Filled,
+                                disabled: busy,
+                                onclick: move |_| handle.send(EstateAction::CommitEdit(Edit::AddUse { path: path.clone() })),
+                            }
+                        }
+                    }
+                }
             }
             if let Some(edited) = &edited {
                 if let Some(diff) = &edited.diff {
                     p { class: "interfaces__supporting", "This file (−) against the source's (+):" }
                     pre { class: "wpacks__diff", "{diff}" }
-                }
-            }
-            div { class: "wpacks__actions",
-                if row.state == PackState::Available {
-                    Button {
-                        variant: ButtonVariant::Tonal,
-                        icon: "download",
-                        disabled: busy,
-                        onclick: { let id = id.clone(); move |_| handle.send(EstateAction::Packs(PackOp::Get(Which::One(id.clone())))) },
-                        "Fetch"
-                    }
-                }
-                if row.state == PackState::Behind {
-                    Button {
-                        variant: ButtonVariant::Tonal,
-                        icon: "update",
-                        disabled: busy,
-                        onclick: { let id = id.clone(); move |_| handle.send(EstateAction::Packs(PackOp::Update { which: Which::One(id.clone()), take_upstream: false })) },
-                        "Update"
-                    }
-                }
-                if row.state == PackState::Edited {
-                    Button {
-                        variant: ButtonVariant::Outlined,
-                        icon: "difference",
-                        disabled: busy,
-                        onclick: { let id = id.clone(); move |_| handle.send(EstateAction::Packs(PackOp::Update { which: Which::One(id.clone()), take_upstream: false })) },
-                        "Show the difference"
-                    }
-                    Button {
-                        variant: ButtonVariant::Outlined,
-                        icon: "cloud_download",
-                        disabled: busy,
-                        onclick: { let id = id.clone(); move |_| confirm.set(Some(Confirm::TakeUpstream(id.clone()))) },
-                        "Take the source's file…"
-                    }
-                }
-                if matches!(row.state, PackState::Edited | PackState::Gone | PackState::Current | PackState::Behind | PackState::NotChecked) {
-                    Button {
-                        variant: ButtonVariant::Text,
-                        icon: "link_off",
-                        disabled: busy,
-                        onclick: { let id = id.clone(); move |_| confirm.set(Some(Confirm::Detach(id.clone()))) },
-                        "Keep as own…"
-                    }
-                }
-                if let Some(path) = use_path {
-                    if !in_use {
-                        Button {
-                            variant: ButtonVariant::Filled,
-                            icon: "add_link",
-                            disabled: busy,
-                            onclick: move |_| handle.send(EstateAction::CommitEdit(Edit::AddUse { path: path.clone() })),
-                            "Add to the estate"
-                        }
-                    }
                 }
             }
         }
@@ -409,14 +525,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_packs_needs_are_said_in_words() {
+    fn a_packs_needs_are_named_on_one_chip() {
         assert_eq!(
             needs_text(&[PackNeed::Project]).as_deref(),
-            Some("reads the delegated project")
+            Some("delegated project")
         );
         assert_eq!(
             needs_text(&[PackNeed::Folder, PackNeed::Project]).as_deref(),
-            Some("reads the delegated folder and the delegated project")
+            Some("delegated folder · project")
         );
         assert_eq!(needs_text(&[]), None);
     }
@@ -462,19 +578,30 @@ mod tests {
         );
     }
 
+    /// A current pack carries no chip: only a state that asks for something does, and a
+    /// pack behind its source says "update available".
     #[test]
-    fn every_state_has_a_word_an_icon_and_a_sentence() {
-        for state in [
-            PackState::Own,
-            PackState::Current,
-            PackState::Behind,
-            PackState::Edited,
-            PackState::Gone,
-            PackState::NotChecked,
-            PackState::Available,
-        ] {
-            let (word, icon) = state_chip(state);
-            assert!(!word.is_empty() && !icon.is_empty() && !meaning(state).is_empty());
+    fn only_a_state_that_asks_for_something_has_a_chip() {
+        assert_eq!(state_chip(PackState::Current), None);
+        assert_eq!(state_chip(PackState::Available), None);
+        assert_eq!(
+            state_chip(PackState::Behind),
+            Some(("update available", "update"))
+        );
+        for state in STATES {
+            assert!(!meaning(state).is_empty() && !state_word(state).is_empty());
         }
+    }
+
+    #[test]
+    fn a_packs_file_is_its_id_in_packs_dir_under_the_estate() {
+        assert_eq!(
+            pack_file(Path::new("/e"), "packs", "team-access"),
+            PathBuf::from("/e/packs/team-access.satz")
+        );
+        assert_eq!(
+            pack_file(Path::new("/e"), "/abs/packs", "x"),
+            PathBuf::from("/abs/packs/x.satz")
+        );
     }
 }

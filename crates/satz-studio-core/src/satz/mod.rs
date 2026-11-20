@@ -2,8 +2,7 @@
 //! ([`cli`]), the decisions sheet and the workbook `satz questions` writes ([`export`]),
 //! satz's own installer verified before it runs ([`install`]), `satz init` and
 //! what it leaves behind ([`init`]), `satz import` and what it wrote and found
-//! ([`import`]), `satz review-preset` and the two places a reviewed pack goes ([`review`]),
-//! what `satz self-update --check-only` found ([`self_update`]), the configuration a
+//! ([`import`]), what `satz self-update --check-only` found ([`self_update`]), the configuration a
 //! client needs to reach this estate as `satz mcp-config` prints it ([`mcp_config`]), the MCP
 //! session over `satz mcp` ([`mcp`]), `satz interfaces`, the interface plane through the
 //! CLI, and how a command that writes the estate file ends ([`project`]), and one session per open estate that
@@ -20,7 +19,6 @@ pub mod mcp;
 pub mod mcp_config;
 pub mod project;
 pub mod reports;
-pub mod review;
 pub mod self_update;
 pub mod session;
 pub mod workload;

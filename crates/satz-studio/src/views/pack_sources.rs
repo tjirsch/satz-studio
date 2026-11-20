@@ -1,13 +1,15 @@
 //! The pack sources of the Packs view: every source `satz pack-source list` names — the
-//! built-in `satz` first, then each `[[pack_source]]` of `config.toml` with where it is —
-//! as a selectable list; choosing one lists its packs. A source is added through a dialog
-//! that runs `satz pack-source add` and removed with `satz pack-source remove`, so
-//! `config.toml` is written by satz alone; a refusal is shown as satz says it (ADR 0030).
+//! built-in `satz` first, then each `[[pack_source]]` of `config.toml` with where it is.
+//! The card is one line: how many there are and the one listed (the first until one is
+//! chosen); the whole list, to choose or remove one, is a dialog (ADR 0031). A source is
+//! added through a dialog that runs `satz pack-source add` and removed with `satz
+//! pack-source remove`, so `config.toml` is written by satz alone; a refusal is shown as
+//! satz says it (ADR 0030).
 
 use std::path::PathBuf;
 
 use dioxus::prelude::*;
-use satz_studio_core::satz::reports::{PackPlace, PackSourceRow};
+use satz_studio_core::satz::reports::{PackPlace, PackSourceRow, PackSourcesReport};
 use satz_studio_core::satz::workload::{NewPlace, NewSource};
 
 use crate::components::{
@@ -50,6 +52,30 @@ fn new_source(
         name: name.to_string(),
         place,
     })
+}
+
+/// The headline of the sources card: how many there are.
+fn count_text(n: usize) -> String {
+    match n {
+        1 => "1 pack source".to_string(),
+        n => format!("{n} pack sources"),
+    }
+}
+
+/// The source the card shows on its one line: the one listed, else the first.
+fn shown<'a>(report: &'a PackSourcesReport, listed: Option<&str>) -> Option<&'a PackSourceRow> {
+    listed
+        .and_then(|name| report.sources.iter().find(|r| r.name == name))
+        .or(report.sources.first())
+}
+
+/// What a source's row says under its name.
+fn supporting(row: &PackSourceRow) -> String {
+    if row.builtin {
+        format!("{} · built in", row.location())
+    } else {
+        row.location()
+    }
 }
 
 /// The sources card. `confirm_remove` asks before a source leaves `config.toml`.
@@ -104,7 +130,13 @@ pub fn PackSourcesCard(busy: bool, confirm_remove: EventHandler<String>) -> Elem
         _ => None,
     };
 
-    let rows = match sources {
+    let mut all = use_signal(|| false);
+    let sources_ok = matches!(sources, Some(Ok(_)));
+    let count = match &sources {
+        Some(Ok(report)) => count_text(report.sources.len()),
+        _ => "Pack sources".to_string(),
+    };
+    let line = match &sources {
         None => rsx! {},
         Some(Err(e)) => rsx! {
             div { class: "interfaces__error",
@@ -115,6 +147,30 @@ pub fn PackSourcesCard(busy: bool, confirm_remove: EventHandler<String>) -> Elem
                 }
             }
         },
+        Some(Ok(report)) => match shown(report, listed.as_deref()) {
+            None => rsx! {},
+            Some(row) => {
+                let chosen = listed.as_deref() == Some(row.name.as_str());
+                let list_name = row.name.clone();
+                rsx! {
+                    List {
+                        ListItem {
+                            headline: row.name.clone(),
+                            supporting: if chosen { supporting(row) } else { format!("{} · choose to list its packs", supporting(row)) },
+                            selected: chosen,
+                            leading: rsx! { Icon { name: place_icon(row), size: 22 } },
+                            onclick: move |_| {
+                                if !busy {
+                                    handle.send(EstateAction::Packs(PackOp::List(list_name.clone())));
+                                }
+                            },
+                        }
+                    }
+                }
+            }
+        },
+    };
+    let rows = match sources {
         Some(Ok(report)) => rsx! {
             List {
                 for row in report.sources {
@@ -122,21 +178,17 @@ pub fn PackSourcesCard(busy: bool, confirm_remove: EventHandler<String>) -> Elem
                         let chosen = listed.as_deref() == Some(row.name.as_str());
                         let list_name = row.name.clone();
                         let remove_name = row.name.clone();
-                        let supporting = if row.builtin {
-                            format!("{} · built in", row.location())
-                        } else {
-                            row.location()
-                        };
                         rsx! {
                             ListItem {
                                 key: "{row.name}",
                                 headline: row.name.clone(),
-                                supporting,
+                                supporting: supporting(&row),
                                 selected: chosen,
                                 leading: rsx! { Icon { name: place_icon(&row), size: 22 } },
                                 onclick: move |_| {
                                     if !busy {
                                         handle.send(EstateAction::Packs(PackOp::List(list_name.clone())));
+                                        all.set(false);
                                     }
                                 },
                                 trailing: if row.builtin { None } else { Some(rsx! {
@@ -146,6 +198,7 @@ pub fn PackSourcesCard(busy: bool, confirm_remove: EventHandler<String>) -> Elem
                                         disabled: busy,
                                         onclick: move |e: MouseEvent| {
                                             e.stop_propagation();
+                                            all.set(false);
                                             confirm_remove.call(remove_name.clone());
                                         },
                                     }
@@ -156,29 +209,32 @@ pub fn PackSourcesCard(busy: bool, confirm_remove: EventHandler<String>) -> Elem
                 }
             }
         },
+        _ => rsx! {},
     };
 
     rsx! {
         Card { variant: CardVariant::Outlined, class: "interfaces__card",
             div { class: "interfaces__card-head",
                 Icon { name: "source", size: 22 }
-                h2 { class: "interfaces__name", "Pack sources" }
+                h2 { class: "interfaces__name", "{count}" }
                 span { class: "grow" }
-                Button {
-                    variant: ButtonVariant::Tonal,
+                IconButton {
+                    icon: "unfold_more",
+                    label: "All pack sources: choose or remove one",
+                    disabled: !sources_ok,
+                    onclick: move |_| all.set(true),
+                }
+                IconButton {
                     icon: "add",
+                    label: "Add a pack source…",
                     disabled: busy,
                     onclick: move |_| {
                         app.estate().source_change().set(None);
                         adding.set(true);
                     },
-                    "Add a source…"
                 }
             }
-            p { class: "interfaces__supporting",
-                "Choose a source to list its packs. A GitHub source is a network read, so it is read when you choose it. The sources are config.toml's; satz pack-source writes them."
-            }
-            {rows}
+            {line}
             if !adding() {
                 if let Some(said) = &refused {
                     div { class: "interfaces__error",
@@ -190,6 +246,29 @@ pub fn PackSourcesCard(busy: bool, confirm_remove: EventHandler<String>) -> Elem
                     }
                 }
             }
+        }
+        Dialog {
+            open: all(),
+            title: "Pack sources",
+            icon: "source",
+            class: "interfaces__add",
+            ondismiss: move |_| all.set(false),
+            actions: rsx! {
+                Button {
+                    variant: ButtonVariant::Text,
+                    icon: "add",
+                    disabled: busy,
+                    onclick: move |_| {
+                        all.set(false);
+                        app.estate().source_change().set(None);
+                        adding.set(true);
+                    },
+                    "Add a source…"
+                }
+                Button { variant: ButtonVariant::Text, onclick: move |_| all.set(false), "Close" }
+            },
+            p { class: "interfaces__supporting", "Choose a source to list its packs." }
+            {rows}
         }
         Dialog {
             open: adding(),
@@ -298,6 +377,12 @@ pub fn PackSourcesCard(busy: bool, confirm_remove: EventHandler<String>) -> Elem
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_card_counts_the_sources() {
+        assert_eq!(count_text(1), "1 pack source");
+        assert_eq!(count_text(3), "3 pack sources");
+    }
 
     #[test]
     fn the_form_is_a_source_once_its_name_and_place_are_given() {

@@ -21,7 +21,6 @@ pub mod packs;
 pub mod params;
 pub mod path;
 pub mod resources;
-pub mod review;
 pub mod satz_release;
 pub mod settings;
 pub mod workload_packs;

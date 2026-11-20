@@ -42,10 +42,7 @@ order: **Overview**, which estate this is — its short name, the customer, the 
 id and the organization id as its own file sets them, then the infrastructure it names,
 in its own answers — and what it still has to do; **Presets**, for an estate that holds the preset library — an organization's:
 every pack satz's pack graph offers, as the estate has it, the packs that need another
-hung below it, each switched on and off by satz's own `add-preset` and `remove-preset`,
-and a pack you wrote reviewed against the library's own bar with `satz review-preset` —
-each finding in the Findings drawer at its line — then placed in the estate's
-library as a `.local.satz` or handed upstream by a pull request;
+hung below it, each switched on and off by satz's own `add-preset` and `remove-preset`;
 **Decisions**, the
 questions those packs declare and it has not answered; **Estate**, the file
 itself — its params, its resource tree, and the interfaces it publishes for other estates
@@ -66,8 +63,13 @@ reload, "Switch estate" — the Start screen with your estates listed — and "C
 every satz command the app runs is one keystroke away in the commands palette (⌘K,
 Ctrl+K on Windows and Linux, or that footer button). What a command prints lands in the
 log in the form satz writes for a person — text, or markdown for the evidence report;
-`json` is a format you pick when you want the file. **Packs**, for every estate, are workload packs: templates taken from a source and adapted
-here. satz says what an estate works in — the organization, a delegated folder or a
+`json` is a format you pick when you want the file. Whoever writes packs for a library
+judges one there too: `review-pack` and `review-preset` are palette entries, not a view.
+**Packs**, for every estate, are workload packs: templates taken from a source and adapted
+here — the `use` lines the estate reads, the pack sources as one line with the whole list
+in a dialog, and each pack on one line with a chip only where its state asks for
+something ("update available"), its actions as icon buttons, "Open in your editor" for
+a pack that is here, and every state explained behind the help button. satz says what an estate works in — the organization, a delegated folder or a
 delegated project — and the window follows it on the same path: an organization's estate
 has Presets and Packs, a workload estate Packs alone; Apply leaves the bootstrap to
 the organization; the compliance reports are offered where the library's catalogs are. The

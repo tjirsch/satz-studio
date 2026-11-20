@@ -424,6 +424,71 @@ pub const PALETTE: &[CommandSpec] = &[
         reports: false,
         external: false,
     },
+    // Judging a pack is the work of whoever writes one for a library — the satz
+    // repository's presets or a source's workload packs — so it stands in the palette, not
+    // in a view: the views take packs and configure them (ADR 0031).
+    CommandSpec {
+        id: "review-pack",
+        label: "review-pack",
+        icon: "rate_review",
+        description: "Judge one workload pack: it parses, it is formatted, its header says what it is, it states its version, it carries no private-shaped value, it declares no membership, every type it writes has a prerequisite row, and it transpiles.",
+        head: &["review-pack"],
+        estate: EstateArg::None,
+        tail: &[],
+        fields: &[
+            Field::Positional {
+                key: "pack",
+                label: "Pack file (.satz)",
+                default: "",
+            },
+            Field::Option {
+                key: "against",
+                flag: "--against",
+                label: "Judge it inside this estate",
+                placeholder: "an estate's .satz file; a synthesised estate when empty",
+            },
+            Field::Choice {
+                key: "format",
+                flag: "--format",
+                label: "Format",
+                options: &["text", "json"],
+                default: "text",
+            },
+        ],
+        reports: true,
+        external: false,
+    },
+    CommandSpec {
+        id: "review-preset",
+        label: "review-preset",
+        icon: "rate_review",
+        description: "Judge one preset against the library's bar: the bar of review-pack, plus a changelog row for its version and no legacy constraint beside its managed replacement.",
+        head: &["review-preset"],
+        estate: EstateArg::None,
+        tail: &[],
+        fields: &[
+            Field::Positional {
+                key: "pack",
+                label: "Pack file (.satz)",
+                default: "",
+            },
+            Field::Option {
+                key: "against",
+                flag: "--against",
+                label: "Judge it inside this estate",
+                placeholder: "an estate's .satz file; a synthesised estate when empty",
+            },
+            Field::Choice {
+                key: "format",
+                flag: "--format",
+                label: "Format",
+                options: &["text", "json"],
+                default: "text",
+            },
+        ],
+        reports: true,
+        external: false,
+    },
     CommandSpec {
         id: "bootstrap-check",
         label: "bootstrap --dry-run",
@@ -921,6 +986,21 @@ mod tests {
         build_args(spec(id), estate, values, Path::new(OUT)).unwrap()
     }
 
+    /// A spec's defaults with every required positional that has none filled in, as the
+    /// operator would before running it: the review commands' pack file has no default.
+    fn ready(s: &CommandSpec) -> BTreeMap<String, String> {
+        let mut values = defaults(s);
+        for f in s.fields {
+            if let Field::Positional {
+                key, default: "", ..
+            } = f
+            {
+                values.insert((*key).to_string(), "pack.satz".to_string());
+            }
+        }
+        values
+    }
+
     #[test]
     fn the_terminal_takes_the_three_external_commands_and_a_dry_run_stays_in_the_app() {
         let args =
@@ -1083,10 +1163,17 @@ mod tests {
         let reporting: Vec<&str> = PALETTE.iter().filter(|s| s.reports).map(|s| s.id).collect();
         assert_eq!(
             reporting,
-            ["questions", "check-presets", "require", "report-compliance"]
+            [
+                "questions",
+                "check-presets",
+                "require",
+                "report-compliance",
+                "review-pack",
+                "review-preset"
+            ]
         );
         for s in PALETTE.iter().filter(|s| s.reports) {
-            let args = built(s.id, "C0example.satz", &defaults(s));
+            let args = built(s.id, "C0example.satz", &ready(s));
             assert!(args.iter().any(|a| a == "--format"), "{}: {args:?}", s.id);
             assert_eq!(
                 args.iter().filter(|a| *a == "--out").count(),
@@ -1178,7 +1265,7 @@ mod tests {
                     assert!(options.contains(default), "{}", s.id);
                 }
             }
-            let args = built(s.id, "C0example.satz", &defaults(s));
+            let args = built(s.id, "C0example.satz", &ready(s));
             assert!(!args.iter().any(|a| a == "json"), "{}: {args:?}", s.id);
         }
     }

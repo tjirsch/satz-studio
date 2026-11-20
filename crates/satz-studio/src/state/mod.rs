@@ -27,7 +27,6 @@ use satz_studio_core::satz::reports::{
     InterfacesReport, InterviewReport, NoticeRow, PackSourcesReport, QuestionsReport,
     UpdatePackReport, WorkloadPacksReport,
 };
-use satz_studio_core::satz::review::ReviewedPack;
 use satz_studio_core::satz::self_update::SatzRelease;
 use satz_studio_core::satz::{CliLine, EstateSession, ImportReport, QuestionsFormat, SatzBinary};
 use satz_studio_core::settings::Settings;
@@ -354,11 +353,6 @@ pub struct EstateStore {
     /// the last decisions sheet or workbook this session wrote, which "Export again"
     /// writes over
     pub last_export: Option<Exported>,
-    /// the pack the Presets view reviewed last with `satz review-preset`, or why its review
-    /// failed; its findings stand in the drawer beside the estate's own until it is closed
-    pub review: Option<PackReviewState>,
-    /// a review or a placement is running
-    pub reviewing: bool,
     /// what the estate publishes, from `satz interfaces` at every reload — or satz's
     /// reason it could not say; `None` until the first reload has asked
     pub interfaces: Option<Result<InterfacesReport, String>>,
@@ -396,31 +390,6 @@ pub enum SignIn {
     Known(Box<satz_studio_core::satz::reports::WhoamiReport>),
     /// satz's refusal, in its own words — no sign-in, or a token that is not minted
     Refused(String),
-}
-
-/// The pack review of the Presets view.
-#[derive(Debug, Clone, PartialEq)]
-pub enum PackReviewState {
-    Reviewed(ReviewedPack),
-    Failed { pack: PathBuf, error: String },
-}
-
-impl PackReviewState {
-    pub fn pack(&self) -> &Path {
-        match self {
-            PackReviewState::Reviewed(r) => &r.path,
-            PackReviewState::Failed { pack, .. } => pack,
-        }
-    }
-
-    /// The review's findings, for the drawer; none for a failed review,
-    /// whose reason the view and the toast carry.
-    pub fn diagnostics(&self) -> Vec<Diagnostic> {
-        match self {
-            PackReviewState::Reviewed(r) => r.diagnostics(),
-            PackReviewState::Failed { .. } => Vec::new(),
-        }
-    }
 }
 
 /// A document an export wrote: the format and the file.

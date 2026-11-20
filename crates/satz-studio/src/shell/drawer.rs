@@ -6,19 +6,15 @@ use satz_studio_core::diag::{DiagSource, Diagnostic, Severity};
 use crate::components::{Chip, ChipKind, Icon, List, ListItem};
 use crate::state::{AppStore, AppStoreStoreExt, DiagnosticSelection, EstateStoreStoreExt, View};
 
-/// The bottom drawer, Findings: the open estate's findings, and those of the pack the
-/// Presets view reviewed, grouped by severity, each with its `file:line`, its source, and —
-/// for one of satz's findings — a chip naming the check that raised it; clicking one sets
+/// The bottom drawer, Findings: the open estate's findings, grouped by severity, each with
+/// its `file:line`, its source, and — for one of satz's findings — a chip naming the check that raised it; clicking one sets
 /// [`DiagnosticSelection`] and opens the destination where its line is ([`destination`]).
 #[component]
 pub fn DiagnosticsDrawer() -> Element {
     let app = use_context::<Store<AppStore>>();
     let selection = use_context::<DiagnosticSelection>();
     let open = app.drawer_open().cloned();
-    let review = app.estate().review().cloned();
-    let reviewed = review.as_ref().map(|r| r.pack().to_path_buf());
-    let mut diagnostics = app.estate().diagnostics().cloned();
-    diagnostics.extend(review.map(|r| r.diagnostics()).unwrap_or_default());
+    let diagnostics = app.estate().diagnostics().cloned();
     let base = app.open().read().as_ref().map(|o| o.dir.clone());
     let main = app.open().read().as_ref().map(|o| o.main.clone());
     let count = |s: Severity| diagnostics.iter().filter(|d| d.severity == s).count();
@@ -58,7 +54,7 @@ pub fn DiagnosticsDrawer() -> Element {
                                                 let headline = d.message.lines().next().unwrap_or_default().to_string();
                                                 let kind = d.kind.clone();
                                                 let item = d.clone();
-                                                let go = destination(&d, main.as_deref(), reviewed.as_deref());
+                                                let go = destination(&d, main.as_deref());
                                                 let mut select = selection.0;
                                                 rsx! {
                                                     ListItem {
@@ -89,18 +85,11 @@ pub fn DiagnosticsDrawer() -> Element {
     }
 }
 
-/// Where a click on `d` takes the window: a line of the main file is in Estate; a finding
-/// about the reviewed pack is in Presets, where the review shows the pack's text with the
-/// line marked; anything else stays where it is.
-pub fn destination(d: &Diagnostic, main: Option<&Path>, reviewed: Option<&Path>) -> Option<View> {
+/// Where a click on `d` takes the window: a line of the main file is in Estate; anything
+/// else stays where it is.
+pub fn destination(d: &Diagnostic, main: Option<&Path>) -> Option<View> {
     let file = d.file.as_deref()?;
-    if Some(file) == main && d.line.is_some() {
-        Some(View::Estate)
-    } else if Some(file) == reviewed {
-        Some(View::Presets)
-    } else {
-        None
-    }
+    (Some(file) == main && d.line.is_some()).then_some(View::Estate)
 }
 
 /// `file:line · source`, the file shown relative to the estate directory.
@@ -137,48 +126,22 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_line_of_the_main_file_is_in_estate_and_one_of_the_reviewed_pack_in_packs() {
+    fn a_line_of_the_main_file_is_in_estate_and_any_other_stays() {
         let main = Path::new("/e/yaml/C0example.satz");
-        let pack = Path::new("/home/packs/team-access.satz");
         let at = |file: &str, line: Option<u32>| Diagnostic {
             line,
-            ..Diagnostic::error("m", DiagSource::Command("review-preset".to_string())).at(file, 1)
+            ..Diagnostic::error("m", DiagSource::Compile).at(file, 1)
         };
         assert_eq!(
-            destination(
-                &at("/e/yaml/C0example.satz", Some(3)),
-                Some(main),
-                Some(pack)
-            ),
+            destination(&at("/e/yaml/C0example.satz", Some(3)), Some(main)),
             Some(View::Estate)
         );
         assert_eq!(
-            destination(
-                &at("/home/packs/team-access.satz", Some(17)),
-                Some(main),
-                Some(pack)
-            ),
-            Some(View::Presets)
-        );
-        // a finding about the whole pack still stands in the review
-        assert_eq!(
-            destination(
-                &at("/home/packs/team-access.satz", None),
-                Some(main),
-                Some(pack)
-            ),
-            Some(View::Presets)
-        );
-        assert_eq!(
-            destination(&at("/e/yaml/C0example.satz", None), Some(main), Some(pack)),
+            destination(&at("/e/yaml/C0example.satz", None), Some(main)),
             None
         );
         assert_eq!(
-            destination(
-                &at("/e/presets/other.satz", Some(2)),
-                Some(main),
-                Some(pack)
-            ),
+            destination(&at("/e/presets/other.satz", Some(2)), Some(main)),
             None
         );
     }

@@ -16,9 +16,6 @@ pub fn PacksView() -> Element {
     rsx! {
         div { class: "view packs-view",
             h1 { class: "view__title", "Packs" }
-            p { class: "view__lead",
-                "A pack is a template for a workload or a part of one: take it from a source, add it to the estate, and adapt it — a pack changed here is this repository's own. What a pack asks is in Decisions."
-            }
             WorkloadPacksPane {}
             NextStep { from: View::Packs }
         }

@@ -1,6 +1,6 @@
 # 0019 — the pack review runs the CLI, and a private pack is placed as a `.local.satz`
 
-- **Status:** accepted
+- **Status:** superseded by [ADR-0031](0031-the-pack-review-is-a-palette-command-and-the-packs-view-says-only-what-asks-for-action.md)
 - **Date:** 2026-09-21
 - **Deciders:** the maintainer
 
