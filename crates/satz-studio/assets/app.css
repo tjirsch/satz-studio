@@ -1,9 +1,11 @@
 /* app.css — the layout of the window and its views. Every color, radius and control
    style comes from the Dioxus component library and its theme (dx-components-theme.css);
    this file arranges them: the top bar over the view, the path bar and the drawer under
-   it, the columns and rows inside a view. It never restyles a library component — `dx`
-   renames the components' classes when it builds, so a rule aimed at one would not even
-   match. The elements that are the app's own (the tree, the connector tree, the command
+   it, the columns and rows inside a view. It never restyles a library component by its
+   class — `dx` renames the components' classes when it builds, so a rule aimed at one
+   would not even match. Two rules reach a component by its `data-slot` attribute, each
+   where it stands: the sidebar's width and the question selected in Decisions' list.
+   The elements that are the app's own (the tree, the connector tree, the command
    log, the estate map) take their colors from the theme's variables. */
 
 :root {
@@ -230,6 +232,14 @@ select {
 
 .card-button {
   cursor: pointer;
+}
+
+/* The sidebar is 60% of the library's 16rem. The library sets its widths inline on the
+   wrapper, and a stylesheet `!important` is the one rule that outranks an inline
+   declaration. A label that does not fit is cut with an ellipsis by the library's own
+   rule; the folded (icon) width stays the library's. */
+[data-slot="sidebar-wrapper"] {
+  --dx-sidebar-width: 9.6rem !important;
 }
 
 .shell__main {
@@ -1229,6 +1239,26 @@ select {
   overflow-y: auto;
 }
 
+/* A question in the list opens on the card when clicked; the one on the card carries the
+   theme's focus blue, tinted behind it and drawn round it, in light and dark alike. */
+.interview__list [data-slot="item"] {
+  cursor: pointer;
+}
+
+.interview__list [data-slot="item"]:hover {
+  background: var(--primary-color-5);
+}
+
+.interview__list [data-slot="item"][data-selected="true"] {
+  background: color-mix(in srgb, var(--focused-border-color) 18%, transparent);
+  border-color: var(--focused-border-color);
+  color: var(--secondary-color-1);
+}
+
+.interview__list [data-selected="true"] [data-slot="item-description"] {
+  color: var(--secondary-color-3);
+}
+
 .interview__list-empty {
   display: flex;
   align-items: center;
@@ -1341,16 +1371,6 @@ select {
   font-weight: 500;
   font-family: var(--font-mono);
   color: var(--secondary-color-5);
-}
-
-.interview__banner {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 12px 16px;
-  border-radius: 0.5rem;
-  background: var(--primary-error-color);
-  color: var(--contrast-error-color);
 }
 
 .interview__recommend {

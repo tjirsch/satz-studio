@@ -22,7 +22,6 @@ use dioxus::prelude::*;
 use dioxus_icons::lucide::{
     ArrowLeft, ArrowRight, Ban, Boxes, Check, CheckCheck, Circle, CircleCheck, CircleCheckBig,
     DoorOpen, History, Lightbulb, MessageCircleQuestionMark, OctagonAlert, PencilLine, Sparkles,
-    TriangleAlert,
 };
 use satz_studio_core::model::answer_kind;
 use satz_studio_core::satz::reports::{
@@ -37,7 +36,7 @@ use crate::components::item::{
 };
 use crate::components::progress::Progress;
 use crate::state::{AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt};
-use crate::widgets::{Draft, FieldKind, SwitchRow, TypedField};
+use crate::widgets::{Draft, FieldKind, SwitchRow, Tip, TypedField};
 
 /// The questions in the order the view walks them: the unanswered ones as the report
 /// lists them, then — when asked for — the answered ones and the ones not asked.
@@ -584,6 +583,53 @@ fn blast_label(b: Blast) -> &'static str {
     }
 }
 
+/// What a question's state badge means, as its tooltip says it: satz's `answered`,
+/// `unanswered` and `not-applicable`, and `blocking` for an unanswered question with no
+/// usable default.
+pub fn state_tip(q: &QuestionRow) -> &'static str {
+    match q.state {
+        QuestionState::Unanswered if q.blocking => {
+            "No usable default: the pack cannot guess this answer, so a value has to be typed."
+        }
+        QuestionState::Unanswered => {
+            "Not answered yet: the value the pack offers applies until the estate binds one."
+        }
+        QuestionState::Answered => "Answered: the estate binds a value for this question.",
+        QuestionState::NotApplicable => {
+            "Not asked: the question's ask_when param is false, so it does not apply to this estate."
+        }
+    }
+}
+
+/// What changing the answer later does to the estate, in satz's words for `reversal`.
+pub fn reversal_tip(r: Reversal) -> &'static str {
+    match r {
+        Reversal::Edit => "Changing this answer later is an edit: one line, one apply.",
+        Reversal::StateSurgery => {
+            "Changing this answer later is state surgery: a rename plus state mv, and whatever the old name is wired into. Done with care."
+        }
+        Reversal::Recreate => {
+            "Changing this answer later destroys and recreates resources: globally unique ids, mail addresses, buckets."
+        }
+    }
+}
+
+/// What changing the answer later costs the running organization, in satz's words for
+/// `blast`. Independent of the reversal: one boolean to reverse can cut every existing
+/// SSH path.
+pub fn blast_tip(b: Blast) -> &'static str {
+    match b {
+        Blast::None => "Changing this answer later costs the running organization nothing.",
+        Blast::Low => "Changing this answer later costs the running organization little.",
+        Blast::High => {
+            "Changing this answer later hits the running organization hard: what runs on the old answer can stop working."
+        }
+    }
+}
+
+/// What the one-way door chip means.
+pub const ONE_WAY_TIP: &str = "Changing this answer later is a recreate or hits a high blast radius. Decide it with the reason above in view.";
+
 /// An answer is written by the filled button and by Enter in a text or number field, and
 /// by nothing else: not when the field loses focus — the button's own click blurs the
 /// field first, so a blur that wrote would send a second answer — and not on a switch
@@ -703,9 +749,11 @@ fn QuestionCard(
                         div { class: "interview__card-head",
                             code { class: "interview__subject", "{q.subject}" }
                             span { class: "grow" }
-                            Badge { variant: if needs_value { BadgeVariant::Destructive } else { BadgeVariant::Outline },
-                                {state_icon(&q, 12)}
-                                "{state_text}"
+                            Tip { text: state_tip(&q),
+                                Badge { variant: if needs_value { BadgeVariant::Destructive } else { BadgeVariant::Outline },
+                                    {state_icon(&q, 12)}
+                                    "{state_text}"
+                                }
                             }
                         }
                         h2 { class: "interview__prompt", "{q.prompt}" }
@@ -713,28 +761,28 @@ fn QuestionCard(
                             p { class: "interview__why", "{why}" }
                         }
                         div { class: "interview__tags",
-                            Badge { variant: BadgeVariant::Outline,
-                                History { size: 12 }
-                                "{reversal_label(q.reversal)}"
+                            Tip { text: reversal_tip(q.reversal),
+                                Badge { variant: BadgeVariant::Outline,
+                                    History { size: 12 }
+                                    "{reversal_label(q.reversal)}"
+                                }
                             }
-                            Badge { variant: if q.blast == Blast::High { BadgeVariant::Destructive } else { BadgeVariant::Outline },
-                                Sparkles { size: 12 }
-                                "{blast_label(q.blast)}"
+                            Tip { text: blast_tip(q.blast),
+                                Badge { variant: if q.blast == Blast::High { BadgeVariant::Destructive } else { BadgeVariant::Outline },
+                                    Sparkles { size: 12 }
+                                    "{blast_label(q.blast)}"
+                                }
                             }
                             if one_way {
-                                Badge { variant: BadgeVariant::Destructive,
-                                    DoorOpen { size: 12 }
-                                    "one-way door"
+                                Tip { text: ONE_WAY_TIP,
+                                    Badge { variant: BadgeVariant::Destructive,
+                                        DoorOpen { size: 12 }
+                                        "one-way door"
+                                    }
                                 }
                             }
                             span { class: "grow" }
                             span { class: "interview__from", "{q.from}" }
-                        }
-                        if one_way {
-                            div { class: "interview__banner", role: "alert",
-                                TriangleAlert { size: 16 }
-                                span { "A one-way door: changing this answer later is a recreate or hits a high blast radius. Decide it with the reason above in view." }
-                            }
                         }
                         if let Some(r) = recommend {
                             div { class: "interview__recommend",
@@ -1183,6 +1231,58 @@ mod tests {
         assert_eq!(walk.back(&questions, true), Some(true));
         assert_eq!(subject_at(&walk, &list), "region");
         assert!(!walk.can_go_back());
+    }
+
+    /// A click on the list's n-th item calls `open(n)`; the card then shows that question
+    /// and the list marks it, since both read the same position.
+    #[test]
+    fn a_click_on_any_listed_question_puts_it_on_the_card() {
+        let questions = vec![
+            q("region", QuestionState::Unanswered),
+            q("billing", QuestionState::Answered),
+            q("domain", QuestionState::Unanswered),
+            q("labels", QuestionState::Answered),
+        ];
+        for show in [false, true] {
+            let list = ordered(&questions, show);
+            let mut walk = Walk::default();
+            for n in (0..list.len()).rev().chain(0..list.len()) {
+                walk.open(&questions, show, n);
+                assert_eq!(walk.position(&list), n);
+                assert_eq!(subject_at(&walk, &list), list[n].subject);
+            }
+        }
+    }
+
+    /// Every badge on the card explains itself: each state, reversal and blast has its own
+    /// tooltip.
+    #[test]
+    fn every_badge_says_what_it_means() {
+        let mut blocking = q("domain", QuestionState::Unanswered);
+        blocking.blocking = true;
+        let states: Vec<&str> = [
+            q("a", QuestionState::Unanswered),
+            blocking,
+            q("b", QuestionState::Answered),
+            q("c", QuestionState::NotApplicable),
+        ]
+        .iter()
+        .map(state_tip)
+        .collect();
+        let reversals: Vec<&str> = [Reversal::Edit, Reversal::StateSurgery, Reversal::Recreate]
+            .into_iter()
+            .map(reversal_tip)
+            .collect();
+        let blasts: Vec<&str> = [Blast::None, Blast::Low, Blast::High]
+            .into_iter()
+            .map(blast_tip)
+            .collect();
+        for tips in [&states, &reversals, &blasts] {
+            assert!(tips.iter().all(|t| !t.is_empty()));
+            let distinct: std::collections::HashSet<_> = tips.iter().collect();
+            assert_eq!(distinct.len(), tips.len(), "{tips:?}");
+        }
+        assert!(!ONE_WAY_TIP.is_empty());
     }
 
     #[test]

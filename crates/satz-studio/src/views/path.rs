@@ -44,9 +44,10 @@ pub fn previous_before(from: View, presets: bool) -> Option<View> {
         .find(|v| presets || *v != View::Presets)
 }
 
-/// What the next step is for, in one sentence.
+/// What a step is for, in one sentence; empty for a view that is not a step.
 pub fn purpose(step: View) -> &'static str {
     match step {
+        View::Overview => "See what the estate is and what it still owes.",
         View::Presets => "Choose the presets this organization is built from.",
         View::Packs => "Take the packs this estate is built from.",
         View::Decisions => "Answer what the estate's presets and packs ask.",
@@ -172,10 +173,11 @@ mod tests {
         }
     }
 
-    /// Every step that can be gone to says what it is for, and is a primary destination.
+    /// Every step says what it is for — the path bar shows it as the tooltip of the button
+    /// that goes there, back to the Overview included — and is a primary destination.
     #[test]
-    fn every_next_step_has_a_purpose_and_is_in_the_sidebar() {
-        for step in &STEPS[1..] {
+    fn every_step_has_a_purpose_and_is_in_the_sidebar() {
+        for step in &STEPS {
             assert!(!purpose(*step).is_empty(), "{step:?}");
             assert!(View::PRIMARY.contains(step), "{step:?}");
         }
