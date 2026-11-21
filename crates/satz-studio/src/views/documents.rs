@@ -13,7 +13,10 @@ use satz_studio_core::agent;
 use dioxus_icons::lucide::{FileText, Play, ShieldCheck};
 
 use crate::components::button::{Button, ButtonVariant};
-use crate::components::card::{Card, CardContent, CardDescription, CardHeader};
+use crate::components::card::{Card, CardContent, CardDescription, CardHeader, CardTitle};
+use crate::components::item::{
+    Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemTitle, ItemVariant,
+};
 use crate::state::{AppStore, AppStoreStoreExt, EstateStoreStoreExt, ToastKind, toast};
 use crate::views::commands::{COMPLIANCE, CommandDeck};
 use crate::views::export::ExportCard;
@@ -83,58 +86,66 @@ pub fn DocumentsView() -> Element {
             }
             ExportCard {}
 
-            h2 { class: "documents__section", "Compliance" }
-            if catalogs {
-                p { class: "view__lead",
-                    "The estate against a catalog, and the evidence report. Both read the live organization, so they need you signed in (Apply says whether you are)."
+            Card {
+                CardHeader {
+                    CardTitle { "Compliance" }
+                    CardDescription {
+                        if catalogs {
+                            "The estate against a catalog, and the evidence report. Both read the live organization, so they need you signed in (Apply says whether you are)."
+                        } else {
+                            "The compliance reports are made from the catalogs of the preset library, which an organization's estate holds. This estate has none: its compliance is reported in the organization's estate."
+                        }
+                    }
                 }
-                CommandDeck { ids: COMPLIANCE.to_vec() }
-            } else {
-                p { class: "view__lead",
-                    "The compliance reports are made from the catalogs of the preset library, which an organization's estate holds. This estate has none: its compliance is reported in the organization's estate."
+                if catalogs {
+                    CardContent {
+                        CommandDeck { ids: COMPLIANCE.to_vec() }
+                    }
                 }
             }
 
-            h2 { class: "documents__section", "Written by an agent" }
-            p { class: "view__lead",
-                "These take a model working through the estate with you, so satz-studio does not make them: it starts the client Settings names in this estate's directory with the skill as its first instruction. The skills are in the satz repository under "
-                code { "skills/" }
-                " and have to be installed for that client."
-            }
-            div { class: "documents__agent",
-                for doc in AGENT_DOCUMENTS {
-                    Card { key: "{doc.skill}", class: "export",
-                        CardHeader {
-                            header { class: "export__head",
-                                {doc.icon(22)}
-                                h3 { class: "export__title", "{doc.title}" }
-                            }
-                            CardDescription { "{doc.text}" }
-                        }
-                        CardContent {
-                        div { class: "export__actions",
-                            Button {
-                                variant: ButtonVariant::Secondary,
-                                disabled: program.is_none(),
-                                onclick: {
-                                    let dir = open.dir.clone();
-                                    let command = skill_command(&agent_command, doc.skill);
-                                    move |_| {
-                                        let Some(command) = &command else { return };
-                                        match agent::start(command, &dir) {
-                                            Ok(_) => toast(app, ToastKind::Info, format!("{command} started in {}", dir.display())),
-                                            Err(e) => toast(app, ToastKind::Error, e.to_string()),
+            Card {
+                CardHeader {
+                    CardTitle { "Written by an agent" }
+                    CardDescription {
+                        "Started in the client Settings names, in this estate's directory, with the skill as its first instruction. The skills are in the satz repository under "
+                        code { "skills/" }
+                        " and have to be installed for that client."
+                    }
+                }
+                CardContent {
+                    ItemGroup { class: "documents__agent",
+                        for doc in AGENT_DOCUMENTS {
+                            Item { key: "{doc.skill}", variant: ItemVariant::Outline,
+                                ItemMedia { {doc.icon(20)} }
+                                ItemContent {
+                                    ItemTitle { "{doc.title}" }
+                                    ItemDescription { "{doc.text}" }
+                                }
+                                ItemActions {
+                                    code { class: "export__last", "/{doc.skill}" }
+                                    Button {
+                                        variant: ButtonVariant::Secondary,
+                                        disabled: program.is_none(),
+                                        onclick: {
+                                            let dir = open.dir.clone();
+                                            let command = skill_command(&agent_command, doc.skill);
+                                            move |_| {
+                                                let Some(command) = &command else { return };
+                                                match agent::start(command, &dir) {
+                                                    Ok(_) => toast(app, ToastKind::Info, format!("{command} started in {}", dir.display())),
+                                                    Err(e) => toast(app, ToastKind::Error, e.to_string()),
+                                                }
+                                            }
+                                        },
+                                        Play { size: 16 }
+                                        match &program {
+                                            Some(p) => format!("Start in {p}"),
+                                            None => "No agent configured".to_string(),
                                         }
                                     }
-                                },
-                                Play { size: 16 }
-                                match &program {
-                                    Some(p) => format!("Start in {p}"),
-                                    None => "No agent configured".to_string(),
                                 }
                             }
-                            code { class: "export__last", "/{doc.skill}" }
-                        }
                         }
                     }
                 }
