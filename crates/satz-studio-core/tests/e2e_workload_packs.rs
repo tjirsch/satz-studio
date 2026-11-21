@@ -10,7 +10,9 @@
 //! fetched from there. `satz packs --local` lists the packs here with their declarations
 //! and the interface folders the estate reads, with what each exports, and reads no
 //! source — a GitHub source that does not exist is no failure. The `use` line satz names
-//! goes into the estate file through the app's writer and satz's check.
+//! goes into the estate file through the app's writer and satz's check. A workload
+//! estate's prerequisites report, through the session as the Overview reads it, lists
+//! the roles its resource types need by where each is granted and checks none.
 
 #[path = "fixtures/e2e/support.rs"]
 mod e2e;
@@ -21,7 +23,8 @@ use satz_studio_core::satz::SatzCli;
 use satz_studio_core::satz::SatzError;
 use satz_studio_core::satz::project;
 use satz_studio_core::satz::reports::{
-    PackPlace, PackState, PublishAction, UpdateAction, WorkloadPackRow,
+    PackPlace, PackState, PrerequisitesResult, PublishAction, RoleScope, UpdateAction,
+    WorkloadPackRow,
 };
 use satz_studio_core::satz::workload::{self, NewPlace, NewSource, PublishRefusal, Which};
 
@@ -497,4 +500,52 @@ async fn an_own_pack_is_published_to_a_folder_source_and_follows_it_from_then_on
         .await
         .unwrap();
     assert_eq!(row(&report.packs, id).state, PackState::Current);
+}
+
+/// `satz_update_prerequisites {report_only: true}` on a workload estate, through the
+/// session as the Overview's "Needed roles" calls it: the estate is a workload estate,
+/// what its resource types need is listed by where each is granted, nothing is missing
+/// and nothing is written.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_workload_estates_prerequisites_are_a_list_of_needs() {
+    let estate = e2e::estate_dir(None);
+    std::fs::copy(
+        e2e::vendor().join("tests/corpus/project/interface.satz"),
+        estate.file("interface.satz"),
+    )
+    .unwrap();
+    let fixture =
+        e2e::repo_root().join("crates/satz-studio-core/tests/fixtures/workload/workload.satz");
+    std::fs::copy(&fixture, estate.file("workload.satz")).unwrap();
+    let before = e2e::read(&estate.file("workload.satz"));
+    let session = estate.open("workload.satz").await;
+    let args =
+        serde_json::Map::from_iter([("report_only".to_string(), serde_json::Value::Bool(true))]);
+    let outcome = e2e::within(session.tool("satz_update_prerequisites", args))
+        .await
+        .unwrap();
+    assert!(!outcome.is_error, "{}", outcome.text);
+    let result = outcome
+        .typed::<PrerequisitesResult>("satz_update_prerequisites")
+        .unwrap();
+    assert!(result.written.is_empty());
+    let report = result.report;
+    assert!(report.workload);
+    assert!(
+        report
+            .needed_roles
+            .iter()
+            .any(|n| n.scope == RoleScope::Folder && n.reason.iter().any(|r| r == "google_folder")),
+        "{:?}",
+        report.needed_roles
+    );
+    assert!(
+        report
+            .needed_apis
+            .iter()
+            .any(|a| a.api == "storage.googleapis.com"),
+        "{:?}",
+        report.needed_apis
+    );
+    assert_eq!(e2e::read(&estate.file("workload.satz")), before);
 }

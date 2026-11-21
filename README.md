@@ -78,7 +78,12 @@ estate — and the window follows it on the same path: an organization's estate
 has Presets and Packs, a workload estate Packs alone; Apply leaves the bootstrap to
 the organization; the compliance reports are offered where the library's catalogs are. The
 Overview names the kind and, for a workload estate, each interface folder it uses: the
-organization's estate that wrote it, the estate account it carries and what it exports. Delegated access is
+organization's estate that wrote it, the estate account it carries and what it exports.
+A workload estate's roles are the organization's to grant, and satz checks none of them:
+"Needed roles" on the Overview lists the roles its resource types need, by where each is
+granted, and the APIs they need on the delegation's infrastructure project — the list the
+workload's team hands to the organization's team, which "Copy" puts on the clipboard as
+plain text. Delegated access is
 given in Estate → Interfaces: every list param a preset declares is shown with its entries, and
 "Add" writes one through `satz add-entry` from a form of the declared fields. A workload
 estate is created from the interface folders it was given, on the Start screen. Packs
@@ -128,7 +133,8 @@ take preset updates (one button runs `git init`, `git add` and a first commit), 
 bootstrap unconfirmed, questions unanswered, an estate map that is off or missing, what satz's pack
 graph finds wrong with the packs the estate uses, a `use` line without its `when <gate>`,
 which switches its pack on whatever the estate answers, no provider
-schema, a pack whose notice is open, prerequisites the transpile found undeclared, raw HCL
+schema, a pack whose notice is open, prerequisites the transpile found undeclared (for a
+workload estate, an API on a project of its own), raw HCL
 nobody has reviewed, an HCL directory nothing has planned against. Every row is derived from the estate as it is on
 the screen, so it cannot go stale, and the card is not there when nothing is owed — the
 top bar's status says so. Documents exports the decisions sheet or the workbook, below.
@@ -160,7 +166,7 @@ that holds them up — in front of apply and bootstrap, which satz refuses.
 
 ## What it needs
 
-- **`satz` 0.109.0 or newer.** `MIN_SATZ` in `crates/satz-studio-core/src/satz/binary.rs`
+- **`satz` 0.110.0 or newer.** `MIN_SATZ` in `crates/satz-studio-core/src/satz/binary.rs`
   names the oldest satz this build works with. It rises when a satz release breaks the
   app or the app starts using something a later satz introduced, not with every satz
   release. Install satz with its installer or bring it up to date with `satz

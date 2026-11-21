@@ -1,0 +1,12 @@
+# A workload estate for the recorded prerequisites report: it reads satz's corpus
+# interface file (`interface.satz`, found through include_dirs in the pinned submodule)
+# and builds a folder, a service account, a bucket, a topic and grants in what that
+# interface gives. scripts/move-pin.sh records `satz update-prerequisites --report-only`
+# of it as tests/fixtures/prerequisites-workload.json. Nothing writes here.
+yaml_dir = "."
+hcl_dir = "hcl"
+include_dirs = [".", "../../../../../vendor/satz/tests/corpus/project", "../../../../../vendor/satz"]
+schema_dir = "../../../../../vendor/satz/tests/schemas"
+presets_dir = "../../../../../vendor/satz/presets"
+tf_tool = "tofu"
+provider_version = "7.14.1"

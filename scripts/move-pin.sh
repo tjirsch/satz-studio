@@ -5,8 +5,8 @@
 #   2. the vendored grammar to the commit that satz names in its
 #      editors/zed/extension.toml (tests/grammar_pin.rs holds the two together);
 #   3. the recorded reports under crates/satz-studio-core/tests/fixtures/ that one satz
-#      command writes: the presets report, the two reviews, the interfaces report and the
-#      two questions reports.
+#      command writes: the presets report, the two reviews, the interfaces report, the
+#      two questions reports and the prerequisites report of a workload estate.
 #
 #   scripts/move-pin.sh v0.95.2
 #
@@ -86,6 +86,14 @@ record review/organization-budget.json review-preset vendor/satz/presets/organiz
 record review/team-access.json review-preset "$fixtures/review/team-access.satz"
 # the broken pack is recorded as standing in an estate's packs/, where the test reads it
 sed -i.bak "s#/e/$fixtures/review/#/e/packs/#g" "$fixtures/review/team-access.json" && rm -f "$fixtures/review/team-access.json.bak"
+# the prerequisites report of a workload estate: `update-prerequisites` takes no `--out`,
+# its JSON is stdout, and its estate is the workload fixture with its own config
+workload="$fixtures/workload"
+out="$fixtures/prerequisites-workload.json"
+"$satz" --config "$workload/config.toml" update-prerequisites "$workload/workload.satz" --report-only --format json 2> /dev/null \
+  | sed -e "s#$repo_root#/e#g" > "$out" || die "satz update-prerequisites wrote no report"
+[[ -s "$out" ]] || die "$out came out empty"
+echo "move-pin: recorded $out"
 
 cat <<EOF
 
