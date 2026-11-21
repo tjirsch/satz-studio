@@ -1974,6 +1974,26 @@ select {
   color: var(--primary-color-7);
 }
 
+.overview__needed-scope {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.overview__needed ul {
+  margin: 4px 0 0;
+  padding-left: 20px;
+}
+
+.overview__needed code {
+  font-family: var(--font-mono);
+  user-select: text;
+}
+
+.overview__needed-error {
+  color: var(--secondary-error-color);
+}
+
 .estate {
   height: 100%;
 }

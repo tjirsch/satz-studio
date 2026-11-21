@@ -241,13 +241,159 @@ pub enum InterviewFilter {
     All,
 }
 
-/// What `satz_update_prerequisites` returns. Only the lines it wrote are read: the
-/// report beside them is what the command's own `--report-only` run prints into the
-/// log, and the app does not render it twice.
+/// What `satz_update_prerequisites` returns: the report, and the lines it wrote.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct PrerequisitesResult {
-    /// the lines written into the estate; empty when nothing was missing
+    pub report: PrerequisitesReport,
+    /// the lines written into the estate; empty under `report_only`, and empty when
+    /// nothing was missing
     pub written: Vec<String>,
+}
+
+/// What `satz update-prerequisites --format json` reports, as far as the app reads it.
+/// An organization's estate is checked: what it misses is the transpile's findings, which
+/// the drawer carries. A workload estate is not (satz's ADR 0101): its account's roles
+/// are the organization's to grant, through the delegation pack that created what it
+/// builds in, and the report lists what its resource types need for the organization's
+/// team. `workload`, `needed_roles` and `needed_apis` are required, so a report of a satz
+/// before them — `delegation`, `request`, `not_delegated_apis` — fails.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct PrerequisitesReport {
+    pub estate: String,
+    /// the estate account the needs are for
+    pub service_account: String,
+    /// the estate uses an interface file: a workload estate
+    pub workload: bool,
+    /// a workload estate alone: the roles its resource types need, by where each is granted
+    pub needed_roles: Vec<NeededRole>,
+    /// a workload estate alone: the APIs its resources need on the delegation's
+    /// infrastructure project that it does not declare — the organization's estate
+    /// enables them there
+    pub needed_apis: Vec<ApiNeed>,
+}
+
+/// Where a role a workload estate's resource types need is granted, so that what the
+/// estate creates inherits it. The order is the order the list is read in.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum RoleScope {
+    Project,
+    /// what creates or changes a folder or a project: granted on the folder it stands under
+    Folder,
+    Organization,
+    BillingAccount,
+    /// a Google Workspace admin role, not IAM
+    Workspace,
+}
+
+impl RoleScope {
+    pub const ALL: [RoleScope; 5] = [
+        RoleScope::Project,
+        RoleScope::Folder,
+        RoleScope::Organization,
+        RoleScope::BillingAccount,
+        RoleScope::Workspace,
+    ];
+
+    /// The heading of the scope's group.
+    pub fn label(self) -> &'static str {
+        match self {
+            RoleScope::Project => "On the project",
+            RoleScope::Folder => "On the folder",
+            RoleScope::Organization => "At the organization",
+            RoleScope::BillingAccount => "On the billing account",
+            RoleScope::Workspace => "In the Google Workspace admin console",
+        }
+    }
+
+    /// Where, inside a sentence.
+    pub fn where_granted(self) -> &'static str {
+        match self {
+            RoleScope::Project => "on the project",
+            RoleScope::Folder => "on the folder",
+            RoleScope::Organization => "at the organization",
+            RoleScope::BillingAccount => "on the billing account",
+            RoleScope::Workspace => "in the Google Workspace admin console",
+        }
+    }
+}
+
+/// One need of a workload estate's resource types: any one of `roles` meets it.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct NeededRole {
+    pub scope: RoleScope,
+    /// any one of them suffices; the first is the narrowest satz knows
+    pub roles: Vec<String>,
+    /// the permission that proves it; none for a Workspace role
+    pub permission: Option<String>,
+    /// the resource types that need it
+    pub reason: Vec<String>,
+}
+
+impl NeededRole {
+    /// The roles as one alternative: `a or b`.
+    pub fn roles_text(&self) -> String {
+        self.roles.join(" or ")
+    }
+}
+
+/// One API the estate's resources need on a project, and the types that need it.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ApiNeed {
+    pub api: String,
+    /// the project the calls are billed to
+    pub project: String,
+    pub reason: Vec<String>,
+    /// a `google_project_service` in the estate enables it there
+    pub declared: bool,
+}
+
+impl PrerequisitesReport {
+    /// The needed roles by where each is granted, in [`RoleScope::ALL`]'s order; a scope
+    /// nothing needs is left out.
+    pub fn needed_by_scope(&self) -> Vec<(RoleScope, Vec<&NeededRole>)> {
+        RoleScope::ALL
+            .into_iter()
+            .map(|scope| {
+                (
+                    scope,
+                    self.needed_roles
+                        .iter()
+                        .filter(|n| n.scope == scope)
+                        .collect::<Vec<_>>(),
+                )
+            })
+            .filter(|(_, needs)| !needs.is_empty())
+            .collect()
+    }
+
+    /// The list the workload's team hands to the organization's team, as plain text: the
+    /// estate account, then one line per role and one per API, each with where it is
+    /// granted or enabled and the resource types that need it.
+    pub fn needed_text(&self) -> String {
+        let mut out = format!("For the estate account {}:\n", self.service_account);
+        for (scope, needs) in self.needed_by_scope() {
+            for n in needs {
+                out.push_str(&format!(
+                    "{} {} — for {}\n",
+                    n.roles_text(),
+                    scope.where_granted(),
+                    n.reason.join(", ")
+                ));
+            }
+        }
+        for a in &self.needed_apis {
+            out.push_str(&format!(
+                "the API {} on the project {} — for {}\n",
+                a.api,
+                a.project,
+                a.reason.join(", ")
+            ));
+        }
+        out
+    }
 }
 
 /// What `satz_open` resolved — including the identity the estate's live tools run as.
@@ -2327,5 +2473,108 @@ mod tests {
         let mut broken = online;
         broken.as_object_mut().unwrap().remove("adc");
         assert!(serde_json::from_value::<WhoamiReport>(broken).is_err());
+    }
+
+    /// `satz update-prerequisites --report-only --format json` of the workload fixture
+    /// (`tests/fixtures/workload/`), recorded by `scripts/move-pin.sh` from the pinned satz.
+    const WORKLOAD_PREREQUISITES: &str =
+        include_str!("../../tests/fixtures/prerequisites-workload.json");
+
+    /// A workload estate's report is read with the roles its resource types need, by where
+    /// each is granted, and the APIs on the delegation's infrastructure project.
+    #[test]
+    fn a_workload_report_carries_the_needed_roles_and_apis() {
+        let report: PrerequisitesReport = serde_json::from_str(WORKLOAD_PREREQUISITES).unwrap();
+        assert!(report.workload);
+        let folder = report
+            .needed_roles
+            .iter()
+            .find(|n| n.reason.iter().any(|r| r == "google_folder"))
+            .expect("a folder is created");
+        assert_eq!(folder.scope, RoleScope::Folder);
+        assert!(
+            folder
+                .roles
+                .iter()
+                .any(|r| r == "roles/resourcemanager.folderCreator"),
+            "{folder:?}"
+        );
+        let bucket = report
+            .needed_roles
+            .iter()
+            .find(|n| n.reason.iter().any(|r| r == "google_storage_bucket"))
+            .expect("a bucket is created");
+        assert_eq!(bucket.scope, RoleScope::Project);
+        let storage = report
+            .needed_apis
+            .iter()
+            .find(|a| a.api == "storage.googleapis.com")
+            .expect("the bucket's API");
+        assert_eq!(storage.project, "acme-infra-001");
+        assert!(!storage.declared);
+        // grouped in the order the list is read: the project before the folder
+        let scopes: Vec<RoleScope> = report.needed_by_scope().iter().map(|(s, _)| *s).collect();
+        assert_eq!(scopes, [RoleScope::Project, RoleScope::Folder]);
+        // and the MCP tool's result wraps it
+        let wrapped = serde_json::json!({
+            "report": serde_json::from_str::<serde_json::Value>(WORKLOAD_PREREQUISITES).unwrap(),
+            "written": [],
+        });
+        let result: PrerequisitesResult = serde_json::from_value(wrapped).unwrap();
+        assert_eq!(result.report, report);
+    }
+
+    /// A report of a satz before 0.110.0 — `delegation`, `request`, `not_delegated_apis`
+    /// and no `workload` — is refused, never read as an estate that needs nothing.
+    #[test]
+    fn the_report_before_needed_roles_is_refused() {
+        let old = serde_json::json!({
+            "estate": "workload.satz",
+            "service_account": "svc-iac@acme-infra-001.iam.gserviceaccount.com",
+            "delegation": {
+                "interface": "delegation-shop", "folder_roles": [], "project_roles": [],
+                "billing_roles": [], "apis": [], "budgets": []
+            },
+            "request": ["roles/storage.admin on the delegated folders — for google_storage_bucket"],
+            "not_delegated_apis": [],
+            "granted": { "own": [], "organization": [], "billing_account": [] },
+        });
+        let refused = serde_json::from_value::<PrerequisitesReport>(old).unwrap_err();
+        assert!(refused.to_string().contains("workload"), "{refused}");
+    }
+
+    /// The list for copying is plain text: the estate account, then one line per role and
+    /// one per API, each with where it is granted or enabled and what needs it.
+    #[test]
+    fn the_needed_list_copies_as_one_line_per_role_and_api() {
+        let report: PrerequisitesReport = serde_json::from_str(WORKLOAD_PREREQUISITES).unwrap();
+        let text = report.needed_text();
+        let lines: Vec<&str> = text.lines().collect();
+        assert_eq!(
+            lines[0],
+            "For the estate account svc-iac@acme-infra-001.iam.gserviceaccount.com:"
+        );
+        assert_eq!(
+            lines.len(),
+            1 + report.needed_roles.len() + report.needed_apis.len(),
+            "{text}"
+        );
+        assert!(
+            lines.contains(&"roles/storage.admin on the project — for google_storage_bucket"),
+            "{text}"
+        );
+        assert!(
+            lines.contains(
+                &"roles/resourcemanager.folderAdmin or roles/resourcemanager.folderCreator on the folder — for google_folder"
+            ),
+            "{text}"
+        );
+        assert!(
+            lines.contains(
+                &"the API storage.googleapis.com on the project acme-infra-001 — for google_storage_bucket"
+            ),
+            "{text}"
+        );
+        assert!(!text.contains('{') && !text.contains('"'), "{text}");
     }
 }

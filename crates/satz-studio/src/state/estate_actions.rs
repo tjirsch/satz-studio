@@ -29,8 +29,8 @@ use satz_studio_core::model::EstateModel;
 use satz_studio_core::satz::project;
 use satz_studio_core::satz::reports::{
     AddEntryArgs, AddPackArgs, EntryAdded, FindingSeverity, InterviewArgs, InterviewReport,
-    MergeReport, NoticeRow, PackChange, PackReview, PacksReport, PrerequisitesResult,
-    QuestionsReport, RemovePackArgs, UpdateAction,
+    MergeReport, NoticeRow, PackChange, PackReview, PacksReport, PrerequisitesReport,
+    PrerequisitesResult, QuestionsReport, RemovePackArgs, UpdateAction,
 };
 use satz_studio_core::satz::review::{self, PlaceError, Placed};
 use satz_studio_core::satz::workload::{self, NewSource, Which};
@@ -117,6 +117,9 @@ pub enum EstateAction {
     /// `satz_whoami`, online: who is signed in, what the estate runs as, and whether
     /// that works — asked by the Apply destination, never unasked
     CheckSignIn,
+    /// `satz_update_prerequisites {report_only: true}`: what a workload estate's resource
+    /// types need from the organization's team — asked by the Overview's "Needed roles"
+    ReadNeeded,
     /// `git init -b main`, `git add -A` and one commit in the estate directory, streamed
     /// into the log: the repository `satz merge-presets` needs for its undo
     InitRepository,
@@ -295,6 +298,14 @@ pub async fn estate_coroutine(
                 spawn(async move {
                     let found = check_sign_in(&session).await;
                     app.estate().sign_in().set(Some(found));
+                });
+            }
+            EstateAction::ReadNeeded => {
+                app.estate().needed().set(None);
+                let session = Arc::clone(&session);
+                spawn(async move {
+                    let read = read_needed(&session).await;
+                    app.estate().needed().set(Some(read));
                 });
             }
             EstateAction::InitRepository => running.started(init_repository(&session, app)),
@@ -1375,6 +1386,24 @@ async fn check_sign_in(session: &Arc<EstateSession>) -> SignIn {
         Ok(report) => SignIn::Known(Box::new(report)),
         Err(e) => SignIn::Refused(e.to_string()),
     }
+}
+
+/// What a workload estate needs from the organization's team: the prerequisites report,
+/// offline and read-only. A report of the old shape is a failure, never an empty list.
+async fn read_needed(session: &Arc<EstateSession>) -> Result<PrerequisitesReport, String> {
+    let args =
+        serde_json::Map::from_iter([("report_only".to_string(), serde_json::Value::Bool(true))]);
+    let outcome = session
+        .tool("satz_update_prerequisites", args)
+        .await
+        .map_err(|e| e.to_string())?;
+    if outcome.is_error {
+        return Err(outcome.text.clone());
+    }
+    outcome
+        .typed::<PrerequisitesResult>("satz_update_prerequisites")
+        .map(|r| r.report)
+        .map_err(|e| e.to_string())
 }
 
 /// One workload-pack operation, then the lists read again: the local one always, and the
