@@ -4613,7 +4613,7 @@ dependencies = [
 
 [[package]]
 name = "satz-studio"
-version = "0.22.0"
+version = "0.23.0"
 dependencies = [
  "dioxus",
  "dioxus-icons",
@@ -4636,7 +4636,7 @@ dependencies = [
 
 [[package]]
 name = "satz-studio-core"
-version = "0.22.0"
+version = "0.23.0"
 dependencies = [
  "cc",
  "dirs 7.0.0",
