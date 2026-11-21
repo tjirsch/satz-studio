@@ -14,18 +14,18 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 
 use dioxus::prelude::*;
-use dioxus_icons::lucide::{ClipboardCheck, FileOutput, RefreshCw};
+use dioxus_icons::lucide::{FileOutput, RefreshCw};
 use satz_studio_core::satz::QuestionsFormat;
 use satz_studio_core::satz::export;
 
 use crate::components::button::{Button, ButtonVariant};
-use crate::components::card::{Card, CardContent, CardDescription, CardHeader};
+use crate::components::card::{Card, CardContent, CardDescription, CardHeader, CardTitle};
 use crate::components::toggle_group::{ToggleGroup, ToggleItem};
 use crate::state::{AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt};
 
 /// The card's title and explanation.
 const TITLE: &str = "Decisions sheet";
-const TEXT: &str = "Every decision this estate rests on — what it is set to, whether it was chosen or taken as offered, and what changing it later costs. Before an organization is touched it is the sheet the customer signs, or the workbook they fill in and send back; after the apply it is the record the customer keeps.";
+const TEXT: &str = "Every decision this estate rests on: what it is set to, whether it was chosen or taken as offered, and what changing it later costs. Signed before an organization is touched, kept as the record after the apply.";
 
 /// The format the card starts on: the decisions sheet, `markdown`, when satz offers it;
 /// otherwise none, and Export waits for a choice.
@@ -151,15 +151,14 @@ pub fn ExportCard() -> Element {
     };
 
     rsx! {
-        Card { class: "export",
+        Card {
             CardHeader {
-                header { class: "export__head",
-                    ClipboardCheck { size: 22 }
-                    h2 { class: "export__title", "{TITLE}" }
-                }
+                CardTitle { "{TITLE}" }
                 CardDescription { "{TEXT}" }
             }
-            CardContent { {body} }
+            CardContent {
+                div { class: "export", {body} }
+            }
         }
     }
 }
