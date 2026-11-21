@@ -1,0 +1,199 @@
+{
+  "estate": "crates/satz-studio-core/tests/fixtures/workload/workload.satz",
+  "service_account": "svc-iac@acme-infra-001.iam.gserviceaccount.com",
+  "default_billing_project": "acme-infra-001",
+  "apis": [
+    {
+      "api": "cloudresourcemanager.googleapis.com",
+      "project": "acme-infra-001",
+      "reason": [
+        "google_folder",
+        "google_project_iam_member"
+      ],
+      "declared": false
+    },
+    {
+      "api": "iam.googleapis.com",
+      "project": "acme-infra-001",
+      "reason": [
+        "google_service_account"
+      ],
+      "declared": false
+    },
+    {
+      "api": "pubsub.googleapis.com",
+      "project": "acme-infra-001",
+      "reason": [
+        "google_pubsub_topic"
+      ],
+      "declared": false
+    },
+    {
+      "api": "storage.googleapis.com",
+      "project": "acme-infra-001",
+      "reason": [
+        "google_storage_bucket"
+      ],
+      "declared": false
+    }
+  ],
+  "missing_apis": [],
+  "workload": true,
+  "needed_roles": [
+    {
+      "scope": "project",
+      "roles": [
+        "roles/iam.serviceAccountAdmin"
+      ],
+      "permission": "iam.serviceAccounts.create",
+      "reason": [
+        "google_service_account"
+      ]
+    },
+    {
+      "scope": "project",
+      "roles": [
+        "roles/pubsub.editor"
+      ],
+      "permission": "pubsub.topics.create",
+      "reason": [
+        "google_pubsub_topic"
+      ]
+    },
+    {
+      "scope": "project",
+      "roles": [
+        "roles/resourcemanager.projectIamAdmin",
+        "roles/resourcemanager.organizationAdmin",
+        "roles/resourcemanager.folderAdmin"
+      ],
+      "permission": "resourcemanager.projects.setIamPolicy",
+      "reason": [
+        "google_project_iam_member"
+      ]
+    },
+    {
+      "scope": "project",
+      "roles": [
+        "roles/storage.admin"
+      ],
+      "permission": "storage.buckets.create",
+      "reason": [
+        "google_storage_bucket"
+      ]
+    },
+    {
+      "scope": "folder",
+      "roles": [
+        "roles/resourcemanager.folderAdmin",
+        "roles/resourcemanager.folderCreator"
+      ],
+      "permission": "resourcemanager.folders.create",
+      "reason": [
+        "google_folder"
+      ]
+    }
+  ],
+  "needed_apis": [
+    {
+      "api": "cloudresourcemanager.googleapis.com",
+      "project": "acme-infra-001",
+      "reason": [
+        "google_folder",
+        "google_project_iam_member"
+      ],
+      "declared": false
+    },
+    {
+      "api": "iam.googleapis.com",
+      "project": "acme-infra-001",
+      "reason": [
+        "google_service_account"
+      ],
+      "declared": false
+    },
+    {
+      "api": "pubsub.googleapis.com",
+      "project": "acme-infra-001",
+      "reason": [
+        "google_pubsub_topic"
+      ],
+      "declared": false
+    },
+    {
+      "api": "storage.googleapis.com",
+      "project": "acme-infra-001",
+      "reason": [
+        "google_storage_bucket"
+      ],
+      "declared": false
+    }
+  ],
+  "unbilled": [],
+  "infra_project": "acme-infra-001",
+  "infra_services": [],
+  "compute_deferral": null,
+  "enable_missing_apis": [],
+  "granted": {
+    "organization": [],
+    "billing_account": []
+  },
+  "needs": [
+    {
+      "reason": [
+        "google_folder"
+      ],
+      "permission": "resourcemanager.folders.create",
+      "roles": [
+        "roles/resourcemanager.folderAdmin",
+        "roles/resourcemanager.folderCreator"
+      ],
+      "scope": "organization"
+    },
+    {
+      "reason": [
+        "google_project_iam_member"
+      ],
+      "permission": "resourcemanager.projects.setIamPolicy",
+      "roles": [
+        "roles/resourcemanager.projectIamAdmin",
+        "roles/resourcemanager.organizationAdmin",
+        "roles/resourcemanager.folderAdmin"
+      ],
+      "scope": "organization"
+    },
+    {
+      "reason": [
+        "google_pubsub_topic"
+      ],
+      "permission": "pubsub.topics.create",
+      "roles": [
+        "roles/pubsub.editor"
+      ],
+      "scope": "project"
+    },
+    {
+      "reason": [
+        "google_service_account"
+      ],
+      "permission": "iam.serviceAccounts.create",
+      "roles": [
+        "roles/iam.serviceAccountAdmin"
+      ],
+      "scope": "project"
+    },
+    {
+      "reason": [
+        "google_storage_bucket"
+      ],
+      "permission": "storage.buckets.create",
+      "roles": [
+        "roles/storage.admin"
+      ],
+      "scope": "project"
+    }
+  ],
+  "missing": [],
+  "write": [],
+  "unknown_types": []
+}

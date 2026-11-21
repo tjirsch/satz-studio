@@ -44,6 +44,17 @@ pub fn steps(workload: bool) -> &'static [&'static str] {
     if workload { APPLY_WORKLOAD } else { APPLY }
 }
 
+/// The state badge of the prerequisites. A workload estate's roles are the organization's
+/// to grant and are not checked (satz's ADR 0101), so what it can lack is an API.
+pub fn prerequisites_badge(workload: bool, declared: bool) -> &'static str {
+    match (workload, declared) {
+        (true, true) => "APIs declared",
+        (true, false) => "APIs not declared",
+        (false, true) => "rights declared",
+        (false, false) => "rights not declared",
+    }
+}
+
 /// What the sign-in card says in its first line, and whether it is an error.
 pub fn sign_in_headline(sign_in: Option<&SignIn>) -> (String, bool) {
     match sign_in {
@@ -218,7 +229,7 @@ pub fn ApplyView() -> Element {
                     }
                     Badge { variant: BadgeVariant::Outline,
                         if prerequisites.is_empty() { CircleCheck { size: 12 } } else { CircleDashed { size: 12 } }
-                        if prerequisites.is_empty() { "rights declared" } else { "rights not declared" }
+                        "{prerequisites_badge(workload, prerequisites.is_empty())}"
                     }
                     Badge { variant: BadgeVariant::Outline,
                         if hcl.transpiled { CircleCheck { size: 12 } } else { CircleDashed { size: 12 } }
@@ -236,14 +247,20 @@ pub fn ApplyView() -> Element {
                     CardHeader {
                         header { class: "apply__head",
                             ShieldUser { size: 22 }
-                            h2 { class: "apply__title", "The prerequisites are not declared" }
+                            h2 { class: "apply__title",
+                                if workload { "An API is not declared" } else { "The prerequisites are not declared" }
+                            }
                         }
                     }
                     CardContent {
                         for (i, message) in prerequisites.iter().enumerate() {
                             p { key: "{i}", class: "apply__finding", "{message}" }
                         }
-                        p { class: "apply__note", "Writing them binds the roles on the estate account and each API on the project its calls are billed to — the infrastructure project, or the project a resource sits inside — in the estate file; an API for a project a pack declares is named, not written. satz works both out offline, from the resource types this estate transpiles to; the write goes through the same check and rollback as an answer." }
+                        if workload {
+                            p { class: "apply__note", "Writing them declares each API on the project of this estate's own that its calls are billed to, in the estate file. The roles are the organization's to grant and are not written here: the Overview's \"Needed roles\" lists them. satz works the APIs out offline, from the resource types this estate transpiles to; the write goes through the same check and rollback as an answer." }
+                        } else {
+                            p { class: "apply__note", "Writing them binds the roles on the estate account and each API on the project its calls are billed to — the infrastructure project, or the project a resource sits inside — in the estate file; an API for a project a pack declares is named, not written. satz works both out offline, from the resource types this estate transpiles to; the write goes through the same check and rollback as an answer." }
+                        }
                         div { class: "apply__actions",
                             Button {
                                 disabled: loading,
@@ -326,6 +343,16 @@ mod tests {
             sign_in_headline(Some(&SignIn::Known(Box::new(blocked)))),
             ("Signed in, and the estate cannot run".to_string(), true)
         );
+    }
+
+    /// A workload estate's badge speaks of APIs alone: its roles are the organization's
+    /// to grant and are never declared in it.
+    #[test]
+    fn a_workload_estates_badge_names_no_rights() {
+        for declared in [true, false] {
+            assert!(prerequisites_badge(true, declared).starts_with("APIs"));
+            assert!(prerequisites_badge(false, declared).starts_with("rights"));
+        }
     }
 
     /// A workload estate walks the organization's steps without the bootstrap and without

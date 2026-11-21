@@ -30,17 +30,18 @@ use satz_studio_core::satz::reports::{DelegatedBy, EstateMode};
 use satz_studio_core::satz::reports::{PackLine, QuestionRow, QuestionState, QuestionsReport};
 
 use dioxus_icons::lucide::{
-    Boxes, Building2, CircleAlert, ClipboardList, CodeXml, Download, ExternalLink, Eye, FileText,
-    GitCommitHorizontal, Landmark, ListChecks, MessageCircleQuestionMark, Network, Package, Play,
-    ShieldUser, Unlink, Workflow, Wrench,
+    Boxes, Building2, CircleAlert, ClipboardList, CodeXml, Copy as CopyIcon, Download,
+    ExternalLink, Eye, FileText, GitCommitHorizontal, Landmark, ListChecks,
+    MessageCircleQuestionMark, Network, Package, Play, ShieldUser, Unlink, Workflow, Wrench,
 };
 
 use crate::components::badge::{Badge, BadgeVariant};
 use crate::components::button::{Button, ButtonVariant};
 use crate::components::card::{Card, CardContent, CardHeader};
 use crate::components::dialog::{Dialog, DialogTitle};
+use crate::components::progress::Progress;
 use crate::state::{AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt, View};
-use crate::views::commands::CommandLog;
+use crate::views::commands::{CommandLog, copy_to_clipboard};
 
 /// What the estate is, as the Overview reads it. Borrowed rather than cloned: this is
 /// built on every render.
@@ -105,7 +106,7 @@ impl Owed {
             "schema" => rsx! { Workflow { size, class: "overview__row-icon" } },
             "hcl-trust" => rsx! { CodeXml { size, class: "overview__row-icon" } },
             "notices" => rsx! { ClipboardList { size, class: "overview__row-icon" } },
-            "prerequisites" => rsx! { ShieldUser { size, class: "overview__row-icon" } },
+            "prerequisites" | "apis" => rsx! { ShieldUser { size, class: "overview__row-icon" } },
             "not-transpiled" => rsx! { Wrench { size, class: "overview__row-icon" } },
             "not-planned" => rsx! { Eye { size, class: "overview__row-icon" } },
             // a row without an icon of its own is still a row that is owed
@@ -332,16 +333,28 @@ pub fn owed(f: &Facts) -> Vec<Owed> {
     }
 
     // A note of this kind owes nothing: satz says what it could not check (a type its
-    // table has no row for), and no command closes it.
+    // table has no row for), and no command closes it. A workload estate's roles are the
+    // organization's to grant and satz checks none of them (its ADR 0101), so what such
+    // an estate can owe here is an API on a project of its own; the roles it needs are the
+    // identity card's "Needed roles", information and never an item.
     if f.diagnostics
         .iter()
         .any(|d| d.kind.as_deref() == Some("prerequisites") && d.severity != Severity::Info)
     {
-        out.push(Owed {
-            id: "prerequisites",
-            title: "The prerequisites are not declared".to_string(),
-            detail: "The transpile found roles this estate's own resource types need and its estate account is not granted, or APIs a project its resources' calls are billed to does not enable. Findings carries each of them; `satz update-prerequisites` writes them into the file. In a workload estate satz writes nothing at the organization: each line says what to ask the organization's estate for, or what the estate grants its own account on its project.".to_string(),
-            remedies: vec![Remedy::Go(View::Apply)],
+        out.push(if mode == EstateMode::Workload {
+            Owed {
+                id: "apis",
+                title: "An API is not declared".to_string(),
+                detail: "The transpile found APIs that a project of this estate's own, one its resources' calls are billed to, does not enable. Findings carries each of them; `satz update-prerequisites` writes them into the file.".to_string(),
+                remedies: vec![Remedy::Go(View::Apply)],
+            }
+        } else {
+            Owed {
+                id: "prerequisites",
+                title: "The prerequisites are not declared".to_string(),
+                detail: "The transpile found roles this estate's own resource types need and its estate account is not granted, or APIs a project its resources' calls are billed to does not enable. Findings carries each of them; `satz update-prerequisites` writes them into the file.".to_string(),
+                remedies: vec![Remedy::Go(View::Apply)],
+            }
         });
     }
 
@@ -779,7 +792,9 @@ pub fn OverviewView() -> Element {
 #[component]
 fn IdentityCard(facts: Vec<Fact>) -> Element {
     let app = use_context::<Store<AppStore>>();
+    let handle = use_coroutine_handle::<EstateAction>();
     let mut exports_open = use_signal(|| None::<DelegatedLine>);
+    let mut needed_open = use_signal(|| false);
     let open = app.open().cloned();
     let model = app.estate().model().cloned();
     let hcl = app.estate().hcl().cloned();
@@ -867,6 +882,20 @@ fn IdentityCard(facts: Vec<Fact>) -> Element {
                         }
                     }
                 }
+                if model.as_deref().is_some_and(|m| m.packs.works_in == EstateMode::Workload) {
+                    dt { "Prerequisites" }
+                    dd {
+                        "Roles are the organization's to grant "
+                        Button {
+                            variant: ButtonVariant::Link,
+                            onclick: move |_| {
+                                needed_open.set(true);
+                                handle.send(EstateAction::ReadNeeded);
+                            },
+                            "Needed roles"
+                        }
+                    }
+                }
                 dt { "Runs as" }
                     dd {
                         match runs_as_row(open.runs_as.as_deref(), open.deployment_mode.as_deref()) {
@@ -910,6 +939,7 @@ fn IdentityCard(facts: Vec<Fact>) -> Element {
             }
         }
         ExportsDialog { open: exports_open }
+        NeededDialog { open: needed_open }
     }
 }
 
@@ -936,6 +966,83 @@ fn ExportsDialog(mut open: Signal<Option<DelegatedLine>>) -> Element {
             }
             div { class: "dialog-actions",
                 Button { variant: ButtonVariant::Ghost, onclick: move |_| open.set(None), "Close" }
+            }
+        }
+    }
+}
+
+/// What a workload estate's resource types need from the organization's team, while
+/// `open` holds: the roles by where each is granted, each with the resource types that
+/// need it, then the APIs on the delegation's infrastructure project. "Copy" puts the list
+/// on the clipboard as plain text, for the workload's team to hand on.
+#[component]
+fn NeededDialog(mut open: Signal<bool>) -> Element {
+    let app = use_context::<Store<AppStore>>();
+    let needed = app.estate().needed().cloned();
+    let text = match &needed {
+        Some(Ok(report)) => Some(report.needed_text()),
+        _ => None,
+    };
+    rsx! {
+        Dialog {
+            open: open(),
+            on_open_change: move |now: bool| open.set(now),
+            DialogTitle { "Needed roles" }
+            div { class: "dialog-body",
+                match needed {
+                    None => rsx! { Progress { value: None::<f64>, "aria-label": "working" } },
+                    Some(Err(refused)) => rsx! { p { class: "overview__needed-error", "{refused}" } },
+                    Some(Ok(report)) => rsx! {
+                        p {
+                            "The roles this estate's resource types need, for the organization's team: its estate grants them to the estate account "
+                            code { "{report.service_account}" }
+                            " through the delegation pack that created what this estate builds in. satz lists them and checks none of them; a missing one is Google's refusal at the apply."
+                        }
+                        if report.needed_roles.is_empty() {
+                            p { "No role." }
+                        }
+                        for (scope, needs) in report.needed_by_scope() {
+                            section { key: "{scope.label()}", class: "overview__needed",
+                                h3 { class: "overview__needed-scope", "{scope.label()}" }
+                                ul {
+                                    for (i, need) in needs.into_iter().enumerate() {
+                                        li { key: "{i}",
+                                            code { "{need.roles_text()}" }
+                                            " — for {need.reason.join(\", \")}"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        if !report.needed_apis.is_empty() {
+                            section { class: "overview__needed",
+                                h3 { class: "overview__needed-scope", "APIs on the delegation's infrastructure project" }
+                                ul {
+                                    for api in report.needed_apis.iter() {
+                                        li { key: "{api.project}/{api.api}",
+                                            code { "{api.api}" }
+                                            " on {api.project} — for {api.reason.join(\", \")}"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                }
+            }
+            div { class: "dialog-actions",
+                Button {
+                    variant: ButtonVariant::Secondary,
+                    disabled: text.is_none(),
+                    onclick: move |_| {
+                        if let Some(text) = &text {
+                            copy_to_clipboard(app, text);
+                        }
+                    },
+                    CopyIcon { size: 16 }
+                    "Copy"
+                }
+                Button { variant: ButtonVariant::Ghost, onclick: move |_| open.set(false), "Close" }
             }
         }
     }
@@ -1572,6 +1679,40 @@ mod tests {
         let mut held = facts(None, hcl, Some(&q), Some(&m), &two);
         held.held_notices = 1;
         assert_eq!(owed(&held)[0].remedies, [Remedy::ShowNotices]);
+        let none: [Diagnostic; 0] = [];
+        assert!(owed(&facts(None, hcl, Some(&q), Some(&m), &none)).is_empty());
+    }
+
+    /// A workload estate's roles are the organization's to grant: what it can owe under
+    /// the prerequisites is an API on a project of its own, and no item speaks of roles.
+    #[test]
+    fn a_workload_estate_owes_no_role() {
+        let q = questions(0, 0);
+        let mut p = packs(PackLine::Active, 0);
+        p.works_in = EstateMode::Workload;
+        let m = model(p, loaded());
+        let hcl = HclState {
+            transpiled: true,
+            initialised: true,
+        };
+        let mut d = Diagnostic::error(
+            "storage.googleapis.com is not enabled on acme-payments-001",
+            DiagSource::Check,
+        );
+        d.kind = Some("prerequisites".to_string());
+        let rows = owed(&facts(
+            None,
+            hcl,
+            Some(&q),
+            Some(&m),
+            std::slice::from_ref(&d),
+        ));
+        assert_eq!(ids(&rows), ["apis"]);
+        for row in &rows {
+            let said = format!("{} {}", row.title, row.detail).to_lowercase();
+            assert!(!said.contains("role"), "{said}");
+            assert!(!said.contains("delegat"), "{said}");
+        }
         let none: [Diagnostic; 0] = [];
         assert!(owed(&facts(None, hcl, Some(&q), Some(&m), &none)).is_empty());
     }

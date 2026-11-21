@@ -28,8 +28,8 @@ use satz_studio_core::git::WorkTree;
 use satz_studio_core::github::StudioUpdate;
 use satz_studio_core::model::EstateModel;
 use satz_studio_core::satz::reports::{
-    InterfacesReport, InterviewReport, NoticeRow, PackSourcesReport, QuestionsReport,
-    UpdatePackReport, WorkloadPacksReport,
+    InterfacesReport, InterviewReport, NoticeRow, PackSourcesReport, PrerequisitesReport,
+    QuestionsReport, UpdatePackReport, WorkloadPacksReport,
 };
 use satz_studio_core::satz::review::ReviewedPack;
 use satz_studio_core::satz::self_update::SatzRelease;
@@ -386,6 +386,10 @@ pub struct EstateStore {
     /// `satz_whoami` answered — or why it could not; `None` until it has been asked,
     /// which the Apply destination does: the check mints a token, a network call
     pub sign_in: Option<SignIn>,
+    /// what a workload estate's resource types need from the organization's team, as
+    /// `satz_update_prerequisites {report_only: true}` lists it — or why it could not;
+    /// `None` until the Overview's "Needed roles" asks, and while it is read again
+    pub needed: Option<Result<PrerequisitesReport, String>>,
 }
 
 /// The sign-in check of the Apply destination.
