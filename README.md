@@ -56,10 +56,15 @@ where its packs declare `entries` statements — its list params: each list para
 field that keys an entry and the fields an entry carries, each with the pattern its
 value must match. Delegated access is given to a team by an entry of the list param
 `delegations` of satz's `presets/delegation.satz`, which writes the delegation's
-interface with the rest. Five of the six are a path, and a bar at the window's foot goes back to the step before and on to the next:
-what the estate is, its presets and workload packs, their questions, its way to the organization, its
-documents; Estate stands after them in the sidebar. **Apply**, its way to the organization — who is signed in, what state the estate is in,
+interface with the rest. All but Estate are a path, and a bar at the window's foot goes back to the step before and on to the next:
+what the estate is, its presets and workload packs, their questions, its way to the organization, the
+security checks its resources fail, its documents; Estate stands after them in the sidebar. **Apply**, its way to the organization — who is signed in, what state the estate is in,
 then the checks, the bootstrap, the HCL code, the plan and the apply, in that order;
+**Security**, hints on what the estate declares: "Scan" runs `satz scan`, Checkov over the
+HCL code the last transpile wrote, and lists each resource with a failed check, the Satz
+line that declared it, and the checks in Checkov's words with its guideline — for an
+organization's estate and a workload estate alike, offline and with no sign-in; it is not
+a review, and the security review is an agent's, on Documents;
 **Documents**, what goes to people as a file: the decisions sheet, the compliance reports,
 and the documents an agent writes, each started in the client Settings names. Agent and Settings sit at the
 foot of the sidebar; ⌘K (Ctrl+K on Windows and Linux) opens the commands palette. Beside the estate the top bar names sit
@@ -166,7 +171,7 @@ that holds them up — in front of apply and bootstrap, which satz refuses.
 
 ## What it needs
 
-- **`satz` 0.110.0 or newer.** `MIN_SATZ` in `crates/satz-studio-core/src/satz/binary.rs`
+- **`satz` 0.110.1 or newer.** `MIN_SATZ` in `crates/satz-studio-core/src/satz/binary.rs`
   names the oldest satz this build works with. It rises when a satz release breaks the
   app or the app starts using something a later satz introduced, not with every satz
   release. Install satz with its installer or bring it up to date with `satz

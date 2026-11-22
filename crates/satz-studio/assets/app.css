@@ -1840,6 +1840,43 @@ select {
 
 /* ---- export ------------------------------------------------------------------- */
 
+/* the Security destination: the scan's card at a reading width, a resource per row and
+   its failed checks one per line under it */
+.view.security {
+  max-width: 72rem;
+}
+
+.security__list {
+  gap: 8px;
+}
+
+.security__checks {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 4px;
+}
+
+.security__check {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 0.875rem;
+}
+
+.security__error {
+  font-size: 0.875rem;
+  color: var(--secondary-error-color);
+  white-space: pre-wrap;
+  user-select: text;
+}
+
+.security__none {
+  font-size: 0.875rem;
+  color: var(--secondary-color-5);
+}
+
 /* the Documents destination: one card per kind of document at a reading width, and the
    agent's documents as a list with room between its rows */
 .view.documents {

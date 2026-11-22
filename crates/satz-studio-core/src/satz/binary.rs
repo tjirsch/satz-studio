@@ -12,12 +12,10 @@ use super::SatzError;
 /// The oldest satz this build works with; an older binary is refused. It may sit below the
 /// submodule's satz ([`SatzBinary::built_against`]), and rises only when a satz release
 /// breaks the app or the app starts using something a later satz introduced — a routine pin
-/// bump leaves it alone (ADR 0014). It is 0.110.0 because the app reads what that release
-/// introduced: the prerequisites report of a workload estate, `workload` with the roles its
-/// resource types need by where each is granted (`needed_roles`) and the APIs they need on
-/// the delegation's infrastructure project (`needed_apis`) (satz's ADR 0101), on top of
-/// 0.109.0's descriptions in every `satz packs` report.
-pub const MIN_SATZ: &str = "0.110.0";
+/// bump leaves it alone (ADR 0014). It is 0.110.1 because the Security destination reads
+/// what that release introduced: `satz scan --format json`, the scan report as data (ADR
+/// 0035), on top of 0.110.0's prerequisites report of a workload estate (satz's ADR 0101).
+pub const MIN_SATZ: &str = "0.110.1";
 
 /// The manifest of the submodule `vendor/satz`, whose version is the satz this build is
 /// built and tested against.

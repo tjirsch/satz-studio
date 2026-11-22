@@ -1670,9 +1670,99 @@ impl WhoamiReport {
     }
 }
 
+/// What `satz scan <estate> --format json` prints: Checkov's counts over the HCL code in
+/// `hcl_dir`, and each failed check with the Satz block that declared its resource. The
+/// checks and their words are Checkov's; the join to the estate is satz's.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ScanReport {
+    /// the estate file the scan was joined to
+    pub estate: String,
+    pub hcl_dir: String,
+    pub checkov_version: String,
+    pub passed: u64,
+    pub failed: u64,
+    pub skipped: u64,
+    /// the resources Checkov looked at
+    pub resource_count: u64,
+    /// the failed checks, in satz's order: by resource, then by check
+    pub findings: Vec<ScanFinding>,
+}
+
+/// One failed check on one resource.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ScanFinding {
+    /// Checkov's id of the check, `CKV_GCP_62`
+    pub check_id: String,
+    /// what the check asks for, in Checkov's words
+    pub check_name: String,
+    /// the Terraform address, `google_storage_bucket.data`
+    pub resource: String,
+    /// the Satz file and line that declared the resource, `packs/team.satz:12`; absent
+    /// for a resource the transpile does not trace to a block
+    pub declared_at: Option<String>,
+    /// Checkov's page on the check
+    pub guideline: Option<String>,
+}
+
+impl ScanReport {
+    /// The failed checks grouped by resource, in the report's order: each resource once,
+    /// with the line that declared it and its checks.
+    pub fn by_resource(&self) -> Vec<(&str, Option<&str>, Vec<&ScanFinding>)> {
+        let mut out: Vec<(&str, Option<&str>, Vec<&ScanFinding>)> = Vec::new();
+        for f in &self.findings {
+            match out.last_mut() {
+                Some((resource, _, checks)) if *resource == f.resource => checks.push(f),
+                _ => out.push((&f.resource, f.declared_at.as_deref(), vec![f])),
+            }
+        }
+        out
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `satz scan --format json` of the workload fixture (`tests/fixtures/workload/`)
+    /// over the Checkov report `tests/fixtures/scan/checkov.json` stands in for, recorded
+    /// by `scripts/move-pin.sh` from the pinned satz.
+    const SCAN: &str = include_str!("../../tests/fixtures/scan-workload.json");
+
+    /// The scan is read with Checkov's counts and each failed check on its resource, the
+    /// declaring Satz line beside it where the transpile traces one.
+    #[test]
+    fn a_scan_carries_each_failed_check_with_the_line_that_declared_its_resource() {
+        let report: ScanReport = serde_json::from_str(SCAN).unwrap();
+        assert_eq!(report.failed as usize, report.findings.len());
+        assert!(report.passed > 0);
+        let groups = report.by_resource();
+        let (_, at, checks) = groups
+            .iter()
+            .find(|(r, _, _)| *r == "google_storage_bucket.data")
+            .expect("the bucket's checks");
+        assert!(
+            at.is_some_and(|at| at.contains("workload.satz:")),
+            "the bucket is a block of the estate: {at:?}"
+        );
+        assert_eq!(checks.len(), 2, "{checks:?}");
+        assert!(
+            checks
+                .iter()
+                .any(|f| f.check_id == "CKV_GCP_62" && f.guideline.is_some())
+        );
+        // a resource Checkov names and the estate does not declare carries no line
+        let (_, at, _) = groups
+            .iter()
+            .find(|(r, _, _)| *r == "google_project_iam_member.stray")
+            .expect("the stray finding");
+        assert_eq!(*at, None);
+        assert_eq!(groups.len(), 2);
+
+        // a report without the findings is another shape: refused, never an empty list
+        let mut broken: serde_json::Value = serde_json::from_str(SCAN).unwrap();
+        broken.as_object_mut().unwrap().remove("findings");
+        assert!(serde_json::from_value::<ScanReport>(broken).is_err());
+    }
 
     const SMOKE: &str = include_str!("../../tests/fixtures/questions-smoke.json");
 
