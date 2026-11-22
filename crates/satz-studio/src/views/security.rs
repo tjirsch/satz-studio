@@ -1,5 +1,5 @@
 //! The Security destination: which security checks the estate's own resources fail, as
-//! hints for whoever deploys them or writes the pack that declares them
+//! hints for whoever applies them or writes the pack that declares them
 //! ([ADR 0035](../../../../docs/adr/0035-security-is-a-destination-of-hints-on-the-estates-own-resources.md)).
 //!
 //! "Scan" runs `satz scan <estate> --format json` ([`EstateAction::Scan`]): Checkov over

@@ -6,7 +6,7 @@
 
 ## Context
 
-A person who deploys resources through an estate, or writes the pack that declares them,
+A person who applies resources through an estate, or writes the pack that declares them,
 learns that one of them breaks a security control late: in the security review, which
 an agent runs with satz's `security-review` skill over the whole organization, or not at
 all. A short hint at the moment of writing — "this bucket logs no access; change it or be
@@ -47,7 +47,7 @@ The app reads satz's reports as data and judges nothing itself (ADR 0025, ADR 00
 1. **`satz scan`, Checkov over the estate's code.** Works for both kinds of estate today,
    offline. No control numbers.
 2. **Prowler, through the command `satz prowler` prints.** Control numbers for Google
-   Cloud, AWS and Azure from Prowler's own findings, after a deploy only. Needs satz to
+   Cloud, AWS and Azure from Prowler's own findings, after an apply only. Needs satz to
    print a command limited to a workload estate's own projects.
 3. **`satz report-compliance` filtered to the estate's resources.** Needs a catalog, which
    a workload estate does not have.

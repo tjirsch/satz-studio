@@ -1,0 +1,32 @@
+{
+  "estate": "crates/satz-studio-core/tests/fixtures/workload/workload.satz",
+  "hcl_dir": "crates/satz-studio-core/tests/fixtures/workload/hcl",
+  "checkov_version": "3.4.6",
+  "passed": 12,
+  "failed": 3,
+  "skipped": 0,
+  "resource_count": 6,
+  "findings": [
+    {
+      "check_id": "CKV_GCP_49",
+      "check_name": "Ensure roles do not impersonate or manage Service Accounts used at project level",
+      "resource": "google_project_iam_member.stray",
+      "declared_at": null,
+      "guideline": null
+    },
+    {
+      "check_id": "CKV_GCP_62",
+      "check_name": "Bucket should log access",
+      "resource": "google_storage_bucket.data",
+      "declared_at": "crates/satz-studio-core/tests/fixtures/workload/workload.satz:51",
+      "guideline": "https://example.com/checkov/CKV_GCP_62"
+    },
+    {
+      "check_id": "CKV_GCP_78",
+      "check_name": "Ensure Cloud storage has versioning enabled",
+      "resource": "google_storage_bucket.data",
+      "declared_at": "crates/satz-studio-core/tests/fixtures/workload/workload.satz:51",
+      "guideline": null
+    }
+  ]
+}
