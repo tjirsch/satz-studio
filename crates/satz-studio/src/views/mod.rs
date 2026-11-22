@@ -23,6 +23,7 @@ pub mod publish_pack;
 pub mod resources;
 pub mod review;
 pub mod satz_release;
+pub mod security;
 pub mod settings;
 pub mod workload_packs;
 

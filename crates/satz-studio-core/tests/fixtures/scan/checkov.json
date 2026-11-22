@@ -1,0 +1,39 @@
+{
+  "check_type": "terraform",
+  "results": {
+    "failed_checks": [
+      {
+        "check_id": "CKV_GCP_62",
+        "check_name": "Bucket should log access",
+        "resource": "google_storage_bucket.data",
+        "file_path": "/main.tf",
+        "file_line_range": [10, 20],
+        "guideline": "https://example.com/checkov/CKV_GCP_62"
+      },
+      {
+        "check_id": "CKV_GCP_78",
+        "check_name": "Ensure Cloud storage has versioning enabled",
+        "resource": "google_storage_bucket.data",
+        "file_path": "/main.tf",
+        "file_line_range": [10, 20],
+        "guideline": null
+      },
+      {
+        "check_id": "CKV_GCP_49",
+        "check_name": "Ensure roles do not impersonate or manage Service Accounts used at project level",
+        "resource": "google_project_iam_member.stray",
+        "file_path": "/main.tf",
+        "file_line_range": [30, 34],
+        "guideline": null
+      }
+    ]
+  },
+  "summary": {
+    "passed": 12,
+    "failed": 3,
+    "skipped": 0,
+    "parsing_errors": 0,
+    "resource_count": 6,
+    "checkov_version": "3.4.6"
+  }
+}

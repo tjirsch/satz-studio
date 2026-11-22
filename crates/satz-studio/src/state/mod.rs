@@ -19,7 +19,7 @@ use std::sync::Arc;
 use dioxus::prelude::*;
 use dioxus_icons::lucide::{
     Bot, Boxes, FileText, FolderOpen, HardDrive, HousePlus, Inbox, LayoutDashboard,
-    MessageCircleQuestionMark, Package, Rocket, ScrollText,
+    MessageCircleQuestionMark, Package, Rocket, ScrollText, Shield,
 };
 use satz_studio_core::cst::Cst;
 use satz_studio_core::diag::Diagnostic;
@@ -119,6 +119,9 @@ pub enum View {
     /// the estate's way to the organization: who is signed in, what state it is in, and
     /// the steps — the checks, the bootstrap, the HCL code, the plan, the apply
     Apply,
+    /// which security checks the estate's own resources fail, as hints: `satz scan`,
+    /// Checkov over the HCL code the last transpile wrote (ADR 0035)
+    Security,
     /// what the estate hands to people as a file: the decisions sheet
     Documents,
     /// setting an external agent up on this estate, and starting it
@@ -131,16 +134,18 @@ impl View {
     /// from what the estate HAS to what it still has to decide. A pack is what declares a
     /// question, and `merge-presets` — the command that brings new pack lines in — is in
     /// Packs, so Packs is where the questions in Decisions come from and it stands before
-    /// them. Apply is the estate's way to the organization, and Documents is what is given
-    /// to people once the rest is settled. Those five are the path, each ending with a
-    /// bar that leads to the next (`views/path.rs`); Estate stands after them, because
-    /// the estate file itself is not a step of the walk (ADR 0027, ADR 0028).
-    pub const PRIMARY: [View; 7] = [
+    /// them. Apply is the estate's way to the organization, Security reads what the
+    /// transpile Apply runs wrote, and Documents is what is given to people once the rest
+    /// is settled. Those are the path, each ending with a bar that leads to the next
+    /// (`views/path.rs`); Estate stands after them, because the estate file itself is not
+    /// a step of the walk (ADR 0027, ADR 0028, ADR 0035).
+    pub const PRIMARY: [View; 8] = [
         View::Overview,
         View::Presets,
         View::Packs,
         View::Decisions,
         View::Apply,
+        View::Security,
         View::Documents,
         View::Estate,
     ];
@@ -170,6 +175,7 @@ impl View {
             View::Packs => "Packs",
             View::Estate => "Estate",
             View::Apply => "Apply",
+            View::Security => "Security",
             View::Documents => "Documents",
             View::Agent => "Agent",
             View::Settings => "Settings",
@@ -186,6 +192,7 @@ impl View {
             View::Packs => rsx! { Package { size } },
             View::Estate => rsx! { FileText { size } },
             View::Apply => rsx! { Rocket { size } },
+            View::Security => rsx! { Shield { size } },
             View::Documents => rsx! { ScrollText { size } },
             View::Agent => rsx! { Bot { size } },
             View::Settings => rsx! { dioxus_icons::lucide::Settings { size } },
@@ -202,6 +209,7 @@ impl View {
                 | View::Packs
                 | View::Estate
                 | View::Apply
+                | View::Security
                 | View::Documents
                 | View::Agent
         )
@@ -390,6 +398,12 @@ pub struct EstateStore {
     /// `satz_update_prerequisites {report_only: true}` lists it — or why it could not;
     /// `None` until the Overview's "Needed roles" asks, and while it is read again
     pub needed: Option<Result<PrerequisitesReport, String>>,
+    /// the last `satz scan` of this estate: Checkov's failed checks on the estate's own
+    /// resources, or satz's refusal in its words; `None` until the Security destination's
+    /// "Scan" asks — Checkov runs for a while, so it never runs unasked
+    pub scan: Option<Result<satz_studio_core::satz::reports::ScanReport, String>>,
+    /// a scan is running
+    pub scanning: bool,
 }
 
 /// The sign-in check of the Apply destination.
@@ -644,6 +658,7 @@ mod tests {
             View::Packs,
             View::Estate,
             View::Apply,
+            View::Security,
             View::Documents,
             View::Agent,
             View::Settings,

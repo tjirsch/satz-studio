@@ -6,7 +6,8 @@
 #      editors/zed/extension.toml (tests/grammar_pin.rs holds the two together);
 #   3. the recorded reports under crates/satz-studio-core/tests/fixtures/ that one satz
 #      command writes: the presets report, the two reviews, the interfaces report, the
-#      two questions reports and the prerequisites report of a workload estate.
+#      two questions reports, and the prerequisites report and the scan report of a
+#      workload estate.
 #
 #   scripts/move-pin.sh v0.95.2
 #
@@ -93,6 +94,22 @@ out="$fixtures/prerequisites-workload.json"
 "$satz" --config "$workload/config.toml" update-prerequisites "$workload/workload.satz" --report-only --format json 2> /dev/null \
   | sed -e "s#$repo_root#/e#g" > "$out" || die "satz update-prerequisites wrote no report"
 [[ -s "$out" ]] || die "$out came out empty"
+echo "move-pin: recorded $out"
+# the scan report of the same estate: `scan` prints its JSON on stdout and exits 1 on a
+# failed check. Checkov is a stand-in that prints the report beside the fixture — what is
+# recorded is satz's join of it to the estate, not Checkov — and the scan needs hcl_dir
+# to exist, so an empty one stands there while it runs
+fake="$(mktemp -d)"
+printf '#!/bin/sh\ncat "%s"\nexit 1\n' "$repo_root/$fixtures/scan/checkov.json" > "$fake/checkov"
+chmod +x "$fake/checkov"
+created_hcl=""
+[[ -d "$workload/hcl" ]] || { mkdir "$workload/hcl"; created_hcl=1; }
+out="$fixtures/scan-workload.json"
+PATH="$fake:$PATH" "$satz" --config "$workload/config.toml" scan "$workload/workload.satz" --format json 2> /dev/null \
+  | sed -e "s#$repo_root#/e#g" > "$out" || true
+[[ -n "$created_hcl" ]] && rmdir "$workload/hcl"
+rm -rf "$fake"
+[[ -s "$out" ]] || die "satz scan wrote no report"
 echo "move-pin: recorded $out"
 
 cat <<EOF

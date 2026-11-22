@@ -120,6 +120,10 @@ pub enum EstateAction {
     /// `satz_update_prerequisites {report_only: true}`: what a workload estate's resource
     /// types need from the organization's team — asked by the Overview's "Needed roles"
     ReadNeeded,
+    /// `satz scan <estate> --format json`: Checkov over the HCL code the last transpile
+    /// wrote, each failed check with the Satz line that declared its resource — asked by
+    /// the Security destination, never unasked
+    Scan,
     /// `git init -b main`, `git add -A` and one commit in the estate directory, streamed
     /// into the log: the repository `satz merge-presets` needs for its undo
     InitRepository,
@@ -306,6 +310,20 @@ pub async fn estate_coroutine(
                 spawn(async move {
                     let read = read_needed(&session).await;
                     app.estate().needed().set(Some(read));
+                });
+            }
+            EstateAction::Scan => {
+                if app.estate().scanning().cloned() {
+                    continue;
+                }
+                app.estate().scanning().set(true);
+                let session = Arc::clone(&session);
+                spawn(async move {
+                    let scanned = satz_studio_core::satz::scan::scan(&session.cli, &session.main)
+                        .await
+                        .map_err(|e| e.to_string());
+                    app.estate().scan().set(Some(scanned));
+                    app.estate().scanning().set(false);
                 });
             }
             EstateAction::InitRepository => running.started(init_repository(&session, app)),

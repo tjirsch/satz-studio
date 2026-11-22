@@ -1,5 +1,6 @@
 //! The path through an estate, as the sidebar orders it: what the estate is, its presets and packs,
-//! their questions, its way to the organization, its documents. While a step's view is
+//! their questions, its way to the organization, the security checks its resources fail,
+//! its documents. While a step's view is
 //! showing, the window's foot carries a bar that goes back to the step before it and on to
 //! the next one, outside the view's scrolling content so it never scrolls away
 //! ([ADR 0028](../../../../docs/adr/0028-apply-is-one-destination-and-starts-with-who-is-signed-in.md)).
@@ -15,12 +16,13 @@ use crate::state::{AppStore, AppStoreStoreExt, EstateStoreStoreExt, View};
 use crate::widgets::Tip;
 
 /// The steps, in order. An estate without a Presets destination skips that one.
-const STEPS: [View; 6] = [
+const STEPS: [View; 7] = [
     View::Overview,
     View::Presets,
     View::Packs,
     View::Decisions,
     View::Apply,
+    View::Security,
     View::Documents,
 ];
 
@@ -52,6 +54,7 @@ pub fn purpose(step: View) -> &'static str {
         View::Packs => "Take the packs this estate is built from.",
         View::Decisions => "Answer what the estate's presets and packs ask.",
         View::Apply => "Check who is signed in, then check, plan and apply.",
+        View::Security => "See which security checks the estate's own resources fail.",
         View::Documents => "Make the documents the customer receives.",
         _ => "",
     }
@@ -127,6 +130,7 @@ mod tests {
                 View::Packs,
                 View::Decisions,
                 View::Apply,
+                View::Security,
                 View::Documents
             ]
         );
@@ -157,6 +161,7 @@ mod tests {
                 View::Packs,
                 View::Decisions,
                 View::Apply,
+                View::Security,
                 View::Documents
             ]
         );

@@ -35,6 +35,7 @@ use crate::views::map::PresetsView;
 use crate::views::overview::OverviewView;
 use crate::views::packs::PacksView;
 use crate::views::path::PathBar;
+use crate::views::security::SecurityView;
 use crate::views::settings::SettingsView;
 
 #[component]
@@ -107,6 +108,7 @@ fn Content() -> Element {
         View::Packs => rsx! { PacksView {} },
         View::Estate => rsx! { EstateView {} },
         View::Apply => rsx! { ApplyView {} },
+        View::Security => rsx! { SecurityView {} },
         View::Documents => rsx! { DocumentsView {} },
         View::Agent => rsx! { AgentView {} },
         View::Settings => rsx! { SettingsView {} },

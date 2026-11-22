@@ -21,6 +21,7 @@ pub mod mcp_config;
 pub mod project;
 pub mod reports;
 pub mod review;
+pub mod scan;
 pub mod self_update;
 pub mod session;
 pub mod workload;
