@@ -34,6 +34,9 @@ pub enum DiagSource {
     Command(String),
     /// a tool over MCP refused, by name
     Tool(String),
+    /// an action of the window failed: what it reported as an error, satz's words where
+    /// satz refused (ADR 0036)
+    Window,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]

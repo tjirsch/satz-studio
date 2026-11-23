@@ -22,7 +22,7 @@ use dioxus_icons::lucide::{
     MessageCircleQuestionMark, Package, Rocket, ScrollText, Shield,
 };
 use satz_studio_core::cst::Cst;
-use satz_studio_core::diag::Diagnostic;
+use satz_studio_core::diag::{DiagSource, Diagnostic};
 use satz_studio_core::estate::HclState;
 use satz_studio_core::git::WorkTree;
 use satz_studio_core::github::StudioUpdate;
@@ -570,6 +570,10 @@ pub struct AppStore {
     pub palette_review: bool,
     /// what waits to be shown as a toast
     pub toasts: VecDeque<Toast>,
+    /// every error the window reported, in full, newest last and at most
+    /// [`ERRORS_KEPT`]: an error's toast is only the count, and the Findings drawer lists
+    /// these until they are cleared (ADR 0036)
+    pub errors: Vec<Diagnostic>,
     pub drawer_open: bool,
     pub estate: EstateStore,
     /// the `satz init` run behind the Create door
@@ -601,6 +605,7 @@ impl AppStore {
             palette_open: false,
             palette_review: false,
             toasts: VecDeque::new(),
+            errors: Vec::new(),
             drawer_open: false,
             estate: EstateStore::default(),
             create: CreateStore::default(),
@@ -616,12 +621,25 @@ impl AppStore {
 #[derive(Clone, Copy, PartialEq)]
 pub struct DiagnosticSelection(pub Signal<Option<Diagnostic>>);
 
-/// Hand the window one thing to say; it shows it as a toast.
+/// Hand the window one thing to say; it shows it as a toast. An error is also kept in
+/// full for the Findings drawer, since its toast says only how many came (ADR 0036).
 pub fn toast(app: Store<AppStore>, kind: ToastKind, text: impl Into<String>) {
-    app.toasts().write().push_back(Toast {
-        kind,
-        text: text.into(),
-    });
+    let text = text.into();
+    if kind == ToastKind::Error {
+        keep_error(&mut app.errors().write(), text.clone());
+    }
+    app.toasts().write().push_back(Toast { kind, text });
+}
+
+/// How many of the window's errors the drawer keeps; the oldest goes first.
+pub const ERRORS_KEPT: usize = 50;
+
+/// `text` added to the window's errors as a finding of its own, the oldest dropped past
+/// [`ERRORS_KEPT`].
+pub fn keep_error(errors: &mut Vec<Diagnostic>, text: String) {
+    errors.push(Diagnostic::error(text, DiagSource::Window));
+    let over = errors.len().saturating_sub(ERRORS_KEPT);
+    errors.drain(..over);
 }
 
 #[cfg(test)]

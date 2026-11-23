@@ -425,6 +425,21 @@ select {
   padding: 8px 16px 0;
 }
 
+/* the selected finding's whole text, as satz wrote it */
+.drawer__full {
+  font-size: 0.75rem;
+  color: var(--secondary-color-5);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.drawer__actions {
+  display: flex;
+  justify-content: flex-end;
+  padding: 4px 8px 0;
+}
+
 .drawer__icon--error {
   color: var(--secondary-error-color);
 }

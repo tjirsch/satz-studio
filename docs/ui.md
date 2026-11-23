@@ -48,6 +48,7 @@ so a log line re-renders the log and not the sidebar:
 | `palette_open` | the commands palette is over the window |
 | `palette_review` | the palette opens on its pack review rather than its first command: a finding of the reviewed pack was chosen in the drawer |
 | `toasts` | what waits to be shown as a toast (`VecDeque<Toast>`); `ToastHost` takes each and hands it to the library's toasts |
+| `errors` | every error the window reported, in full, newest last and at most 50 (`ERRORS_KEPT`): `toast` adds one for each error, the error toast is only their count, and the Findings drawer lists them until "Clear the window's errors" |
 | `drawer_open` | the Findings drawer |
 | `create` | the `CreateStore`: the one `satz init` run behind the Create door — `log`, `running`, `command`, `outcome`, reset when a run starts. What `init` derives from the sign-in is in these lines while the window shows them and in the estate satz wrote; it reaches no file of the app's own |
 | `import` | the `ImportStore`: the one `satz import` run behind the Import door — `log` (the `satz init` that runs first on the two-step path included), `running`, `command` (one command line, or the two), `outcome`, and `report`, satz's own import report split out of the run's lines (`ImportReport`); what a live import prints of what it read as the person signed in stays in these lines and in the estate satz wrote |
@@ -158,8 +159,8 @@ from the view.
     that returned no result had, the bytes are put back and the sentence ends "satz
     refused and had changed `<file>`; the file is back as it was". A check that refuses
     restores the bytes, puts its findings in
-    the drawer — they stay through the reload that follows — and a toast names the
-    first line; a check that passes puts the findings it reported there instead, so a
+    the drawer — they stay through the reload that follows — and an error toast counts
+    it; a check that passes puts the findings it reported there instead, so a
     warning shows at its line beside the write that landed. `AcceptDefaults` is the
     same call with `accept_defaults: true`.
   - `CommitEdit(Edit)` is the app's writer: `EditSession::open`, `apply(&[edit])`,
@@ -233,8 +234,9 @@ from the view.
     `--source <from>` when the Manage dialog asks it for one source's packs; that source
     is listed after it.
 
-An error from either — a refusal, a missing binary — is a toast in the toasts and,
-where it concerns the estate, a finding in the drawer or an outcome under the log.
+An error from either — a refusal, a missing binary — is counted in an error toast and
+listed in full in the drawer, and where it concerns the estate it is also a finding there
+or an outcome under the log.
 
 ### Views
 
@@ -484,16 +486,25 @@ arrangements of library `Button`s and `Card`s, laid out in `assets/app.css`.
   clickable; Settings is where either is acted on, and the banner offers the satz-studio
   release while it is naming a newer satz.
 - **Findings drawer:** a bottom drawer, collapsed to its header, listing the open
-  estate's findings and those of the pack the palette's pack review judged, grouped
-  Errors, Warnings, Info, each with `file:line` relative to the estate directory, its
-  source (`satz review-preset` for a review's), and — for one of satz's findings — a badge
-  naming the check that raised it (`unadopted-pack`, `missing-required`, `pack`, …);
-  clicking a row sets the selection and opens where its line is (`destination`): a line
-  of the main file in Estate, a finding about the reviewed pack in the palette, opened on
-  its pack review (`Go::Review`).
+  estate's findings, those of the pack the palette's pack review judged, and the errors
+  the window reported ([ADR 0036](adr/0036-an-error-toast-is-a-count-and-findings-holds-the-text.md)),
+  grouped Errors, Warnings, Info, each with `file:line` relative to the estate directory,
+  its source (`satz review-preset` for a review's, `satz-studio` for the window's), and —
+  for one of satz's findings — a badge naming the check that raised it
+  (`unadopted-pack`, `missing-required`, `pack`, …). A row shows the first line of its
+  text; clicking it sets the selection, shows the whole text under it when there is more
+  than one line, and opens where its line is (`destination`): a line of the main file in
+  Estate, a finding about the reviewed pack in the palette, opened on its pack review
+  (`Go::Review`). The window's errors are kept in `AppStore::errors`, newest first in the
+  list and at most `ERRORS_KEPT` (50), whether an estate is open or not; one whose text a
+  finding already carries — a write satz refused — is listed once (`reported`). While
+  there are any, "Clear the window's errors" (ghost, `X`) empties that list.
 - **Toasts:** what the stores report is a toast of the component library (`ToastHost`
-  inside the `ToastProvider` of `src/app.rs`): a notice leaves by itself after five
-  seconds and an error after twelve, and either can be closed before.
+  inside the `ToastProvider` of `src/app.rs`). A notice is its own text and leaves by
+  itself after five seconds. An error is not quoted: the errors that arrive together are
+  one toast titled with their count, "1 error" or "3 errors" (`error_title`), whose line
+  says the Findings drawer holds the full text, and it leaves after eight seconds; `toast`
+  keeps each error's text in `AppStore::errors` for the drawer. Either can be closed before.
 
 ### The agent handoff
 
