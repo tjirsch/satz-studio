@@ -62,3 +62,14 @@ until satz-studio was restarted. Two rules close that:
 - An error that is a finding of the estate already — what a reload's check found, a write
   satz refused or rolled back — raises its toast through `toast_finding` and is not kept:
   the finding is the record, and the next reload is what updates it.
+
+## Second amendment (2026-11-24)
+
+The toast's line pointing at the drawer read as noise, and a merge that needed a person
+showed one error, "the merge needs attention", that named nothing. Now:
+
+- The toast is the count and nothing else: "1 error", "2 errors · 3 warnings", "1
+  warning" (`count_title`). Warnings are counted beside errors; a reload raises a toast
+  only when the estate has an error.
+- A merge that needs a person is one error per event that asks for one, in the words the
+  log prints it (`MergeReport::needs_you`).

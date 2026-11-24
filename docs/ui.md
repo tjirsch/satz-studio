@@ -510,11 +510,20 @@ arrangements of library `Button`s and `Card`s, laid out in `assets/app.css`.
   window's errors" (ghost, `X`) empties that list.
 - **Toasts:** what the stores report is a toast of the component library (`ToastHost`
   inside the `ToastProvider` of `src/app.rs`). A notice is its own text and leaves by
-  itself after five seconds. An error is not quoted: the errors that arrive together are
-  one toast titled with their count, "1 error" or "3 errors" (`error_title`), whose line
-  says the Findings drawer holds the full text, and it leaves after eight seconds; `toast`
-  keeps each error's text in `AppStore::errors` for the drawer, and `toast_finding`, for an
-  error that is a finding already, keeps none. Either can be closed before.
+  itself after five seconds. Errors and warnings are not quoted: the ones that arrive
+  together are one toast that is their count and nothing else — "1 error", "2 errors ·
+  3 warnings", "1 warning" (`count_title`), the library's error toast when there is an
+  error, its warning toast otherwise — and it leaves after eight seconds; `toast` keeps
+  each error's text in `AppStore::errors` for the drawer, and `toast_finding`, for an
+  error or a warning that is a message of the estate already, keeps none. A reload raises
+  a toast only when the estate has an error, and then counts every error and warning the
+  drawer lists. Either can be closed before.
+- **A merge that needs a person:** `satz_merge_presets` reports `attention` when a pack
+  was forked, adopted, deferred, refused or skipped as a local edit, a fork's delta moved,
+  upstream warned, or prerequisites are still missing or not written. Each of those
+  events is an error of its own, in the words the log prints it
+  (`MergeReport::needs_you`), prefixed `merge-presets:`, and the outcome under the log
+  lists them under "merge-presets needs you:".
 
 ### The agent handoff
 
