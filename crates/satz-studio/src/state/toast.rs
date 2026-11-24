@@ -5,6 +5,8 @@
 pub enum ToastKind {
     Info,
     Error,
+    /// a warning the drawer lists as a message of the estate; counted beside the errors
+    Warning,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -852,10 +852,56 @@ impl MergeReport {
     /// notice the merge opened with the command it names. A pack that is current says
     /// nothing; the counts carry it.
     pub fn lines(&self) -> Vec<String> {
+        let mut out: Vec<String> = self
+            .events
+            .iter()
+            .flat_map(|e| self.event_lines(e))
+            .collect();
+        out.push(self.summary());
+        for n in &self.notices {
+            out.push(format!("notice from {}: {}", n.pack, n.text));
+            out.push(format!("  run: {}", n.run));
+        }
+        out
+    }
+
+    /// What needs a person, in the words [`Self::lines`] prints them: each event that
+    /// makes satz report `attention` — a pack forked, adopted, deferred, refused or
+    /// skipped as a local edit, a fork whose delta moved, a warning, prerequisites still
+    /// missing or not written. Empty when `attention` is false.
+    pub fn needs_you(&self) -> Vec<String> {
+        if !self.attention {
+            return Vec::new();
+        }
+        self.events
+            .iter()
+            .filter(|e| match e {
+                MergeEvent::Pack { action, .. } => matches!(
+                    action.as_str(),
+                    "forked-and-repointed"
+                        | "fork-diff-refreshed"
+                        | "adopted-in-place"
+                        | "deferred"
+                        | "refused"
+                        | "skipped-edited"
+                ),
+                MergeEvent::Warning { .. } => true,
+                MergeEvent::Prerequisites {
+                    missing, refused, ..
+                } => refused.is_some() || !missing.is_empty(),
+                MergeEvent::Note { .. } | MergeEvent::EmissionDelta { .. } => false,
+            })
+            .flat_map(|e| self.event_lines(e))
+            .filter(|l| !l.starts_with("prerequisite written"))
+            .collect()
+    }
+
+    /// The lines one event prints.
+    fn event_lines(&self, e: &MergeEvent) -> Vec<String> {
         let dry = self.report_only;
         let verb = |would: &str, did: &str| if dry { would } else { did }.to_string();
         let mut out = Vec::new();
-        for e in &self.events {
+        {
             match e {
                 MergeEvent::Pack {
                     file,
@@ -872,7 +918,7 @@ impl MergeReport {
                         .map(|v| format!(" ({v})"))
                         .unwrap_or_default();
                     let line = match action.as_str() {
-                        "current" => continue,
+                        "current" => return out,
                         "installed" => format!("{} {file}", verb("would install", "installed")),
                         "artifact-updated" => {
                             format!("{} {file}", verb("would update", "updated"))
@@ -935,11 +981,6 @@ impl MergeReport {
                     out.extend(missing.iter().map(|m| format!("{lead} {m}")));
                 }
             }
-        }
-        out.push(self.summary());
-        for n in &self.notices {
-            out.push(format!("notice from {}: {}", n.pack, n.text));
-            out.push(format!("  run: {}", n.run));
         }
         out
     }

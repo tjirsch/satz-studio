@@ -634,9 +634,9 @@ pub fn toast(app: Store<AppStore>, kind: ToastKind, text: impl Into<String>) {
 /// An error toast for an error the Findings drawer lists as a finding of the estate
 /// already — a reload's check, a write satz refused: counted in the toast and not kept a
 /// second time, since the next reload is what updates the finding (ADR 0036).
-pub fn toast_finding(app: Store<AppStore>, text: impl Into<String>) {
+pub fn toast_finding(app: Store<AppStore>, kind: ToastKind, text: impl Into<String>) {
     app.toasts().write().push_back(Toast {
-        kind: ToastKind::Error,
+        kind,
         text: text.into(),
     });
 }

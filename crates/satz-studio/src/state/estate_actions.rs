@@ -432,7 +432,7 @@ where
     match edit::delegated_write(session, call).await {
         Err(e) => {
             let text = e.to_string();
-            toast_finding(app, text.clone());
+            toast_finding(app, ToastKind::Error, text.clone());
             Carried {
                 checked: Vec::new(),
                 refused: Some(Diagnostic::error(text, source)),
@@ -448,7 +448,7 @@ where
         Ok(Delegated::RolledBack { error, .. }) => Carried::checked(rolled_back(app, error)),
         Ok(Delegated::NotLanded(not_landed)) => {
             let text = not_landed.message(&name);
-            toast_finding(app, text.clone());
+            toast_finding(app, ToastKind::Error, text.clone());
             Carried {
                 checked: Vec::new(),
                 refused: Some(Diagnostic::error(text, source)),
@@ -717,7 +717,7 @@ fn rolled_back(app: Store<AppStore>, e: CommitError) -> Vec<Diagnostic> {
                 },
                 None => "not written — satz refused the file".to_string(),
             };
-            toast_finding(app, text);
+            toast_finding(app, ToastKind::Error, text);
             diags
         }
         CommitError::Rollback(Rollback::ChangedOnDisk) => {
@@ -1213,7 +1213,15 @@ async fn merge_presets(session: &Arc<EstateSession>, app: Store<AppStore>) {
                 queue_notices(app, &report.notices);
                 let outcome = merge_outcome(&report);
                 if !outcome.ok {
-                    toast(app, ToastKind::Error, outcome.text.clone());
+                    // each thing that needs a person is an error of its own in the drawer,
+                    // in satz's words; the toast counts them
+                    let needs = report.needs_you();
+                    if needs.is_empty() {
+                        toast(app, ToastKind::Error, outcome.text.clone());
+                    }
+                    for need in needs {
+                        toast(app, ToastKind::Error, format!("merge-presets: {need}"));
+                    }
                 }
                 outcome
             }
@@ -1241,9 +1249,15 @@ async fn merge_presets(session: &Arc<EstateSession>, app: Store<AppStore>) {
 /// outcome here, as a command that exits non-zero is in `run_command`.
 fn merge_outcome(report: &MergeReport) -> CommandOutcome {
     if report.attention {
+        let needs = report.needs_you();
         CommandOutcome {
             ok: false,
-            text: "satz_merge_presets: the merge needs attention".to_string(),
+            text: if needs.is_empty() {
+                "merge-presets needs attention and names nothing that does; the log above has its report"
+                    .to_string()
+            } else {
+                format!("merge-presets needs you:\n{}", needs.join("\n"))
+            },
         }
     } else {
         CommandOutcome {
@@ -1882,14 +1896,16 @@ async fn reload_with(session: &Arc<EstateSession>, app: Store<AppStore>, carried
     }
     diagnostics.extend(carried.checked);
     diagnostics.extend(carried.refused);
-    if let Some(first) = diagnostics
-        .iter()
-        .find(|d| d.severity == satz_studio_core::diag::Severity::Error)
-    {
-        toast_finding(
-            app,
-            first.message.lines().next().unwrap_or_default().to_string(),
-        );
+    // a reload runs on every focus of the window: it raises a toast only when the estate
+    // has an error, and then counts every error and warning the drawer lists
+    if diagnostics.iter().any(|d| d.severity == Severity::Error) {
+        for d in &diagnostics {
+            match d.severity {
+                Severity::Error => toast_finding(app, ToastKind::Error, d.message.clone()),
+                Severity::Warning => toast_finding(app, ToastKind::Warning, d.message.clone()),
+                Severity::Info => {}
+            }
+        }
     }
     estate.diagnostics().set(diagnostics);
     estate.loading().set(false);
@@ -2069,9 +2085,58 @@ mod tests {
         .unwrap();
         let failed = merge_outcome(&report);
         assert!(!failed.ok);
-        assert!(failed.text.contains("attention"), "{}", failed.text);
+        assert!(failed.text.contains("names nothing"), "{}", failed.text);
         report.attention = false;
         assert!(merge_outcome(&report).ok);
+    }
+
+    /// A merge that needs a person says what: each event that asks for one, in the words
+    /// the log prints it — not "the merge needs attention".
+    #[test]
+    fn a_merge_that_needs_attention_names_what_needs_you() {
+        let report: MergeReport = serde_json::from_value(serde_json::json!({
+            "report_only": false,
+            "events": [
+                {"kind": "pack", "file": "cis/a.satz", "action": "current"},
+                {"kind": "pack", "file": "scc/scc-enable-all.sh", "action": "artifact-updated"},
+                {"kind": "pack", "file": "logs.satz", "action": "skipped-edited"},
+                {"kind": "warning", "file": "x.satz", "text": "content changed but the pack version did not"},
+                {"kind": "prerequisites", "wrote": ["roles/storage.admin"], "missing": ["pubsub.googleapis.com"]}
+            ],
+            "counts": {
+                "installed": 0, "current": 1, "artifacts_updated": 1, "doc_only": 0,
+                "unused_overwritten": 0, "adopted_in_place": 0, "forked_and_repointed": 0,
+                "fork_diffs_refreshed": 0, "deferred": 0, "refused": 0, "skipped_edited": 1
+            },
+            "attention": true
+        }))
+        .unwrap();
+        let needs = report.needs_you();
+        assert_eq!(needs.len(), 3, "{needs:?}");
+        assert!(needs[0].starts_with("logs.satz is skipped"), "{needs:?}");
+        assert!(needs[1].starts_with("warning: x.satz"), "{needs:?}");
+        assert!(needs[2].contains("pubsub.googleapis.com"), "{needs:?}");
+        let failed = merge_outcome(&report);
+        assert!(
+            failed
+                .text
+                .starts_with("merge-presets needs you:\nlogs.satz is skipped"),
+            "{}",
+            failed.text
+        );
+        // the log still prints every event, the summary and nothing twice
+        let lines = report.lines();
+        assert!(
+            lines.iter().any(|l| l == "updated scc/scc-enable-all.sh"),
+            "{lines:?}"
+        );
+        assert!(
+            lines
+                .iter()
+                .any(|l| l == "prerequisite written: roles/storage.admin"),
+            "{lines:?}"
+        );
+        assert!(!lines.iter().any(|l| l.contains("cis/a.satz")), "{lines:?}");
     }
 
     /// The toast says satz's verdict and counts what decides it: the errors of a pack that
