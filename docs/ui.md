@@ -339,7 +339,12 @@ without them.
   rule that reaches into a library UI component is layout: a card's content (`data-slot="card-content"`)
   stands its children in a column with a 12 px gap, and a card that is one row — the
   Agent lead, the Apply state line, the map card, the empty states — puts its class on
-  the content and lays that out as a row.
+  the content and lays that out as a row. The other is a badge (`span[data-style][padding="true"]`,
+  the attributes the library's `Badge` writes): its words stay on one line and it keeps its
+  width beside what wraps around it, since the badge is one line high and wrapped words
+  would run over its border. A class given to a library `Card` replaces the card's own, so
+  a card that needs a class of the app's carries it on its header or content, never on the
+  `Card`; the Presets cards carry none.
 - **Icons.** Lucide line icons from `dioxus-icons` (`dioxus_icons::lucide`), one
   Dioxus component per icon, sized where it is used: `Check { size: 16 }`. Where an icon is
   chosen per entry it is chosen by the entry's id, in one function beside the table:
