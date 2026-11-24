@@ -48,7 +48,7 @@ so a log line re-renders the log and not the sidebar:
 | `palette_open` | the commands palette is over the window |
 | `palette_review` | the palette opens on its pack review rather than its first command: a finding of the reviewed pack was chosen in the drawer |
 | `toasts` | what waits to be shown as a toast (`VecDeque<Toast>`); `ToastHost` takes each and hands it to the library's toasts |
-| `errors` | every error the window reported, in full, newest last and at most 50 (`ERRORS_KEPT`): `toast` adds one for each error, the error toast is only their count, and the Findings drawer lists them until "Clear the window's errors" |
+| `errors` | every error the window reported that is not a finding of the estate already, in full, newest last and at most 50 (`ERRORS_KEPT`): `toast` adds one for each error, `toast_finding` adds none, the error toast is only their count, and the Findings drawer lists them until "Clear the window's errors" or until an estate closes or opens (`close_estate`) |
 | `drawer_open` | the Findings drawer |
 | `create` | the `CreateStore`: the one `satz init` run behind the Create door — `log`, `running`, `command`, `outcome`, reset when a run starts. What `init` derives from the sign-in is in these lines while the window shows them and in the estate satz wrote; it reaches no file of the app's own |
 | `import` | the `ImportStore`: the one `satz import` run behind the Import door — `log` (the `satz init` that runs first on the two-step path included), `running`, `command` (one command line, or the two), `outcome`, and `report`, satz's own import report split out of the run's lines (`ImportReport`); what a live import prints of what it read as the person signed in stays in these lines and in the estate satz wrote |
@@ -496,15 +496,20 @@ arrangements of library `Button`s and `Card`s, laid out in `assets/app.css`.
   than one line, and opens where its line is (`destination`): a line of the main file in
   Estate, a finding about the reviewed pack in the palette, opened on its pack review
   (`Go::Review`). The window's errors are kept in `AppStore::errors`, newest first in the
-  list and at most `ERRORS_KEPT` (50), whether an estate is open or not; one whose text a
-  finding already carries — a write satz refused — is listed once (`reported`). While
-  there are any, "Clear the window's errors" (ghost, `X`) empties that list.
+  list and at most `ERRORS_KEPT` (50), with an estate open or none; closing an estate and
+  opening one empties the list (`close_estate`), so an estate reopened after an edit shows
+  what satz says of it now. An error that is a finding of the estate already — what a
+  reload's check found, a write satz refused or rolled back — raises its toast through
+  `toast_finding` and is not kept: the next reload is what updates the finding. One whose
+  text a finding carries is listed once (`reported`). While there are any, "Clear the
+  window's errors" (ghost, `X`) empties that list.
 - **Toasts:** what the stores report is a toast of the component library (`ToastHost`
   inside the `ToastProvider` of `src/app.rs`). A notice is its own text and leaves by
   itself after five seconds. An error is not quoted: the errors that arrive together are
   one toast titled with their count, "1 error" or "3 errors" (`error_title`), whose line
   says the Findings drawer holds the full text, and it leaves after eight seconds; `toast`
-  keeps each error's text in `AppStore::errors` for the drawer. Either can be closed before.
+  keeps each error's text in `AppStore::errors` for the drawer, and `toast_finding`, for an
+  error that is a finding already, keeps none. Either can be closed before.
 
 ### The agent handoff
 

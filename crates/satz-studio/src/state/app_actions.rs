@@ -333,10 +333,13 @@ fn look_at_launch(app: Store<AppStore>) -> Option<CancellationToken> {
 /// Drop the session: the estate host unmounts and its coroutine with it.
 /// Closing an estate is how estates are SWITCHED: the window has nowhere to stand
 /// without one, so it goes back to the Start screen with its doors, and the palette
-/// over it — which acts on the estate that is gone — closes with it.
+/// over it — which acts on the estate that is gone — closes with it. The window's errors
+/// go too: they were about what the window did with what is closing, and an estate opened
+/// next — the same file after an edit among them — is read afresh (ADR 0036).
 pub fn close_estate(app: Store<AppStore>) {
     app.open().set(None);
     app.estate().set(EstateStore::default());
+    app.errors().write().clear();
     app.palette_open().set(false);
     app.nav().set(View::Start);
 }
