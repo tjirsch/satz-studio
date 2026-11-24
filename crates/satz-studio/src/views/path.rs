@@ -1,11 +1,11 @@
 //! The path through an estate, as the sidebar orders it: what the estate is, its presets and packs,
-//! their questions, its way to the organization, the security checks its resources fail,
-//! its documents. While a step's view is
-//! showing, the window's foot carries a bar that goes back to the step before it and on to
-//! the next one, outside the view's scrolling content so it never scrolls away
-//! ([ADR 0028](../../../../docs/adr/0028-apply-is-one-destination-and-starts-with-who-is-signed-in.md)).
-//! The Estate destination is not a step: it is the estate file itself, for whoever wants
-//! a value the questions do not ask for.
+//! their questions, the estate file for a value no question asks for, its way to the
+//! organization, the security checks its resources fail, its documents. While a step's
+//! view is showing, the window's foot carries a bar that goes back to the step before it
+//! and on to the next one, outside the view's scrolling content so it never scrolls away
+//! ([ADR 0028](../../../../docs/adr/0028-apply-is-one-destination-and-starts-with-who-is-signed-in.md),
+//! [ADR 0037](../../../../docs/adr/0037-estate-is-a-step-of-the-path-before-apply.md)).
+//! Every primary destination is a step; Agent and Settings are none.
 
 use dioxus::prelude::*;
 
@@ -15,16 +15,9 @@ use crate::components::button::{Button, ButtonVariant};
 use crate::state::{AppStore, AppStoreStoreExt, EstateStoreStoreExt, View};
 use crate::widgets::Tip;
 
-/// The steps, in order. An estate without a Presets destination skips that one.
-const STEPS: [View; 7] = [
-    View::Overview,
-    View::Presets,
-    View::Packs,
-    View::Decisions,
-    View::Apply,
-    View::Security,
-    View::Documents,
-];
+/// The steps, in order: the primary destinations, as the sidebar lists them. An estate
+/// without a Presets destination skips that one.
+const STEPS: [View; 8] = View::PRIMARY;
 
 /// The step after `from`, or `None` for the last step and for a view that is not one.
 pub fn next_after(from: View, presets: bool) -> Option<View> {
@@ -53,6 +46,7 @@ pub fn purpose(step: View) -> &'static str {
         View::Presets => "Choose the presets this organization is built from.",
         View::Packs => "Take the packs this estate is built from.",
         View::Decisions => "Answer what the estate's presets and packs ask.",
+        View::Estate => "Set any value of the estate file the questions do not ask for.",
         View::Apply => "Check who is signed in, then check, plan and apply.",
         View::Security => "See which security checks the estate's own resources fail.",
         View::Documents => "Make the documents the customer receives.",
@@ -109,8 +103,8 @@ pub fn PathBar() -> Element {
 mod tests {
     use super::*;
 
-    /// The walk is the sidebar's order without Estate; an estate without presets goes from
-    /// the Overview to its packs.
+    /// The walk is the sidebar's order, Estate between the questions and Apply; an estate
+    /// without presets goes from the Overview to its packs.
     #[test]
     fn the_steps_follow_each_other_and_an_estate_without_presets_skips_them() {
         let walk = |presets: bool| {
@@ -129,13 +123,17 @@ mod tests {
                 View::Overview,
                 View::Packs,
                 View::Decisions,
+                View::Estate,
                 View::Apply,
                 View::Security,
                 View::Documents
             ]
         );
+        // Estate is the step between the questions and Apply
+        assert_eq!(next_after(View::Decisions, true), Some(View::Estate));
+        assert_eq!(next_after(View::Estate, false), Some(View::Apply));
         // not a step, and the last step
-        assert_eq!(next_after(View::Estate, true), None);
+        assert_eq!(next_after(View::Settings, true), None);
         assert_eq!(next_after(View::Documents, true), None);
     }
 
@@ -160,13 +158,14 @@ mod tests {
                 View::Overview,
                 View::Packs,
                 View::Decisions,
+                View::Estate,
                 View::Apply,
                 View::Security,
                 View::Documents
             ]
         );
         // not a step, and the first step
-        assert_eq!(previous_before(View::Estate, true), None);
+        assert_eq!(previous_before(View::Agent, true), None);
         assert_eq!(previous_before(View::Overview, true), None);
         // each step on the walk is the next of the step before it
         for presets in [true, false] {

@@ -56,9 +56,10 @@ where its packs declare `entries` statements — its list params: each list para
 field that keys an entry and the fields an entry carries, each with the pattern its
 value must match. Delegated access is given to a team by an entry of the list param
 `delegations` of satz's `presets/delegation.satz`, which writes the delegation's
-interface with the rest. All but Estate are a path, and a bar at the window's foot goes back to the step before and on to the next:
-what the estate is, its presets and workload packs, their questions, its way to the organization, the
-security checks its resources fail, its documents; Estate stands after them in the sidebar. **Apply**, its way to the organization — who is signed in, what state the estate is in,
+interface with the rest. Estate stands after Decisions, for a value no question asks for, and before the
+transpile. All of them are a path, and a bar at the window's foot goes back to the step before and on to the next:
+what the estate is, its presets and workload packs, their questions, the estate file, its way to the organization, the
+security checks its resources fail, its documents. **Apply**, its way to the organization — who is signed in, what state the estate is in,
 then the checks, the bootstrap, the HCL code, the plan and the apply, in that order;
 **Security**, hints on what the estate declares: "Scan" runs `satz scan`, Checkov over the
 HCL code the last transpile wrote, and lists each resource with a failed check, the Satz
