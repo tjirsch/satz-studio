@@ -134,20 +134,21 @@ impl View {
     /// from what the estate HAS to what it still has to decide. A pack is what declares a
     /// question, and `merge-presets` — the command that brings new pack lines in — is in
     /// Packs, so Packs is where the questions in Decisions come from and it stands before
-    /// them. Apply is the estate's way to the organization, Security reads what the
-    /// transpile Apply runs wrote, and Documents is what is given to people once the rest
-    /// is settled. Those are the path, each ending with a bar that leads to the next
-    /// (`views/path.rs`); Estate stands after them, because the estate file itself is not
-    /// a step of the walk (ADR 0027, ADR 0028, ADR 0035).
+    /// them. Estate is the file itself, where a value no question asks for is set, so it
+    /// comes after the questions and before the transpile. Apply is the estate's way to the
+    /// organization, Security reads what the transpile Apply runs wrote, and Documents is
+    /// what is given to people once the rest is settled. Every one of them is a step of the
+    /// path, each ending with a bar that leads to the next (`views/path.rs`; ADR 0027,
+    /// ADR 0028, ADR 0035, ADR 0037).
     pub const PRIMARY: [View; 8] = [
         View::Overview,
         View::Presets,
         View::Packs,
         View::Decisions,
+        View::Estate,
         View::Apply,
         View::Security,
         View::Documents,
-        View::Estate,
     ];
 
     /// The primary destinations of the open estate. An estate that holds no preset

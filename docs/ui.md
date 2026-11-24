@@ -241,7 +241,7 @@ or an outcome under the log.
 ### Views
 
 The window is ordered by the job. With an estate open the
-sidebar reads **Overview, Presets, Packs, Decisions, Apply, Security, Documents, Estate**, then Agent and
+sidebar reads **Overview, Presets, Packs, Decisions, Estate, Apply, Security, Documents**, then Agent and
 Settings at its foot; with none open it carries Settings alone and the window stands on
 the Start screen. Presets and Packs stand before Decisions because a pack is what DECLARES a
 question: a pack switched on opens the questions it asks, so the questions
@@ -252,7 +252,7 @@ an organization's estate or a workload estate, as satz's presets report names it
 (`works_in`: `organization` or `workload`) ([ADR 0032](adr/0032-an-estate-is-an-organizations-or-a-workload-estate-and-a-pack-shows-its-declarations.md)).
 Presets is the destination of an estate that holds the preset library; Packs is every
 estate's ([ADR 0029](adr/0029-presets-and-packs-are-two-destinations.md)). A workload estate has no
-Presets destination. All of the sidebar but Estate is the path through an estate, and while one of their views shows, the path bar stands at the window's foot (`PathBar` in `src/views/path.rs`, `.path-bar`; the anatomy is under Shell); Estate stands after them and has none ([ADR 0028](adr/0028-apply-is-one-destination-and-starts-with-who-is-signed-in.md)). The kind is a row of the
+Presets destination. The whole sidebar is the path through an estate — Estate between the questions and Apply, for a value no question asks for — and while one of its views shows, the path bar stands at the window's foot (`PathBar` in `src/views/path.rs`, `.path-bar`; the anatomy is under Shell) ([ADR 0028](adr/0028-apply-is-one-destination-and-starts-with-who-is-signed-in.md), [ADR 0037](adr/0037-estate-is-a-step-of-the-path-before-apply.md)). The kind is a row of the
 Overview's identity card, "Kind", one badge — "Organization's estate"
 (`Building2`) or "Workload estate" (`Package`) — and no sentence, with the
 interface folders a workload estate reads under "Delegated by". Estate has three tabs for every
@@ -439,13 +439,14 @@ arrangements of library `Button`s and `Card`s, laid out in `assets/app.css`.
   place. Neither version is here: the window title carries satz-studio's, a newer release
   of either is the banner's business, and Settings holds the satz binary with its update
   buttons, the release page and the look-again.
-- **Path bar:** while Overview, Presets, Packs, Decisions, Apply, Security or Documents shows, the
+- **Path bar:** while Overview, Presets, Packs, Decisions, Estate, Apply, Security or Documents shows, the
   window's foot — below the scrolling content and above the Findings drawer, so it never
   scrolls away — carries at its right edge a `Ghost` `Button` "← <step>" to the step
   before and a `Primary` `Button` "<step> →" to the next; each button's tooltip, opening
   upward, says what its step is for. `next_after` and `previous_before` in
   `src/views/path.rs` walk the same order both ways, and an estate without presets skips
-  Presets in both. The first step has no previous button, the last no next. Estate,
+  Presets in both. The steps are the sidebar's primary destinations, in its order
+  (`STEPS` is `View::PRIMARY`). The first step has no previous button, the last no next.
   Agent, Settings and the Start screen have no bar.
 - **Commands palette:** every entry of `PALETTE` in a dialog over the window, opened
   with ⌘K (Ctrl+K on Windows and Linux) — it has no entry in the sidebar — and closed with

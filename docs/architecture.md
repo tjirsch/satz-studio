@@ -230,7 +230,7 @@ estate cards. A door is one `Door` variant, one card in the row and one arm of t
 view's `match`, so another way in joins by being added in those three places.
 
 With an estate open the window is ordered by the job: **Overview**, **Presets**, **Packs**,
-**Decisions**, **Apply**, **Security**, **Documents**, **Estate**, then Agent and Settings at the foot of
+**Decisions**, **Estate**, **Apply**, **Security**, **Documents**, then Agent and Settings at the foot of
 the sidebar — Presets and Packs before Decisions, because a pack is what declares a question. Overview
 (`src/views/overview.rs`) says which estate this is — the short name, the customer, the
 customer id and the organization id from the file's own `params { }` block (the model's
