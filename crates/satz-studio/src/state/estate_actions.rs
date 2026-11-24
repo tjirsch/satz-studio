@@ -43,7 +43,7 @@ use super::View;
 use super::app_actions::close_estate;
 use super::{
     AppStore, AppStoreStoreExt, CommandOutcome, Door, EstateStore, EstateStoreStoreExt, Exported,
-    PackReviewState, ToastKind, strip_ansi, toast,
+    PackReviewState, ToastKind, strip_ansi, toast, toast_finding,
 };
 
 pub enum EstateAction {
@@ -432,7 +432,7 @@ where
     match edit::delegated_write(session, call).await {
         Err(e) => {
             let text = e.to_string();
-            toast(app, ToastKind::Error, text.clone());
+            toast_finding(app, text.clone());
             Carried {
                 checked: Vec::new(),
                 refused: Some(Diagnostic::error(text, source)),
@@ -448,7 +448,7 @@ where
         Ok(Delegated::RolledBack { error, .. }) => Carried::checked(rolled_back(app, error)),
         Ok(Delegated::NotLanded(not_landed)) => {
             let text = not_landed.message(&name);
-            toast(app, ToastKind::Error, text.clone());
+            toast_finding(app, text.clone());
             Carried {
                 checked: Vec::new(),
                 refused: Some(Diagnostic::error(text, source)),
@@ -717,7 +717,7 @@ fn rolled_back(app: Store<AppStore>, e: CommitError) -> Vec<Diagnostic> {
                 },
                 None => "not written — satz refused the file".to_string(),
             };
-            toast(app, ToastKind::Error, text);
+            toast_finding(app, text);
             diags
         }
         CommitError::Rollback(Rollback::ChangedOnDisk) => {
@@ -1886,9 +1886,8 @@ async fn reload_with(session: &Arc<EstateSession>, app: Store<AppStore>, carried
         .iter()
         .find(|d| d.severity == satz_studio_core::diag::Severity::Error)
     {
-        toast(
+        toast_finding(
             app,
-            ToastKind::Error,
             first.message.lines().next().unwrap_or_default().to_string(),
         );
     }

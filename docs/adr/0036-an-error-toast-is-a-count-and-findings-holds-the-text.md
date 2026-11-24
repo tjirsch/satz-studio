@@ -47,5 +47,18 @@ in a toast.
 
 - No message is cut: every error is readable in full in the drawer, and selectable there.
 - The toast no longer says what failed; the drawer's error badge and list do.
-- The window's errors outlive the estate they were about until they are cleared or the
-  window closes.
+- An error is kept by the window, not by the estate it was about.
+
+## Amendment (2026-11-24)
+
+As first built, the window's errors outlived the estate they were about until they were
+cleared or the window closed, and every error was kept — the reload's own toast of its
+first finding included. An estate that failed its check, was fixed in an editor, closed
+and opened again still listed the old error with its old line beside the fresh findings,
+until satz-studio was restarted. Two rules close that:
+
+- Closing an estate and opening one empties the window's errors (`close_estate`): they
+  were about what the window did with what is closing.
+- An error that is a finding of the estate already — what a reload's check found, a write
+  satz refused or rolled back — raises its toast through `toast_finding` and is not kept:
+  the finding is the record, and the next reload is what updates it.
