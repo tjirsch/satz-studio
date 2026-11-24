@@ -67,7 +67,7 @@ pub fn copy_smoke() -> SmokeCopy {
 }
 
 /// The same copy at a validation level other than satz's default (`warn`): under
-/// `"error"` a finding that would be a warning refuses the compile instead.
+/// `"error"` a message that would be a warning refuses the compile instead.
 pub fn copy_smoke_at(validation_level: Option<&str>) -> SmokeCopy {
     let dir = scratch();
     let root = canon(dir.path());

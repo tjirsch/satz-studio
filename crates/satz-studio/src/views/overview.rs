@@ -10,7 +10,7 @@
 //! not carry is simply not a row.
 //!
 //! The card of owed items is DERIVED from the estate's own state on every render — the
-//! questions report, the pack rows, the schema, the transpile's findings, the HCL
+//! questions report, the pack rows, the schema, the transpile's messages, the HCL
 //! directory — so it cannot drift from the estate, and it disappears when there is
 //! nothing left in it. Nothing is saved: there is no workflow to resume, no step to be
 //! trapped in, and no record of how the estate reached the app. An estate that was
@@ -101,7 +101,7 @@ impl Owed {
             "bootstrap" => rsx! { Landmark { size, class: "overview__row-icon" } },
             "questions" => rsx! { MessageCircleQuestionMark { size, class: "overview__row-icon" } },
             "map-off" | "map-absent" => rsx! { Boxes { size, class: "overview__row-icon" } },
-            "pack-findings" => rsx! { Network { size, class: "overview__row-icon" } },
+            "pack-messages" => rsx! { Network { size, class: "overview__row-icon" } },
             "ungated-lines" => rsx! { Unlink { size, class: "overview__row-icon" } },
             "schema" => rsx! { Workflow { size, class: "overview__row-icon" } },
             "hcl-trust" => rsx! { CodeXml { size, class: "overview__row-icon" } },
@@ -241,10 +241,10 @@ pub fn owed(f: &Facts) -> Vec<Owed> {
         let findings = &model.packs.findings;
         if let Some(first) = findings.first() {
             out.push(Owed {
-                id: "pack-findings",
+                id: "pack-messages",
                 title: match findings.len() {
-                    1 => "The pack graph has 1 finding".to_string(),
-                    n => format!("The pack graph has {n} findings"),
+                    1 => "The pack graph has 1 message".to_string(),
+                    n => format!("The pack graph has {n} messages"),
                 },
                 detail: first.message.clone(),
                 // an estate without presets has no Presets destination to go to
@@ -258,7 +258,7 @@ pub fn owed(f: &Facts) -> Vec<Owed> {
 
         // A `use` line without its `when <gate>` applies its pack whatever the estate
         // answers. satz reports that as `ungated-pack` only while the file declaring the
-        // gate is switched on, so with the map off the findings row above says nothing about it;
+        // gate is switched on, so with the map off the messages row above says nothing about it;
         // a row satz does speak about is left to satz's own sentence, in Presets.
         let ungated = model
             .packs
@@ -301,13 +301,13 @@ pub fn owed(f: &Facts) -> Vec<Owed> {
                     1 => "1 raw HCL block has not been reviewed".to_string(),
                     n => format!("{n} raw HCL blocks have not been reviewed"),
                 },
-                detail: "An `hcl { … }` block is written into the HCL code verbatim and is opaque to the compliance plane: no claim can cover it, and satz warns on every transpile. Reading it and writing `hcl trust \"<reason>\" { … }` around it settles the debt — the warning becomes a note carrying the reason. Counted here are this estate file's own blocks; Findings carries the transpile's finding for every one in the estate, packs included.".to_string(),
+                detail: "An `hcl { … }` block is written into the HCL code verbatim and is opaque to the compliance plane: no claim can cover it, and satz warns on every transpile. Reading it and writing `hcl trust \"<reason>\" { … }` around it settles the debt — the warning becomes a note carrying the reason. Counted here are this estate file's own blocks; Messages carries the transpile's message for every one in the estate, packs included.".to_string(),
                 remedies: vec![Remedy::Go(View::Estate)],
             });
         }
     }
 
-    // What a pack asks to be run once it is switched on. The transpile raises one finding
+    // What a pack asks to be run once it is switched on. The transpile raises one message
     // per open notice, so the count is satz's, not the app's; the window holds the ones
     // a write of this session opened and can raise their dialog again.
     let notices = f
@@ -345,14 +345,14 @@ pub fn owed(f: &Facts) -> Vec<Owed> {
             Owed {
                 id: "apis",
                 title: "An API is not declared".to_string(),
-                detail: "The transpile found APIs that a project of this estate's own, one its resources' calls are billed to, does not enable. Findings carries each of them; `satz update-prerequisites` writes them into the file.".to_string(),
+                detail: "The transpile found APIs that a project of this estate's own, one its resources' calls are billed to, does not enable. Messages carries each of them; `satz update-prerequisites` writes them into the file.".to_string(),
                 remedies: vec![Remedy::Go(View::Apply)],
             }
         } else {
             Owed {
                 id: "prerequisites",
                 title: "The prerequisites are not declared".to_string(),
-                detail: "The transpile found roles this estate's own resource types need and its estate account is not granted, or APIs a project its resources' calls are billed to does not enable. Findings carries each of them; `satz update-prerequisites` writes them into the file.".to_string(),
+                detail: "The transpile found roles this estate's own resource types need and its estate account is not granted, or APIs a project its resources' calls are billed to does not enable. Messages carries each of them; `satz update-prerequisites` writes them into the file.".to_string(),
                 remedies: vec![Remedy::Go(View::Apply)],
             }
         });
@@ -1363,7 +1363,7 @@ mod tests {
         }
     }
 
-    /// A report whose map line stands as `map` and that carries `findings` pack findings.
+    /// A report whose map line stands as `map` and that carries `findings` pack messages.
     fn packs(map: PackLine, findings: usize) -> PacksReport {
         PacksReport {
             estate: "C0example.satz".to_string(),
@@ -1401,7 +1401,7 @@ mod tests {
                     file: None,
                     line: None,
                     subject: Some("presets/organization-budget.satz".to_string()),
-                    message: format!("finding {i}"),
+                    message: format!("message {i}"),
                     fix: None,
                 })
                 .collect(),
@@ -1545,14 +1545,14 @@ mod tests {
         );
         let m = model(packs(PackLine::Active, 2), loaded());
         let rows = owed(&facts(None, hcl, Some(&q), Some(&m), &[]));
-        assert_eq!(ids(&rows), ["pack-findings"]);
-        assert_eq!(rows[0].title, "The pack graph has 2 findings");
-        assert_eq!(rows[0].detail, "finding 0");
+        assert_eq!(ids(&rows), ["pack-messages"]);
+        assert_eq!(rows[0].title, "The pack graph has 2 messages");
+        assert_eq!(rows[0].detail, "message 0");
         assert_eq!(rows[0].remedies, [Remedy::Go(View::Presets)]);
     }
 
     /// satz reports `ungated-pack` only while the file declaring the gate is on, so the
-    /// findings row is silent about a line no answer switches off in an estate with the
+    /// messages row is silent about a line no answer switches off in an estate with the
     /// map off. This row is not.
     #[test]
     fn a_line_without_its_gate_is_a_row_of_its_own_until_satz_says_it() {

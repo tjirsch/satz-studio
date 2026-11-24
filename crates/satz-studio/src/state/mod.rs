@@ -357,7 +357,7 @@ pub struct EstateStore {
     /// writes over
     pub last_export: Option<Exported>,
     /// the pack the Presets view reviewed last with `satz review-preset`, or why its review
-    /// failed; its findings stand in the drawer beside the estate's own until it is closed
+    /// failed; its messages stand in the drawer beside the estate's own until it is closed
     pub review: Option<PackReviewState>,
     /// a review or a placement is running
     pub reviewing: bool,
@@ -432,7 +432,7 @@ impl PackReviewState {
         }
     }
 
-    /// The review's findings, for the drawer; none for a failed review,
+    /// The review's messages, for the drawer; none for a failed review,
     /// whose reason the view and the toast carry.
     pub fn diagnostics(&self) -> Vec<Diagnostic> {
         match self {
@@ -566,13 +566,13 @@ pub struct AppStore {
     pub door: Door,
     /// the command palette is over the window
     pub palette_open: bool,
-    /// the palette opens on the pack review rather than its first command: a finding of
+    /// the palette opens on the pack review rather than its first command: a message of
     /// the reviewed pack was chosen in the drawer
     pub palette_review: bool,
     /// what waits to be shown as a toast
     pub toasts: VecDeque<Toast>,
     /// every error the window reported, in full, newest last and at most
-    /// [`ERRORS_KEPT`]: an error's toast is only the count, and the Findings drawer lists
+    /// [`ERRORS_KEPT`]: an error's toast is only the count, and the Messages drawer lists
     /// these until they are cleared (ADR 0036)
     pub errors: Vec<Diagnostic>,
     pub drawer_open: bool,
@@ -618,12 +618,12 @@ impl AppStore {
     }
 }
 
-/// The finding the drawer selected last; the estate views scroll to it.
+/// The message the drawer selected last; the estate views scroll to it.
 #[derive(Clone, Copy, PartialEq)]
 pub struct DiagnosticSelection(pub Signal<Option<Diagnostic>>);
 
 /// Hand the window one thing to say; it shows it as a toast. An error is also kept in
-/// full for the Findings drawer, since its toast says only how many came (ADR 0036).
+/// full for the Messages drawer, since its toast says only how many came (ADR 0036).
 pub fn toast(app: Store<AppStore>, kind: ToastKind, text: impl Into<String>) {
     let text = text.into();
     if kind == ToastKind::Error {
@@ -632,9 +632,9 @@ pub fn toast(app: Store<AppStore>, kind: ToastKind, text: impl Into<String>) {
     app.toasts().write().push_back(Toast { kind, text });
 }
 
-/// An error toast for an error the Findings drawer lists as a finding of the estate
+/// An error toast for an error the Messages drawer lists as a message of the estate
 /// already — a reload's check, a write satz refused: counted in the toast and not kept a
-/// second time, since the next reload is what updates the finding (ADR 0036).
+/// second time, since the next reload is what updates the message (ADR 0036).
 pub fn toast_finding(app: Store<AppStore>, kind: ToastKind, text: impl Into<String>) {
     app.toasts().write().push_back(Toast {
         kind,
@@ -645,7 +645,7 @@ pub fn toast_finding(app: Store<AppStore>, kind: ToastKind, text: impl Into<Stri
 /// How many of the window's errors the drawer keeps; the oldest goes first.
 pub const ERRORS_KEPT: usize = 50;
 
-/// `text` added to the window's errors as a finding of its own, the oldest dropped past
+/// `text` added to the window's errors as a message of its own, the oldest dropped past
 /// [`ERRORS_KEPT`].
 pub fn keep_error(errors: &mut Vec<Diagnostic>, text: String) {
     errors.push(Diagnostic::error(text, DiagSource::Window));

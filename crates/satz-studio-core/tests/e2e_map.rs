@@ -3,13 +3,13 @@
 //! pack switched on, which binds its gate and makes its line active, and off, which binds
 //! the gate false and leaves the line; a switch satz refuses, which writes nothing and
 //! names why; and a gate bound true whose line is gone, which satz's pack report shows as
-//! an absent pack with the finding and the command that answers it, and which
+//! an absent pack with the message and the command that answers it, and which
 //! `satz transpile --check` names — a warning at satz's default validation level, a
 //! refusal at `error`. And a gate answered through `satz_interview` that satz refuses
 //! after it has written the file: the file is back as it was either way, and the refusal
 //! says it was put back exactly when it was. A pack's line stripped of its ` when <gate>`
 //! is the satz→studio contract the Packs view's chip and sentence stand on: the row reads
-//! `ungated`, the report carries the `ungated-pack` finding, and the check names it.
+//! `ungated`, the report carries the `ungated-pack` message, and the check names it.
 
 #[path = "fixtures/e2e/support.rs"]
 mod support;
@@ -184,7 +184,7 @@ async fn a_gate_bound_true_without_its_line_is_absent_and_the_check_names_the_pa
     assert_eq!(last.find('='), shortname, "{text}");
     assert_eq!(committed.sha256, sha256_hex(text.as_bytes()));
 
-    // and says so: a warning on stderr, which parses to a finding naming the pack
+    // and says so: a warning on stderr, which parses to a message naming the pack
     // and the remedy
     let (passed, lines) = support::check_lines(&session.cli, &main).await;
     assert!(passed, "{lines:?}");
@@ -204,8 +204,8 @@ async fn a_gate_bound_true_without_its_line_is_absent_and_the_check_names_the_pa
         warning.message
     );
 
-    // the pack report: the pack is absent, its gate true, the finding on its row, and
-    // the command that answers it in the report's findings; the gate is no param row
+    // the pack report: the pack is absent, its gate true, the message on its row, and
+    // the command that answers it in the report's messages; the gate is no param row
     let m = support::model(&session, diags.clone()).await;
     let row = m.packs.row(BUDGET).unwrap();
     assert_eq!(
@@ -236,7 +236,7 @@ async fn a_gate_bound_true_without_its_line_is_absent_and_the_check_names_the_pa
     assert!(m.diagnostics.contains(warning), "{:?}", m.diagnostics);
 
     // at validation level `error` the same sentence is a refusal: the CLI checker over
-    // a config at that level returns it as the finding …
+    // a config at that level returns it as the message …
     let strict_dir = support::config_over(&estate.yaml, "error");
     let strict = CliChecker {
         cli: strict_dir.cli().await,
@@ -271,7 +271,7 @@ async fn a_gate_bound_true_without_its_line_is_absent_and_the_check_names_the_pa
 
     // … and the write discipline rolls a binding back: switching the pack off lands
     // through the estate's own checker, where a pack that creates nothing is a warning;
-    // switching it on again is refused by the strict one with that finding, the
+    // switching it on again is refused by the strict one with that message, the
     // file keeps its bytes, no temp file stays
     let es = EditSession::open(&main).unwrap();
     let proposed = es
@@ -304,7 +304,7 @@ async fn a_gate_bound_true_without_its_line_is_absent_and_the_check_names_the_pa
     assert_eq!(diags, refused);
     assert_eq!(support::read(&main), off);
 
-    // the finding's command, as the Packs view's switch runs it, writes the line where
+    // the message's command, as the Packs view's switch runs it, writes the line where
     // the pack graph places it
     support::add_pack(&session, BUDGET).await;
     let m = support::model(&session, Vec::new()).await;
@@ -387,9 +387,9 @@ async fn a_refused_answer_leaves_the_file_as_it_was_and_says_so_when_satz_had_ch
 }
 
 /// A `use` line stripped of its ` when <gate>`: nothing the estate answers switches that
-/// pack off. satz says so with the `ungated-pack` finding while the file declaring the
+/// pack off. satz says so with the `ungated-pack` message while the file declaring the
 /// gate is active — here the map — and the Packs view's chip and sentence stand on the row
-/// state and that finding.
+/// state and that message.
 #[tokio::test]
 async fn a_line_without_its_when_is_ungated_and_satz_names_the_gate() {
     let estate = support::estate_dir(None);
@@ -414,7 +414,7 @@ async fn a_line_without_its_when_is_ungated_and_satz_names_the_gate() {
     assert_eq!(row.gate.as_deref(), Some("use_budget"));
     assert!(row.at_line.is_some(), "{row:?}");
 
-    // the report: the finding on the pack, with satz's own sentence on the row
+    // the report: the message on the pack, with satz's own sentence on the row
     let finding = m
         .packs
         .findings
@@ -433,8 +433,8 @@ async fn a_line_without_its_when_is_ungated_and_satz_names_the_gate() {
         row.findings
     );
 
-    // and the check: at validation level `error` the same finding refuses the estate,
-    // as the finding the drawer shows
+    // and the check: at validation level `error` the same message refuses the estate,
+    // as the message the drawer shows
     let strict_dir = support::config_over(&estate.yaml, "error");
     let strict = CliChecker {
         cli: strict_dir.cli().await,

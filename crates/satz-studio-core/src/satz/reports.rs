@@ -251,7 +251,7 @@ pub struct PrerequisitesResult {
 }
 
 /// What `satz update-prerequisites --format json` reports, as far as the app reads it.
-/// An organization's estate is checked: what it misses is the transpile's findings, which
+/// An organization's estate is checked: what it misses is the transpile's messages, which
 /// the drawer carries. A workload estate is not (satz's ADR 0101): its account's roles
 /// are the organization's to grant, through the delegation pack that created what it
 /// builds in, and the report lists what its resource types need for the organization's
@@ -407,7 +407,7 @@ pub struct OpenReport {
     pub runs_as: Option<String>,
 }
 
-/// How bad a finding is. `Error` refuses the transpile; `Warning` and `Info` come back
+/// How bad a message is. `Error` refuses the transpile; `Warning` and `Info` come back
 /// with a summary that passed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -429,7 +429,7 @@ pub struct Finding {
     /// A `String` rather than an enum, so a kind satz adds is carried through instead
     /// of failing the whole result.
     pub kind: String,
-    /// The header the CLI prints once above the findings that share it.
+    /// The header the CLI prints once above the messages that share it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub group: Option<String>,
     /// The file as the loader saw it — a `use` path, or the estate.
@@ -438,12 +438,12 @@ pub struct Finding {
     /// 1-based, in that file
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub line: Option<u32>,
-    /// What the finding is about, and with `kind` its identity: the pack a pack finding
+    /// What the message is about, and with `kind` its identity: the pack a pack message
     /// judges, the param a notice is acknowledged by.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub subject: Option<String>,
     pub message: String,
-    /// The command that answers the finding, as it is typed; absent where no one
+    /// The command that answers the message, as it is typed; absent where no one
     /// command does.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fix: Option<String>,
@@ -466,7 +466,7 @@ pub struct PackReview {
 }
 
 impl PackReview {
-    /// satz's verdict: the pack clears the bar when no finding is an error. Warnings are
+    /// satz's verdict: the pack clears the bar when no message is an error. Warnings are
     /// the author's to weigh. `satz review-preset` exits non-zero exactly when this is false.
     pub fn passed(&self) -> bool {
         !self
@@ -475,7 +475,7 @@ impl PackReview {
             .any(|f| f.severity == FindingSeverity::Error)
     }
 
-    /// How many findings carry `severity`.
+    /// How many messages carry `severity`.
     pub fn count(&self, severity: FindingSeverity) -> usize {
         self.findings
             .iter()
@@ -587,7 +587,7 @@ pub struct PackRow {
     /// estate's own entries
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub contributes: Vec<Contributed>,
-    /// the transpile's findings about this pack, as sentences
+    /// the transpile's messages about this pack, as sentences
     pub findings: Vec<String>,
 }
 
@@ -651,7 +651,7 @@ pub struct PacksReport {
     pub interfaces: Vec<Unmanaged>,
     /// per used interface file, who delegated and what it carries
     pub delegated_by: Vec<DelegatedBy>,
-    /// the transpile's pack findings, each with its pack as `subject`
+    /// the transpile's pack messages, each with its pack as `subject`
     pub findings: Vec<Finding>,
 }
 
@@ -1039,8 +1039,8 @@ pub struct CompileSummary {
 }
 
 /// The `structuredContent` of a refused transpile tool: what the transpile found, each
-/// finding at its own line. satz sends the whole `CompileSummary` shape with no
-/// address; the findings are the half a caller can point at lines. A refusal that
+/// message at its own line. satz sends the whole `CompileSummary` shape with no
+/// address; the messages are the half a caller can point at lines. A refusal that
 /// never reached the transpile — a missing file, an estate outside the root — carries no
 /// structured content at all.
 #[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
@@ -1674,7 +1674,7 @@ pub struct WhoamiQuotaProject {
 }
 
 /// The permission test. A missing permission is counted here; what it is and how to
-/// close it is the prerequisites finding in the drawer.
+/// close it is the prerequisites message in the drawer.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct WhoamiPermissions {
     pub tested: usize,
@@ -1799,7 +1799,7 @@ mod tests {
         assert_eq!(*at, None);
         assert_eq!(groups.len(), 2);
 
-        // a report without the findings is another shape: refused, never an empty list
+        // a report without the messages is another shape: refused, never an empty list
         let mut broken: serde_json::Value = serde_json::from_str(SCAN).unwrap();
         broken.as_object_mut().unwrap().remove("findings");
         assert!(serde_json::from_value::<ScanReport>(broken).is_err());

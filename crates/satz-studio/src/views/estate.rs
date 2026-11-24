@@ -44,7 +44,7 @@ pub fn EstateView() -> Element {
     let open = app.open().cloned();
     let mut pane = use_signal(|| Pane::Params);
 
-    // A finding names a line, and a line is a node: the drawer's selection belongs
+    // A message names a line, and a line is a node: the drawer's selection belongs
     // to the tree, so choosing one opens the tab that can show it.
     use_effect(move || {
         if (selection.0)().is_some() {

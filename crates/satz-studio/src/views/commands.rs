@@ -714,7 +714,7 @@ pub fn CommandDeck(
     let handle = use_coroutine_handle::<EstateAction>();
     let specs: Vec<&'static CommandSpec> = ids.iter().filter_map(|id| spec_of(id)).collect();
     let count = specs.len();
-    // a finding of the reviewed pack chosen in the drawer opens the palette on the review
+    // a message of the reviewed pack chosen in the drawer opens the palette on the review
     let mut selected = use_signal(move || {
         if review && *app.palette_review().peek() {
             count

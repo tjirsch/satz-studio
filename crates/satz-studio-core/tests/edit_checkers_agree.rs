@@ -1,8 +1,8 @@
 //! The two checkers over the same six files — three edits satz accepts, three it
 //! refuses — return the same verdict, and for a refusal the same set of
-//! `(file, line, kind, message)` tuples, whether they read the findings as JSON over
+//! `(file, line, kind, message)` tuples, whether they read the messages as JSON over
 //! MCP or as the `Debug` of the refusal the CLI exits on. The summaries differ by
-//! design: the CLI prints neither an address list nor its findings, so a check that
+//! design: the CLI prints neither an address list nor its messages, so a check that
 //! passes carries them in the MCP summary alone.
 
 #[path = "fixtures/edit/support.rs"]
@@ -24,9 +24,9 @@ fn key(diags: &[Diagnostic]) -> BTreeSet<Key> {
         .collect()
 }
 
-/// The finding a test is about, by kind. A transpile carries every finding the satz
+/// The message a test is about, by kind. A transpile carries every message the satz
 /// release makes over the estate — a prerequisite the fixture does not declare, a check
-/// a later version adds — so a test names the finding it asserts on instead of counting
+/// a later version adds — so a test names the message it asserts on instead of counting
 /// them.
 fn finding_of_kind<'a>(diags: &'a [Diagnostic], kind: &str) -> &'a Diagnostic {
     diags
@@ -125,7 +125,7 @@ async fn the_two_checkers_agree_on_six_cases() {
 }
 
 /// `use_budget = true` spliced into a copy that has no line for the pack, on the temp
-/// file the write discipline checks — satz's unadopted-pack finding, whose severity the
+/// file the write discipline checks — satz's unadopted-pack message, whose severity the
 /// validation level decides.
 fn asks_for_a_pack_it_does_not_use(copy: &support::SmokeCopy, main: &Path) -> PathBuf {
     let proposed = EditSession::open(main)
@@ -172,7 +172,7 @@ async fn a_check_that_passes_carries_its_warnings_through_both_checkers() {
     let tmp = asks_for_a_pack_it_does_not_use(&copy, &session.main);
     let (mcp, cli) = support::checkers(&session);
 
-    // the same finding at satz's default level: a warning, so the transpile goes on
+    // the same message at satz's default level: a warning, so the transpile goes on
     let a = support::within(mcp.check(&tmp)).await.unwrap();
     assert!(!a.addresses.is_empty());
     let pack = a

@@ -79,7 +79,7 @@ pub enum EditError {
 pub enum Rollback {
     /// the file on disk is not the file that was opened
     ChangedOnDisk,
-    /// satz refused the temp file; the findings name the real file
+    /// satz refused the temp file; the messages name the real file
     Check(Vec<Diagnostic>),
 }
 
@@ -104,8 +104,8 @@ pub enum CommitError {
 /// What a check returned when it did not pass.
 #[derive(Debug)]
 pub enum CheckFailure {
-    /// satz transpiled the file and refused it — one finding per finding, at the
-    /// line the finding names
+    /// satz transpiled the file and refused it — one message per message, at the
+    /// line the message names
     Refused(Vec<Diagnostic>),
     /// satz could not be run at all, or answered in a shape this version does not read
     Failed(SatzError),
@@ -142,7 +142,7 @@ pub struct Committed {
     pub path: PathBuf,
     /// the hash of what is on disk now — the next session's snapshot
     pub sha256: String,
-    /// what the check reported: the addresses written, and the findings it did not
+    /// what the check reported: the addresses written, and the messages it did not
     /// refuse on — the warnings and notes the app shows at their lines after the write
     pub summary: CompileSummary,
 }
@@ -242,7 +242,7 @@ impl Proposed {
     ///    `use "…"` and `include_dirs` resolve as they do for the file, and the name
     ///    keeps the extension satz reads;
     /// 3. `checker.check(tmp)`: a refusal deletes the temp file and is
-    ///    [`Rollback::Check`] with every finding re-pointed from the temp path (as
+    ///    [`Rollback::Check`] with every message re-pointed from the temp path (as
     ///    given and canonical) to the real one; a checker that could not run deletes it
     ///    and is [`CommitError::Satz`];
     /// 4. the temp file is renamed over the real one;

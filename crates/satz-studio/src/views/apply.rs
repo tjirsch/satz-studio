@@ -115,7 +115,7 @@ pub fn sign_in_lines(report: &WhoamiReport) -> Vec<(String, bool)> {
             match p.missing.len() {
                 0 => format!("{} permissions tested, none missing", p.tested),
                 n => format!(
-                    "{} permissions tested, {n} missing — Findings names each",
+                    "{} permissions tested, {n} missing — Messages names each",
                     p.tested
                 ),
             },
