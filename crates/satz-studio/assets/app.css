@@ -203,6 +203,29 @@ select {
   gap: 6px;
 }
 
+/* a badge holds one line: a value longer than the row is cut, never wrapped over the
+   badge's border; the tooltip carries the whole of it */
+.tag-list__tags > * {
+  max-width: 100%;
+  min-width: 0;
+}
+
+/* the tooltip around the value, and its trigger, may shrink with the badge */
+.tag-list__tags :has(> .tag-list__value),
+.tag-list__tags :has(> * > .tag-list__value) {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.tag-list__value {
+  display: block;
+  font-size: inherit;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .source-tags {
   display: inline-flex;
   flex-wrap: wrap;

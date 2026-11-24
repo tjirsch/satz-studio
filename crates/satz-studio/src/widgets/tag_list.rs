@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 use dioxus_icons::lucide::X;
 
-use super::Field;
+use super::{Field, Tip};
 use crate::components::badge::{Badge, BadgeVariant};
 use crate::components::button::{Button, ButtonSize, ButtonVariant};
 
@@ -46,7 +46,11 @@ pub fn TagList(
                             let rest = items.clone();
                             rsx! {
                                 Badge { key: "{i}-{item}", variant: BadgeVariant::Secondary,
-                                    code { "{item}" }
+                                    // one line, cut where it does not fit; the whole value
+                                    // on hover
+                                    Tip { text: item.clone(),
+                                        code { class: "tag-list__value", "{item}" }
+                                    }
                                     if !disabled {
                                         Button {
                                             variant: ButtonVariant::Ghost,
