@@ -191,6 +191,14 @@ select {
   gap: 8px;
 }
 
+/* every badge of the library is one line high: its words stay on that line and the
+   badge keeps its width beside what wraps around it, rather than wrapping over its own
+   border. Layout only — the badge's look is the library's. */
+span[data-style][padding="true"] {
+  white-space: nowrap;
+  flex: none;
+}
+
 .tag-list {
   display: flex;
   flex-direction: column;
@@ -201,6 +209,29 @@ select {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+}
+
+/* a badge holds one line: a value longer than the row is cut, never wrapped over the
+   badge's border; the tooltip carries the whole of it */
+.tag-list__tags > * {
+  max-width: 100%;
+  min-width: 0;
+}
+
+/* the tooltip around the value, and its trigger, may shrink with the badge */
+.tag-list__tags :has(> .tag-list__value),
+.tag-list__tags :has(> * > .tag-list__value) {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.tag-list__value {
+  display: block;
+  font-size: inherit;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .source-tags {
@@ -1490,7 +1521,7 @@ select {
 }
 
 .map__map-card code,
-.pack-card code {
+.map__cards code {
   user-select: text;
 }
 
@@ -1515,23 +1546,29 @@ select {
   color: var(--focused-border-color);
 }
 
+/* the pack cards, as wide as a path and its badge on one line where the window allows */
 .map__cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(460px, 1fr));
   gap: 16px;
 }
 
+/* the path first; the badge and the help button go to a line of their own when the
+   path takes the width */
 .pack-card__head {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   color: var(--secondary-color-5);
 }
 
 .pack-card__path {
+  flex: 1 1 14rem;
+  min-width: 0;
   font-size: 13px;
   color: var(--secondary-color-4);
-  word-break: break-all;
+  overflow-wrap: anywhere;
 }
 
 .pack-card__prompt {

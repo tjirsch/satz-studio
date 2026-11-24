@@ -46,7 +46,7 @@ use crate::state::{
 };
 use crate::views::pack_sources::{PackSourcesCard, Sheet};
 use crate::views::publish_pack::PublishDialog;
-use crate::widgets::{Field, HelpButton};
+use crate::widgets::{Field, HelpButton, Tip};
 
 /// What gives a value a pack reads, as satz matched the read against the estate: the
 /// group the expander lists it under.
@@ -176,6 +176,62 @@ fn badge(state: PackState, local: bool) -> Option<(&'static str, bool)> {
         PackState::NotChecked => Some(("Not checked", false)),
         PackState::Own | PackState::Current | PackState::Available => None,
     }
+}
+
+/// What the badge a pack's state earns means, as its tooltip says it.
+fn badge_tip(state: PackState, local: bool) -> &'static str {
+    match state {
+        PackState::Behind => {
+            "The pack source has a newer version of this pack than the one in this estate's packs folder. Update takes it; a pack edited here is compared first."
+        }
+        PackState::Edited => {
+            "The copy in this estate's packs folder differs from the version it was fetched as: it was changed here. An update shows the difference before it replaces anything."
+        }
+        PackState::Gone => {
+            "The pack source no longer has this pack. The copy in this estate's packs folder stays as it is and gets no updates."
+        }
+        PackState::NotChecked if local => {
+            "The copy in this estate's packs folder is the one fetched; this list read no pack source, so whether the source has a newer version is not known. Choose a source to compare."
+        }
+        PackState::NotChecked => {
+            "Whether the pack source has a newer version of this pack was not checked."
+        }
+        PackState::Own | PackState::Current | PackState::Available => "",
+    }
+}
+
+/// What "Unmet read" means for this pack: each value it reads from an interface folder
+/// that the estate does not give, by the param it would fill, and what makes the pack
+/// usable — the estate setting that param itself, or using an interface folder that
+/// exports the value.
+pub fn unmet_tip(row: &WorkloadPackRow) -> String {
+    let unmet: Vec<String> = row
+        .reads
+        .iter()
+        .filter(|r| r.unmet())
+        .map(|r| match &r.param {
+            Some(p) => format!("`{}` (for `{p}`)", r.value),
+            None => format!("`{}`", r.value),
+        })
+        .collect();
+    let params: Vec<String> = row
+        .reads
+        .iter()
+        .filter(|r| r.unmet())
+        .filter_map(|r| r.param.as_ref().map(|p| format!("`{p}`")))
+        .collect();
+    let fix = if params.is_empty() {
+        "use an interface folder that exports it".to_string()
+    } else {
+        format!(
+            "set {} in this estate's params, or use an interface folder that exports it",
+            params.join(", ")
+        )
+    };
+    format!(
+        "This pack reads {} from an interface folder, and no interface folder this estate uses exports it. Used here, the transpile refuses it until you {fix}. The arrows list each value and why.",
+        unmet.join(", ")
+    )
 }
 
 /// The Lucide icon of the badge a pack's state earns, `size` pixels square.
@@ -675,15 +731,19 @@ fn PackLine(
                 if let Some(s) = state
                     && let Some((word, error)) = badge(s, local)
                 {
-                    Badge { variant: if error { BadgeVariant::Destructive } else { BadgeVariant::Outline },
-                        {badge_icon(s, local, 12)}
-                        "{word}"
+                    Tip { text: badge_tip(s, local).to_string(),
+                        Badge { variant: if error { BadgeVariant::Destructive } else { BadgeVariant::Outline },
+                            {badge_icon(s, local, 12)}
+                            "{word}"
+                        }
                     }
                 }
-                if unmet {
-                    Badge { variant: BadgeVariant::Destructive,
-                        TriangleAlert { size: 12 }
-                        "Unmet read"
+                if unmet && let Some(row) = &row {
+                    Tip { text: unmet_tip(row),
+                        Badge { variant: BadgeVariant::Destructive,
+                            TriangleAlert { size: 12 }
+                            "Unmet read"
+                        }
                     }
                 }
                 if let Some((into, out)) = row.as_ref().map(flow_counts) {
@@ -1045,6 +1105,59 @@ mod tests {
             met_by: met_by.iter().map(|f| f.to_string()).collect(),
             unmet_reason: reason.map(str::to_string),
             description: description.map(str::to_string),
+        }
+    }
+
+    /// "Unmet read" says which value is not given, for which param, and how the estate
+    /// gives it; a read the estate gives or binds is not named.
+    #[test]
+    fn the_unmet_read_tip_names_the_value_the_param_and_the_way_out() {
+        let mut r = row(PackState::Available, Some("1.0"), None);
+        r.reads = vec![
+            read(
+                (None, "delegated_folder"),
+                Some("workload_project_parent"),
+                false,
+                &[],
+                Some("no used interface folder has a value `delegated_folder`"),
+                None,
+            ),
+            read(
+                (None, "project_id"),
+                Some("rag_project_id"),
+                true,
+                &[],
+                None,
+                None,
+            ),
+        ];
+        let tip = unmet_tip(&r);
+        assert!(
+            tip.contains("`delegated_folder` (for `workload_project_parent`)"),
+            "{tip}"
+        );
+        assert!(
+            tip.contains("set `workload_project_parent` in this estate's params"),
+            "{tip}"
+        );
+        assert!(!tip.contains("rag_project_id"), "{tip}");
+        // every badge a state earns has a tooltip, and a state with no badge has none
+        for s in [
+            PackState::Behind,
+            PackState::Edited,
+            PackState::Gone,
+            PackState::NotChecked,
+            PackState::Own,
+            PackState::Current,
+            PackState::Available,
+        ] {
+            for local in [true, false] {
+                assert_eq!(
+                    badge(s, local).is_some(),
+                    !badge_tip(s, local).is_empty(),
+                    "{s:?} {local}"
+                );
+            }
         }
     }
 

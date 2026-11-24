@@ -399,7 +399,7 @@ pub fn PresetsView() -> Element {
                     h2 { class: "map__section-title", "Not in the pack graph" }
                     div { class: "map__cards",
                         for u in unmanaged {
-                            Card { key: "{u.path}-{u.at_line}", class: "pack-card",
+                            Card { key: "{u.path}-{u.at_line}",
                                 CardHeader {
                                     div { class: "pack-card__head",
                                         Unplug { size: 20 }
@@ -621,7 +621,7 @@ fn PackCard(
     let switchable = row.role == PackRole::Pack && row.by_hand.is_none();
     let path = row.path.clone();
     rsx! {
-        Card { class: "pack-card",
+        Card {
             CardHeader {
                 div { class: "pack-card__head",
                     Puzzle { size: 20 }
