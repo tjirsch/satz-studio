@@ -12,9 +12,9 @@ use crate::components::item::{
 };
 use crate::state::{AppStore, AppStoreStoreExt, DiagnosticSelection, EstateStoreStoreExt, View};
 
-/// The bottom drawer, Findings: the open estate's findings, those of the pack the
+/// The bottom drawer, Messages: the open estate's messages, those of the pack the
 /// palette's pack review judged, and the errors the window reported (ADR 0036), grouped by
-/// severity, each with its `file:line`, its source, and — for one of satz's findings — a
+/// severity, each with its `file:line`, its source, and — for one of satz's messages — a
 /// badge naming the check that raised it; clicking one sets [`DiagnosticSelection`], shows
 /// its full text when it has more than one line, and opens the destination where its line
 /// is ([`destination`]).
@@ -41,14 +41,14 @@ pub fn DiagnosticsDrawer() -> Element {
     let selected = (selection.0)();
 
     rsx! {
-        section { class: "drawer", class: if open { "drawer--open" }, "aria-label": "findings",
+        section { class: "drawer", class: if open { "drawer--open" }, "aria-label": "messages",
             header { class: "drawer__header", onclick: move |_| app.drawer_open().toggle(),
                 if open {
                     ChevronDown { size: 16 }
                 } else {
                     ChevronUp { size: 16 }
                 }
-                span { class: "drawer__title", "Findings" }
+                span { class: "drawer__title", "Messages" }
                 Badge { variant: if errors > 0 { BadgeVariant::Destructive } else { BadgeVariant::Outline },
                     CircleAlert { size: 12 }
                     "{errors} errors"
@@ -65,7 +65,7 @@ pub fn DiagnosticsDrawer() -> Element {
             if open {
                 div { class: "drawer__body",
                     if diagnostics.is_empty() {
-                        p { class: "drawer__empty", "No findings." }
+                        p { class: "drawer__empty", "No messages." }
                     }
                     if !window_errors.is_empty() {
                         div { class: "drawer__actions",
@@ -78,7 +78,7 @@ pub fn DiagnosticsDrawer() -> Element {
                             }
                         }
                     }
-                    for (severity, title) in [(Severity::Error, "Errors"), (Severity::Warning, "Warnings"), (Severity::Info, "Info")] {
+                    for (severity, title) in [(Severity::Error, "Errors"), (Severity::Warning, "Warnings"), (Severity::Info, "Notes")] {
                         {
                             let group: Vec<Diagnostic> = diagnostics.iter().filter(|d| d.severity == severity).cloned().collect();
                             let base = base.clone();
@@ -146,8 +146,8 @@ pub fn DiagnosticsDrawer() -> Element {
     }
 }
 
-/// The window's errors the drawer lists, newest first: each one no finding of the estate
-/// or the review already carries — a write satz refused is both a finding and the
+/// The window's errors the drawer lists, newest first: each one no message of the estate
+/// or the review already carries — a write satz refused is both a message and the
 /// window's error, with one text.
 pub fn reported(findings: &[Diagnostic], errors: &[Diagnostic]) -> Vec<Diagnostic> {
     errors
@@ -158,7 +158,7 @@ pub fn reported(findings: &[Diagnostic], errors: &[Diagnostic]) -> Vec<Diagnosti
         .collect()
 }
 
-/// Where a click on a finding takes the window.
+/// Where a click on a message takes the window.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Go {
     /// a destination
@@ -167,7 +167,7 @@ pub enum Go {
     Review,
 }
 
-/// Where a click on `d` takes the window: a line of the main file is in Estate; a finding
+/// Where a click on `d` takes the window: a line of the main file is in Estate; a message
 /// about the reviewed pack is in the palette's pack review, which shows the pack's text
 /// with the line marked; anything else stays where it is.
 pub fn destination(d: &Diagnostic, main: Option<&Path>, reviewed: Option<&Path>) -> Option<Go> {
@@ -215,7 +215,7 @@ fn location(d: &Diagnostic, base: Option<&Path>) -> String {
 mod tests {
     use super::*;
 
-    /// The window's errors stand newest first, and one whose text a finding already
+    /// The window's errors stand newest first, and one whose text a message already
     /// carries is not listed twice.
     #[test]
     fn the_windows_errors_are_listed_newest_first_and_once() {
@@ -274,7 +274,7 @@ mod tests {
             ),
             Some(Go::Review)
         );
-        // a finding about the whole pack still stands in the review
+        // a message about the whole pack still stands in the review
         assert_eq!(
             destination(
                 &at("/home/packs/team-access.satz", None),

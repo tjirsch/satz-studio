@@ -227,8 +227,8 @@ fn flat_sections(
     out
 }
 
-/// Each of the transpile's findings about `row`, with the command that answers it where
-/// satz names one: the sentences are the row's, the commands the report's findings whose
+/// Each of the transpile's messages about `row`, with the command that answers it where
+/// satz names one: the sentences are the row's, the commands the report's messages whose
 /// subject is the pack.
 pub fn row_findings(report: &PacksReport, row: &PackRow) -> Vec<(String, Option<String>)> {
     row.findings
@@ -244,7 +244,7 @@ pub fn row_findings(report: &PacksReport, row: &PackRow) -> Vec<(String, Option<
         .collect()
 }
 
-/// The report's findings about no pack it has a row for: they have no card to stand on.
+/// The report's messages about no pack it has a row for: they have no card to stand on.
 pub fn loose_findings(report: &PacksReport) -> Vec<Finding> {
     report
         .findings
@@ -536,10 +536,10 @@ fn line_badge(row: &PackRow) -> Element {
 /// sentence for `ungated` and for `misplaced`, `None` for every other state, which the
 /// badge says in full.
 ///
-/// satz says this itself where it can — the `ungated-pack` finding, which the card shows
+/// satz says this itself where it can — the `ungated-pack` message, which the card shows
 /// with satz's own `fix:` — and it can only where the file declaring the gate is switched on, so
 /// an estate with the map off hears nothing about a line no answer switches off. This is
-/// what the card says then: a row that carries a finding of its own has none, because
+/// what the card says then: a row that carries a message of its own has none, because
 /// satz's wording wins wherever satz speaks.
 fn line_note(row: &PackRow) -> Option<String> {
     if !row.findings.is_empty() {

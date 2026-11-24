@@ -3,8 +3,8 @@
 //! places a reviewed pack goes.
 //!
 //! The rules are satz's; the view runs the command ([`EstateAction::ReviewPack`]) and
-//! shows what it said: the verdict, what the pack creates, each finding — clickable, and
-//! in the drawer at its line — and the pack's own text with the chosen finding's line
+//! shows what it said: the verdict, what the pack creates, each message — clickable, and
+//! in the drawer at its line — and the pack's own text with the chosen message's line
 //! marked. Then the two destinations. **Upstream** is a pull request to the satz
 //! repository, by hand until satz ships `contribute-pack`: the card says what it takes and
 //! offers the file's path and folder, and automates nothing. **Private** places the
@@ -57,8 +57,8 @@ fn choose_and_review(handle: Coroutine<EstateAction>, start: PathBuf, against: b
     });
 }
 
-/// The line the drawer's selection marks in the pack's text: the selected finding's
-/// line, when it is a finding about this pack.
+/// The line the drawer's selection marks in the pack's text: the selected message's
+/// line, when it is a message about this pack.
 pub fn marked_line(selected: Option<&Diagnostic>, pack: &Path) -> Option<u32> {
     selected
         .filter(|d| d.file.as_deref() == Some(pack))
@@ -82,7 +82,7 @@ pub fn PackReviewCard() -> Element {
         .and_then(|r| r.pack().parent().map(Path::to_path_buf))
         .unwrap_or_else(|| presets.clone());
 
-    // A finding picked in the drawer or in the list scrolls its line of the text into view.
+    // A message picked in the drawer or in the list scrolls its line of the text into view.
     // The review is peeked: a new review must not scroll to a line the reader left.
     use_effect(move || {
         let picked = (selection.0)();
@@ -127,7 +127,7 @@ pub fn PackReviewCard() -> Element {
                 p { class: "review__lead",
                     "satz review-preset holds a pack to the library's own bar: it parses, it is formatted, its header says what it is, its version has a changelog row, it declares no membership, it runs no legacy constraint beside its managed replacement, every type it creates has a prerequisite row, and it transpiles. The pack is folded into an estate made of the documented example values, or into "
                     code { "{open.name}" }
-                    " with the switch on — for a pack that estate uses. Each finding is in the drawer at its line."
+                    " with the switch on — for a pack that estate uses. Each message is in the Messages drawer at its line."
                 }
                 if reviewing {
                     Progress { value: None::<f64>, "aria-label": "working" }
@@ -163,7 +163,7 @@ pub fn PackReviewCard() -> Element {
     }
 }
 
-/// A review satz answered: the verdict, the findings, the text, the two destinations.
+/// A review satz answered: the verdict, the messages, the text, the two destinations.
 #[component]
 fn Reviewed(reviewed: ReviewedPack, presets: PathBuf, reviewing: bool) -> Element {
     let handle = use_coroutine_handle::<EstateAction>();

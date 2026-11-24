@@ -1,7 +1,7 @@
 //! The pack rows and the edges between them are satz's: the model's pack report, read
 //! over the session as the app's reload reads it (`satz_presets`), equals what
 //! `satz presets <estate> --format json` writes for the same estate — every row, every
-//! requirement and dependent, every `use` the graph does not know, every finding. The
+//! requirement and dependent, every `use` the graph does not know, every message. The
 //! estates are the skeleton `satz interview --create` writes, as written and interviewed
 //! with the map and two packs on, so a pin bump that changes the graph is checked here
 //! without anyone naming it.
@@ -30,7 +30,7 @@ async fn cli_report(estate: &support::Estate, main: &Path) -> PacksReport {
         .unwrap()
 }
 
-/// A finding without the half that names the estate as typed: the CLI names the file it
+/// A message without the half that names the estate as typed: the CLI names the file it
 /// was given and the server the estate it opened.
 fn judged(findings: &[Finding]) -> Vec<(String, Option<String>, String, Option<u32>)> {
     findings

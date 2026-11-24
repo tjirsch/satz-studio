@@ -345,7 +345,7 @@ pub struct ImportReport {
     /// `--customer-shortname` answers on the next run.
     pub not_derivable: Vec<String>,
     /// `import: skipped N resource(s):` and every line under it — the counts, the
-    /// reasons, and the levers satz names. A skipped resource is a finding, so this is
+    /// reasons, and the levers satz names. A skipped resource is a message, so this is
     /// its own section rather than the tail of a log.
     pub skipped: Vec<String>,
     /// the files satz wrote, with what to do next
@@ -431,7 +431,7 @@ fn is_loss(trimmed: &str) -> bool {
             || trimmed.contains(" asset type(s) Cloud Asset Inventory does not serve"))
 }
 
-/// A stderr line satz marks as its own: a finding, or a part of the report it printed
+/// A stderr line satz marks as its own: a message, or a part of the report it printed
 /// there rather than on stdout.
 fn claimed_on_stderr(text: &str) -> bool {
     let trimmed = text.trim_start();
@@ -961,7 +961,7 @@ mod tests {
         );
     }
 
-    /// The state shape's report, same run: a `warning:` on stderr is a finding, the
+    /// The state shape's report, same run: a `warning:` on stderr is a message, the
     /// params satz could not derive are their own worklist, and the skipped resources
     /// keep their heading, their reasons and the levers together.
     #[test]

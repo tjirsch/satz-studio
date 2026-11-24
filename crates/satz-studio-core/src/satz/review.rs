@@ -1,7 +1,7 @@
 //! `satz review-preset` and the two places a reviewed pack goes.
 //!
 //! The rules a pack is held to are satz's (`vendor/satz/src/review_pack.rs`): the app
-//! runs the command, types its report ([`PackReview`]) and shows each finding at its
+//! runs the command, types its report ([`PackReview`]) and shows each message at its
 //! line. It runs the CLI, `satz --config <estate dir> review-preset <pack> --format json`,
 //! and not the `satz_review_preset` tool: `satz mcp` confines every path to the estate's
 //! root, and a pack under review is usually a file its author keeps elsewhere — placing
@@ -30,7 +30,7 @@ use crate::diag::{DiagSource, Diagnostic, plain};
 use crate::edit::{CheckFailure, Checker, sha256_hex};
 use crate::satz::reports::CompileSummary;
 
-/// The name the findings of a review carry in the drawer: `satz review-preset`.
+/// The name the messages of a review carry in the drawer: `satz review-preset`.
 pub const COMMAND: &str = "review-preset";
 
 /// A pack, the bytes the review judged, and what satz said about them.
@@ -47,7 +47,7 @@ pub struct ReviewedPack {
 }
 
 impl ReviewedPack {
-    /// Every finding as a finding at its `file:line`, from `satz review-preset`.
+    /// Every message as a message at its `file:line`, from `satz review-preset`.
     pub fn diagnostics(&self) -> Vec<Diagnostic> {
         diagnostics(&self.path, &self.review)
     }
@@ -86,7 +86,7 @@ pub async fn review(
     pack: &Path,
     against: Option<&Path>,
 ) -> Result<ReviewedPack, SatzError> {
-    // satz names the pack by its canonical path in every finding, so the review keeps
+    // satz names the pack by its canonical path in every message, so the review keeps
     // that form: a pack reached through a symlinked directory (`/tmp` on macOS) is one
     // file to the drawer, the view and satz alike
     let path = std::fs::canonicalize(pack)
@@ -136,7 +136,7 @@ fn read_text(path: &Path) -> Result<String, SatzError> {
     })
 }
 
-/// Each finding at the file and line it names. satz names the pack by its absolute path;
+/// Each message at the file and line it names. satz names the pack by its absolute path;
 /// a relative one resolves against the pack's directory.
 pub fn diagnostics(pack: &Path, review: &PackReview) -> Vec<Diagnostic> {
     let base = pack.parent().unwrap_or(Path::new("."));
@@ -329,7 +329,7 @@ mod tests {
         );
     }
 
-    /// Every finding of the recorded review is a finding in the pack's file, at the
+    /// Every message of the recorded review is a message in the pack's file, at the
     /// line satz named where it named one, from `satz review-preset`.
     #[test]
     fn the_findings_are_diagnostics_at_file_and_line() {

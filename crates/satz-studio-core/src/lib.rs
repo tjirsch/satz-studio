@@ -21,7 +21,7 @@
 //!   ([`satz::mcp_config`]). satz-studio runs no model (ADR 0020).
 //! - [`editor`] — the file a pack's author edits, opened in the Editor setting's command
 //!   or the system's text editor.
-//! - [`settings`] and [`diag`] — the settings file and the one finding type.
+//! - [`settings`] and [`diag`] — the settings file and the one message type.
 //!
 //! The public surface of every module is the contract between the crates and the
 //! views (see `docs/architecture.md`).

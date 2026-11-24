@@ -333,7 +333,7 @@ mod tests {
             "{said}"
         );
 
-        // once satz has updated to it, the same finding offers nothing
+        // once satz has updated to it, the same message offers nothing
         assert_eq!(satz_available(Some(&found), Some(&newer)), None);
 
         let latest = Ok(SatzRelease::Latest {

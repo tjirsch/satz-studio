@@ -321,7 +321,7 @@ pub enum PublishRefusal {
     /// the source's folder holds another file of that id: `--force` copies over `file`
     Exists { file: String },
     /// the pack does not clear `review-pack`'s bar: one line per error, and the command
-    /// satz names that lists every finding
+    /// satz names that lists every message
     Bar {
         lines: Vec<String>,
         command: Option<String>,

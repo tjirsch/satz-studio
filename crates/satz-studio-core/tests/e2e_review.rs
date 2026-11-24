@@ -1,8 +1,8 @@
 //! `satz review-preset` end to end with the installed satz, the way the Packs view runs it:
 //! the CLI with the estate's directory as `--config`, over an estate the smoke matrix's
 //! answers complete. A pack of satz's own library clears the bar; the broken fixture
-//! (`tests/fixtures/review/team-access.satz`) does not, and each of its findings is a
-//! finding at a line of the pack's own text. The private destination then places the
+//! (`tests/fixtures/review/team-access.satz`) does not, and each of its messages is a
+//! message at a line of the pack's own text. The private destination then places the
 //! reviewed bytes as `<stem>.local.satz` with the estate checked over the session, and
 //! refuses a second placement over other text. The library it places into is a scratch
 //! directory: the estate's own `presets_dir` is `vendor/satz/presets`, which no test

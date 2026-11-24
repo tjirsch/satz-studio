@@ -75,7 +75,7 @@ when nothing is owed, the count of items otherwise — and opens the Overview;
 every satz command the app runs is one keystroke away in the commands palette (⌘K,
 Ctrl+K on Windows and Linux, or that footer button). The palette also holds "Review a
 pack for the preset library": a pack you wrote judged against the library's own bar with
-`satz review-preset` — each finding in the Findings drawer at its line — then placed in
+`satz review-preset` — each message in the Messages drawer at its line — then placed in
 the estate's library as a `.local.satz` or handed upstream by a pull request. What a command prints lands in the
 log in the form satz writes for a person — text, or markdown for the evidence report;
 `json` is a format you pick when you want the file. **Packs**, for every estate, are workload packs: templates taken from a source and adapted
@@ -167,7 +167,7 @@ it for later. The estate says a notice has been dealt with by binding its param,
 is what "I ran it" writes and what `satz adopt --execute --import` writes itself — run
 from the dialog, it is satz's own writer under the same guard as an answer: the file is
 recorded before, checked after, and put back if either refuses; until
-then the notice stands on the Overview, in the Findings drawer, and — for a notice
+then the notice stands on the Overview, in the Messages drawer, and — for a notice
 that holds them up — in front of apply and bootstrap, which satz refuses.
 
 ## What it needs
@@ -249,7 +249,7 @@ the suite needs a network or a sign-in.
 |---|---|
 | `Cargo.toml` | the workspace: two crates, `vendor` excluded, every dependency pinned once under `[workspace.dependencies]` |
 | `release.toml` | cargo-release: the version bump, the commit, the tag `vX.Y.Z` and the push, in one step on `main` |
-| `crates/satz-studio-core/` | the headless half: the estate directory, the document layer, the edit primitives and the write discipline, the provider schema and the view model, the satz driver (binary, CLI, `satz mcp` session, the configuration `satz mcp-config` prints), the agentic client it starts, settings, findings. No GUI dependency; tested on every runner |
+| `crates/satz-studio-core/` | the headless half: the estate directory, the document layer, the edit primitives and the write discipline, the provider schema and the view model, the satz driver (binary, CLI, `satz mcp` session, the configuration `satz mcp-config` prints), the agentic client it starts, settings, messages. No GUI dependency; tested on every runner |
 | `crates/satz-studio/` | the Dioxus 0.7 desktop binary `satz-studio`: the window, the views, the Dioxus component library's components and theme, and the layout stylesheet |
 | `vendor/satz/` | git submodule, pinned to a satz release tag. **The one pin:** satz-core as a path dependency, the presets, the smoke estates and the provider-schema fixture all come from this checkout |
 | `vendor/satz-tree-sitter/` | the generated tree-sitter parser for Satz (`src/`), copied from the grammar repository at the commit named in `COMMIT`; `scripts/sync-grammar.sh` refreshes it and `crates/satz-studio-core/build.rs` builds it |

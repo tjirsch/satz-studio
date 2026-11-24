@@ -1,5 +1,5 @@
 //! The shell around every view: the sidebar, the top bar, the satz banner, the path bar
-//! at the foot of a step, the Findings drawer and the toasts. While an estate is open the whole
+//! at the foot of a step, the Messages drawer and the toasts. While an estate is open the whole
 //! frame sits inside [`EstateHost`], which owns that estate's coroutine, so every part
 //! of the shell can reach it through `try_use_context::<Coroutine<EstateAction>>()`.
 

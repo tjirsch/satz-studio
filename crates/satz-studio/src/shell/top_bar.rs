@@ -95,8 +95,8 @@ pub fn TopBar() -> Element {
                 }
                 Button {
                     variant: if drawer_open { ButtonVariant::Secondary } else { ButtonVariant::Ghost },
-                    title: "Findings",
-                    "aria-label": "Findings",
+                    title: "Messages",
+                    "aria-label": "Messages",
                     "aria-pressed": if drawer_open { "true" } else { "false" },
                     onclick: move |_| app.drawer_open().toggle(),
                     SearchCheck { size: 16 }

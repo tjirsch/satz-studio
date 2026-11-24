@@ -93,7 +93,7 @@ pub enum EstateAction {
     /// `satz_merge_presets`: the line for a pack the library gained
     MergePresets,
     /// `satz --config <dir> review-preset <pack> [--against <estate>]`: the pack judged
-    /// against the library's bar, its findings into the drawer at their lines
+    /// against the library's bar, its messages into the drawer at their lines
     ReviewPack {
         pack: PathBuf,
         against: bool,
@@ -101,7 +101,7 @@ pub enum EstateAction {
     /// the reviewed bytes into the estate's `presets_dir` as `<stem>.local.satz`, the
     /// estate checked with it there, then the placed file reviewed where it now stands
     PlacePrivate,
-    /// the review closed: its card and its findings leave the window
+    /// the review closed: its card and its messages leave the window
     CloseReview,
     /// a workload-pack command on the estate's `packs_dir`: `satz packs`, `get-pack`,
     /// `update-pack`, `detach-pack` or `publish-pack`, then the list read again from the
@@ -360,7 +360,7 @@ impl RunningCommand {
 /// What a write hands the reload that follows it.
 #[derive(Debug, Default)]
 struct Carried {
-    /// what the check of the write said — the findings of a check that passed, or the
+    /// what the check of the write said — the messages of a check that passed, or the
     /// refusal's own — which the reload keeps instead of running the check again
     checked: Vec<Diagnostic>,
     /// a call that did not land — satz refused, the call ended without a result, or the
@@ -635,7 +635,7 @@ async fn write_prerequisites(session: &Arc<EstateSession>, app: Store<AppStore>)
 
 /// The app's writer: open, apply in memory, commit through the temp file and the
 /// check. An edit the document layer refuses wrote nothing; a commit the check
-/// refuses leaves the file as it was and its findings in the drawer.
+/// refuses leaves the file as it was and its messages in the drawer.
 async fn commit_edit(session: &Arc<EstateSession>, app: Store<AppStore>, edit: Edit) {
     let carried = {
         let _lock = session.write_lock().await;
@@ -676,7 +676,7 @@ async fn commit_edit(session: &Arc<EstateSession>, app: Store<AppStore>, edit: E
     reload_with(session, app, Carried::checked(carried)).await;
 }
 
-/// The findings of a check that passed, to carry through the reload: a
+/// The messages of a check that passed, to carry through the reload: a
 /// warning the transpile raised — a required argument the provider wants, a pack the
 /// estate asks for and does not use — belongs in the drawer at its line, beside the
 /// write that landed.
@@ -694,8 +694,8 @@ fn carried_findings(committed: &Committed) -> Vec<Diagnostic> {
         .collect()
 }
 
-/// A commit that did not land, as a toast, and the findings to carry through the
-/// reload: a check refusal names its first line and keeps every finding; a file
+/// A commit that did not land, as a toast, and the messages to carry through the
+/// reload: a check refusal names its first line and keeps every message; a file
 /// that changed under the edit says so and is reloaded, nothing kept.
 fn rolled_back(app: Store<AppStore>, e: CommitError) -> Vec<Diagnostic> {
     match e {
@@ -1008,7 +1008,7 @@ fn last_line(text: &str, command: &str) -> String {
 }
 
 /// The outcome under the log after a delegated write: a call that did not land is its
-/// message; a check that refused — an error among the findings carried, since a check that
+/// message; a check that refused — an error among the messages carried, since a check that
 /// passed carries warnings and infos alone — put the bytes back; otherwise the write landed
 /// and the check passed.
 fn delegated_outcome(carried: &Carried, command: &str) -> CommandOutcome {
@@ -1269,7 +1269,7 @@ fn merge_outcome(report: &MergeReport) -> CommandOutcome {
 
 /// `satz review-preset` with the estate's config, through the CLI: the MCP tool is confined
 /// to the estate's root, and a pack under review usually lives outside it. The review
-/// replaces the last one; its findings join the drawer, which opens on a review that has
+/// replaces the last one; its messages join the drawer, which opens on a review that has
 /// something to say above an info, and the verdict is a toast. A review that failed —
 /// satz could not run, or answered in a shape the app does not read — keeps the pack's
 /// path and satz's reason in the view.
@@ -1719,8 +1719,8 @@ fn source_changed(app: Store<AppStore>, name: &str, said: Result<String, SatzErr
     }
 }
 
-/// `satz_transpile_check` on the estate as it stands: the findings of a transpile that
-/// passed, the findings of one that refused, or the one error of a checker that
+/// `satz_transpile_check` on the estate as it stands: the messages of a transpile that
+/// passed, the messages of one that refused, or the one error of a checker that
 /// could not run.
 async fn check(session: &Arc<EstateSession>) -> Vec<Diagnostic> {
     let checker = McpChecker {
@@ -1743,7 +1743,7 @@ async fn check(session: &Arc<EstateSession>) -> Vec<Diagnostic> {
 
 /// Questions and packs through the session, then the file, the params and the schema on
 /// a blocking thread, then the model, then the transpile's own check. Every failure is a
-/// finding and a toast; the model stays what it was. `carried` — what the write this
+/// message and a toast; the model stays what it was. `carried` — what the write this
 /// reload follows said — stays in the drawer, at its line in the file as it is: what the
 /// check already said, so the reload does not run it again, and a tool's refusal.
 async fn reload_with(session: &Arc<EstateSession>, app: Store<AppStore>, carried: Carried) {
@@ -1802,7 +1802,7 @@ async fn reload_with(session: &Arc<EstateSession>, app: Store<AppStore>, carried
 
     let main = session.main.clone();
     let dir = session.dir.clone();
-    // The error is boxed: a finding is a path, a message and a source, which is
+    // The error is boxed: a message is a path, a text and a source, which is
     // large enough that clippy refuses it as the `Err` of a `Result` returned by value.
     let parsed = tokio::task::spawn_blocking(move || {
         let text = std::fs::read_to_string(&main).map_err(|e| {
@@ -1997,7 +1997,7 @@ mod tests {
 
     /// The outcome under the log after a delegated write, as the notice's `satz adopt`
     /// sets it: a call that did not land is its message; an error among the carried
-    /// findings is the check's refusal with the bytes back; otherwise it landed.
+    /// messages is the check's refusal with the bytes back; otherwise it landed.
     #[test]
     fn a_delegated_writes_outcome_is_its_refusal_the_checks_or_that_it_landed() {
         let refused = Carried {

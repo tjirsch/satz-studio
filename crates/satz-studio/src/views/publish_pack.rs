@@ -184,7 +184,7 @@ pub fn PublishDialog(
                                     li { key: "{line}", "{line}" }
                                 }
                             }
-                            p { "The full list of findings comes from satz review-pack:" }
+                            p { "The full list of messages comes from satz review-pack:" }
                             if let Some(command) = command {
                                 pre { "{command}" }
                             }
