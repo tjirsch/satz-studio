@@ -1201,6 +1201,11 @@ pub struct RequestRow {
     /// list param sets none
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub defaults: BTreeMap<String, serde_json::Value>,
+    /// per field, the field of the same entry whose value an entry without it takes
+    /// (`defaults = { dead_letter = each.name }`); satz leaves the key out when the list
+    /// param sets none
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub field_defaults: BTreeMap<String, String>,
     pub file: String,
     pub line: usize,
 }

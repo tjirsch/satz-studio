@@ -1,17 +1,18 @@
 //! The shape an answer is typed in, held to the packs. Decisions picks an answer's field
-//! from `answer_kind` over the questions report, which carries the shape the pack
-//! declares each param with; a question that offers no value — a param every pack
-//! declares `none`, its shape another file's default or the question's `recommend` — is
-//! typed in that shape, so one address typed for a list of addresses is written as a list
-//! of one and never as a string that `tofu apply` refuses.
+//! from `answer_kind` over the questions report, which carries the shape of each param;
+//! a question that offers no value — a param every pack declares `none`, whose shape satz
+//! reads from where the param is read (its ADR 0108) — is typed in that shape, so one
+//! address typed for a list of addresses is written as a list of one and never as a
+//! string that `tofu apply` refuses.
 //!
 //! The sweep reads every question of every pack under `vendor/satz/presets`, finds the
-//! value its param is declared with in the pack's own text, and asserts that the field
-//! agrees with it: a list is a list of strings, a bool a bool, a number a number. It runs over one
-//! estate that uses every pack, through the installed satz and the model the app builds,
-//! so a pin bump that brings a pack with a new list param fails here, not in someone's
-//! apply. The declaration it reads is its own: satz's `shape` and this file's walk of the
-//! pack text are two readings of one fact, and the test is that they agree.
+//! value its param is declared with in the pack's own text — for a param no file gives a
+//! value, the shape satz reports — and asserts that the field agrees with it: a list is a
+//! list of strings, a bool a bool, a number a number. It runs over one estate that uses
+//! every pack, through the installed satz and the model the app builds, so a pin bump
+//! that brings a pack with a new list param fails here, not in someone's apply. Where a
+//! file gives a value, the declaration it reads is its own: satz's `shape` and this file's
+//! walk of the pack text are two readings of one fact, and the test is that they agree.
 
 #[path = "fixtures/e2e/support.rs"]
 mod support;
@@ -23,7 +24,9 @@ use satz_core::satz::{File, Value};
 use satz_studio_core::cst::Cst;
 use satz_studio_core::estate::EstateDir;
 use satz_studio_core::model::{EstateModel, ParamKind, SourceValue, answer_kind};
-use satz_studio_core::satz::reports::{PacksReport, QuestionKind, QuestionState, QuestionsReport};
+use satz_studio_core::satz::reports::{
+    PacksReport, QuestionKind, QuestionState, QuestionsReport, Shape,
+};
 use satz_studio_core::schema::ResourceRegistry;
 
 /// Every pack file under `vendor/satz/presets`, parsed, by the path a `use` names it with.
@@ -208,38 +211,44 @@ async fn every_question_of_every_pack_is_answered_in_the_shape_its_param_is_decl
         .iter()
         .filter(|q| q.kind == QuestionKind::Param)
     {
-        // the value a file gives it, else — every declaration `none` — the question's
-        // `recommend`, else text: the shape satz reads an answer in (its ADR 0106)
-        let recommend = || {
-            library[q.from.as_str()]
-                .questions
-                .iter()
-                .find(|d| d.subject == q.subject)
-                .and_then(|d| d.recommend.as_ref())
-        };
-        let shaped = match declaration(&q.subject, &q.from, &library, &order) {
-            Some((file, value)) => Some(followed(value, file, &library, &order)),
-            None => recommend(),
-        };
-        let want = match shaped.unwrap_or(&Value::Str(Vec::new())) {
-            Value::List(items) => {
-                lists.insert(q.subject.clone());
-                // a list field holds strings and sends strings, as `parse_answer` reads a
-                // list; a pack that declares a list of anything else needs a typed one
-                if let Some(item) = items.iter().find(|i| !matches!(i, Value::Str(_))) {
+        // the shape of the value a file gives it, read off the pack text; a param no file
+        // gives a value — every declaration `none` — has the shape satz reports, which it
+        // reads from where the param is read (satz ADR 0108), and the field is that shape
+        let want = match declaration(&q.subject, &q.from, &library, &order) {
+            Some((file, value)) => match followed(value, file, &library, &order) {
+                Value::List(items) => {
+                    // a list field holds strings and sends strings, as `parse_answer` reads
+                    // a list; a pack that declares a list of anything else needs a typed one
+                    if let Some(item) = items.iter().find(|i| !matches!(i, Value::Str(_))) {
+                        wrong.push(format!(
+                            "{} `{}`: declared a list holding {item:?}, and a list field sends strings",
+                            q.from, q.subject
+                        ));
+                    }
+                    ParamKind::List
+                }
+                Value::Bool(_) => ParamKind::Bool,
+                Value::Num(_) => ParamKind::Number,
+                Value::Str(_) | Value::Obj(_) => ParamKind::String,
+                Value::Ref(_) | Value::None => unreachable!("followed, and `none` skipped"),
+            },
+            None => match q.shape {
+                Some(Shape::List) => ParamKind::List,
+                Some(Shape::Bool) => ParamKind::Bool,
+                Some(Shape::Number) => ParamKind::Number,
+                Some(Shape::String) | None => ParamKind::String,
+                Some(Shape::Map) => {
                     wrong.push(format!(
-                        "{} `{}`: declared a list holding {item:?}, and a list field sends strings",
+                        "{} `{}`: declared `none` everywhere and read as a map, which has no field",
                         q.from, q.subject
                     ));
+                    continue;
                 }
-                ParamKind::List
-            }
-            Value::Bool(_) => ParamKind::Bool,
-            Value::Num(_) => ParamKind::Number,
-            Value::Str(_) | Value::Obj(_) => ParamKind::String,
-            // a recommendation that names a param reads as text; a declaration is followed
-            Value::Ref(_) | Value::None => ParamKind::String,
+            },
         };
+        if want == ParamKind::List {
+            lists.insert(q.subject.clone());
+        }
         // as the report has it, and as it would be with nothing offered — the path a
         // param takes the moment its default is not one satz can offer
         let mut offers_nothing = q.clone();

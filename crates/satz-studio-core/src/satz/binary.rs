@@ -12,13 +12,15 @@ use super::SatzError;
 /// The oldest satz this build works with; an older binary is refused. It may sit below the
 /// submodule's satz ([`SatzBinary::built_against`]), and rises only when a satz release
 /// breaks the app or the app starts using something a later satz introduced — a routine pin
-/// bump leaves it alone (ADR 0014). It is 0.111.0 because the merge report the app types
-/// carries what that release introduced: the counts and the outcomes of what the preset
-/// library dropped (`dropped_removed`, `dropped_forked`, `forks_kept`; satz's ADR 0103),
-/// which an older satz's report lacks and the app refuses — and the app reads `p = none`
-/// as a param with no value (satz's ADR 0106) and `locals { }` as a file's own values
-/// (satz's ADR 0105), which an older satz does not.
-pub const MIN_SATZ: &str = "0.111.0";
+/// bump leaves it alone (ADR 0014). It is 0.113.0 because the shape an answer is typed in
+/// is the one that release reports for a param no file gives a value: satz reads it from
+/// where the param is read (satz's ADR 0108), and before it such a list param was reported
+/// with no shape and answered as text. It also carries what 0.111.0 introduced: the merge
+/// report's counts of what the preset library dropped (`dropped_removed`, `dropped_forked`,
+/// `forks_kept`; satz's ADR 0103), which an older report lacks and the app refuses, `p =
+/// none` as a param with no value (satz's ADR 0106) and `locals { }` as a file's own values
+/// (satz's ADR 0105).
+pub const MIN_SATZ: &str = "0.113.0";
 
 /// The manifest of the submodule `vendor/satz`, whose version is the satz this build is
 /// built and tested against.

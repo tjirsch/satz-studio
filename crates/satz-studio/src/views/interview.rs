@@ -15,8 +15,9 @@
 //! "Show answered" on, every question is listed beside the card. Back, Skip and the filled
 //! button stand in a bar below the question, which scrolls above it. A typed answer's
 //! field has the shape `answer_kind` reads off the report — the shape the pack declares
-//! the param with, else the offered value's, else text — so a list that offers nothing is
-//! still a list.
+//! the param with — for a param every pack declares `none`, the shape satz reads from where
+//! it is read (satz's ADR 0108) — else the offered value's, else text, so a list that
+//! offers nothing is still a list.
 
 use dioxus::prelude::*;
 use dioxus_icons::lucide::{

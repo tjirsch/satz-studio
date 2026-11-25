@@ -76,7 +76,15 @@ async fn the_report_reads_what_the_estate_publishes_and_its_list_params() {
         .find(|r| r.param == "event_topics")
         .expect("the showcase declares the list param event_topics");
     assert_eq!(topics.key, "name");
-    assert_eq!(topics.fields, ["name", "retention", "subscription"]);
+    assert_eq!(
+        topics.fields,
+        ["name", "retention", "subscription", "dead_letter"]
+    );
+    // a field whose default is another field of the same entry
+    assert_eq!(
+        topics.field_defaults.get("dead_letter").map(String::as_str),
+        Some("name")
+    );
     assert_eq!(
         topics.patterns.get("name").map(String::as_str),
         Some("[a-z][a-z0-9-]*")
@@ -87,6 +95,6 @@ async fn the_report_reads_what_the_estate_publishes_and_its_list_params() {
     );
     assert_eq!(
         topics.fields_shown(),
-        "name ~ [a-z][a-z0-9-]*, retention ~ [0-9]+s, subscription"
+        "name ~ [a-z][a-z0-9-]*, retention ~ [0-9]+s, subscription, dead_letter ~ [a-z][a-z0-9-]*"
     );
 }

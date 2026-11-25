@@ -96,9 +96,9 @@ fn kind_of(value: &SourceValue) -> ParamKind {
 /// with, else the shape of the value the interview offers. A param its pack declares `[]`
 /// is a list, and one address typed for it is written as a list of one.
 ///
-/// A param with no shape and nothing offered — every declaration `none`, no other file's
-/// default and no `recommend` to read one off — is answered as text, as satz reads it
-/// (satz ADR 0106). `None` is no typed field: a map, which satz answers only by an edit
+/// A param every file declares `none` has the shape satz reads from where it is read
+/// (satz ADR 0108); one with no shape and nothing offered — read nowhere, with no
+/// `recommend` — is answered as text, as satz reads it. `None` is no typed field: a map, which satz answers only by an edit
 /// to the estate's params.
 pub fn answer_kind(q: &QuestionRow) -> Option<ParamKind> {
     match q.shape {
