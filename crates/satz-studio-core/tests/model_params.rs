@@ -51,7 +51,7 @@ async fn showcase_params_carry_their_questions_and_leave_the_gates_out() {
     let packs: PacksReport = json_report(&estate, "presets", "showcase.satz").await;
     let text = std::fs::read_to_string(&main).unwrap();
     let cst = Cst::parse(&text).unwrap();
-    let env = estate.params(&main).unwrap();
+    let env = estate.scope(&main).unwrap();
     let registry = ResourceRegistry::load_all(&estate.schema_dir()).unwrap();
     let m = EstateModel::build(
         &main,

@@ -198,7 +198,7 @@ pub(super) fn mode_of(value: &SourceValue) -> EditMode {
 fn needs_source(value: &SourceValue) -> bool {
     match value {
         SourceValue::Str { parts, .. } => parts.iter().any(|p| !matches!(p, StrPart::Lit(_))),
-        SourceValue::Num(_) | SourceValue::Bool(_) => false,
+        SourceValue::Num(_) | SourceValue::Bool(_) | SourceValue::None => false,
         SourceValue::Ref { .. } | SourceValue::Obj => true,
         SourceValue::List(items) => items.iter().any(needs_source),
     }

@@ -134,6 +134,7 @@ impl<'t> Builder<'t> {
             "header" => Ok(self.header(n)),
             "params" => self.params(n, NodeKind::Params),
             "inputs" => self.params(n, NodeKind::Inputs),
+            "locals" => self.params(n, NodeKind::Locals),
             "param" => self.entry(n, "name"),
             "attribute" => self.entry(n, "key"),
             "use_statement" => Ok(self.use_statement(n)),
@@ -192,7 +193,8 @@ impl<'t> Builder<'t> {
         id
     }
 
-    /// A `params { … }` or an `inputs { … }` block: the same shape, entries and trivia.
+    /// A `params { … }`, an `inputs { … }` or a `locals { … }` block: the same shape,
+    /// entries and trivia.
     fn params(&mut self, n: Ts<'_>, kind: NodeKind) -> Result<NodeId, CstError> {
         let id = self.push_at(kind, n);
         let mut out = Vec::new();

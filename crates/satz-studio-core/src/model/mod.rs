@@ -102,6 +102,11 @@ pub enum SourceValue {
     },
     List(Vec<SourceValue>),
     Obj,
+    /// `p = none` in `params { }`: the param is declared and the file gives it no value
+    /// (satz ADR 0106). An estate's `none` binds nothing — the question stays open and a
+    /// value must be provided. It stands nowhere else: read anywhere else, `none` is a
+    /// bare name
+    None,
 }
 
 #[derive(Debug, Clone, PartialEq)]

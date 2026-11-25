@@ -192,3 +192,47 @@ async fn a_check_that_passes_carries_its_warnings_through_both_checkers() {
     assert_eq!(b.findings, a.findings);
     std::fs::remove_file(&tmp).unwrap();
 }
+
+/// Two used packs that declare one param with different defaults are refused at the
+/// transpile (satz ADR 0104): both checkers return it as an error message of the pack
+/// that disagrees, naming the param, as they return any other refusal.
+#[tokio::test]
+async fn two_packs_that_disagree_on_a_default_are_a_refusal_like_any_other() {
+    let copy = support::copy_smoke();
+    std::fs::write(
+        copy.file("disagree-a.satz"),
+        "pack disagree_a version \"1.0\"\n\nparams {\n  twice_region = \"eu\"\n}\n",
+    )
+    .unwrap();
+    std::fs::write(
+        copy.file("disagree-b.satz"),
+        "pack disagree_b version \"1.0\"\n\nparams {\n  twice_region = \"us\"\n}\n",
+    )
+    .unwrap();
+    std::fs::write(
+        copy.file("twice.satz"),
+        "estate twice\n\nuse \"disagree-a.satz\"\nuse \"disagree-b.satz\"\n",
+    )
+    .unwrap();
+    let session = copy.open("twice.satz").await;
+    let (mcp, cli) = support::checkers(&session);
+    for (how, verdict) in [
+        ("mcp", support::within(mcp.check(&session.main)).await),
+        ("cli", support::within(cli.check(&session.main)).await),
+    ] {
+        let Err(CheckFailure::Refused(diags)) = verdict else {
+            panic!("{how}: not a refusal: {verdict:?}")
+        };
+        let d = diags
+            .iter()
+            .find(|d| d.message.contains("`twice_region`"))
+            .unwrap_or_else(|| panic!("{how}: no message names the param: {diags:?}"));
+        assert_eq!(d.severity, Severity::Error, "{how}");
+        assert!(
+            d.file
+                .as_deref()
+                .is_some_and(|f| f.ends_with("disagree-b.satz")),
+            "{how}: {d:?}"
+        );
+    }
+}

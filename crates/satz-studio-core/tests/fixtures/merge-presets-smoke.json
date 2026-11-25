@@ -2,12 +2,15 @@
   "attention": true,
   "counts": {
     "adopted_in_place": 0,
-    "artifacts_updated": 0,
-    "current": 98,
+    "artifacts_updated": 1,
+    "current": 112,
     "deferred": 0,
     "doc_only": 1,
+    "dropped_forked": 1,
+    "dropped_removed": 1,
     "fork_diffs_refreshed": 0,
     "forked_and_repointed": 1,
+    "forks_kept": 0,
     "installed": 1,
     "refused": 0,
     "skipped_edited": 0,
@@ -16,7 +19,17 @@
   "events": [
     {
       "action": "current",
+      "file": "CHANGELOG.md",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
       "file": "README.md",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "attach-points.yaml",
       "kind": "pack"
     },
     {
@@ -151,6 +164,26 @@
     },
     {
       "action": "current",
+      "file": "delegated-budget-role.satz",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "delegated-folders.satz",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "delegated-projects.satz",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "delegation.satz",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
       "file": "docs/CIS-GCP-Foundation-4.0.md",
       "kind": "pack"
     },
@@ -241,6 +274,26 @@
     },
     {
       "action": "current",
+      "file": "docs/delegated-budget-role.md",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "docs/delegated-folders.md",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "docs/delegated-projects.md",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "docs/delegation.md",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
       "file": "docs/dns-logging.md",
       "kind": "pack"
     },
@@ -262,6 +315,11 @@
     {
       "action": "current",
       "file": "docs/exemption-tag.md",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "docs/interface-notice.md",
       "kind": "pack"
     },
     {
@@ -321,11 +379,6 @@
     },
     {
       "action": "current",
-      "file": "docs/project-cis-log-alerts.md",
-      "kind": "pack"
-    },
-    {
-      "action": "current",
       "file": "docs/s1-security-groups.md",
       "kind": "pack"
     },
@@ -366,6 +419,11 @@
     },
     {
       "action": "current",
+      "file": "docs/shared-network.md",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
       "file": "docs/shielded-vm.md",
       "kind": "pack"
     },
@@ -380,12 +438,17 @@
       "kind": "pack"
     },
     {
+      "action": "artifact-updated",
+      "file": "dropped-files.txt",
+      "kind": "pack"
+    },
+    {
       "action": "forked-and-repointed",
       "diff": "presets/essential-contacts-organization.diff.satz",
       "file": "essential-contacts-organization.satz",
       "fork": "essential-contacts-organization.local.satz",
       "kind": "pack",
-      "versions": "1.4 -> 1.5"
+      "versions": "1.5 -> 1.6"
     },
     {
       "action": "current",
@@ -444,17 +507,27 @@
     },
     {
       "action": "current",
+      "file": "interface-lookups.yaml",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "interface-notice.satz",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "library-groups.txt",
+      "kind": "pack"
+    },
+    {
+      "action": "current",
       "file": "managed-constraint-equivalents.txt",
       "kind": "pack"
     },
     {
       "action": "current",
       "file": "monitoring/organization-audit-logsink.satz",
-      "kind": "pack"
-    },
-    {
-      "action": "current",
-      "file": "monitoring/organization-cis-log-alerts-central.satz",
       "kind": "pack"
     },
     {
@@ -521,6 +594,29 @@
       "action": "current",
       "file": "security-group-models/s2-security-groups.satz",
       "kind": "pack"
+    },
+    {
+      "action": "current",
+      "file": "shared-network.satz",
+      "kind": "pack"
+    },
+    {
+      "action": "dropped-removed",
+      "file": "docs/project-cis-log-alerts.md",
+      "kind": "pack",
+      "reason": "the preset library no longer carries it, and the estate does not use it"
+    },
+    {
+      "action": "dropped-forked",
+      "file": "monitoring/organization-cis-log-alerts-central.satz",
+      "fork": "monitoring/organization-cis-log-alerts-central.local.satz",
+      "kind": "pack",
+      "reason": "the preset library no longer carries monitoring/organization-cis-log-alerts-central.satz, so the fork is the estate's own file from now on"
+    },
+    {
+      "file": "notes.txt",
+      "kind": "warning",
+      "text": "not a file of the preset library, a fork (`.local.satz`) or an adoption delta (`.diff.satz`) \u2014 presets is satz's folder, and only forks and adoption deltas belong there beside the preset library. Move this file out; satz does not delete it"
     }
   ],
   "report_only": true

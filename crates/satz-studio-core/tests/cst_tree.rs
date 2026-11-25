@@ -11,6 +11,7 @@ fn label(kind: &NodeKind) -> String {
         NodeKind::Header { .. } => "Header".into(),
         NodeKind::Params => "Params".into(),
         NodeKind::Inputs => "Inputs".into(),
+        NodeKind::Locals => "Locals".into(),
         NodeKind::ParamEntry { .. } => "ParamEntry".into(),
         NodeKind::Use { .. } => "Use".into(),
         NodeKind::Block { .. } => "Block".into(),
@@ -575,4 +576,41 @@ fn a_condition_is_the_entrys_and_a_key_named_when_is_a_key() {
         })
         .unwrap();
     assert_eq!(cst.slice(span), "when not keep");
+}
+
+/// `locals { … }` (satz ADR 0105) is a node of its own with the entries of a params block:
+/// never a resource block, and `Cst::param` does not find a local value.
+#[test]
+fn a_locals_block_is_its_own_node_and_holds_no_param() {
+    let text = "estate x\n\nparams {\n  shortname = \"acme\"\n}\n\nlocals {\n  // the bucket's name\n  bucket = \"{shortname}-logs\"\n}\n";
+    let cst = Cst::parse(text).unwrap();
+    assert_eq!(cst.text(), text);
+    assert_eq!(labels(&cst, cst.root()), ["Header", "Params", "Locals"]);
+    let locals = cst
+        .nodes()
+        .find(|(_, n)| n.kind == NodeKind::Locals)
+        .map(|(id, _)| id)
+        .unwrap();
+    assert_eq!(labels(&cst, locals), ["Comment", "ParamEntry"]);
+    let entry = child(&cst, locals, 1);
+    let NodeKind::ParamEntry { name, value, .. } = cst.node(entry).kind else {
+        panic!("{:?}", cst.node(entry).kind)
+    };
+    assert_eq!(cst.slice(name), "bucket");
+    assert_eq!(cst.slice(cst.node(value).span), "\"{shortname}-logs\"");
+    assert!(cst.param("bucket").is_none(), "a local value is no param");
+    assert!(cst.param("shortname").is_some());
+}
+
+/// `p = none` (satz ADR 0106) is a bare identifier to the grammar: a reference node, which
+/// the model reads as a param with no value.
+#[test]
+fn none_is_a_reference_to_the_grammar() {
+    let cst = Cst::parse("pack p version \"1.0\"\n\nparams {\n  region = none\n}\n").unwrap();
+    let region = cst.param("region").unwrap();
+    let NodeKind::ParamEntry { value, .. } = cst.node(region).kind else {
+        panic!()
+    };
+    assert_eq!(cst.node(value).kind, NodeKind::Value(ValueKind::Ref));
+    assert_eq!(cst.slice(cst.node(value).span), "none");
 }

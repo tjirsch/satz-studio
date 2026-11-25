@@ -43,6 +43,14 @@ fn tags(value: &SourceValue) -> Element {
             code { "]" }
         },
         SourceValue::Obj => rsx! { code { "{{ … }}" } },
+        SourceValue::None => rsx! {
+            Tooltip {
+                TooltipTrigger {
+                    Badge { variant: BadgeVariant::Outline, "none" }
+                }
+                TooltipContent { "declared without a value: one must be provided" }
+            }
+        },
     }
 }
 

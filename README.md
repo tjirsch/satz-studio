@@ -49,7 +49,9 @@ every pack satz's pack graph offers, as the estate has it, the packs that need a
 hung below it, each switched on and off by satz's own `add-preset` and `remove-preset`;
 **Decisions**, the
 questions those packs declare and it has not answered; **Estate**, the file
-itself — its params, its resource tree, and the interfaces it publishes for other estates
+itself — its params (a param it declares `none` reads "no value — must be provided"
+until a value is typed in its place; its own `locals { }` values are not params and stay
+as the file writes them), its resource tree, and the interfaces it publishes for other estates
 to read, as `satz interfaces` reports them: the core exports every interface
 carries, then each interface with the interfaces it uses and its own exports, and —
 where its packs declare `entries` statements — its list params: each list param, the
@@ -112,7 +114,8 @@ would fill; or not given, with why — each with the description of the export t
 it and the param it fills with that param's question; and the outgoing values by
 interface, the core exports first, each with its description. A pack with a value this
 estate does not give is marked "Unmet read", so the list says before a fetch whether a
-pack fits. "Details" shows its params with their defaults and the questions that ask for
+pack fits. "Details" shows its params with their defaults — `none — must be provided` for one it
+declares without a value — and the questions that ask for
 them, and its list params. "New pack…" writes a pack of your own
 into `packs_dir`, adds its `use` line to the estate and opens it in the editor Settings →
 Editor names — a command line such as `zed` or `subl -n`, run with the file last — or,
@@ -172,7 +175,7 @@ that holds them up — in front of apply and bootstrap, which satz refuses.
 
 ## What it needs
 
-- **`satz` 0.110.1 or newer.** `MIN_SATZ` in `crates/satz-studio-core/src/satz/binary.rs`
+- **`satz` 0.113.0 or newer.** `MIN_SATZ` in `crates/satz-studio-core/src/satz/binary.rs`
   names the oldest satz this build works with. It rises when a satz release breaks the
   app or the app starts using something a later satz introduced, not with every satz
   release. Install satz with its installer or bring it up to date with `satz

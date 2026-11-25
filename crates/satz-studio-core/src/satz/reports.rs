@@ -65,10 +65,13 @@ pub struct QuestionRow {
     /// the estate's own value when answered
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub current: Option<serde_json::Value>,
-    /// the pack's default when unanswered and one exists — what an interview offers
+    /// the pack's default when unanswered and one exists — what an interview offers, `""`
+    /// and `[]` included. Absent when no file gives the param a value (every declaration
+    /// is `none`) and while the default is built from a param still unanswered
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub default: Option<serde_json::Value>,
-    /// unanswered and no usable default: a value has to be typed
+    /// unanswered and no usable default — a `none` param no other file gives a value: a
+    /// value has to be typed
     pub blocking: bool,
     /// the shape the pack declares the param with. Absent for a choice, which is
     /// answered by an option's name, and for a param whose declaration names no
@@ -85,8 +88,9 @@ pub struct QuestionRow {
     /// also answered [`NO_BRANCH`] — every option `false`
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub required: bool,
-    /// what an empty answer means, where the question says (`empty = "…"`): `""` is then
-    /// an answer — offered, accepted and counted — rather than one still to give
+    /// what an empty answer means, where the question says (`empty = "…"`), shown beside
+    /// `""` wherever the answer or the default is shown. `""` is an answer with it or
+    /// without it (satz ADR 0106)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub empty: Option<String>,
     /// the file that declared it
@@ -844,6 +848,15 @@ pub struct MergeCounts {
     pub deferred: usize,
     pub refused: usize,
     pub skipped_edited: usize,
+    /// a file the preset library no longer carries and the estate does not use, or the
+    /// adoption delta of one: removed (satz ADR 0103)
+    pub dropped_removed: usize,
+    /// a pack the preset library no longer carries and the estate uses: forked, the
+    /// estate repointed at the fork
+    pub dropped_forked: usize,
+    /// a fork whose original the preset library no longer carries: kept, the estate's
+    /// own file from now on
+    pub forks_kept: usize,
 }
 
 impl MergeReport {
@@ -867,8 +880,9 @@ impl MergeReport {
 
     /// What needs a person, in the words [`Self::lines`] prints them: each event that
     /// makes satz report `attention` — a pack forked, adopted, deferred, refused or
-    /// skipped as a local edit, a fork whose delta moved, a warning, prerequisites still
-    /// missing or not written. Empty when `attention` is false.
+    /// skipped as a local edit, a pack the preset library dropped and the estate uses,
+    /// forked, a fork whose delta moved, a warning, prerequisites still missing or not
+    /// written. Empty when `attention` is false.
     pub fn needs_you(&self) -> Vec<String> {
         if !self.attention {
             return Vec::new();
@@ -879,6 +893,7 @@ impl MergeReport {
                 MergeEvent::Pack { action, .. } => matches!(
                     action.as_str(),
                     "forked-and-repointed"
+                        | "dropped-forked"
                         | "fork-diff-refreshed"
                         | "adopted-in-place"
                         | "deferred"
@@ -893,6 +908,18 @@ impl MergeReport {
             })
             .flat_map(|e| self.event_lines(e))
             .filter(|l| !l.starts_with("prerequisite written"))
+            .collect()
+    }
+
+    /// satz's warnings, in the words [`Self::lines`] prints them — a pack whose content
+    /// changed without its version, a file in the presets folder that is not the preset
+    /// library's, a fork or an adoption delta. A warning alone does not set `attention`;
+    /// with it, the warnings are among [`Self::needs_you`].
+    pub fn warnings(&self) -> Vec<String> {
+        self.events
+            .iter()
+            .filter(|e| matches!(e, MergeEvent::Warning { .. }))
+            .flat_map(|e| self.event_lines(e))
             .collect()
     }
 
@@ -954,6 +981,28 @@ impl MergeReport {
                         "skipped-edited" => format!(
                             "{file} is skipped: it has upstream's version and other content, which is a local edit; name it to overwrite it"
                         ),
+                        "dropped-removed" => format!(
+                            "{} {file}: {}",
+                            verb("would remove", "removed"),
+                            reason
+                                .as_deref()
+                                .unwrap_or("the preset library no longer carries it")
+                        ),
+                        "dropped-forked" => format!(
+                            "{} {file} to {fork} and {} the estate at it: {}",
+                            verb("would fork", "forked"),
+                            verb("point", "pointed"),
+                            reason
+                                .as_deref()
+                                .unwrap_or("the preset library no longer carries it")
+                        ),
+                        "fork-kept" => format!(
+                            "{} {file}: {}",
+                            verb("would keep", "kept"),
+                            reason
+                                .as_deref()
+                                .unwrap_or("the preset library no longer carries its original")
+                        ),
                         other => format!("{file}: {}", other.replace('-', " ")),
                     };
                     out.push(line);
@@ -999,6 +1048,9 @@ impl MergeReport {
             (c.deferred, "deferred"),
             (c.refused, "refused"),
             (c.skipped_edited, "skipped as local edits"),
+            (c.dropped_removed, "dropped and removed"),
+            (c.dropped_forked, "dropped and forked"),
+            (c.forks_kept, "forks kept"),
             (c.current, "current"),
         ]
         .into_iter()
@@ -1149,6 +1201,11 @@ pub struct RequestRow {
     /// list param sets none
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub defaults: BTreeMap<String, serde_json::Value>,
+    /// per field, the field of the same entry whose value an entry without it takes
+    /// (`defaults = { dead_letter = each.name }`); satz leaves the key out when the list
+    /// param sets none
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub field_defaults: BTreeMap<String, String>,
     pub file: String,
     pub line: usize,
 }
@@ -1281,8 +1338,8 @@ pub struct WorkloadPackRow {
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct PackParam {
     pub name: String,
-    /// the value as the pack writes it, in Satz; none where it writes `""`, a value
-    /// nobody has given yet
+    /// the value as the pack writes it, in Satz (`""` and `[]` included); none where it
+    /// declares the param `none`, proposing no value
     pub default: Option<String>,
     /// the pack asks for it: a `question` names it, or an option of a `oneof` one does
     pub question: bool,
@@ -1809,14 +1866,18 @@ mod tests {
 
     /// `satz_merge_presets {report_only: true}` of satz's smoke estate, recorded from the
     /// release the app is tested against, over a pristine library in which upstream
-    /// added a file, moved a pack the estate uses to a new version and touched the
-    /// comments of one it does not use. The diff path is written relative.
+    /// added a file, moved a pack the estate uses to a new version, touched the comments
+    /// of one it does not use, and dropped a pack the estate uses and a document — both
+    /// named in its `dropped-files.txt` (satz ADR 0103) — with a file in the estate's
+    /// presets folder that is not the library's. Its paths are written relative.
     const MERGE: &str = include_str!("../../tests/fixtures/merge-presets-smoke.json");
 
     #[test]
     fn the_recorded_merge_report_round_trips() {
         let report: MergeReport = serde_json::from_str(MERGE).unwrap();
-        assert_eq!(report.counts.current, 98);
+        assert_eq!(report.counts.current, 112);
+        assert_eq!(report.counts.dropped_forked, 1);
+        assert_eq!(report.counts.dropped_removed, 1);
         let again: serde_json::Value = serde_json::to_value(&report).unwrap();
         let original: serde_json::Value = serde_json::from_str(MERGE).unwrap();
         assert_eq!(again, original);
@@ -1830,7 +1891,7 @@ mod tests {
         let lines = report.lines();
         assert!(
             lines.iter().any(|l| l
-                == "would fork essential-contacts-organization.satz to essential-contacts-organization.local.satz and point the estate at it (1.4 -> 1.5); the adoption delta is presets/essential-contacts-organization.diff.satz"),
+                == "would fork essential-contacts-organization.satz to essential-contacts-organization.local.satz and point the estate at it (1.5 -> 1.6); the adoption delta is presets/essential-contacts-organization.diff.satz"),
             "{lines:#?}"
         );
         assert!(
@@ -1843,12 +1904,42 @@ mod tests {
                 .any(|l| l == "would update cis/dns-logging.satz: comments and layout only"),
             "{lines:#?}"
         );
+        assert!(
+            lines.iter().any(|l| l
+                == "would remove docs/project-cis-log-alerts.md: the preset library no longer carries it, and the estate does not use it"),
+            "{lines:#?}"
+        );
+        assert!(
+            lines.iter().any(|l| l.starts_with(
+                "would fork monitoring/organization-cis-log-alerts-central.satz to monitoring/organization-cis-log-alerts-central.local.satz and point the estate at it: the preset library no longer carries"
+            )),
+            "{lines:#?}"
+        );
+        assert!(
+            lines
+                .iter()
+                .any(|l| l.starts_with("warning: notes.txt: not a file of the preset library")),
+            "{lines:#?}"
+        );
         assert_eq!(
             lines.last().unwrap(),
-            "Report only, nothing written: 1 installed, 1 comments and layout only, 1 forked and repointed, 98 current. Something above needs you."
+            "Report only, nothing written: 1 installed, 1 artifacts updated, 1 comments and layout only, 1 forked and repointed, 1 dropped and removed, 1 dropped and forked, 112 current. Something above needs you."
         );
         // a pack that is current says nothing: the counts carry it
-        assert_eq!(lines.len(), 4, "{lines:#?}");
+        assert_eq!(lines.len(), 8, "{lines:#?}");
+        // what needs a person: the two forks and the file that is not the library's
+        let needs = report.needs_you();
+        assert_eq!(needs.len(), 3, "{needs:#?}");
+        assert!(
+            needs
+                .iter()
+                .any(|n| n.starts_with("would fork monitoring/")),
+            "{needs:#?}"
+        );
+        assert!(
+            needs.iter().any(|n| n.starts_with("warning: notes.txt")),
+            "{needs:#?}"
+        );
         for l in &lines {
             let t = l.trim_start();
             assert!(!t.starts_with('{') && !t.starts_with('['), "{l}");
@@ -1885,6 +1976,96 @@ mod tests {
             ]),
             "{lines:#?}"
         );
+    }
+
+    /// What the preset library dropped (satz ADR 0103): a used pack forked and the estate
+    /// repointed needs a person, a removed file and a kept fork do not, and a file in the
+    /// presets folder that is not the library's is a warning — with `attention` among what
+    /// needs a person, without it a warning of its own. The summary counts each outcome.
+    #[test]
+    fn what_the_library_dropped_reads_as_sentences_and_a_used_one_needs_you() {
+        let mut report: MergeReport = serde_json::from_value(serde_json::json!({
+            "report_only": false,
+            "events": [
+                {"kind": "pack", "file": "old-unused.satz", "action": "dropped-removed",
+                 "reason": "the preset library no longer carries it, and the estate does not use it"},
+                {"kind": "pack", "file": "old-used.satz", "action": "dropped-forked",
+                 "fork": "old-used.local.satz",
+                 "reason": "the preset library no longer carries old-used.satz, so the fork is the estate's own file from now on"},
+                {"kind": "pack", "file": "gone.local.satz", "action": "fork-kept",
+                 "reason": "the preset library no longer carries gone.satz, so the fork is the estate's own file from now on"},
+                {"kind": "warning", "file": "notes.txt",
+                 "text": "not a file of the preset library, a fork (`.local.satz`) or an adoption delta (`.diff.satz`)"}
+            ],
+            "counts": {
+                "installed": 0, "current": 0, "artifacts_updated": 0, "doc_only": 0,
+                "unused_overwritten": 0, "adopted_in_place": 0, "forked_and_repointed": 0,
+                "fork_diffs_refreshed": 0, "deferred": 0, "refused": 0, "skipped_edited": 0,
+                "dropped_removed": 1, "dropped_forked": 1, "forks_kept": 1
+            },
+            "attention": true
+        }))
+        .unwrap();
+        let lines = report.lines();
+        assert!(
+            lines.iter().any(|l| l
+                == "removed old-unused.satz: the preset library no longer carries it, and the estate does not use it"),
+            "{lines:#?}"
+        );
+        assert!(
+            lines.iter().any(|l| l.starts_with(
+                "kept gone.local.satz: the preset library no longer carries gone.satz"
+            )),
+            "{lines:#?}"
+        );
+        assert_eq!(
+            lines.last().unwrap(),
+            "Merged: 1 dropped and removed, 1 dropped and forked, 1 forks kept. Something above needs you."
+        );
+        let needs = report.needs_you();
+        assert_eq!(needs.len(), 2, "{needs:?}");
+        assert!(
+            needs[0].starts_with(
+                "forked old-used.satz to old-used.local.satz and pointed the estate at it: the preset library no longer carries old-used.satz"
+            ),
+            "{needs:?}"
+        );
+        assert!(
+            needs[1].starts_with("warning: notes.txt: not a file of the preset library"),
+            "{needs:?}"
+        );
+        assert_eq!(report.warnings().len(), 1);
+        // without attention nothing needs a person, and the foreign file is still a warning
+        report.attention = false;
+        assert!(report.needs_you().is_empty());
+        assert!(report.warnings()[0].starts_with("warning: notes.txt"));
+        // a report-only run says what it would do
+        report.report_only = true;
+        let lines = report.lines();
+        assert!(
+            lines.iter().any(|l| l.starts_with(
+                "would fork old-used.satz to old-used.local.satz and point the estate at it"
+            )),
+            "{lines:#?}"
+        );
+        assert!(
+            lines
+                .iter()
+                .any(|l| l.starts_with("would remove old-unused.satz")),
+            "{lines:#?}"
+        );
+    }
+
+    /// A merge report without the counts of what the library dropped is a satz older than
+    /// the app reads: refused, never counted as nothing.
+    #[test]
+    fn a_merge_report_without_the_dropped_counts_fails() {
+        let mut v: serde_json::Value = serde_json::from_str(MERGE).unwrap();
+        v["counts"]
+            .as_object_mut()
+            .unwrap()
+            .remove("dropped_forked");
+        assert!(serde_json::from_value::<MergeReport>(v).is_err());
     }
 
     #[test]

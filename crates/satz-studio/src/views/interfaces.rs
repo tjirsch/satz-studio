@@ -147,6 +147,22 @@ pub fn entry_fields(
         .collect()
 }
 
+/// The line under a field of a new entry: the pattern its value matches, that a list
+/// takes several values, and — for a field whose default is another field of the entry —
+/// that it takes that field's value when left empty.
+pub fn entry_field_hint(request: &RequestRow, field: &str, kind: EntryField) -> String {
+    let mut parts = Vec::new();
+    if let Some(p) = request.patterns.get(field) {
+        parts.push(format!("matches {p}"));
+    } else if kind == EntryField::List {
+        parts.push("several values, separated by commas".to_string());
+    }
+    if let Some(other) = request.field_defaults.get(field) {
+        parts.push(format!("empty takes the entry's {other}"));
+    }
+    parts.join("; ")
+}
+
 /// The list params the estate's packs declare, each with the entries it holds and a form that
 /// adds one: a delegation, a delegated resource, a subnet. The form is built from
 /// the declaration — one field per declared field, its pattern under it, its default as
@@ -259,11 +275,7 @@ fn RequestsCard(requests: Vec<RequestRow>) -> Element {
                                         label: if f == r.key { format!("{f} (names the entry)") } else { f.clone() },
                                         value,
                                         monospace: true,
-                                        supporting: match (r.patterns.get(&f), kind) {
-                                            (Some(p), _) => format!("matches {p}"),
-                                            (None, EntryField::List) => "several values, separated by commas".to_string(),
-                                            _ => String::new(),
-                                        },
+                                        supporting: entry_field_hint(&r, &f, kind),
                                         oninput: move |v: String| { typed.write().insert(key.clone(), v); },
                                     }
                                 },
@@ -440,6 +452,28 @@ mod tests {
         assert_eq!(r.default_text("budgets").as_deref(), Some("false"));
         assert_eq!(r.default_text("name"), None);
         assert_eq!(r.keys(), ["payments"]);
+    }
+
+    /// The line under a field says the pattern, that a list takes several values, and that
+    /// a field whose default is another field of the entry takes that field's value empty.
+    #[test]
+    fn a_field_says_its_pattern_and_the_field_it_defaults_to() {
+        let mut r = projects();
+        r.field_defaults
+            .insert("delegation".to_string(), "name".to_string());
+        assert_eq!(
+            entry_field_hint(&r, "name", EntryField::Text),
+            "matches [a-z][a-z0-9-]*"
+        );
+        assert_eq!(
+            entry_field_hint(&r, "apis", EntryField::List),
+            "several values, separated by commas"
+        );
+        assert_eq!(
+            entry_field_hint(&r, "delegation", EntryField::Text),
+            "empty takes the entry's name"
+        );
+        assert_eq!(entry_field_hint(&r, "budgets", EntryField::Bool), "");
     }
 
     /// Only what was typed and differs from the default is sent: satz leaves a default out

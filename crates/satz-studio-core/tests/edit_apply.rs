@@ -297,3 +297,45 @@ fn a_file_without_params_refuses_an_append_and_another_extension_is_refused() {
         Err(EditError::NotSatz(p)) if p == other
     ));
 }
+
+/// An answer replaces a param declared `none` (satz ADR 0106) in place, and satz-core reads
+/// the value; the file's `locals { }` block (satz ADR 0105) is never the target of a param
+/// edit: a param of a local value's name is refused with satz's own sentence.
+#[test]
+fn an_answer_replaces_none_and_a_local_value_is_never_a_param_edit() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("e.satz");
+    let text = "estate e\n\nparams {\n  owner = none\n}\n\nlocals {\n  bucket = \"logs\"\n}\n";
+    std::fs::write(&path, text).unwrap();
+    let s = EditSession::open(&path).unwrap();
+    let p = s
+        .apply(&[Edit::ReplaceParam {
+            name: "owner".to_string(),
+            value: string("team@example.com"),
+        }])
+        .unwrap();
+    assert!(!p.text().contains("none"), "{}", p.text());
+    let file = satz_core::satz::parse(p.text()).unwrap();
+    assert_eq!(
+        file.params
+            .iter()
+            .find(|(n, _, _)| n == "owner")
+            .map(|(_, v, _)| v),
+        Some(&Value::Str(vec![StrPart::Lit(
+            "team@example.com".to_string()
+        )]))
+    );
+
+    // a param of a local value's name would be both: satz-core refuses the result, so
+    // the edit is refused and the local value is never rewritten as a param
+    let err = s
+        .apply(&[Edit::ReplaceParam {
+            name: "bucket".to_string(),
+            value: string("other"),
+        }])
+        .unwrap_err();
+    assert!(
+        matches!(&err, EditError::Syntax { message, .. } if message.contains("`bucket` is also a param")),
+        "{err}"
+    );
+}

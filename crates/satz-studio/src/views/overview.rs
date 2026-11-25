@@ -427,9 +427,11 @@ pub enum Reading {
     /// a param of [`FILE_ORDER`] the file's `params { }` block does not set; a pack's
     /// default is not shown for it either
     NotSet,
-    /// a param of [`FILE_ORDER`] the file sets to `""`, as `satz init` writes the ones it
-    /// could not derive
+    /// a param of [`FILE_ORDER`] the file sets to `""`: an empty value, which is one
     Empty,
+    /// a param of [`FILE_ORDER`] the file declares `none`, as `satz init` writes the ones
+    /// it could not derive: no value, and one must be provided
+    NoValue,
     /// a param of [`FILE_ORDER`] before the model is built: whether the file sets it is
     /// not known yet, so the row states neither a value nor "not set"
     NotRead,
@@ -455,6 +457,7 @@ pub fn identity(params: Option<&[ParamRow]>, questions: Option<&QuestionsReport>
                 None => Reading::NotRead,
                 Some(params) => match params.iter().find(|p| p.name == *name) {
                     None => Reading::NotSet,
+                    Some(p) if p.value == SourceValue::None => Reading::NoValue,
                     Some(p) => match source_line(&p.value) {
                         line if line.is_empty() => Reading::Empty,
                         line => Reading::Value(line),
@@ -523,6 +526,7 @@ fn source_line(value: &SourceValue) -> String {
         } => param.clone(),
         SourceValue::List(items) => items.iter().map(source_line).collect::<Vec<_>>().join(", "),
         SourceValue::Obj => "an object".to_string(),
+        SourceValue::None => "no value".to_string(),
     }
 }
 
@@ -806,7 +810,7 @@ fn IdentityCard(facts: Vec<Fact>) -> Element {
         .filter(|f| {
             matches!(
                 f.reading,
-                Reading::NotAnswered | Reading::NotSet | Reading::Empty
+                Reading::NotAnswered | Reading::NotSet | Reading::NoValue
             )
         })
         .count();
@@ -838,6 +842,7 @@ fn IdentityCard(facts: Vec<Fact>) -> Element {
                             Reading::NotAnswered => rsx! { span { class: "overview__unanswered", "not answered" } },
                             Reading::NotSet => rsx! { span { class: "overview__unanswered", "not set" } },
                             Reading::Empty => rsx! { span { class: "overview__unanswered", "empty" } },
+                            Reading::NoValue => rsx! { span { class: "overview__unanswered", "no value — must be provided" } },
                             Reading::NotRead => rsx! { span { class: "overview__unanswered", "not read yet" } },
                         }
                     }
@@ -1186,18 +1191,21 @@ mod tests {
     }
 
     /// A param the file does not set says so, even where the core pack's question offers a
-    /// default, and one it sets to `""` says it is empty; before the model is built the
-    /// file has not been read, and the row says that instead of claiming the param is not
-    /// set.
+    /// default; one it sets to `""` says it is empty, and one it declares `none` says it has
+    /// no value; before the model is built the file has not been read, and the row says
+    /// that instead of claiming the param is not set.
     #[test]
     fn a_param_the_file_does_not_set_reads_not_set_and_an_unread_file_says_so() {
         let mut offered = row("customer_longname", CORE_PACK, None);
         offered.default = Some(json!("Acme Corp."));
         let r = report(vec![offered]);
+        let mut org = param("customer_organization_id", "");
+        org.value = SourceValue::None;
         let facts = identity(
             Some(&[
                 param("customer_shortname", "acme"),
                 param("customer_id", ""),
+                org,
             ]),
             Some(&r),
         );
@@ -1207,7 +1215,7 @@ mod tests {
                 &value("acme"),
                 &Reading::NotSet,
                 &Reading::Empty,
-                &Reading::NotSet
+                &Reading::NoValue
             ]
         );
         assert!(
