@@ -1,8 +1,9 @@
 //! The shape an answer is typed in, held to the packs. Decisions picks an answer's field
 //! from `answer_kind` over the questions report, which carries the shape the pack
-//! declares each param with; a question that offers no value — a param its pack declares
-//! `[]` offers none — is typed in that declared shape, so one address typed for a list of
-//! addresses is written as a list of one and never as a string that `tofu apply` refuses.
+//! declares each param with; a question that offers no value — a param every pack
+//! declares `none`, its shape another file's default or the question's `recommend` — is
+//! typed in that shape, so one address typed for a list of addresses is written as a list
+//! of one and never as a string that `tofu apply` refuses.
 //!
 //! The sweep reads every question of every pack under `vendor/satz/presets`, finds the
 //! value its param is declared with in the pack's own text, and asserts that the field
@@ -119,8 +120,9 @@ fn followed<'a>(
     }
 }
 
-/// Where `name` is declared: in the declaring file first, then in the library in the
-/// estate's `use` order, the first declaration winning as the fold's does.
+/// Where `name` is given a value: in the declaring file first, then in the library in
+/// the estate's `use` order, the first declaration winning as the fold's does. A `none`
+/// gives no value and agrees with the default another file gives (satz ADR 0106).
 fn declaration<'a>(
     name: &str,
     from: &'a str,
@@ -131,7 +133,7 @@ fn declaration<'a>(
         library[path]
             .params
             .iter()
-            .find(|(n, _, _)| n == name)
+            .find(|(n, v, _)| n == name && *v != Value::None)
             .map(|(_, v, _)| (path, v))
     };
     find(from).or_else(|| order.iter().find_map(|p| find(p.as_str())))
@@ -206,14 +208,20 @@ async fn every_question_of_every_pack_is_answered_in_the_shape_its_param_is_decl
         .iter()
         .filter(|q| q.kind == QuestionKind::Param)
     {
-        let (file, value) =
-            declaration(&q.subject, &q.from, &library, &order).unwrap_or_else(|| {
-                panic!(
-                    "{}: `{}` is asked and declared by no pack",
-                    q.from, q.subject
-                )
-            });
-        let want = match followed(value, file, &library, &order) {
+        // the value a file gives it, else — every declaration `none` — the question's
+        // `recommend`, else text: the shape satz reads an answer in (its ADR 0106)
+        let recommend = || {
+            library[q.from.as_str()]
+                .questions
+                .iter()
+                .find(|d| d.subject == q.subject)
+                .and_then(|d| d.recommend.as_ref())
+        };
+        let shaped = match declaration(&q.subject, &q.from, &library, &order) {
+            Some((file, value)) => Some(followed(value, file, &library, &order)),
+            None => recommend(),
+        };
+        let want = match shaped.unwrap_or(&Value::Str(Vec::new())) {
             Value::List(items) => {
                 lists.insert(q.subject.clone());
                 // a list field holds strings and sends strings, as `parse_answer` reads a
@@ -229,7 +237,8 @@ async fn every_question_of_every_pack_is_answered_in_the_shape_its_param_is_decl
             Value::Bool(_) => ParamKind::Bool,
             Value::Num(_) => ParamKind::Number,
             Value::Str(_) | Value::Obj(_) => ParamKind::String,
-            Value::Ref(_) => unreachable!("followed"),
+            // a recommendation that names a param reads as text; a declaration is followed
+            Value::Ref(_) | Value::None => ParamKind::String,
         };
         // as the report has it, and as it would be with nothing offered — the path a
         // param takes the moment its default is not one satz can offer
@@ -262,9 +271,9 @@ async fn every_question_of_every_pack_is_answered_in_the_shape_its_param_is_decl
 }
 
 /// The defect this guards, end to end on a skeleton with the access-approval pack in:
-/// the question offers nothing and blocks, its field is a list because the fold carries
-/// the pack's `[]`, the answer `satz_interview` receives is a JSON array, and the line
-/// satz writes is a list the transpile accepts.
+/// the question offers nothing and blocks, its field is a list because the report gives
+/// the param the shape of a list, the answer `satz_interview` receives is a JSON array,
+/// and the line satz writes is a list the transpile accepts.
 #[tokio::test]
 async fn one_address_for_a_list_param_is_written_as_a_list_of_one() {
     const SUBJECT: &str = "access_approval_notification_emails";
@@ -286,8 +295,8 @@ async fn one_address_for_a_list_param_is_written_as_a_list_of_one() {
     let env = session.dir.params(&main).unwrap();
     assert_eq!(
         env.get(SUBJECT),
-        Some(&serde_yaml::Value::Sequence(Vec::new())),
-        "the fold carries the pack's declaration"
+        None,
+        "the pack declares it `none`: no file gives it a value"
     );
     let report = support::questions(&session).await;
     let row = report
@@ -297,7 +306,7 @@ async fn one_address_for_a_list_param_is_written_as_a_list_of_one() {
         .expect("the pack asks it");
     assert_eq!(row.state, QuestionState::Unanswered);
     assert!(row.blocking, "{row:?}");
-    assert_eq!(row.offered(), None, "satz offers no empty list");
+    assert_eq!(row.offered(), None, "no file gives it a value to offer");
     assert_eq!(answer_kind(row), Some(ParamKind::List));
 
     // what a list field sends for one chip

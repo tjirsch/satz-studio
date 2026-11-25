@@ -70,7 +70,12 @@ pub enum NodeKind {
     /// the `inputs { … }` block: a template's contract, which a reader binds. Its
     /// entries are `ParamEntry` nodes, as a `params` block's are
     Inputs,
-    /// `name = value` inside `params`
+    /// the `locals { … }` block: values the file keeps to itself, read by their bare
+    /// names in that file only — never bound by the estate, never in tfvars, never asked
+    /// (satz ADR 0105). Its entries are `ParamEntry` nodes; the app shows them in the
+    /// file and edits none of them
+    Locals,
+    /// `name = value` inside `params`, `inputs` or `locals`
     ParamEntry { name: Span, eq: Span, value: NodeId },
     /// `use "path" [as key] [when gate]`, active; `path` spans the quotes
     Use {

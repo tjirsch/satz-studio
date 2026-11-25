@@ -118,20 +118,23 @@
       "deploys": false,
       "requires": [
         {
-          "kind": "requires",
-          "any_of": [
-            "presets/security-group-models/s1-security-groups.satz",
-            "presets/security-group-models/s2-security-groups.satz"
-          ],
-          "met": false
-        },
-        {
           "kind": "gate",
           "any_of": [
             "presets/estate-map.satz"
           ],
           "params": [
             "use_billing_permissions"
+          ],
+          "met": false
+        },
+        {
+          "kind": "data",
+          "any_of": [
+            "presets/security-group-models/s1-security-groups.satz",
+            "presets/security-group-models/s2-security-groups.satz"
+          ],
+          "params": [
+            "gcp_billing_admins_name"
           ],
           "met": false
         }

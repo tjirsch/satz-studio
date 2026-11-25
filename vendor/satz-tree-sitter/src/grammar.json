@@ -27,6 +27,10 @@
         },
         {
           "type": "SYMBOL",
+          "name": "locals"
+        },
+        {
+          "type": "SYMBOL",
           "name": "use_statement"
         },
         {
@@ -198,6 +202,30 @@
         {
           "type": "STRING",
           "value": "inputs"
+        },
+        {
+          "type": "STRING",
+          "value": "{"
+        },
+        {
+          "type": "REPEAT",
+          "content": {
+            "type": "SYMBOL",
+            "name": "param"
+          }
+        },
+        {
+          "type": "STRING",
+          "value": "}"
+        }
+      ]
+    },
+    "locals": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "STRING",
+          "value": "locals"
         },
         {
           "type": "STRING",

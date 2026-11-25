@@ -1021,7 +1021,7 @@ fn PackDetails(row: WorkloadPackRow) -> Element {
                         " — "
                         match &param.default {
                             Some(default) => rsx! { code { "{default}" } },
-                            None => rsx! { span { class: "interfaces__supporting", "no default" } },
+                            None => rsx! { span { class: "interfaces__supporting", "none — must be provided" } },
                         }
                         if param.question {
                             span { class: "interfaces__supporting",

@@ -710,6 +710,21 @@
     }
   },
   {
+    "type": "locals",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "param",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
     "type": "notice",
     "named": true,
     "fields": {
@@ -942,6 +957,10 @@
         },
         {
           "type": "interface",
+          "named": true
+        },
+        {
+          "type": "locals",
           "named": true
         },
         {
@@ -1223,6 +1242,10 @@
   },
   {
     "type": "interface",
+    "named": false
+  },
+  {
+    "type": "locals",
     "named": false
   },
   {

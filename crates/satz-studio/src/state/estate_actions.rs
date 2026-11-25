@@ -1184,7 +1184,8 @@ async fn run_steps(
 }
 
 /// `satz_merge_presets` on the session, into the log: the report typed and written as
-/// sentences ([`MergeReport::lines`]), and the notices it opened queued — a merge that
+/// sentences ([`MergeReport::lines`]), each thing that needs a person an error and each
+/// warning of a merge that needs nobody a warning, and the notices it opened queued — a merge that
 /// brings a pack in, or a pack that gained one, opens notices of its own, and the same
 /// window raises them. A refusal is satz's own text; a report the app cannot type is a
 /// failure in the log's outcome and a toast, never the JSON it came as.
@@ -1221,6 +1222,12 @@ async fn merge_presets(session: &Arc<EstateSession>, app: Store<AppStore>) {
                     }
                     for need in needs {
                         toast(app, ToastKind::Error, format!("merge-presets: {need}"));
+                    }
+                } else {
+                    // a warning alone needs nobody now — a file in the presets folder that
+                    // is not the library's, say — and is counted as one
+                    for warning in report.warnings() {
+                        toast(app, ToastKind::Warning, format!("merge-presets: {warning}"));
                     }
                 }
                 outcome
@@ -1814,7 +1821,7 @@ async fn reload_with(session: &Arc<EstateSession>, app: Store<AppStore>, carried
         let cst = Cst::parse(&text)
             .map_err(|e| Box::new(Diagnostic::error(e.to_string(), DiagSource::Cst)))?;
         let env = dir
-            .params(&main)
+            .scope(&main)
             .map_err(|e| Box::new(Diagnostic::from_pipeline_error(&dir.dir, &e)))?;
         let registry = ResourceRegistry::load_all(&dir.schema_dir());
         Ok::<_, Box<Diagnostic>>((cst, env, registry))
@@ -2078,7 +2085,8 @@ mod tests {
             "counts": {
                 "installed": 0, "current": 1, "artifacts_updated": 0, "doc_only": 0,
                 "unused_overwritten": 0, "adopted_in_place": 0, "forked_and_repointed": 0,
-                "fork_diffs_refreshed": 0, "deferred": 0, "refused": 0, "skipped_edited": 0
+                "fork_diffs_refreshed": 0, "deferred": 0, "refused": 0, "skipped_edited": 0,
+                "dropped_removed": 0, "dropped_forked": 0, "forks_kept": 0
             },
             "attention": true
         }))
@@ -2106,7 +2114,8 @@ mod tests {
             "counts": {
                 "installed": 0, "current": 1, "artifacts_updated": 1, "doc_only": 0,
                 "unused_overwritten": 0, "adopted_in_place": 0, "forked_and_repointed": 0,
-                "fork_diffs_refreshed": 0, "deferred": 0, "refused": 0, "skipped_edited": 1
+                "fork_diffs_refreshed": 0, "deferred": 0, "refused": 0, "skipped_edited": 1,
+                "dropped_removed": 0, "dropped_forked": 0, "forks_kept": 0
             },
             "attention": true
         }))

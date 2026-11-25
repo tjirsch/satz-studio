@@ -45,7 +45,7 @@ fn model_of(name: &str) -> EstateModel {
     let main = estate.yaml_dir().join(name);
     let text = std::fs::read_to_string(&main).unwrap();
     let cst = Cst::parse(&text).unwrap();
-    let env = estate.params(&main).unwrap();
+    let env = estate.scope(&main).unwrap();
     let registry = ResourceRegistry::load_all(&estate.schema_dir()).unwrap();
     EstateModel::build(
         &main,
@@ -520,7 +520,7 @@ fn without_a_registry_everything_typed_is_unknown() {
     let main = estate.yaml_dir().join("smoke.satz");
     let text = std::fs::read_to_string(&main).unwrap();
     let cst = Cst::parse(&text).unwrap();
-    let env = estate.params(&main).unwrap();
+    let env = estate.scope(&main).unwrap();
     let dir = Path::new("/nowhere/schemas");
     let m = EstateModel::build(
         &main,
@@ -582,4 +582,72 @@ fn private_is_satzs_bool_and_not_a_provider_argument() {
     assert_eq!(private.typed, AttrType::Bool);
     assert_eq!(private.value, SourceValue::Bool(false));
     assert!(private.editable);
+}
+
+/// A file's local values (satz ADR 0105) are not params and not resources: the rows are the
+/// `params { }` block's alone, and the outline holds the resource maps alone. A param the
+/// file declares `none` (satz ADR 0106) is a row with no value — never a reference to a
+/// param named `none` — typed in the shape its question is answered in, in value mode,
+/// so the field an answer is typed into is there.
+#[test]
+fn locals_are_no_rows_and_a_none_param_is_a_row_with_no_value() {
+    let text = "estate x\n\nparams {\n  emails    = none\n  shortname = \"acme\"\n  owner     = none\n}\n\nlocals {\n  bucket = \"{shortname}-logs\"\n}\n\ngoogle_storage_bucket {\n  b {\n    name     = \"{bucket}\"\n    location = \"EU\"\n  }\n}\n";
+    let cst = Cst::parse(text).unwrap();
+    let registry = ResourceRegistry::load_all(&fixture().schema_dir()).unwrap();
+    let main = Path::new("inline.satz");
+    let questions: QuestionsReport = serde_json::from_value(serde_json::json!({
+        "estate": "inline.satz",
+        "questions": [{
+            "subject": "emails", "kind": "param", "prompt": "Who is told?", "reversal": "edit",
+            "blast": "low", "state": "unanswered", "blocking": true, "shape": "list",
+            "pack_description": "d", "from": "p.satz", "pack": "p"
+        }],
+        "summary": {"total": 1, "answered": 0, "unanswered": 1, "not_applicable": 0,
+                    "blocking": 1, "one_way_doors": 0, "complete": false}
+    }))
+    .unwrap();
+    let mut env = Env::new();
+    env.insert("shortname".into(), serde_yaml::Value::String("acme".into()));
+    env.insert(
+        "bucket".into(),
+        serde_yaml::Value::String("acme-logs".into()),
+    );
+    let m = EstateModel::build(
+        main,
+        &cst,
+        Ok(&registry),
+        &env,
+        &questions,
+        &no_packs(main),
+        Vec::new(),
+    )
+    .unwrap();
+
+    let names: Vec<&str> = m.params.iter().map(|r| r.name.as_str()).collect();
+    assert_eq!(
+        names,
+        ["emails", "shortname", "owner"],
+        "a local value is no row"
+    );
+    assert_eq!(
+        keys(&m.outline),
+        ["google_storage_bucket"],
+        "nor a resource"
+    );
+
+    let emails = m.params.iter().find(|r| r.name == "emails").unwrap();
+    assert_eq!(emails.value, SourceValue::None);
+    assert_eq!(emails.kind, satz_studio_core::model::ParamKind::List);
+    assert_eq!(emails.mode, EditMode::Value);
+    // no question to read a shape off: text
+    let owner = m.params.iter().find(|r| r.name == "owner").unwrap();
+    assert_eq!(owner.value, SourceValue::None);
+    assert_eq!(owner.kind, satz_studio_core::model::ParamKind::String);
+
+    // a value that reads the local value resolves to it
+    let bucket = child(&child(&m.outline, "google_storage_bucket").children, "b");
+    let SourceValue::Str { parts, .. } = &row(bucket, "name").value else {
+        panic!("{:?}", row(bucket, "name").value)
+    };
+    assert_eq!(parts, &[param("bucket", "acme-logs")]);
 }

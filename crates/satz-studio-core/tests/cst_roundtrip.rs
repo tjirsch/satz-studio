@@ -157,31 +157,44 @@ fn differential(name: &str, cst: &Cst, file: &File) {
         ),
     }
 
-    let got: Vec<(String, usize)> = cst
-        .params()
-        .map(|p| {
-            cst.node(p)
-                .children
-                .iter()
-                .filter_map(|&c| match &cst.node(c).kind {
-                    NodeKind::ParamEntry { name, .. } => {
-                        Some((cst.slice(*name).to_string(), cst.node(c).line as usize))
-                    }
-                    _ => None,
-                })
-                .collect()
-        })
-        .unwrap_or_default();
-    let want: Vec<(String, usize)> = file
-        .params
-        .iter()
-        .map(|(n, _, l)| (n.clone(), *l))
-        .collect();
-    assert_eq!(got, want, "{name}: the params");
+    // the entries of the `params { }` block, and of the `locals { }` block (satz ADR 0105)
+    let entries = |block: Option<usize>| -> Vec<(String, usize)> {
+        block
+            .map(|p| {
+                cst.node(p)
+                    .children
+                    .iter()
+                    .filter_map(|&c| match &cst.node(c).kind {
+                        NodeKind::ParamEntry { name, .. } => {
+                            Some((cst.slice(*name).to_string(), cst.node(c).line as usize))
+                        }
+                        _ => None,
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+    let named = |list: &[(String, Value, usize)]| -> Vec<(String, usize)> {
+        list.iter().map(|(n, _, l)| (n.clone(), *l)).collect()
+    };
+    assert_eq!(
+        entries(cst.params()),
+        named(&file.params),
+        "{name}: the params"
+    );
+    let locals = cst
+        .nodes()
+        .find(|(_, n)| n.kind == NodeKind::Locals)
+        .map(|(id, _)| id);
+    assert_eq!(
+        entries(locals),
+        named(&file.locals),
+        "{name}: the local values"
+    );
 
     let mut want: Vec<(usize, String)> = Vec::new();
     walk_entries(&file.items, &mut want);
-    for (_, v, _) in &file.params {
+    for (_, v, _) in file.params.iter().chain(&file.locals) {
         walk_value(v, &mut want);
     }
     want.sort();

@@ -248,6 +248,33 @@ impl EstateDir {
         satz_core::pipeline::estate_params(&main.to_string_lossy(), &src, &self.loader(main))
     }
 
+    /// What the estate file's values read by a bare name: its resolved params
+    /// ([`EstateDir::params`]) and its own local values (`locals { … }`, satz ADR 0105)
+    /// resolved against them, as satz's editor support shows a local value. A local
+    /// value's name is no param's, so the two never collide.
+    pub fn scope(
+        &self,
+        main: &Path,
+    ) -> Result<satz_core::pipeline::Env, satz_core::pipeline::PipelineError> {
+        let mut env = self.params(main)?;
+        let name = main.to_string_lossy();
+        let src =
+            std::fs::read_to_string(main).map_err(|e| satz_core::pipeline::PipelineError {
+                file: name.to_string(),
+                line: 0,
+                msg: e.to_string(),
+            })?;
+        let file =
+            satz_core::satz::parse(&src).map_err(|e| satz_core::pipeline::PipelineError {
+                file: name.to_string(),
+                line: e.line,
+                msg: e.msg,
+            })?;
+        let locals = satz_core::pipeline::file_locals(&file, &env, &name)?;
+        env.extend(locals);
+        Ok(env)
+    }
+
     /// Whether the estate has acknowledged the notice on `param`, by satz's own rule
     /// over the resolved params of [`EstateDir::params`]: the param is bound `true`,
     /// and nothing else counts. The app asks this rather than reading the param
@@ -498,6 +525,64 @@ mod tests {
         let env = e.params(&main).unwrap();
         assert!(env.contains_key("customer_shortname"));
         assert!(e.deployment_mode(&main).unwrap().is_some());
+    }
+
+    /// An estate in a directory of its own: `e.satz` beside the packs it names.
+    fn estate_with(files: &[(&str, &str)]) -> (tempfile::TempDir, EstateDir, PathBuf) {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        std::fs::write(
+            root.join("config.toml"),
+            "yaml_dir = \".\"\ninclude_dirs = [\".\"]\n",
+        )
+        .unwrap();
+        for (name, text) in files {
+            std::fs::write(root.join(name), text).unwrap();
+        }
+        let e = EstateDir::open(root).unwrap();
+        let main = root.join("e.satz");
+        (dir, e, main)
+    }
+
+    /// The scope a value of the file reads: its params, and its own local values resolved
+    /// against them (satz ADR 0105); the params alone carry no local value.
+    #[test]
+    fn the_scope_is_the_params_and_the_file_s_own_local_values() {
+        let (_dir, e, main) = estate_with(&[(
+            "e.satz",
+            "estate e\n\nparams {\n  shortname = \"acme\"\n  owner     = none\n}\n\nlocals {\n  bucket = \"{shortname}-logs\"\n}\n",
+        )]);
+        let params = e.params(&main).unwrap();
+        assert!(params.contains_key("shortname"));
+        assert!(!params.contains_key("bucket"));
+        assert!(!params.contains_key("owner"), "a `none` binds nothing");
+        let scope = e.scope(&main).unwrap();
+        assert_eq!(
+            scope.get("bucket"),
+            Some(&serde_yaml::Value::String("acme-logs".to_string()))
+        );
+    }
+
+    /// A param one pack declares `none` agrees with the default another gives, which is
+    /// its value whichever file is walked first (satz ADR 0106); two different defaults
+    /// are the transpile's refusal (ADR 0104), which `tests/edit_checkers_agree.rs` reads.
+    #[test]
+    fn none_agrees_with_the_default_another_pack_gives() {
+        let (_dir, e, main) = estate_with(&[
+            (
+                "a.satz",
+                "pack a version \"1.0\"\n\nparams {\n  region = \"eu\"\n}\n",
+            ),
+            (
+                "c.satz",
+                "pack c version \"1.0\"\n\nparams {\n  region = none\n}\n",
+            ),
+            ("e.satz", "estate e\n\nuse \"c.satz\"\nuse \"a.satz\"\n"),
+        ]);
+        assert_eq!(
+            e.params(&main).unwrap().get("region"),
+            Some(&serde_yaml::Value::String("eu".to_string()))
+        );
     }
 
     #[test]

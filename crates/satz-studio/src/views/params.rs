@@ -9,7 +9,7 @@ use dioxus_icons::lucide::{
 };
 use satz_studio_core::cst::TypedValue;
 use satz_studio_core::edit::Edit;
-use satz_studio_core::model::{EditMode, ParamRow};
+use satz_studio_core::model::{EditMode, ParamRow, SourceValue};
 
 use crate::components::badge::{Badge, BadgeVariant};
 use crate::components::button::{Button, ButtonSize, ButtonVariant};
@@ -101,6 +101,18 @@ pub fn ParamsPane() -> Element {
     }
 }
 
+/// The line under a row's typed field: the question's prompt, and for a param the file
+/// declares `none` that it has no value and one must be provided — the value typed is
+/// written in its place.
+fn supporting_text(row: &ParamRow) -> String {
+    let prompt = row.question.as_ref().map(|q| q.prompt.as_str());
+    match (&row.value, prompt) {
+        (SourceValue::None, Some(prompt)) => format!("no value — must be provided · {prompt}"),
+        (SourceValue::None, None) => "no value — must be provided".to_string(),
+        (_, prompt) => prompt.unwrap_or_default().to_string(),
+    }
+}
+
 #[component]
 fn ParamRowView(row: ParamRow, source: String, line: String, loading: bool) -> Element {
     let handle = use_coroutine_handle::<EstateAction>();
@@ -127,7 +139,7 @@ fn ParamRowView(row: ParamRow, source: String, line: String, loading: bool) -> E
         }
     };
     let why = row.question.as_ref().and_then(|q| q.why.clone());
-    let prompt = row.question.as_ref().map(|q| q.prompt.clone());
+    let supporting = supporting_text(&row);
 
     rsx! {
         div { class: "param-row",
@@ -166,7 +178,7 @@ fn ParamRowView(row: ParamRow, source: String, line: String, loading: bool) -> E
                         label_hidden: true,
                         subject: row.name.clone(),
                         disabled: loading,
-                        supporting: prompt.clone().unwrap_or_default(),
+                        supporting: supporting.clone(),
                         oncommit: {
                             let name = name.clone();
                             move |d: Draft| {
@@ -217,7 +229,7 @@ fn ParamRowView(row: ParamRow, source: String, line: String, loading: bool) -> E
 #[cfg(test)]
 mod tests {
     use super::*;
-    use satz_studio_core::model::{ParamKind, SourceValue, StrPart};
+    use satz_studio_core::model::{ParamKind, StrPart};
     use satz_studio_core::satz::reports::QuestionRow;
 
     fn row(name: &str, pack: Option<&str>) -> ParamRow {
@@ -241,6 +253,19 @@ mod tests {
             mode: EditMode::Value,
             line: 1,
         }
+    }
+
+    /// A param declared `none` says it has no value beside its prompt; a param with a
+    /// value shows the prompt alone.
+    #[test]
+    fn a_none_param_says_it_has_no_value() {
+        let mut none = row("region", Some("core"));
+        none.value = SourceValue::None;
+        assert_eq!(supporting_text(&none), "no value — must be provided · p");
+        let mut bare = row("region", None);
+        bare.value = SourceValue::None;
+        assert_eq!(supporting_text(&bare), "no value — must be provided");
+        assert_eq!(supporting_text(&row("region", Some("core"))), "p");
     }
 
     #[test]

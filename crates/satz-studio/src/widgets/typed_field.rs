@@ -106,9 +106,10 @@ impl Draft {
     /// The draft of a value as the file has it, decoded, for a field in value mode: a
     /// string is its literal text, a list its items' literal text. A reference or an
     /// interpolation cannot be shown as a value (that is what source mode is for) and
-    /// is `None`.
+    /// is `None`. A param declared `none` has no value, and its field starts empty.
     pub fn of_source(value: &SourceValue, kind: FieldKind) -> Option<Draft> {
         Some(match (kind, value) {
+            (_, SourceValue::None) => Draft::empty(kind),
             (FieldKind::Bool, SourceValue::Bool(b)) => Draft::Bool(*b),
             (FieldKind::Number, SourceValue::Num(n)) => Draft::Number(n.clone()),
             (FieldKind::List(_), SourceValue::List(items)) => {
@@ -223,7 +224,9 @@ fn literal(value: &SourceValue) -> Option<String> {
         SourceValue::Str { parts, .. } => literal_of(parts),
         SourceValue::Num(n) => Some(n.clone()),
         SourceValue::Bool(b) => Some(b.to_string()),
-        SourceValue::Ref { .. } | SourceValue::List(_) | SourceValue::Obj => None,
+        SourceValue::Ref { .. } | SourceValue::List(_) | SourceValue::Obj | SourceValue::None => {
+            None
+        }
     }
 }
 
