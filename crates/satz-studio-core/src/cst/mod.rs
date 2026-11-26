@@ -62,9 +62,15 @@ pub struct Cond {
 pub enum NodeKind {
     /// the root: the whole file
     Document,
-    /// `estate NAME`, `pack NAME version "…"` or `interface "NAME"` (a generated
-    /// interface file; `name` without the quotes); a `version` string is a `Value` child
-    Header { keyword: String, name: String },
+    /// `estate NAME`, `pack NAME version "…" [multiple]` or `interface "NAME"` (a
+    /// generated interface file; `name` without the quotes); a `version` string is a
+    /// `Value` child. `multiple` is the pack's word that it may be used several times,
+    /// each a named use (satz's ADR 0109)
+    Header {
+        keyword: String,
+        name: String,
+        multiple: bool,
+    },
     /// the `params { … }` block
     Params,
     /// the `inputs { … }` block: a template's contract, which a reader binds. Its
@@ -77,10 +83,13 @@ pub enum NodeKind {
     Locals,
     /// `name = value` inside `params`, `inputs` or `locals`
     ParamEntry { name: Span, eq: Span, value: NodeId },
-    /// `use "path" [as key] [when gate]`, active; `path` spans the quotes
+    /// `use "path" [as key] [named NAME] [when gate]`, active; `path` spans the quotes.
+    /// `named` is a named use: the pack used under a name, with params of its own that
+    /// the estate binds as `NAME.<param>` (satz's ADR 0109)
     Use {
         path: Span,
         as_key: Option<Span>,
+        named: Option<Span>,
         when: Option<Span>,
     },
     /// `KEY [NAME] [when [not] NAME] { … }` — a resource map, a named entry, a nested
@@ -222,6 +231,8 @@ pub struct UseLine {
     pub path: String,
     pub gate: Option<String>,
     pub as_key: Option<String>,
+    /// the name of a named use, `use "…" named <name>` (satz's ADR 0109)
+    pub named: Option<String>,
     pub state: UseState,
     /// the whole line without its newline
     pub span: Span,

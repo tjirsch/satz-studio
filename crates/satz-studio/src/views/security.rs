@@ -88,9 +88,11 @@ pub fn SecurityView() -> Element {
                                             ItemContent {
                                                 ItemTitle { code { "{resource}" } }
                                                 ItemDescription {
-                                                    match declared_at {
-                                                        Some(at) => format!("declared at {at}"),
-                                                        None => "not traced to a block of the estate".to_string(),
+                                                    // a named use's resource: the line serves every use of its pack
+                                                    match (declared_at, checks.first().and_then(|f| f.named.as_deref())) {
+                                                        (Some(at), Some(name)) => format!("declared at {at}, written by the named use {name}"),
+                                                        (Some(at), None) => format!("declared at {at}"),
+                                                        (None, _) => "not traced to a block of the estate".to_string(),
                                                     }
                                                 }
                                                 div { class: "security__checks",

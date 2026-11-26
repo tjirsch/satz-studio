@@ -432,10 +432,10 @@ pub fn DecisionsView() -> Element {
         .as_ref()
         .and_then(answer_kind)
         .map(FieldKind::of_param);
-    let previous_pack = i
+    let previous_group = i
         .checked_sub(1)
         .and_then(|p| list.get(p))
-        .map(|q| q.pack.clone());
+        .map(QuestionRow::group);
     let progress = if s.total == 0 {
         1.0
     } else {
@@ -492,7 +492,7 @@ pub fn DecisionsView() -> Element {
                             key: "{card_key(&q, field)}",
                             question: q,
                             field,
-                            previous_pack,
+                            previous_group,
                             loading,
                             can_back,
                             onback: move |_| go_back(),
@@ -652,7 +652,7 @@ const _: () = assert!(
 fn QuestionCard(
     question: QuestionRow,
     field: Option<FieldKind>,
-    previous_pack: Option<String>,
+    previous_group: Option<String>,
     loading: bool,
     can_back: bool,
     onback: EventHandler<()>,
@@ -660,7 +660,7 @@ fn QuestionCard(
     onaccept: EventHandler<(String, serde_json::Value)>,
 ) -> Element {
     let q = question;
-    let new_pack = previous_pack.as_deref() != Some(q.pack.as_str());
+    let new_group = previous_group != Some(q.group());
     let one_way = q.one_way_door();
     let recommend = recommends_otherwise(&q).map(str::to_string);
     let state_text = state_of(&q);
@@ -736,11 +736,11 @@ fn QuestionCard(
     rsx! {
         div { class: "interview__question",
             div { class: "interview__scroll",
-                if new_pack {
+                if new_group {
                     div { class: "interview__pack",
                         Boxes { size: 20 }
                         div {
-                            span { class: "interview__pack-name", "{q.pack}" }
+                            span { class: "interview__pack-name", "{q.group()}" }
                             p { class: "interview__pack-description", "{q.pack_description}" }
                         }
                     }
@@ -748,7 +748,7 @@ fn QuestionCard(
                 Card { class: "interview__card",
                     CardContent {
                         div { class: "interview__card-head",
-                            code { class: "interview__subject", "{q.subject}" }
+                            code { class: "interview__subject", "{q.label()}" }
                             span { class: "grow" }
                             Tip { text: state_tip(&q),
                                 Badge { variant: if needs_value { BadgeVariant::Destructive } else { BadgeVariant::Outline },
@@ -797,7 +797,7 @@ fn QuestionCard(
                                         TypedField {
                                             kind,
                                             draft: initial,
-                                            label: q.subject.clone(),
+                                            label: q.label().to_string(),
                                             subject: q.subject.clone(),
                                             disabled: loading,
                                             supporting: field_hint,

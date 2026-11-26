@@ -348,19 +348,40 @@ fn showcase_decodes_references_locks_import_ids_and_keeps_statements_out() {
         ],
         "claim, question, action, suppress, private, entries and hcl are not blocks"
     );
-    let top: Vec<(&str, Option<&str>, UseState)> = m
+    // the showcase uses `showcase-bucket.satz` twice, each a named use
+    let top: Vec<(&str, Option<&str>, Option<&str>, UseState)> = m
         .uses
         .iter()
-        .map(|u| (u.path.as_str(), u.gate.as_deref(), u.state))
+        .map(|u| {
+            (
+                u.path.as_str(),
+                u.named.as_deref(),
+                u.gate.as_deref(),
+                u.state,
+            )
+        })
         .collect();
     assert_eq!(
         top,
         [
-            ("showcase-pack.satz", None, UseState::Active),
-            ("showcase-policies.satz", None, UseState::Active),
+            ("showcase-pack.satz", None, None, UseState::Active),
+            ("showcase-policies.satz", None, None, UseState::Active),
             (
                 "showcase-optional.satz",
+                None,
                 Some("want_optional"),
+                UseState::Active
+            ),
+            (
+                "showcase-bucket.satz",
+                Some("reports"),
+                None,
+                UseState::Active
+            ),
+            (
+                "showcase-bucket.satz",
+                Some("scratch"),
+                None,
                 UseState::Active
             ),
         ]

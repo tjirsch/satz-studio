@@ -156,7 +156,7 @@ impl<'t> Builder<'t> {
         }
     }
 
-    /// `estate NAME` / `pack NAME [version "…"] [content]` / `interface "NAME"` (the
+    /// `estate NAME` / `pack NAME [version "…"] [multiple]` / `interface "NAME"` (the
     /// header of a generated interface file): the keyword and the name as text — an
     /// interface's name without its quotes, as satz reads it — and a `version` string as
     /// a `Value` child. The quoted name of an interface is no value: satz writes it.
@@ -180,7 +180,15 @@ impl<'t> Builder<'t> {
             })
             .unwrap_or_default();
         let version = n.child_by_field_name("version").map(|c| c.id());
-        let id = self.push_at(NodeKind::Header { keyword, name }, n);
+        let multiple = n.child_by_field_name("multiple").is_some();
+        let id = self.push_at(
+            NodeKind::Header {
+                keyword,
+                name,
+                multiple,
+            },
+            n,
+        );
         let mut out = Vec::new();
         for c in kids(n) {
             if let Some(t) = self.trivia(c) {
@@ -270,18 +278,20 @@ impl<'t> Builder<'t> {
         Ok(id)
     }
 
-    /// `use "path" [as key] [when gate]`: the string's span with its quotes, the two
-    /// identifiers' spans; the first of each when the grammar accepted a repeat.
+    /// `use "path" [as key] [named NAME] [when gate]`: the string's span with its quotes,
+    /// the identifiers' spans; the first of each when the grammar accepted a repeat.
     fn use_statement(&mut self, n: Ts<'_>) -> NodeId {
         let Some(path) = n.child_by_field_name("path") else {
             return self.error(n, "a use without a path".to_string());
         };
         let as_key = n.child_by_field_name("type").map(span);
+        let named = n.child_by_field_name("named").map(span);
         let when = n.child_by_field_name("condition").map(span);
         let id = self.push_at(
             NodeKind::Use {
                 path: span(path),
                 as_key,
+                named,
                 when,
             },
             n,

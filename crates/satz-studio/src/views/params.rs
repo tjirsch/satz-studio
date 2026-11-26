@@ -1,5 +1,6 @@
 //! The Params pane of the Estate destination: every param the estate binds that is not
-//! a pack choice, grouped by the pack whose question asks for it, each as a typed field
+//! a pack choice, grouped by the pack whose question asks for it — a named use's params
+//! under the use, each by the pack's own name of the param — each as a typed field
 //! in value mode or as its Satz source in source mode. A commit is one
 //! `Edit::ReplaceParam` through the app's own writer.
 
@@ -22,16 +23,17 @@ use crate::widgets::{Draft, Field, FieldKind, SourceTags, TypedField};
 /// The group a row belongs to: the pack whose question asks for it, else the estate.
 pub const ESTATE_GROUP: &str = "estate";
 
-/// The rows by group in order of first appearance: a row with a question under its
+/// The rows by group in order of first appearance: a named use's param under its use
+/// (`web — packs/vm.satz`, as satz's interview heads it), a row with a question under its
 /// pack, one without under [`ESTATE_GROUP`].
 pub fn grouped(rows: &[ParamRow]) -> Vec<(String, Vec<ParamRow>)> {
     let mut out: Vec<(String, Vec<ParamRow>)> = Vec::new();
     for row in rows {
-        let group = row
-            .question
-            .as_ref()
-            .map(|q| q.pack.clone())
-            .unwrap_or_else(|| ESTATE_GROUP.to_string());
+        let group = match (&row.named, &row.question) {
+            (Some(u), _) => u.heading(),
+            (None, Some(q)) => q.pack.clone(),
+            (None, None) => ESTATE_GROUP.to_string(),
+        };
         match out.iter_mut().find(|(g, _)| *g == group) {
             Some((_, rows)) => rows.push(row.clone()),
             None => out.push((group, vec![row.clone()])),
@@ -144,7 +146,7 @@ fn ParamRowView(row: ParamRow, source: String, line: String, loading: bool) -> E
     rsx! {
         div { class: "param-row",
             div { class: "param-row__name",
-                code { "{row.name}" }
+                code { title: "{row.name}", "{row.own_name()}" }
                 span { class: "param-row__line", "line {row.line}" }
                 if row.one_way_door {
                     Badge { variant: BadgeVariant::Destructive, class: "param-row__door",
@@ -229,7 +231,7 @@ fn ParamRowView(row: ParamRow, source: String, line: String, loading: bool) -> E
 #[cfg(test)]
 mod tests {
     use super::*;
-    use satz_studio_core::model::{ParamKind, StrPart};
+    use satz_studio_core::model::{NamedUse, ParamKind, StrPart};
     use satz_studio_core::satz::reports::QuestionRow;
 
     fn row(name: &str, pack: Option<&str>) -> ParamRow {
@@ -251,6 +253,7 @@ mod tests {
             question,
             one_way_door: false,
             mode: EditMode::Value,
+            named: None,
             line: 1,
         }
     }
@@ -291,6 +294,44 @@ mod tests {
                     vec!["b".to_string(), "e".to_string()]
                 ),
                 ("cis".to_string(), vec!["c".to_string()]),
+            ]
+        );
+    }
+
+    /// A named use's params stand under the use, apart from the flat use of the same
+    /// pack, and each is shown by the pack's own name.
+    #[test]
+    fn a_named_use_s_params_group_under_the_use() {
+        let named = |name: &str, use_: &str| {
+            let mut r = row(name, Some("vm"));
+            r.named = Some(NamedUse {
+                name: use_.to_string(),
+                path: "packs/vm.satz".to_string(),
+            });
+            r
+        };
+        let rows = vec![
+            named("web.vm_zone", "web"),
+            row("vm_zone", Some("vm")),
+            named("db.vm_zone", "db"),
+            named("web.vm_name", "web"),
+        ];
+        let shape: Vec<(String, Vec<String>)> = grouped(&rows)
+            .into_iter()
+            .map(|(k, v)| (k, v.iter().map(|r| r.own_name().to_string()).collect()))
+            .collect();
+        assert_eq!(
+            shape,
+            vec![
+                (
+                    "web — packs/vm.satz".to_string(),
+                    vec!["vm_zone".to_string(), "vm_name".to_string()]
+                ),
+                ("vm".to_string(), vec!["vm_zone".to_string()]),
+                (
+                    "db — packs/vm.satz".to_string(),
+                    vec!["vm_zone".to_string()]
+                ),
             ]
         );
     }

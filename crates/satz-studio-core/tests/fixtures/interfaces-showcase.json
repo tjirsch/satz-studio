@@ -9,7 +9,7 @@
       "attach": [],
       "description": "The customer's primary domain",
       "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
-      "line": 326
+      "line": 337
     },
     {
       "name": "default_region",
@@ -19,7 +19,7 @@
       "attach": [],
       "description": "The region the estate builds in",
       "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
-      "line": 327
+      "line": 338
     },
     {
       "name": "infra_project_id",
@@ -31,7 +31,7 @@
       "attach": [],
       "description": "The infrastructure project",
       "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
-      "line": 328
+      "line": 339
     },
     {
       "name": "infra_folder",
@@ -43,7 +43,7 @@
       "attach": [],
       "description": "The infrastructure folder, folders/<number>",
       "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
-      "line": 329
+      "line": 340
     },
     {
       "name": "infra_project_number",
@@ -54,7 +54,7 @@
       ],
       "attach": [],
       "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
-      "line": 330
+      "line": 341
     },
     {
       "name": "audit_bucket_url",
@@ -65,7 +65,7 @@
       ],
       "attach": [],
       "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
-      "line": 331
+      "line": 342
     },
     {
       "name": "regions",
@@ -74,7 +74,7 @@
       "targets": [],
       "attach": [],
       "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
-      "line": 332
+      "line": 343
     },
     {
       "name": "folders",
@@ -87,19 +87,21 @@
       "attach": [],
       "description": "Every folder, by label",
       "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
-      "line": 338
+      "line": 349
     },
     {
       "name": "buckets",
       "how": "map",
-      "value": "{ \"audit_logs\" = \"corp-audit-logs\" }",
+      "value": "{ \"audit_logs\" = \"corp-audit-logs\", \"reports__kept\" = \"corp-reports\", \"scratch__kept\" = \"corp-scratch\" }",
       "all": "google_storage_bucket",
       "targets": [
-        "google_storage_bucket.audit_logs"
+        "google_storage_bucket.audit_logs",
+        "google_storage_bucket.reports__kept",
+        "google_storage_bucket.scratch__kept"
       ],
       "attach": [],
       "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
-      "line": 339
+      "line": 350
     },
     {
       "name": "infra_projects",
@@ -113,7 +115,31 @@
       "attach": [],
       "description": "The Google projects in the infrastructure folder",
       "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
-      "line": 340
+      "line": 351
+    },
+    {
+      "name": "reports__bucket",
+      "how": "static",
+      "value": "\"corp-reports\"",
+      "targets": [
+        "google_storage_bucket.reports__kept"
+      ],
+      "attach": [],
+      "description": "The bucket the use keeps",
+      "file": "showcase-bucket.satz",
+      "line": 51
+    },
+    {
+      "name": "scratch__bucket",
+      "how": "static",
+      "value": "\"corp-scratch\"",
+      "targets": [
+        "google_storage_bucket.scratch__kept"
+      ],
+      "attach": [],
+      "description": "The bucket the use keeps",
+      "file": "showcase-bucket.satz",
+      "line": 51
     },
     {
       "name": "archive_project_id",
@@ -128,7 +154,7 @@
       ],
       "description": "The project's Google project",
       "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
-      "line": 359
+      "line": 370
     },
     {
       "name": "archive_project_number",
@@ -140,7 +166,7 @@
       ],
       "attach": [],
       "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
-      "line": 360
+      "line": 371
     },
     {
       "name": "audit_bucket_name",
@@ -153,7 +179,7 @@
       "attach": [],
       "description": "The audit log bucket",
       "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
-      "line": 354
+      "line": 365
     },
     {
       "name": "topic",
@@ -166,7 +192,7 @@
       "attach": [],
       "description": "The project's Pub/Sub topic",
       "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
-      "line": 370
+      "line": 381
     },
     {
       "name": "topic",
@@ -179,7 +205,7 @@
       "attach": [],
       "description": "The project's Pub/Sub topic",
       "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
-      "line": 370
+      "line": 381
     }
   ],
   "interfaces": [
@@ -191,7 +217,7 @@
       ],
       "exports": 2,
       "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
-      "line": 357
+      "line": 368
     },
     {
       "name": "audit",
@@ -199,7 +225,7 @@
       "uses": [],
       "exports": 1,
       "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
-      "line": 353
+      "line": 364
     },
     {
       "name": "billing-events",
@@ -209,7 +235,7 @@
       ],
       "exports": 1,
       "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
-      "line": 368
+      "line": 379
     },
     {
       "name": "orders-events",
@@ -219,7 +245,7 @@
       ],
       "exports": 1,
       "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
-      "line": 368
+      "line": 379
     }
   ],
   "list_params": [
@@ -259,7 +285,39 @@
         "dead_letter": "name"
       },
       "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
-      "line": 250
+      "line": 261
+    },
+    {
+      "param": "reports.bucket_archives",
+      "named": "reports",
+      "key": "name",
+      "fields": [
+        "name"
+      ],
+      "patterns": {
+        "name": "[a-z][a-z0-9-]*"
+      },
+      "description": "An archive bucket beside the use's bucket",
+      "entries": 0,
+      "rows": [],
+      "file": "showcase-bucket.satz",
+      "line": 17
+    },
+    {
+      "param": "scratch.bucket_archives",
+      "named": "scratch",
+      "key": "name",
+      "fields": [
+        "name"
+      ],
+      "patterns": {
+        "name": "[a-z][a-z0-9-]*"
+      },
+      "description": "An archive bucket beside the use's bucket",
+      "entries": 0,
+      "rows": [],
+      "file": "showcase-bucket.satz",
+      "line": 17
     }
   ]
 }

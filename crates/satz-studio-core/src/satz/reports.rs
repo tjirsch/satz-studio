@@ -53,7 +53,9 @@ pub enum QuestionState {
 /// One question, joined with the answer the estate currently carries.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct QuestionRow {
-    /// the param it answers, or the group name for a choice
+    /// the param it answers, or the group name for a choice — for a question of a named
+    /// use the name the estate binds, `web.vm_zone` (satz's ADR 0109): what an answer is
+    /// keyed by
     pub subject: String,
     pub kind: QuestionKind,
     pub prompt: String,
@@ -96,9 +98,28 @@ pub struct QuestionRow {
     /// the file that declared it
     pub from: String,
     pub pack: String,
+    /// the named use the question is asked for, `web`; absent for a flat use
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub named: Option<String>,
+    /// for a named use, the pack's own name of the param, `vm_zone`
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub param: Option<String>,
 }
 
 impl QuestionRow {
+    /// The heading the question stands under, as satz's interview heads it: the pack for
+    /// a flat use, `web — packs/vm.satz` for a named use.
+    pub fn group(&self) -> String {
+        match &self.named {
+            Some(n) => format!("{n} — {}", self.from),
+            None => self.pack.clone(),
+        }
+    }
+    /// The name the question is shown by: the pack's own name of the param for a named
+    /// use, the subject otherwise. The answer is keyed by the subject either way.
+    pub fn label(&self) -> &str {
+        self.param.as_deref().unwrap_or(&self.subject)
+    }
     /// A recreate, or a high blast: the interview reads the `why` out before it.
     pub fn one_way_door(&self) -> bool {
         self.reversal == Reversal::Recreate || self.blast == Blast::High
@@ -183,8 +204,12 @@ pub struct QuestionsSummary {
 /// `NoticeRow` (`vendor/satz/src/notices.rs`).
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct NoticeRow {
-    /// the param the estate binds `true` to acknowledge it
+    /// the param the estate binds `true` to acknowledge it: for a named use the name the
+    /// estate binds it under, `web.<param>`
     pub param: String,
+    /// the named use the notice is acknowledged for, `web`; absent for a flat use
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub named: Option<String>,
     /// the file that declares it, as the `use` that reached it names it
     pub pack: String,
     /// what to do and why
@@ -612,6 +637,9 @@ pub struct Unmanaged {
     /// the line's number, 1-based
     #[serde(rename = "at")]
     pub at_line: u32,
+    /// the name of a named use, `use "…" named <name>`: one row per use (satz's ADR 0109)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub named: Option<String>,
 }
 
 /// Which kind of estate it is, as satz's presets report says it (`works_in`): an
@@ -1181,8 +1209,12 @@ pub struct ExportRow {
 /// One list param of `satz interfaces`: a list a project may add entries to.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct RequestRow {
-    /// the list param a project's `contributes_<param>` adds to
+    /// the list param a project's `contributes_<param>` adds to; a named use's list as
+    /// the estate binds it, `web.event_topics`, which takes no contribution
     pub param: String,
+    /// the named use whose list this is (satz's ADR 0109); absent for a flat list
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub named: Option<String>,
     /// the field that names an entry
     pub key: String,
     /// every field an entry may carry
@@ -1800,6 +1832,10 @@ pub struct ScanFinding {
     pub declared_at: Option<String>,
     /// Checkov's page on the check
     pub guideline: Option<String>,
+    /// the named use that wrote the resource (satz's ADR 0109): the line `declared_at`
+    /// names serves every use of its pack; absent for what the estate writes flat
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub named: Option<String>,
 }
 
 impl ScanReport {
@@ -1953,6 +1989,7 @@ mod tests {
         report.attention = false;
         report.notices.push(NoticeRow {
             param: "cis_baseline_adopted".into(),
+            named: None,
             pack: "presets/cis/block-project-ssh-keys.satz".into(),
             text: "Import what is live first.".into(),
             run: "satz adopt <estate> --execute --import".into(),
@@ -2121,6 +2158,35 @@ mod tests {
             "\"\" (no team folder)"
         );
         assert_eq!(folder.shown(&serde_json::json!("Team A")), "Team A");
+    }
+
+    /// A question of a named use is headed `web — packs/vm.satz`, as satz's interview
+    /// heads it, and shown by the pack's own name of its param; its answer is keyed by the
+    /// dotted subject. A flat use's question stands under its pack, by its subject.
+    #[test]
+    fn a_named_use_s_question_is_grouped_by_its_use_and_labelled_by_its_param() {
+        let row = |extra: serde_json::Value| -> QuestionRow {
+            let mut v = serde_json::json!({
+                "subject": "vm_zone", "kind": "param", "prompt": "p", "reversal": "recreate",
+                "blast": "low", "state": "unanswered", "blocking": false,
+                "pack_description": "d", "from": "packs/vm.satz", "pack": "corpus_vm"
+            });
+            v.as_object_mut()
+                .unwrap()
+                .extend(extra.as_object().unwrap().clone());
+            serde_json::from_value(v).unwrap()
+        };
+        let web =
+            row(serde_json::json!({"subject": "web.vm_zone", "named": "web", "param": "vm_zone"}));
+        assert_eq!(web.group(), "web — packs/vm.satz");
+        assert_eq!(web.label(), "vm_zone");
+        assert_eq!(web.subject, "web.vm_zone");
+        let flat = row(serde_json::json!({}));
+        assert_eq!(flat.group(), "corpus_vm");
+        assert_eq!(flat.label(), "vm_zone");
+        // the two optional fields are absent from a flat row as satz writes it
+        let json = serde_json::to_value(&flat).unwrap();
+        assert!(json.get("named").is_none() && json.get("param").is_none());
     }
 
     #[test]

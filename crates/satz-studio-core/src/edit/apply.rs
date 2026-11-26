@@ -334,16 +334,26 @@ fn signature(cst: &Cst, id: NodeId) -> String {
     let s = |sp: Span| cst.slice(sp);
     match &n.kind {
         NodeKind::Document => "document".to_string(),
-        NodeKind::Header { keyword, name } => format!("header {keyword} {name}"),
+        NodeKind::Header {
+            keyword,
+            name,
+            multiple,
+        } => format!("header {keyword} {name} multiple {multiple}"),
         NodeKind::Params => "params".to_string(),
         NodeKind::Inputs => "inputs".to_string(),
         NodeKind::Locals => "locals".to_string(),
         NodeKind::ParamEntry { name, .. } => format!("param {}", s(*name)),
-        NodeKind::Use { path, as_key, when } => {
+        NodeKind::Use {
+            path,
+            as_key,
+            named,
+            when,
+        } => {
             format!(
-                "use {} as {:?} when {:?}",
+                "use {} as {:?} named {:?} when {:?}",
                 s(*path),
                 as_key.map(s),
+                named.map(s),
                 when.map(s)
             )
         }
@@ -444,6 +454,7 @@ fn new_signatures(
             NodeKind::Use {
                 path,
                 as_key: None,
+                named: None,
                 when: None,
             } if added_use.is_some_and(within) => {
                 let path = cst.slice(*path).trim_matches('"').to_string();

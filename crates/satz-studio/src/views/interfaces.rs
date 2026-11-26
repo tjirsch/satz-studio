@@ -167,7 +167,8 @@ pub fn entry_field_hint(request: &RequestRow, field: &str, kind: EntryField) -> 
 /// adds one: a delegation, a delegated resource, a subnet. The form is built from
 /// the declaration — one field per declared field, its pattern under it, its default as
 /// the value an untouched field keeps — and the entry is written by satz's own writer
-/// (`satz_add_entry`), which checks it against the same declaration.
+/// (`satz_add_entry`), which checks it against the same declaration. A named use's list is
+/// the one the estate binds as `<name>.<list>`, and the entry is added to it by that name.
 #[component]
 fn RequestsCard(requests: Vec<RequestRow>) -> Element {
     let handle = use_coroutine_handle::<EstateAction>();
@@ -225,6 +226,11 @@ fn RequestsCard(requests: Vec<RequestRow>) -> Element {
                         code { class: "interfaces__value", {r.fields_shown()} }
                         if let Some(d) = r.description.clone() {
                             p { class: "interfaces__supporting", "{d}" }
+                        }
+                        if let Some(name) = &r.named {
+                            p { class: "interfaces__supporting",
+                                "The list of the named use " code { "{name}" } ": this estate binds it, and no request file adds to it."
+                            }
                         }
                         if !r.keys().is_empty() {
                             div { class: "interfaces__entries",

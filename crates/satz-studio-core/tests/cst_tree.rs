@@ -65,7 +65,8 @@ fn the_root_lists_the_statements_in_order() {
         cst.node(header).kind,
         NodeKind::Header {
             keyword: "estate".into(),
-            name: "showcase".into()
+            name: "showcase".into(),
+            multiple: false
         }
     );
     assert_eq!(cst.node(header).line, 2);
@@ -133,11 +134,18 @@ fn a_block_carries_key_name_and_braces_and_its_entries_are_children() {
     assert_eq!(cst.slice(cst.node(value).span), "\"Infrastructure\"");
 
     let use_ = child(&cst, block, 1);
-    let NodeKind::Use { path, as_key, when } = cst.node(use_).kind else {
+    let NodeKind::Use {
+        path,
+        as_key,
+        named,
+        when,
+    } = cst.node(use_).kind
+    else {
         panic!()
     };
     assert_eq!(cst.slice(path), "\"p.satz\"");
     assert_eq!(cst.slice(as_key.unwrap()), "k");
+    assert!(named.is_none());
     assert_eq!(cst.slice(when.unwrap()), "g");
 
     let nested = child(&cst, block, 2);
@@ -197,7 +205,8 @@ fn the_pack_header_and_a_version_string() {
         cst.node(header).kind,
         NodeKind::Header {
             keyword: "pack".into(),
-            name: "showcase_pack".into()
+            name: "showcase_pack".into(),
+            multiple: false
         }
     );
     assert_eq!(labels(&cst, header), ["Str"]);
@@ -419,7 +428,8 @@ fn a_generated_interface_file_is_its_header_and_four_kinds_of_block() {
         cst.node(header).kind,
         NodeKind::Header {
             keyword: "interface".into(),
-            name: "archive".into()
+            name: "archive".into(),
+            multiple: false
         }
     );
     assert!(labels(&cst, header).is_empty(), "the name is no value");
@@ -613,4 +623,42 @@ fn none_is_a_reference_to_the_grammar() {
     };
     assert_eq!(cst.node(value).kind, NodeKind::Value(ValueKind::Ref));
     assert_eq!(cst.slice(cst.node(value).span), "none");
+}
+
+/// `multiple` in a pack's header, its author's word that the pack may be used several
+/// times (satz's ADR 0109), and `named NAME` on a `use`, each read as written; a dotted
+/// param is one entry of the params block, by its whole name.
+#[test]
+fn a_multiple_pack_and_a_named_use() {
+    let cst = Cst::parse("pack vm version \"1.2\" multiple\n").unwrap();
+    assert_eq!(
+        cst.node(child(&cst, cst.root(), 0)).kind,
+        NodeKind::Header {
+            keyword: "pack".into(),
+            name: "vm".into(),
+            multiple: true
+        }
+    );
+    let cst = Cst::parse(
+        "estate e\nuse \"packs/vm.satz\" named web when want_web\nparams {\n  web.vm_zone = \"europe-west3-a\"\n}\n",
+    )
+    .unwrap();
+    let NodeKind::Use {
+        path,
+        as_key,
+        named,
+        when,
+    } = cst.node(child(&cst, cst.root(), 1)).kind
+    else {
+        panic!()
+    };
+    assert_eq!(cst.slice(path), "\"packs/vm.satz\"");
+    assert!(as_key.is_none());
+    assert_eq!(named.map(|s| cst.slice(s)), Some("web"));
+    assert_eq!(when.map(|s| cst.slice(s)), Some("want_web"));
+    let params = cst.params().expect("a params block");
+    let NodeKind::ParamEntry { name, .. } = cst.node(child(&cst, params, 0)).kind else {
+        panic!()
+    };
+    assert_eq!(cst.slice(name), "web.vm_zone");
 }

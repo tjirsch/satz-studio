@@ -17,18 +17,25 @@ pub(super) fn scan(cst: &Cst) -> Vec<UseLine> {
         .collect();
     let mut out = Vec::new();
     for (_, node) in cst.nodes() {
-        let (path, as_key, gate, state) = match &node.kind {
-            NodeKind::Use { path, as_key, when } => (
+        let (path, as_key, named, gate, state) = match &node.kind {
+            NodeKind::Use {
+                path,
+                as_key,
+                named,
+                when,
+            } => (
                 unquote(cst.slice(*path)).to_string(),
                 as_key.map(|s| cst.slice(s).to_string()),
+                named.map(|s| cst.slice(s).to_string()),
                 when.map(|s| cst.slice(s).to_string()),
                 UseState::Active,
             ),
             NodeKind::Comment => match pack_line(cst.slice(node.span)) {
-                Some((path, as_key, gate)) => (
-                    path.to_string(),
-                    as_key.map(str::to_string),
-                    gate.map(str::to_string),
+                Some(l) => (
+                    l.path.to_string(),
+                    l.as_key.map(str::to_string),
+                    l.named.map(str::to_string),
+                    l.gate.map(str::to_string),
                     UseState::Commented,
                 ),
                 None => continue,
@@ -39,6 +46,7 @@ pub(super) fn scan(cst: &Cst) -> Vec<UseLine> {
             path,
             gate,
             as_key,
+            named,
             state,
             span: line_span(text, node.span.start),
             line: node.line,
@@ -48,10 +56,19 @@ pub(super) fn scan(cst: &Cst) -> Vec<UseLine> {
     out
 }
 
-/// `// use "<path>"[ as <key>][ when <gate>]` and nothing else — trailing whitespace
-/// tolerated — as `(path, as_key, gate)`. The `as` form is what `uncomment_pack`
-/// matches too, by its suffix; `pack_line` never writes it.
-pub(super) fn pack_line(t: &str) -> Option<(&str, Option<&str>, Option<&str>)> {
+/// A commented pack line, read: the path between the quotes and the words after it.
+pub(super) struct PackLine<'a> {
+    pub path: &'a str,
+    pub as_key: Option<&'a str>,
+    pub named: Option<&'a str>,
+    pub gate: Option<&'a str>,
+}
+
+/// `// use "<path>"[ as <key>][ named <name>][ when <gate>]` and nothing else — trailing
+/// whitespace tolerated. The `as` form is what `uncomment_pack` matches too, by its
+/// suffix; `pack_line` never writes it. `named` is a named use's (satz's ADR 0109), in
+/// the order satz's own scanner of pack lines reads it.
+pub(super) fn pack_line(t: &str) -> Option<PackLine<'_>> {
     let rest = t.strip_prefix("// use \"")?;
     let (path, rest) = rest.split_once('"')?;
     if path.is_empty() {
@@ -64,6 +81,12 @@ pub(super) fn pack_line(t: &str) -> Option<(&str, Option<&str>, Option<&str>)> {
         as_key = Some(k);
         rest = r;
     }
+    let mut named = None;
+    if let Some(r) = rest.strip_prefix(" named ") {
+        let (n, r) = ident_prefix(r)?;
+        named = Some(n);
+        rest = r;
+    }
     let mut gate = None;
     if let Some(r) = rest.strip_prefix(" when ") {
         let (g, r) = ident_prefix(r)?;
@@ -73,7 +96,12 @@ pub(super) fn pack_line(t: &str) -> Option<(&str, Option<&str>, Option<&str>)> {
     if !rest.is_empty() {
         return None;
     }
-    Some((path, as_key, gate))
+    Some(PackLine {
+        path,
+        as_key,
+        named,
+        gate,
+    })
 }
 
 /// The identifier at the start of `s` (`[A-Za-z_][A-Za-z0-9_.]*`) and what follows it.

@@ -131,7 +131,7 @@ fn the_tree_and_the_ast_agree() {
 
 fn differential(name: &str, cst: &Cst, file: &File) {
     let header = cst.nodes().find_map(|(_, n)| match &n.kind {
-        NodeKind::Header { keyword, name } => Some((keyword.clone(), name.clone())),
+        NodeKind::Header { keyword, name, .. } => Some((keyword.clone(), name.clone())),
         _ => None,
     });
     if let Some(iface) = &file.interface_file {
