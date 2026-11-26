@@ -1,6 +1,6 @@
 # 0024 — workload packs are a tab of Estate, and a workload estate has no Presets destination
 
-- **Status:** accepted; the tab and the missing Presets destination superseded by [ADR 0029](0029-components-is-one-destination-for-presets-and-packs.md); the rule that recognises a workload estate superseded by [ADR 0025](0025-an-estate-works-in-one-of-three-modes-and-satz-says-which.md)
+- **Status:** accepted; the tab and the missing Presets destination superseded by [ADR 0029](0029-components-is-one-destination-for-presets-and-packs.md); the rule that recognises a workload estate superseded by [ADR 0025](0025-an-estate-works-in-one-of-three-modes-and-satz-says-which.md); the `use` line as the document layer's edit superseded by [ADR 0038](0038-the-app-writes-no-use-line-and-shows-the-one-satz-names.md) — the app writes none
 - **Date:** 2026-11-11
 - **Deciders:** the maintainer
 

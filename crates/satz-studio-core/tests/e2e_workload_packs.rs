@@ -9,15 +9,15 @@
 //! a folder source of its own, a temporary one, after review-pack's bar, and records it as
 //! fetched from there. `satz packs --local` lists the packs here with their declarations
 //! and the interface folders the estate reads, with what each exports, and reads no
-//! source — a GitHub source that does not exist is no failure. The `use` line satz names
-//! goes into the estate file through the app's writer and satz's check. A workload
+//! source — a GitHub source that does not exist is no failure. A pack here that the
+//! estate does not use carries the `use` line satz names for it, the one the Packs view
+//! shows for the estate's author to write — a `multiple` pack's included. A workload
 //! estate's prerequisites report, through the session as the Overview reads it, lists
 //! the roles its resource types need by where each is granted and checks none.
 
 #[path = "fixtures/e2e/support.rs"]
 mod e2e;
 
-use satz_studio_core::edit::{CliChecker, Edit, EditSession};
 use satz_studio_core::estate::EstateDir;
 use satz_studio_core::satz::SatzCli;
 use satz_studio_core::satz::SatzError;
@@ -148,10 +148,7 @@ async fn a_pack_is_fetched_kept_current_left_alone_when_edited_and_detached() {
         }
         other => panic!("removing a source a row names was not refused: {other:?}"),
     }
-    assert_eq!(
-        fetched_row.use_path(),
-        Some(format!("packs/{PACK}.satz").as_str())
-    );
+    assert_eq!(fetched_row.use_line.as_deref(), Some(use_line.as_str()));
 
     // a second fetch is satz's refusal, not a report
     let again = e2e::within(workload::get(&cli, &Which::One(PACK.into()), source, &main)).await;
@@ -309,8 +306,15 @@ async fn the_local_listing_reads_no_source_and_names_the_interface_folders() {
     assert_eq!(row(&local.packs, PACK).state, PackState::Edited);
 }
 
+/// A pack of satz's `packs/` tree whose header says `multiple`: an estate uses it under a
+/// name, `use "…" named <name>`.
+const MULTIPLE: &str = "project-budget";
+
+/// The Packs model carries the `use` line satz names for every pack here the estate does
+/// not use, in both listings — the line the view shows for the estate's author to write,
+/// the app writing none. A `multiple` pack's line is the one `get-pack` printed for it.
 #[tokio::test(flavor = "multi_thread")]
-async fn the_use_line_satz_names_goes_into_the_estate_through_the_writer() {
+async fn a_pack_the_estate_does_not_use_carries_the_line_satz_names_for_it() {
     let estate = e2e::estate_dir(None);
     let main = estate.file("wp.satz");
     std::fs::write(&main, ESTATE).unwrap();
@@ -318,39 +322,48 @@ async fn the_use_line_satz_names_goes_into_the_estate_through_the_writer() {
     std::fs::write(estate.root.join("packs").join("own.satz"), OWN).unwrap();
     let cli = estate.cli().await;
     add_source(&cli).await;
+    assert!(
+        e2e::read(&e2e::vendor().join("packs").join(format!("{MULTIPLE}.satz")))
+            .lines()
+            .any(|l| l.starts_with("pack ") && l.trim_end().ends_with(" multiple")),
+        "{MULTIPLE} is a pack whose header says multiple"
+    );
+    let got = e2e::within(workload::get(
+        &cli,
+        &Which::One(MULTIPLE.into()),
+        SOURCE,
+        &main,
+    ))
+    .await
+    .unwrap();
+    let printed = got.installed[0].use_line.clone();
+    assert!(
+        printed.starts_with(&format!("use \"packs/{MULTIPLE}.satz\"")),
+        "{printed}"
+    );
 
-    let report = e2e::within(workload::list(&cli, SOURCE, &main))
+    let listed = e2e::within(workload::list(&cli, SOURCE, &main))
         .await
         .unwrap();
-    let path = row(&report.packs, "own")
-        .use_path()
-        .expect("a pack that is here has a use line")
-        .to_string();
-    assert_eq!(path, "packs/own.satz");
-
-    let es = EditSession::open(&main).unwrap();
-    let proposed = es.apply(&[Edit::AddUse { path: path.clone() }]).unwrap();
-    let checker = CliChecker { cli: cli.clone() };
-    e2e::within(proposed.commit(&checker)).await.unwrap();
-    let written = e2e::read(&main);
-    assert_eq!(
-        written,
-        ESTATE.replace(
-            "params {\n  customer_organization_id = \"123456789012\"\n}\n",
-            "params {\n  customer_organization_id = \"123456789012\"\n}\n\nuse \"packs/own.satz\"\n"
-        )
-    );
-    assert!(estate.temp_files().is_empty(), "{:?}", estate.temp_files());
-
-    // the estate reads the pack now, and a second line for it is refused before a write
-    let (passed, lines) = e2e::check_lines(&cli, &main).await;
-    assert!(passed, "{lines:?}");
-    let es = EditSession::open(&main).unwrap();
-    assert!(es.apply(&[Edit::AddUse { path }]).is_err());
+    let local = e2e::within(workload::list_local(&cli, &main))
+        .await
+        .unwrap();
+    for packs in [&listed.packs, &local.packs] {
+        assert_eq!(
+            row(packs, "own").use_line.as_deref(),
+            Some("use \"packs/own.satz\"")
+        );
+        assert_eq!(
+            row(packs, MULTIPLE).use_line.as_deref(),
+            Some(printed.as_str())
+        );
+    }
+    // the app wrote nothing into the estate file
+    assert_eq!(e2e::read(&main), ESTATE);
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn a_new_pack_is_the_repositorys_own_and_the_estate_uses_it_through_the_writer() {
+async fn a_new_pack_is_the_repositorys_own_and_satz_names_its_line() {
     let estate = e2e::estate_dir(None);
     let main = estate.file("wp.satz");
     std::fs::write(&main, ESTATE).unwrap();
@@ -370,25 +383,19 @@ async fn a_new_pack_is_the_repositorys_own_and_the_estate_uses_it_through_the_wr
             .is_err()
     );
 
-    // the line satz would name, through the writer and satz's check
-    let path = dir
-        .use_path_of(&file)
-        .expect("packs_dir is under include_dirs");
-    assert_eq!(path, "packs/team-notes.satz");
-    let es = EditSession::open(&main).unwrap();
-    let proposed = es.apply(&[Edit::AddUse { path: path.clone() }]).unwrap();
-    let checker = CliChecker { cli: cli.clone() };
-    e2e::within(proposed.commit(&checker)).await.unwrap();
-    assert_eq!(dir.pack_of_use(&main, &path).as_deref(), Some("team-notes"));
-
-    // satz lists it as the repository's own
+    // satz lists it as the repository's own, with the line an estate reads it with, and
+    // the estate file is as it was
     add_source(&cli).await;
     let report = e2e::within(workload::list(&cli, SOURCE, &main))
         .await
         .unwrap();
     let own = row(&report.packs, "team-notes");
     assert_eq!(own.state, PackState::Own);
-    assert_eq!(own.use_path(), Some(path.as_str()));
+    assert_eq!(
+        own.use_line.as_deref(),
+        Some("use \"packs/team-notes.satz\"")
+    );
+    assert_eq!(e2e::read(&main), ESTATE);
 }
 
 /// What the new pack `team-notes` is written as before it is published: a header the index
@@ -404,15 +411,11 @@ async fn an_own_pack_is_published_to_a_folder_source_and_follows_it_from_then_on
     let dir = EstateDir::open(&estate.root).unwrap();
     let id = "team-notes";
 
-    // the new pack, used by the estate through the writer
+    // the new pack, used by the estate: its line written by hand, as its author writes it
     let file = e2e::within(workload::create_pack(&cli, &dir.packs_dir(), id))
         .await
         .unwrap();
-    let path = dir.use_path_of(&file).unwrap();
-    let es = EditSession::open(&main).unwrap();
-    let proposed = es.apply(&[Edit::AddUse { path }]).unwrap();
-    let checker = CliChecker { cli: cli.clone() };
-    e2e::within(proposed.commit(&checker)).await.unwrap();
+    std::fs::write(&main, format!("{ESTATE}\nuse \"packs/{id}.satz\"\n")).unwrap();
 
     // a folder source of its own, outside the satz checkout
     let shared_dir = e2e::scratch();

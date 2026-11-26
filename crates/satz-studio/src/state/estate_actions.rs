@@ -108,8 +108,8 @@ pub enum EstateAction {
     /// same source
     Packs(PackOp),
     /// a new pack of the repository's own: `packs_dir/<id>.satz` written and formatted
-    /// by `satz fmt`, its `use` line added through the app's writer, and the file
-    /// opened in the application the system gives `.satz` files
+    /// by `satz fmt`, and the file opened in the Editor setting's command; its `use` line
+    /// is the estate author's to write
     NewPack(String),
     /// a command on the estate's pack sources: `satz pack-source list`, `add` or
     /// `remove`, the last two followed by the list read again
@@ -1616,33 +1616,17 @@ async fn list_local(session: &Arc<EstateSession>, app: Store<AppStore>) {
 }
 
 /// A new pack of the repository's own (`workload::create_pack`, under the write lock),
-/// then its `use` line — the path satz names for a file of `packs_dir` — through the
-/// app's writer like every other edit, then the file opened for its author. A refused
-/// line leaves the pack where it is, opened all the same: the file is the author's.
+/// then the file opened for its author. No `use` line is written: the Packs view shows
+/// the one satz names, for the author to write into the estate file (ADR 0038).
 async fn new_pack(session: &Arc<EstateSession>, app: Store<AppStore>, id: &str) {
     let created = {
         let _lock = session.write_lock().await;
         workload::create_pack(&session.cli, &session.dir.packs_dir(), id).await
     };
-    let file = match created {
-        Ok(file) => file,
-        Err(e) => {
-            toast(app, ToastKind::Error, format!("no new pack: {e}"));
-            return;
-        }
-    };
-    match session.dir.use_path_of(&file) {
-        Some(path) => commit_edit(session, app, Edit::AddUse { path }).await,
-        None => toast(
-            app,
-            ToastKind::Error,
-            format!(
-                "{} is written, and no use line reaches it: packs_dir is under none of config.toml's include_dirs",
-                file.display()
-            ),
-        ),
+    match created {
+        Ok(file) => edit_file(app, &file),
+        Err(e) => toast(app, ToastKind::Error, format!("no new pack: {e}")),
     }
-    edit_file(app, &file);
 }
 
 /// A pack's file opened for its author: in the Editor setting's command, or the system's
