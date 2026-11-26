@@ -312,7 +312,8 @@ const MULTIPLE: &str = "project-budget";
 
 /// The Packs model carries the `use` line satz names for every pack here the estate does
 /// not use, in both listings — the line the view shows for the estate's author to write,
-/// the app writing none. A `multiple` pack's line is the one `get-pack` printed for it.
+/// the app writing none. A `multiple` pack's line is the one `get-pack` printed for it,
+/// `use "…" named <name>`.
 #[tokio::test(flavor = "multi_thread")]
 async fn a_pack_the_estate_does_not_use_carries_the_line_satz_names_for_it() {
     let estate = e2e::estate_dir(None);
@@ -337,9 +338,10 @@ async fn a_pack_the_estate_does_not_use_carries_the_line_satz_names_for_it() {
     .await
     .unwrap();
     let printed = got.installed[0].use_line.clone();
-    assert!(
-        printed.starts_with(&format!("use \"packs/{MULTIPLE}.satz\"")),
-        "{printed}"
+    // satz 0.119.0 names the use: `<name>` is the placeholder the estate's author replaces
+    assert_eq!(
+        printed,
+        format!("use \"packs/{MULTIPLE}.satz\" named <name>")
     );
 
     let listed = e2e::within(workload::list(&cli, SOURCE, &main))

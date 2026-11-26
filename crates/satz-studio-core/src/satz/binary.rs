@@ -12,8 +12,13 @@ use super::SatzError;
 /// The oldest satz this build works with; an older binary is refused. It may sit below the
 /// submodule's satz ([`SatzBinary::built_against`]), and rises only when a satz release
 /// breaks the app or the app starts using something a later satz introduced — a routine pin
-/// bump leaves it alone (ADR 0014). It is 0.118.0 because the app reads a named use (satz's
-/// ADR 0109), which 0.114.0 to 0.118.0 introduced in four parts and 0.118.0 completed: the
+/// bump leaves it alone (ADR 0014). It is 0.119.0 because the app reads a named use (satz's
+/// ADR 0109), which 0.114.0 to 0.119.0 introduced in five parts. 0.119.0 brings the fifth:
+/// an interface of a named use, reported by `satz interfaces` with its `named`, which the
+/// Interfaces tab shows on the interface's card, and the `use "…" named <name>` line that
+/// `satz get-pack` and `satz packs` name for a pack whose header says `multiple`, which the
+/// Packs view shows for the estate's author to write — an older satz names a plain `use`
+/// line, which the estate refuses for such a pack. The parts before it: the
 /// questions report's `named` and `param` and its dotted `subject`, which the Decisions view
 /// groups by use and answers by; `named` on an unmanaged line of the presets report, on a
 /// notice and on a scan finding; and a list param of a named use, reported as
@@ -26,7 +31,7 @@ use super::SatzError;
 /// `dropped_forked`, `forks_kept`; satz's ADR 0103), which an older report lacks and the app
 /// refuses, `p = none` as a param with no value (satz's ADR 0106) and `locals { }` as a
 /// file's own values (satz's ADR 0105).
-pub const MIN_SATZ: &str = "0.118.0";
+pub const MIN_SATZ: &str = "0.119.0";
 
 /// The manifest of the submodule `vendor/satz`, whose version is the satz this build is
 /// built and tested against.

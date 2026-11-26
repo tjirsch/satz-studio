@@ -356,6 +356,11 @@ fn InterfaceCard(iface: InterfaceRow, rows: Vec<ExportRow>) -> Element {
                         "In the library every project's folder carries."
                     }
                 }
+                if let Some(n) = &iface.named {
+                    p { class: "interfaces__supporting",
+                        "Of the named use {n}: its own folder, never common."
+                    }
+                }
                 if !iface.uses.is_empty() {
                     div { class: "interfaces__uses",
                         span { class: "interfaces__supporting", "uses" }

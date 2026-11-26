@@ -1307,6 +1307,7 @@ impl RequestRow {
 pub struct InterfaceRow {
     pub name: String,
     /// in the library every project's folder carries: marked `common`, or declared in a pack
+    /// outside an `each` and outside a named use
     pub common: bool,
     /// the interfaces its module also carries, directly or through another
     pub uses: Vec<String>,
@@ -1314,6 +1315,11 @@ pub struct InterfaceRow {
     pub exports: usize,
     pub file: String,
     pub line: usize,
+    /// the named use whose interface this is, `name` being `<use>-<interface>`, its folder
+    /// that use's own and never common (satz's ADR 0109); absent for an interface of the
+    /// flat namespace
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub named: Option<String>,
 }
 
 /// How a workload pack in the estate's `packs_dir` stands, as satz judges it from the
@@ -2443,7 +2449,8 @@ mod tests {
 
     /// `satz interfaces showcase.satz --format json`, recorded from the release the app is
     /// tested against over `tests/fixtures/smoke/config.toml`: the smoke showcase's core
-    /// exports, its common `audit` interface and `archive`, which uses it.
+    /// exports, its common `audit` interface and `archive`, which uses it, and the `bucket`
+    /// interface of `showcase-bucket.satz` once per named use, `reports-bucket` among them.
     const INTERFACES: &str = include_str!("../../tests/fixtures/interfaces-showcase.json");
 
     #[test]
@@ -2464,6 +2471,16 @@ mod tests {
             .unwrap();
         assert_eq!(archive.uses, ["audit"]);
         assert!(report.of("archive").any(|e| !e.attach.is_empty()));
+        assert_eq!(archive.named, None);
+        // an interface of a named use is that use's own folder, never common (satz 0.119.0)
+        let of_use = report
+            .interfaces
+            .iter()
+            .find(|i| i.name == "reports-bucket")
+            .unwrap();
+        assert_eq!(of_use.named.as_deref(), Some("reports"));
+        assert!(!of_use.common);
+        assert_eq!(report.of("reports-bucket").count(), of_use.exports);
         assert!(
             report
                 .exports
@@ -2505,6 +2522,22 @@ mod tests {
                 "an interface without `{field}` was read"
             );
         }
+        // `named` is sent only for an interface of a named use
+        assert_eq!(
+            serde_json::from_value::<InterfaceRow>(iface.clone())
+                .unwrap()
+                .named,
+            None
+        );
+        let mut of_use = iface;
+        of_use["named"] = serde_json::json!("reports");
+        assert_eq!(
+            serde_json::from_value::<InterfaceRow>(of_use)
+                .unwrap()
+                .named
+                .as_deref(),
+            Some("reports")
+        );
     }
 
     #[test]

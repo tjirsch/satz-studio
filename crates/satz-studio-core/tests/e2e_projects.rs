@@ -1,7 +1,8 @@
 //! The Interfaces tab over the real satz, on a copy of satz's smoke showcase: `satz
 //! interfaces` read through the CLI as the reload reads it — the core exports, the
 //! declared interfaces, one interface per entry of a list that a top-level `each` writes
-//! (satz ADR 0075), and the list params with the pattern each field's value matches.
+//! (satz ADR 0075), the interface of each named use of a pack that declares one (satz ADR
+//! 0109), and the list params with the pattern each field's value matches.
 
 #[path = "fixtures/e2e/support.rs"]
 mod e2e;
@@ -65,6 +66,23 @@ async fn the_report_reads_what_the_estate_publishes_and_its_list_params() {
         assert!(
             topic.value.contains(&name.replace("-events", "")),
             "{topic:?}"
+        );
+        assert_eq!(iface.named, None);
+    }
+
+    // `use "showcase-bucket.satz" named reports` and `… named scratch`: the pack's
+    // `interface "bucket"` is each use's own, `<use>-bucket`, never common (satz 0.119.0)
+    for (name, of_use) in [("reports-bucket", "reports"), ("scratch-bucket", "scratch")] {
+        let iface = report
+            .interfaces
+            .iter()
+            .find(|i| i.name == name)
+            .unwrap_or_else(|| panic!("the named use `{of_use}` publishes `{name}`"));
+        assert_eq!(iface.named.as_deref(), Some(of_use), "{iface:?}");
+        assert!(!iface.common, "{iface:?}");
+        assert!(
+            report.of(name).any(|e| e.name == "bucket_name"),
+            "`{name}` exports its bucket's name"
         );
     }
 
