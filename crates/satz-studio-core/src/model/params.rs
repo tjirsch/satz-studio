@@ -12,7 +12,7 @@ use std::collections::BTreeSet;
 use satz_core::pipeline::Env;
 
 use super::value::{decode, mode_of};
-use super::{ModelError, ParamKind, ParamRow, SourceValue};
+use super::{ModelError, NamedUse, ParamKind, ParamRow, SourceValue};
 use crate::cst::{Cst, NodeId, NodeKind, ValueKind};
 use crate::satz::reports::{QuestionKind, QuestionRow, QuestionsReport, Shape};
 
@@ -26,6 +26,7 @@ pub(super) fn build(
     let Some(params) = cst.params() else {
         return Ok(Vec::new());
     };
+    let uses = named_uses(cst);
     let mut out = Vec::new();
     for &id in &cst.node(params).children {
         let node = cst.node(id);
@@ -63,11 +64,40 @@ pub(super) fn build(
             mode: mode_of(&value),
             question,
             value,
+            named: named_of(&uses, &name),
             name,
             line: node.line,
         });
     }
     Ok(out)
+}
+
+/// The named uses of the file's top level, `use "…" named <name>`, in order — the only
+/// place satz reads one (satz's ADR 0109).
+fn named_uses(cst: &Cst) -> Vec<NamedUse> {
+    cst.node(cst.root())
+        .children
+        .iter()
+        .filter_map(|&id| match &cst.node(id).kind {
+            NodeKind::Use {
+                path,
+                named: Some(named),
+                ..
+            } => Some(NamedUse {
+                name: cst.slice(*named).to_string(),
+                path: cst.slice(*path).trim_matches('"').to_string(),
+            }),
+            _ => None,
+        })
+        .collect()
+}
+
+/// The named use a param of the estate's `params` belongs to: the one whose name is the
+/// part of the dotted name before its first dot. satz refuses a dotted param that names
+/// no named use, so a dotted name without one is a flat name here.
+fn named_of(uses: &[NamedUse], name: &str) -> Option<NamedUse> {
+    let (first, _) = name.split_once('.')?;
+    uses.iter().find(|u| u.name == first).cloned()
 }
 
 /// The value node is the keyword `none` — the whole value, as satz reads it in `params`

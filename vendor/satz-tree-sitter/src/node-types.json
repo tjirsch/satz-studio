@@ -572,6 +572,16 @@
           }
         ]
       },
+      "multiple": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "multiple",
+            "named": false
+          }
+        ]
+      },
       "name": {
         "multiple": false,
         "required": true,
@@ -1097,6 +1107,16 @@
           }
         ]
       },
+      "named": {
+        "multiple": true,
+        "required": false,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      },
       "path": {
         "multiple": false,
         "required": true,
@@ -1246,6 +1266,14 @@
   },
   {
     "type": "locals",
+    "named": false
+  },
+  {
+    "type": "multiple",
+    "named": false
+  },
+  {
+    "type": "named",
     "named": false
   },
   {

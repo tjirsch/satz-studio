@@ -1941,6 +1941,7 @@ mod tests {
             run: "satz adopt <estate> --execute --import".to_string(),
             severity: satz_studio_core::satz::reports::FindingSeverity::Error,
             acknowledged: false,
+            named: None,
         }
     }
 

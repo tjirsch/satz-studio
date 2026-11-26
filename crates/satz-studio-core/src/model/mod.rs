@@ -182,6 +182,41 @@ pub struct ParamRow {
     pub one_way_door: bool,
     pub mode: EditMode,
     pub line: u32,
+    /// the named use a dotted param belongs to — `web.vm_zone` is the param `vm_zone` of
+    /// `use "…" named web` (satz's ADR 0109); `None` for a param of the flat namespace
+    pub named: Option<NamedUse>,
+}
+
+/// A named use of the estate file, as its top-level `use … named <name>` line reads.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NamedUse {
+    /// the use's name, the first part of its params' dotted names
+    pub name: String,
+    /// the pack's path as the line writes it
+    pub path: String,
+}
+
+impl NamedUse {
+    /// The heading a named use's params and questions stand under, as satz's own
+    /// interview heads them: `web — packs/vm.satz`.
+    pub fn heading(&self) -> String {
+        format!("{} — {}", self.name, self.path)
+    }
+}
+
+impl ParamRow {
+    /// The pack's own name of the param: the part after the use's name for a named use's
+    /// param, the whole name otherwise.
+    pub fn own_name(&self) -> &str {
+        match &self.named {
+            Some(u) => self
+                .name
+                .strip_prefix(&u.name)
+                .and_then(|r| r.strip_prefix('.'))
+                .unwrap_or(&self.name),
+            None => &self.name,
+        }
+    }
 }
 
 /// One `hcl { … }` block of the file. Raw HCL is written verbatim and is opaque to the

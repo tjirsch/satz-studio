@@ -163,7 +163,7 @@ async fn the_generated_interfaces_parse_and_a_project_reads_one() {
         let header = cst
             .nodes()
             .find_map(|(_, n)| match &n.kind {
-                NodeKind::Header { keyword, name } => Some((keyword.clone(), name.clone())),
+                NodeKind::Header { keyword, name, .. } => Some((keyword.clone(), name.clone())),
                 _ => None,
             })
             .unwrap();

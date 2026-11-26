@@ -91,7 +91,16 @@ pub fn NoticeDialog() -> Element {
         String::new()
     };
     let param = notice.param.clone();
-    let title = format!("{} asks for a command{of}", short_pack(&notice.pack));
+    // a named use's notice is acknowledged per use: the title names the use
+    let used_as = notice
+        .named
+        .as_ref()
+        .map(|n| format!(" named {n}"))
+        .unwrap_or_default();
+    let title = format!(
+        "{}{used_as} asks for a command{of}",
+        short_pack(&notice.pack)
+    );
 
     rsx! {
         Dialog {
@@ -104,7 +113,7 @@ pub fn NoticeDialog() -> Element {
             class: "notice-dialog",
             DialogTitle { "{title}" }
             div { class: "dialog-body",
-                p { class: "notice-dialog__pack", code { "{notice.pack}" } }
+                p { class: "notice-dialog__pack", code { "{notice.pack}" } "{used_as}" }
                 p { "{notice.text}" }
                 pre { class: "notice-dialog__command", code { "{notice.run}" } }
                 if let Err(why) = &command {
@@ -183,6 +192,7 @@ mod tests {
             run: "satz adopt <estate> --execute --import".to_string(),
             severity: FindingSeverity::Error,
             acknowledged: false,
+            named: None,
         }
     }
 

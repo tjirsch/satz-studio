@@ -48,8 +48,10 @@ in its own answers — and what it still has to do; **Presets**, for an estate t
 every pack satz's pack graph offers, as the estate has it, the packs that need another
 hung below it, each switched on and off by satz's own `add-preset` and `remove-preset`;
 **Decisions**, the
-questions those packs declare and it has not answered; **Estate**, the file
-itself — its params (a param it declares `none` reads "no value — must be provided"
+questions those packs declare and it has not answered — a pack the estate uses
+several times, each a named use (`use "packs/vm.satz" named web`), asks its questions once
+per use, under `web — packs/vm.satz`, and the answer is written as `web.vm_zone`; **Estate**, the file
+itself — its params (a named use's `web.<param>` stand under the use; a param it declares `none` reads "no value — must be provided"
 until a value is typed in its place; its own `locals { }` values are not params and stay
 as the file writes them), its resource tree, and the interfaces it publishes for other estates
 to read, as `satz interfaces` reports them: the core exports every interface
@@ -93,9 +95,11 @@ granted, and the APIs they need on the delegation's infrastructure project — t
 workload's team hands to the organization's team, which "Copy" puts on the clipboard as
 plain text. Delegated access is
 given in Estate → Interfaces: every list param a preset declares is shown with its entries, and
-"Add" writes one through `satz add-entry` from a form of the declared fields. A workload
+"Add" writes one through `satz add-entry` from a form of the declared fields — a named use's
+list by the name the estate binds it, `web.<list>`. A workload
 estate is created from the interface folders it was given, on the Start screen. Packs
-lists every workload pack the estate uses first, then the other files of `packs_dir`:
+lists every workload pack the estate uses first, each with a badge per name it is used
+under, then the other files of `packs_dir`:
 the ones the repository wrote itself ("Own pack") and the ones `satz get-pack` fetched.
 When Packs opens, `satz packs --local` lists them without reading any pack source — no
 network — so each row has its state, where it came from and "Details" at once: a fetched
@@ -175,7 +179,7 @@ that holds them up — in front of apply and bootstrap, which satz refuses.
 
 ## What it needs
 
-- **`satz` 0.113.0 or newer.** `MIN_SATZ` in `crates/satz-studio-core/src/satz/binary.rs`
+- **`satz` 0.118.0 or newer.** `MIN_SATZ` in `crates/satz-studio-core/src/satz/binary.rs`
   names the oldest satz this build works with. It rises when a satz release breaks the
   app or the app starts using something a later satz introduced, not with every satz
   release. Install satz with its installer or bring it up to date with `satz

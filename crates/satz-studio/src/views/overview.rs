@@ -1113,6 +1113,7 @@ mod tests {
             question: None,
             one_way_door: false,
             mode: satz_studio_core::model::EditMode::Value,
+            named: None,
             line: 1,
         }
     }

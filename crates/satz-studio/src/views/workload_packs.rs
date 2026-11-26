@@ -32,7 +32,7 @@ use satz_studio_core::satz::workload::{Which, new_pack_id};
 use dioxus_icons::lucide::{
     ArrowDown, ArrowUp, Check, ChevronDown, ChevronUp, CircleAlert, CloudDownload, CloudOff, Diff,
     Download, FilePlus, FolderInput, FolderUp, History, Hourglass, Link as LinkIcon, Package,
-    Pencil, RefreshCw, SlidersHorizontal, TriangleAlert, Unlink,
+    Pencil, RefreshCw, SlidersHorizontal, Tag, TriangleAlert, Unlink,
 };
 
 use crate::components::badge::{Badge, BadgeVariant};
@@ -274,24 +274,28 @@ fn origin_text(row: &WorkloadPackRow) -> Option<String> {
 }
 
 /// One pack of `packs_dir`, as the card lists it: the `use` path the estate reads it by,
-/// where it does, satz's row for it once a listing names it, and whether that row is the
-/// local listing's.
+/// where it does, the names it is used under, satz's row for it once a listing names it,
+/// and whether that row is the local listing's.
 #[derive(Debug, Clone, PartialEq)]
 struct HereRow {
     id: String,
     used: Option<String>,
+    /// the names of the named uses that read the pack, `use "…" named <name>`, in the
+    /// order of their lines (satz's ADR 0109); empty where only a flat line uses it
+    named: Vec<String>,
     row: Option<WorkloadPackRow>,
     local: bool,
 }
 
 /// The packs of `packs_dir`: every one the estate uses, in the order of its `use` lines,
 /// then the others a listing names, by id. A pack's row is the source listing's where it
-/// names the pack, else the local listing's. `used` is each used pack's id and the path of
-/// its line.
+/// names the pack, else the local listing's. `used` is each active line's pack id, its
+/// path and, for a named use, its name: a pack used under several names is one row that
+/// carries them all.
 fn here_rows(
     source: Option<&WorkloadPacksReport>,
     local: Option<&WorkloadPacksReport>,
-    used: &[(String, String)],
+    used: &[(String, String, Option<String>)],
 ) -> Vec<HereRow> {
     let here = |r: &WorkloadPacksReport, is_local: bool| -> Vec<(WorkloadPackRow, bool)> {
         r.packs
@@ -309,23 +313,28 @@ fn here_rows(
     }
     let row_of = |id: &str| listed.iter().find(|(p, _)| p.id == id).cloned();
     let mut rows: Vec<HereRow> = Vec::new();
-    for (id, path) in used {
-        if rows.iter().all(|r| &r.id != id) {
-            let found = row_of(id);
-            rows.push(HereRow {
-                id: id.clone(),
-                used: Some(path.clone()),
-                local: found.as_ref().is_some_and(|(_, l)| *l),
-                row: found.map(|(p, _)| p),
-            });
+    for (id, path, named) in used {
+        match rows.iter_mut().find(|r| &r.id == id) {
+            Some(r) => r.named.extend(named.clone()),
+            None => {
+                let found = row_of(id);
+                rows.push(HereRow {
+                    id: id.clone(),
+                    used: Some(path.clone()),
+                    named: named.iter().cloned().collect(),
+                    local: found.as_ref().is_some_and(|(_, l)| *l),
+                    row: found.map(|(p, _)| p),
+                });
+            }
         }
     }
     let mut others: Vec<HereRow> = listed
         .iter()
-        .filter(|(p, _)| used.iter().all(|(id, _)| id != &p.id))
+        .filter(|(p, _)| used.iter().all(|(id, _, _)| id != &p.id))
         .map(|(p, is_local)| HereRow {
             id: p.id.clone(),
             used: None,
+            named: Vec::new(),
             row: Some(p.clone()),
             local: *is_local,
         })
@@ -377,8 +386,9 @@ pub fn WorkloadPacksPane() -> Element {
     });
     let busy = app.estate().packs_busy().cloned() || app.estate().loading().cloned();
     let update = app.estate().pack_update().cloned();
-    // the packs the estate uses: its active `use` lines that read a file of packs_dir
-    let used: Vec<(String, String)> = app
+    // the packs the estate uses: its active `use` lines that read a file of packs_dir,
+    // each with the name of a named use
+    let used: Vec<(String, String, Option<String>)> = app
         .estate()
         .cst()
         .read()
@@ -389,7 +399,7 @@ pub fn WorkloadPacksPane() -> Element {
                 .filter(|u| u.state == UseState::Active)
                 .filter_map(|u| {
                     let id = open.session.dir.pack_of_use(&open.main, &u.path)?;
-                    Some((id, u.path))
+                    Some((id, u.path, u.named))
                 })
                 .collect()
         })
@@ -462,7 +472,7 @@ pub fn WorkloadPacksPane() -> Element {
                     }
                     CardContent {
                         for row in available {
-                            PackLine { key: "{row.id}", id: row.id.clone(), row: Some(row.clone()), folders: folders.clone(), local: false, used: true, file: None, edited: None, busy, confirm, publishing }
+                            PackLine { key: "{row.id}", id: row.id.clone(), row: Some(row.clone()), folders: folders.clone(), local: false, used: true, named: Vec::new(), file: None, edited: None, busy, confirm, publishing }
                         }
                     }
                 }
@@ -642,6 +652,7 @@ fn HereCard(
                     key: "{here.id}",
                     id: here.id.clone(),
                     used: here.used.is_some(),
+                    named: here.named.clone(),
                     edited: edited_of(&here.id),
                     file: Some(files.join(format!("{}.satz", here.id))),
                     row: here.row,
@@ -694,8 +705,9 @@ fn HereCard(
 
 /// One pack: its id, version, badge, where it comes from and what can be done. `row` is
 /// satz's, once a listing names it, and `local` says that listing read no source; `used`
-/// says the estate reads it; `file` is where it is, for a pack that is here; `folders` are
-/// the interface folders the estate uses, which the expander names.
+/// says the estate reads it, and `named` the names of the named uses that read it — a
+/// badge each; `file` is where it is, for a pack that is here; `folders` are the interface
+/// folders the estate uses, which the expander names.
 #[component]
 fn PackLine(
     id: String,
@@ -703,6 +715,7 @@ fn PackLine(
     folders: Vec<InterfaceFolder>,
     local: bool,
     used: bool,
+    named: Vec<String>,
     file: Option<PathBuf>,
     edited: Option<UpdatedPack>,
     busy: bool,
@@ -727,6 +740,14 @@ fn PackLine(
                 code { class: "interfaces__export-name", "{id}" }
                 if let Some(row) = &row {
                     span { class: "interfaces__supporting", {versions(row)} }
+                }
+                for name in named {
+                    Tip { key: "{name}", text: format!("The estate uses this pack under the name {name}: its params are bound as {name}.<param>, and what it creates is addressed {name}__<label>."),
+                        Badge { variant: BadgeVariant::Outline,
+                            Tag { size: 12 }
+                            "named {name}"
+                        }
+                    }
                 }
                 if let Some(s) = state
                     && let Some((word, error)) = badge(s, local)
@@ -1383,6 +1404,35 @@ mod tests {
         );
     }
 
+    /// A pack used under two names, and flat beside them, is one row that names both uses
+    /// in the order of their lines; a pack used flat alone names none.
+    #[test]
+    fn a_pack_used_under_names_is_one_row_with_its_names() {
+        let line = |id: &str, named: Option<&str>| {
+            (
+                id.to_string(),
+                format!("packs/{id}.satz"),
+                named.map(str::to_string),
+            )
+        };
+        let used = vec![
+            line("vm", Some("web")),
+            line("budget", None),
+            line("vm", None),
+            line("vm", Some("db")),
+        ];
+        let rows = here_rows(None, None, &used);
+        assert_eq!(
+            rows.iter()
+                .map(|r| (r.id.as_str(), r.named.clone()))
+                .collect::<Vec<_>>(),
+            [
+                ("vm", vec!["web".to_string(), "db".to_string()]),
+                ("budget", Vec::new()),
+            ]
+        );
+    }
+
     /// The used packs lead in the order of their lines, with satz's row where a source
     /// was listed; the other packs here follow by id; an available one is no row here.
     #[test]
@@ -1392,8 +1442,8 @@ mod tests {
             ..row(state, Some("1.0"), None)
         };
         let used = vec![
-            ("zeta".to_string(), "packs/zeta.satz".to_string()),
-            ("alpha".to_string(), "packs/alpha.satz".to_string()),
+            ("zeta".to_string(), "packs/zeta.satz".to_string(), None),
+            ("alpha".to_string(), "packs/alpha.satz".to_string(), None),
         ];
         let unlisted = here_rows(None, None, &used);
         assert_eq!(
@@ -1440,7 +1490,7 @@ mod tests {
             sources: Vec::new(),
             packs,
         };
-        let used = vec![("alpha".to_string(), "packs/alpha.satz".to_string())];
+        let used = vec![("alpha".to_string(), "packs/alpha.satz".to_string(), None)];
         let local = report(vec![
             with("alpha", PackState::NotChecked),
             with("fresh", PackState::Own),

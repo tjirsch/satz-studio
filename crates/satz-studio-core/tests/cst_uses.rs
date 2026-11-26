@@ -238,3 +238,32 @@ fn an_active_use_with_as_and_a_triple_quoted_path() {
         "an active use directly above is not a caption"
     );
 }
+
+/// A named use, `use "…" named <name> [when <gate>]` (satz's ADR 0109): the tree carries
+/// the name, active or commented, beside the gate; a flat line of the same pack carries
+/// none.
+#[test]
+fn a_named_use_carries_its_name() {
+    let text = "estate e\n\nuse \"packs/vm.satz\" named web\nuse \"packs/vm.satz\" named db when want_db\n// use \"packs/vm.satz\" named spare when want_spare\nuse \"packs/vm.satz\"\n\nparams {\n  web.vm_zone = \"europe-west3-a\"\n}\n";
+    let cst = Cst::parse(text).unwrap();
+    let uses = scan_uses(&cst);
+    let read: Vec<(Option<&str>, Option<&str>, UseState)> = uses
+        .iter()
+        .map(|u| (u.named.as_deref(), u.gate.as_deref(), u.state))
+        .collect();
+    assert_eq!(
+        read,
+        [
+            (Some("web"), None, UseState::Active),
+            (Some("db"), Some("want_db"), UseState::Active),
+            (Some("spare"), Some("want_spare"), UseState::Commented),
+            (None, None, UseState::Active),
+        ]
+    );
+    assert!(uses.iter().all(|u| u.path == "packs/vm.satz"));
+    let db = &uses[1];
+    assert_eq!(
+        cst.slice(db.span),
+        "use \"packs/vm.satz\" named db when want_db"
+    );
+}

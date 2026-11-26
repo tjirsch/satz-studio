@@ -78,6 +78,11 @@ async fn showcase_params_carry_their_questions_and_leave_the_gates_out() {
             "audit_retention_days",
             "pack_bucket_location",
             "pack_bucket_adopted",
+            "reports.bucket_purpose",
+            "reports.bucket_location",
+            "reports.bucket_adopted",
+            "scratch.bucket_purpose",
+            "scratch.bucket_adopted",
             "team_folder_name",
             "archive_project_folder",
             "infra_project_services",
@@ -121,6 +126,26 @@ async fn showcase_params_carry_their_questions_and_leave_the_gates_out() {
     assert!(!retention.one_way_door);
 
     assert!(row(&m.params, "customer_id").question.is_none());
+
+    // a named use's params belong to the use and are shown by the pack's own name
+    for (name, use_, own) in [
+        ("reports.bucket_purpose", "reports", "bucket_purpose"),
+        ("scratch.bucket_purpose", "scratch", "bucket_purpose"),
+    ] {
+        let r = row(&m.params, name);
+        let named = r.named.as_ref().expect("a named use's param");
+        assert_eq!(named.name, use_);
+        assert_eq!(named.path, "showcase-bucket.satz");
+        assert_eq!(named.heading(), format!("{use_} — showcase-bucket.satz"));
+        assert_eq!(r.own_name(), own);
+    }
+    assert!(
+        m.params
+            .iter()
+            .filter(|r| !r.name.contains('.'))
+            .all(|r| r.named.is_none()),
+        "a flat param belongs to no use"
+    );
     // every row sits on the line that binds it, wherever the params block stands
     let lines: Vec<&str> = text.lines().collect();
     for r in &m.params {

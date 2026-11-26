@@ -12,15 +12,21 @@ use super::SatzError;
 /// The oldest satz this build works with; an older binary is refused. It may sit below the
 /// submodule's satz ([`SatzBinary::built_against`]), and rises only when a satz release
 /// breaks the app or the app starts using something a later satz introduced — a routine pin
-/// bump leaves it alone (ADR 0014). It is 0.113.0 because the shape an answer is typed in
-/// is the one that release reports for a param no file gives a value: satz reads it from
-/// where the param is read (satz's ADR 0108), and before it such a list param was reported
-/// with no shape and answered as text. It also carries what 0.111.0 introduced: the merge
-/// report's counts of what the preset library dropped (`dropped_removed`, `dropped_forked`,
-/// `forks_kept`; satz's ADR 0103), which an older report lacks and the app refuses, `p =
-/// none` as a param with no value (satz's ADR 0106) and `locals { }` as a file's own values
-/// (satz's ADR 0105).
-pub const MIN_SATZ: &str = "0.113.0";
+/// bump leaves it alone (ADR 0014). It is 0.118.0 because the app reads a named use (satz's
+/// ADR 0109), which 0.114.0 to 0.118.0 introduced in four parts and 0.118.0 completed: the
+/// questions report's `named` and `param` and its dotted `subject`, which the Decisions view
+/// groups by use and answers by; `named` on an unmanaged line of the presets report, on a
+/// notice and on a scan finding; and a list param of a named use, reported as
+/// `<name>.<list>` with its `named` and written through `satz_add_entry` by that name, which
+/// 0.118.0 is the first to take. An older satz reads an estate with a named use as broken,
+/// so the views that show one would show satz's refusal instead. It also carries what
+/// 0.113.0 introduced: the shape an answer is typed in for a param no file gives a value,
+/// read from where the param is read (satz's ADR 0108); and what 0.111.0 introduced: the
+/// merge report's counts of what the preset library dropped (`dropped_removed`,
+/// `dropped_forked`, `forks_kept`; satz's ADR 0103), which an older report lacks and the app
+/// refuses, `p = none` as a param with no value (satz's ADR 0106) and `locals { }` as a
+/// file's own values (satz's ADR 0105).
+pub const MIN_SATZ: &str = "0.118.0";
 
 /// The manifest of the submodule `vendor/satz`, whose version is the satz this build is
 /// built and tested against.

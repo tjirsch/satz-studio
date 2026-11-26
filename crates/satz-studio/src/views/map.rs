@@ -20,7 +20,7 @@ use satz_studio_core::satz::reports::{
 
 use dioxus_icons::lucide::{
     Circle, CircleAlert, CircleCheck, CircleCheckBig, ClipboardX, Link as LinkIcon, Map as MapIcon,
-    Merge, Puzzle, ToggleRight, Unplug,
+    Merge, Puzzle, Tag, ToggleRight, Unplug,
 };
 
 use crate::components::badge::{Badge, BadgeVariant};
@@ -405,11 +405,19 @@ pub fn PresetsView() -> Element {
                                         Unplug { size: 20 }
                                         code { class: "pack-card__path", "{u.path}" }
                                         span { class: "grow" }
+                                        if let Some(name) = &u.named {
+                                            Badge { variant: BadgeVariant::Outline, Tag { size: 12 } "named {name}" }
+                                        }
                                         Badge { variant: BadgeVariant::Outline, CircleCheck { size: 12 } "line {u.at_line}" }
                                     }
                                 }
                                 CardContent {
                                     p { class: "pack-card__why", "The pack graph does not know this file, so no switch here changes its line: it is the estate's own." }
+                                    if let Some(name) = &u.named {
+                                        p { class: "pack-card__why",
+                                            "A named use: the pack used under the name " code { "{name}" } ", with params of its own the estate binds as " code { "{name}.<param>" } "."
+                                        }
+                                    }
                                 }
                             }
                         }
