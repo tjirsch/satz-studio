@@ -95,6 +95,15 @@ pub enum Sheet {
     Add,
 }
 
+/// What a dialog's own close asks of `sheet`. A dialog closes itself on Escape and on a
+/// pointer or focus outside it — and the one that just closed still listens while its
+/// closing animation runs, so moving from the list to the form would hear the form's own
+/// focus as "outside" and close everything. A dialog therefore closes `sheet` only while
+/// `sheet` still names it; once the other one stands, its close changes nothing.
+pub fn on_own_close(now: Sheet, mine: Sheet, then: Sheet) -> Option<Sheet> {
+    (now == mine).then_some(then)
+}
+
 /// A refusal of satz's, as it said it.
 #[component]
 pub fn Refused(said: String) -> Element {
@@ -295,8 +304,9 @@ pub fn PackSourcesCard(
         Dialog {
             open: sheet() == Sheet::Manage,
             on_open_change: move |now: bool| {
-                if !now {
-                    sheet.set(Sheet::Closed);
+                let shown = *sheet.peek();
+                if !now && let Some(next) = on_own_close(shown, Sheet::Manage, Sheet::Closed) {
+                    sheet.set(next);
                 }
             },
             class: "interfaces__add",
@@ -328,8 +338,9 @@ pub fn PackSourcesCard(
         Dialog {
             open: sheet() == Sheet::Add,
             on_open_change: move |now: bool| {
-                if !now {
-                    sheet.set(Sheet::Manage);
+                let shown = *sheet.peek();
+                if !now && let Some(next) = on_own_close(shown, Sheet::Add, Sheet::Manage) {
+                    sheet.set(next);
                 }
             },
             class: "interfaces__add",
@@ -432,6 +443,22 @@ pub fn PackSourcesCard(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Moving from the list to the form closes the list, and the list still hears the
+    /// form's focus as outside: its close must leave the form standing.
+    #[test]
+    fn a_dialog_closes_the_sheet_only_while_it_is_the_one_shown() {
+        assert_eq!(
+            on_own_close(Sheet::Manage, Sheet::Manage, Sheet::Closed),
+            Some(Sheet::Closed)
+        );
+        assert_eq!(on_own_close(Sheet::Add, Sheet::Manage, Sheet::Closed), None);
+        assert_eq!(
+            on_own_close(Sheet::Add, Sheet::Add, Sheet::Manage),
+            Some(Sheet::Manage)
+        );
+        assert_eq!(on_own_close(Sheet::Closed, Sheet::Add, Sheet::Manage), None);
+    }
 
     #[test]
     fn the_sources_are_counted_and_the_first_two_named() {
