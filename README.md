@@ -55,7 +55,9 @@ itself — its params (a named use's `web.<param>` stand under the use; a param 
 until a value is typed in its place; its own `locals { }` values are not params and stay
 as the file writes them), its resource tree, and the interfaces it publishes for other estates
 to read, as `satz interfaces` reports them: the core exports every interface
-carries, then each interface with the interfaces it uses and its own exports, and —
+carries, then each interface with the interfaces it uses and its own exports — an
+interface of a named use, `<name>-<interface>`, saying which use it is, its folder that
+use's own and never common — and —
 where its packs declare `entries` statements — its list params: each list param, the
 field that keys an entry and the fields an entry carries, each with the pattern its
 value must match. Delegated access is given to a team by an entry of the list param
@@ -183,7 +185,7 @@ that holds them up — in front of apply and bootstrap, which satz refuses.
 
 ## What it needs
 
-- **`satz` 0.118.0 or newer.** `MIN_SATZ` in `crates/satz-studio-core/src/satz/binary.rs`
+- **`satz` 0.119.0 or newer.** `MIN_SATZ` in `crates/satz-studio-core/src/satz/binary.rs`
   names the oldest satz this build works with. It rises when a satz release breaks the
   app or the app starts using something a later satz introduced, not with every satz
   release. Install satz with its installer or bring it up to date with `satz

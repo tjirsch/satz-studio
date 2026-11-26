@@ -206,6 +206,54 @@
       "description": "The project's Pub/Sub topic",
       "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
       "line": 381
+    },
+    {
+      "name": "bucket_name",
+      "interface": "reports-bucket",
+      "how": "static",
+      "value": "\"corp-reports\"",
+      "targets": [
+        "google_storage_bucket.reports__kept"
+      ],
+      "attach": [],
+      "description": "The bucket the use keeps",
+      "file": "showcase-bucket.satz",
+      "line": 56
+    },
+    {
+      "name": "bucket_location",
+      "interface": "reports-bucket",
+      "how": "static",
+      "value": "\"europe-west3\"",
+      "targets": [],
+      "attach": [],
+      "description": "Where the use keeps it",
+      "file": "showcase-bucket.satz",
+      "line": 57
+    },
+    {
+      "name": "bucket_name",
+      "interface": "scratch-bucket",
+      "how": "static",
+      "value": "\"corp-scratch\"",
+      "targets": [
+        "google_storage_bucket.scratch__kept"
+      ],
+      "attach": [],
+      "description": "The bucket the use keeps",
+      "file": "showcase-bucket.satz",
+      "line": 56
+    },
+    {
+      "name": "bucket_location",
+      "interface": "scratch-bucket",
+      "how": "static",
+      "value": "\"EU\"",
+      "targets": [],
+      "attach": [],
+      "description": "Where the use keeps it",
+      "file": "showcase-bucket.satz",
+      "line": 57
     }
   ],
   "interfaces": [
@@ -246,6 +294,24 @@
       "exports": 1,
       "file": "vendor/satz/tests/smoke/yaml/showcase.satz",
       "line": 379
+    },
+    {
+      "name": "reports-bucket",
+      "common": false,
+      "uses": [],
+      "exports": 2,
+      "file": "showcase-bucket.satz",
+      "line": 55,
+      "named": "reports"
+    },
+    {
+      "name": "scratch-bucket",
+      "common": false,
+      "uses": [],
+      "exports": 2,
+      "file": "showcase-bucket.satz",
+      "line": 55,
+      "named": "scratch"
     }
   ],
   "list_params": [
