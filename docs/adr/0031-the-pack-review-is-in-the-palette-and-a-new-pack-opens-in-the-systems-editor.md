@@ -1,6 +1,6 @@
 # 0031 — the pack review is in the palette, and a new pack opens in the system's editor
 
-- **Status:** accepted; what opens a pack's file is superseded by [ADR 0033](0033-a-pack-opens-in-the-editor-setting-or-the-systems-text-editor.md) — the Editor setting, or the system's text editor
+- **Status:** accepted; what opens a pack's file is superseded by [ADR 0033](0033-a-pack-opens-in-the-editor-setting-or-the-systems-text-editor.md) — the Editor setting, or the system's text editor; the `use` line New pack added superseded by [ADR 0038](0038-the-app-writes-no-use-line-and-shows-the-one-satz-names.md) — the app writes none
 - **Date:** 2026-11-20
 - **Deciders:** the maintainer
 

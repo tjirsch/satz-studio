@@ -120,8 +120,12 @@ interface, the core exports first, each with its description. A pack with a valu
 estate does not give is marked "Unmet read", so the list says before a fetch whether a
 pack fits. "Details" shows its params with their defaults — `none — must be provided` for one it
 declares without a value — and the questions that ask for
-them, and its list params. "New pack…" writes a pack of your own
-into `packs_dir`, adds its `use` line to the estate and opens it in the editor Settings →
+them, and its list params. satz-studio fetches a pack and writes no `use` line: a pack
+in `packs_dir` the estate does not use shows, under its row, "Write this line into the
+estate file <file>:" over the line satz names for it, with "Copy" and an Edit button that
+opens the estate file — for a pack whose header says `multiple`, the line ends in
+`named <name>`, and the text adds "and replace <name> with the use's name". "New pack…"
+writes a pack of your own into `packs_dir` and opens it in the editor Settings →
 Editor names — a command line such as `zed` or `subl -n`, run with the file last — or,
 with that empty, in the system's text editor (`open -t` on macOS, `xdg-open` on Linux,
 `notepad` on Windows); Edit opens any pack the same way, and Reload on the card reads

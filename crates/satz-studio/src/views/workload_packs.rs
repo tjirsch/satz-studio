@@ -6,11 +6,12 @@
 //! the source holds beyond them is listed too. A fetch is
 //! `satz get-pack --source`, an update `satz update-pack` from each pack's recorded
 //! source, and a pack edited here is shown with its difference and written only when the
-//! operator says so (ADR 0024). A new pack is the repository's own: written and formatted,
-//! its `use` line added through the app's writer, and opened in the application the
-//! system gives `.satz` files, as Edit opens any pack (ADR 0031); once it works, "Store in
-//! a pack source…" copies it into a folder source with `satz publish-pack`
-//! ([`PublishDialog`]). Each listed pack — fetched or only available — expands to what flows
+//! operator says so (ADR 0024). The app writes no `use` line (ADR 0038): a pack here that
+//! the estate does not use shows the line satz names for it, to copy and write into the
+//! estate file ([`UseLine`]). A new pack is the repository's own: written, formatted and
+//! opened in the Editor setting's command, as Edit opens any pack (ADR 0031, ADR 0033);
+//! once it works, "Store in a pack source…" copies it into a folder source with `satz
+//! publish-pack` ([`PublishDialog`]). Each listed pack — fetched or only available — expands to what flows
 //! through it ([`PackFlow`]): the interface values it reads, grouped by what gives each
 //! against the open estate as `satz packs --estate` matched it (satz's ADR 0100), and the
 //! values it exports, grouped by interface; a read the estate does not give marks the row
@@ -22,7 +23,6 @@ use std::path::PathBuf;
 
 use dioxus::prelude::*;
 use satz_studio_core::cst::UseState;
-use satz_studio_core::edit::Edit;
 use satz_studio_core::satz::reports::{
     InterfaceFolder, PackExport, PackState, UpdateAction, UpdatePackReport, UpdatedPack,
     WorkloadPackRow, WorkloadPacksReport,
@@ -30,8 +30,8 @@ use satz_studio_core::satz::reports::{
 use satz_studio_core::satz::workload::{Which, new_pack_id};
 
 use dioxus_icons::lucide::{
-    ArrowDown, ArrowUp, Check, ChevronDown, ChevronUp, CircleAlert, CloudDownload, CloudOff, Diff,
-    Download, FilePlus, FolderInput, FolderUp, History, Hourglass, Link as LinkIcon, Package,
+    ArrowDown, ArrowUp, Check, ChevronDown, ChevronUp, CircleAlert, CloudDownload, CloudOff,
+    Copy as CopyIcon, Diff, Download, FilePlus, FolderInput, FolderUp, History, Hourglass, Package,
     Pencil, RefreshCw, SlidersHorizontal, Tag, TriangleAlert, Unlink,
 };
 
@@ -44,6 +44,7 @@ use crate::components::progress::Progress;
 use crate::state::{
     AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt, PackOp, SourceOp, edit_file,
 };
+use crate::views::commands::copy_to_clipboard;
 use crate::views::pack_sources::{PackSourcesCard, Sheet};
 use crate::views::publish_pack::PublishDialog;
 use crate::widgets::{Field, HelpButton, Tip};
@@ -456,6 +457,7 @@ pub fn WorkloadPacksPane() -> Element {
                 failed: failed.or(local_failed),
                 packs_dir: open.session.dir.tool.packs_dir.clone(),
                 files: packs_dir,
+                estate_file: open.main.clone(),
                 update,
                 busy,
                 confirm,
@@ -472,7 +474,7 @@ pub fn WorkloadPacksPane() -> Element {
                     }
                     CardContent {
                         for row in available {
-                            PackLine { key: "{row.id}", id: row.id.clone(), row: Some(row.clone()), folders: folders.clone(), local: false, used: true, named: Vec::new(), file: None, edited: None, busy, confirm, publishing }
+                            PackLine { key: "{row.id}", id: row.id.clone(), row: Some(row.clone()), folders: folders.clone(), local: false, used: false, named: Vec::new(), file: None, estate_file: open.main.clone(), edited: None, busy, confirm, publishing }
                         }
                     }
                 }
@@ -550,6 +552,7 @@ fn HereCard(
     failed: Option<String>,
     packs_dir: String,
     files: PathBuf,
+    estate_file: PathBuf,
     update: Option<UpdatePackReport>,
     busy: bool,
     confirm: Signal<Option<Confirm>>,
@@ -625,7 +628,7 @@ fn HereCard(
                     p { "The arrows on a pack count what flows through it, seen from the pack: in, the values it reads from the interface folders this estate uses; out, the values it exports. Opening them lists both. In is grouped by what gives each value — an interface folder, named with the organization's estate that wrote it, the estate itself where it sets the param the value would fill, or not given, with why — each value with its export's description and the param it fills with that param's question. Out is grouped by interface, the core exports first, each with its description. Unmet read marks a pack with a value this estate does not give; the transpile refuses it once the estate uses the pack." }
                     p { "Details shows the rest of what a pack declares: its params with their defaults and the questions that ask for them, and its list params." }
                     p { "Reload reads the estate again, the packs here and the listed pack source with them: the way to see a pack after New pack or Edit, since the window cannot tell when the editor is done with the file." }
-                    p { "New pack writes {packs_dir}/<name>.satz, adds its use line to the estate and opens the file in the application this computer gives .satz files; Edit opens a pack the same way. Keep as own forgets where a fetched pack came from. What a pack asks is answered in Decisions." }
+                    p { "New pack writes {packs_dir}/<name>.satz and opens it in the editor Settings → Editor names, or this computer's text editor; Edit opens a pack the same way. satz-studio writes no use line: a pack here that the estate does not use shows the line that reads it, to copy and write into the estate file by hand — for a pack used under a name, its line ends in named <name>, and <name> is replaced by the use's name. Keep as own forgets where a fetched pack came from. What a pack asks is answered in Decisions." }
                     p { "Store in a pack source, on your own pack, copies it into a folder pack source with satz publish-pack once it clears review-pack's bar inside this estate, and records it as fetched from there, so other estates fetch it and update-pack follows it here too." }
                 }
             }
@@ -655,6 +658,7 @@ fn HereCard(
                     named: here.named.clone(),
                     edited: edited_of(&here.id),
                     file: Some(files.join(format!("{}.satz", here.id))),
+                    estate_file: estate_file.clone(),
                     row: here.row,
                     folders: folders.clone(),
                     local: here.local,
@@ -706,8 +710,9 @@ fn HereCard(
 /// One pack: its id, version, badge, where it comes from and what can be done. `row` is
 /// satz's, once a listing names it, and `local` says that listing read no source; `used`
 /// says the estate reads it, and `named` the names of the named uses that read it — a
-/// badge each; `file` is where it is, for a pack that is here; `folders` are the interface
-/// folders the estate uses, which the expander names.
+/// badge each; `file` is where it is, for a pack that is here; `estate_file` is the
+/// estate's main file, which an unused pack's line is written into ([`UseLine`]);
+/// `folders` are the interface folders the estate uses, which the expander names.
 #[component]
 fn PackLine(
     id: String,
@@ -717,6 +722,7 @@ fn PackLine(
     used: bool,
     named: Vec<String>,
     file: Option<PathBuf>,
+    estate_file: PathBuf,
     edited: Option<UpdatedPack>,
     busy: bool,
     confirm: Signal<Option<Confirm>>,
@@ -728,7 +734,10 @@ fn PackLine(
     let mut flow_open = use_signal(|| false);
     let state = row.as_ref().map(|r| r.state);
     let unmet = row.as_ref().is_some_and(WorkloadPackRow::has_unmet_read);
-    let use_path = row.as_ref().and_then(|r| r.use_path()).map(str::to_string);
+    let use_line = row
+        .as_ref()
+        .and_then(|r| r.use_line.clone())
+        .filter(|_| !used);
     let op = |op: PackOp| move |_| handle.send(EstateAction::Packs(op.clone()));
     let one = Which::One(id.clone());
     rsx! {
@@ -819,18 +828,6 @@ fn PackLine(
                         "Update"
                     }
                 }
-                if !used {
-                    if let Some(path) = use_path {
-                        Button {
-                            variant: ButtonVariant::Ghost,
-                            size: ButtonSize::Sm,
-                            disabled: busy,
-                            onclick: move |_| handle.send(EstateAction::CommitEdit(Edit::AddUse { path: path.clone() })),
-                            LinkIcon { size: 16 }
-                            "Add to the estate"
-                        }
-                    }
-                }
                 if state == Some(PackState::Edited) {
                     Button {
                         variant: ButtonVariant::Ghost,
@@ -895,6 +892,9 @@ fn PackLine(
                     PackFlow { row: row.clone(), folders: folders.clone() }
                 }
             }
+            if let Some(line) = use_line {
+                UseLine { line, estate_file }
+            }
             if let Some(edited) = &edited {
                 if let Some(diff) = &edited.diff {
                     p { class: "interfaces__supporting", "This file (−) against the source's (+):" }
@@ -915,6 +915,59 @@ fn PackLine(
             }
         }
     }
+}
+
+/// The line that reads a pack the estate does not use, as satz names it, for the
+/// estate's author to write into the estate file: the app writes no `use` line (ADR
+/// 0038). A pack whose header says `multiple` is used under a name, and its line ends in
+/// `named <name>` ([`takes_a_name`]). "Copy" puts the line on the clipboard; the pencil
+/// opens the estate file in the Editor setting's command, as Edit opens a pack.
+#[component]
+fn UseLine(line: String, estate_file: PathBuf) -> Element {
+    let app = use_context::<Store<AppStore>>();
+    let file_name = estate_file.file_name().map_or_else(
+        || estate_file.display().to_string(),
+        |n| n.to_string_lossy().into_owned(),
+    );
+    let say = if takes_a_name(&line) {
+        format!(
+            "Write this line into the estate file {file_name}, and replace <name> with the use's name:"
+        )
+    } else {
+        format!("Write this line into the estate file {file_name}:")
+    };
+    rsx! {
+        div { class: "wpacks__use",
+            p { class: "interfaces__supporting", "{say}" }
+            div { class: "wpacks__actions",
+                code { class: "wpacks__use-line", "{line}" }
+                Button {
+                    variant: ButtonVariant::Ghost,
+                    size: ButtonSize::Sm,
+                    onclick: {
+                        let line = line.clone();
+                        move |_| copy_to_clipboard(app, &line)
+                    },
+                    CopyIcon { size: 16 }
+                    "Copy"
+                }
+                Button {
+                    variant: ButtonVariant::Ghost,
+                    size: ButtonSize::Icon,
+                    title: "Edit {file_name}",
+                    "aria-label": "Edit {file_name}",
+                    onclick: move |_| edit_file(app, &estate_file),
+                    Pencil { size: 16 }
+                }
+            }
+        }
+    }
+}
+
+/// Whether a `use` line is one satz names for a pack used under a name: it ends in
+/// `named <name>`, the placeholder the estate's author replaces.
+fn takes_a_name(line: &str) -> bool {
+    line.ends_with(" named <name>")
 }
 
 /// What flows through a pack, seen from the pack: what it reads, grouped by what gives
@@ -1520,5 +1573,14 @@ mod tests {
             rows[1].local,
             "a pack the source listing does not name keeps its local row"
         );
+    }
+
+    /// A line that ends in `named <name>` is satz's for a pack used under a name; a
+    /// plain line, and a name already written, are not.
+    #[test]
+    fn a_named_line_is_one_whose_name_is_still_to_write() {
+        assert!(takes_a_name("use \"packs/vm.satz\" named <name>"));
+        assert!(!takes_a_name("use \"packs/vm.satz\""));
+        assert!(!takes_a_name("use \"packs/vm.satz\" named web"));
     }
 }

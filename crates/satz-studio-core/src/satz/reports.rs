@@ -1362,7 +1362,9 @@ pub struct WorkloadPackRow {
     pub source: Option<String>,
     /// for a pack fetched from a GitHub source: the commit its row records
     pub commit: Option<String>,
-    /// the line an estate reads the pack with; none for a pack that is only available
+    /// the line an estate reads the pack with, written into the estate file by its author;
+    /// for a pack whose header says `multiple`, `use "…" named <name>`, `<name>` to be
+    /// replaced by the use's name. None for a pack that is only available
     pub use_line: Option<String>,
 }
 
@@ -1446,15 +1448,6 @@ impl WorkloadPackRow {
     /// Whether a read of the pack is one the estate does not give.
     pub fn has_unmet_read(&self) -> bool {
         self.reads.iter().any(PackRead::unmet)
-    }
-
-    /// The path of [`Self::use_line`], without `use` and the quotes: what an
-    /// [`crate::edit::Edit::AddUse`] carries.
-    pub fn use_path(&self) -> Option<&str> {
-        self.use_line
-            .as_deref()?
-            .strip_prefix("use \"")?
-            .strip_suffix('"')
     }
 }
 
@@ -2642,8 +2635,11 @@ mod tests {
             Some("0123456789abcdef0123456789abcdef01234567")
         );
         assert_eq!(list.packs[0].state, PackState::Edited);
-        assert_eq!(list.packs[0].use_path(), Some("packs/demo.satz"));
-        assert_eq!(list.packs[2].use_path(), None);
+        assert_eq!(
+            list.packs[0].use_line.as_deref(),
+            Some("use \"packs/demo.satz\"")
+        );
+        assert_eq!(list.packs[2].use_line, None);
         assert_eq!(list.packs[3].state, PackState::NotChecked);
         let demo = &list.packs[0];
         assert_eq!(demo.params[1].default, None);

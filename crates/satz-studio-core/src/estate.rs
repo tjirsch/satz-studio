@@ -328,18 +328,6 @@ impl EstateDir {
         id.strip_suffix(".satz").map(str::to_string)
     }
 
-    /// The `use` path satz names for a file of `packs_dir`, as `satz get-pack` prints it:
-    /// its path under the `include_dirs` entry that holds it by the shortest path; `None`
-    /// when none does, which satz refuses for every pack of the folder.
-    pub fn use_path_of(&self, file: &Path) -> Option<String> {
-        let file = std::fs::canonicalize(file).ok()?;
-        self.runtime
-            .include_dirs
-            .iter()
-            .filter_map(|d| std::fs::canonicalize(d).ok())
-            .filter_map(|d| file.strip_prefix(d).ok().map(slashed))
-            .min_by_key(String::len)
-    }
     /// Where satz writes what the estate publishes: `<interfaces_dir>/outgoing`.
     pub fn outgoing_dir(&self) -> PathBuf {
         PathBuf::from(&self.runtime.interfaces_dir).join("outgoing")
@@ -472,10 +460,10 @@ mod tests {
         );
     }
 
-    /// A `use` line into `packs_dir` names its pack, and the pack's file the line that
-    /// reads it; a line elsewhere, or to no file, names none.
+    /// A `use` line into `packs_dir` names its pack; a line elsewhere, or to no file,
+    /// names none.
     #[test]
-    fn a_use_line_into_packs_dir_names_its_pack_and_back() {
+    fn a_use_line_into_packs_dir_names_its_pack() {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
         std::fs::write(
@@ -494,11 +482,6 @@ mod tests {
         );
         assert_eq!(e.pack_of_use(&main, "other.satz"), None);
         assert_eq!(e.pack_of_use(&main, "packs/none.satz"), None);
-        assert_eq!(
-            e.use_path_of(&root.join("packs/team/access.satz"))
-                .as_deref(),
-            Some("packs/team/access.satz")
-        );
     }
 
     #[test]

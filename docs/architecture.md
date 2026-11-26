@@ -24,8 +24,9 @@ blocks are neither added nor removed.
   checked by `satz transpile --check` before it replaces the file. Beside the estate file
   it writes a reviewed pack into the estate's library as `<stem>.local.satz`
   (`review::place_private`, under the same lock and checked the same way), a new pack of
-  the repository's own into `packs_dir` before its `use` line is added through the
-  document layer (`workload::create_pack`, under the same lock), a palette
+  the repository's own into `packs_dir` (`workload::create_pack`, under the same lock) —
+  no `use` line: that line is the estate author's to write ([ADR
+  0038](adr/0038-the-app-writes-no-use-line-and-shows-the-one-satz-names.md)) —, a palette
   command's report into `reports_dir()` (read into the log and removed), and satz's
   verified installer script into a temporary directory of its own (`satz::install`).
 - **The app never touches `hcl_dir` or `interfaces_dir`.** The HCL code and the
@@ -460,11 +461,10 @@ written, a project added, a notice's `satz adopt`, a pack placed in the library.
 estate does it through its own `satz mcp`, outside this window and outside this lock, and
 the estate is re-read when the window comes back to the front.
 
-`Edit::AddUse { path }` adds `use "<path>"` as a line of its own at the top level —
-after the file's last top-level `use`, after the params block where it has none, after
-the header where it has neither — and is refused for a path the file already uses. Its
-proof is the same walk: the old tree with the added line between two top-level nodes
-against the new one, where a plain `Use` inside the inserted range is that line.
+The document layer writes values and params, and nothing else: no `use` line. A pack
+the estate does not use shows the line satz names for it in the Packs view, for the
+estate's author to write ([ADR
+0038](adr/0038-the-app-writes-no-use-line-and-shows-the-one-satz-names.md)).
 
 A value edit, `Edit::ReplaceValue { node, value }` or `Edit::ReplaceParam { name,
 value }`:
@@ -674,8 +674,9 @@ the tree and over the commits a pull request adds, or the push to `main` that me
 | [0021](adr/0021-the-settings-ceiling-is-the-agents-and-studio-writes-at-its-own.md) | the Settings ceiling is the external agent's alone; the app's own `satz mcp` runs at `read,write`; the Agent view shows the ceiling on disk beside the setting and offers Replace where they differ |
 | [0022](adr/0022-the-mcp-root-is-the-one-satz-mcp-config-renders.md) | the root of the app's own `satz mcp` is the one `satz mcp-config` renders — the estate's config directory — for the window and every client alike |
 | [0023](adr/0023-the-interfaces-tab-reads-and-writes-through-the-cli.md) | the Interfaces tab reads `satz interfaces` through the CLI; the interface plane's MCP tools are paused. Its write half, `satz add-project`, went with the command (satz ADR 0075) |
-| [0024](adr/0024-workload-packs-are-a-tab-of-estate-and-a-workload-estate-has-no-presets-destination.md) | the destination is Presets; workload packs are the fourth tab of Estate, read through the CLI against a source the operator names and never unasked; the `use` line is `Edit::AddUse`; a workload estate — satz's presets report names an interface and holds no pack — has no Presets destination |
+| [0024](adr/0024-workload-packs-are-a-tab-of-estate-and-a-workload-estate-has-no-presets-destination.md) | the destination is Presets; workload packs are the fourth tab of Estate, read through the CLI against a source the operator names and never unasked; the `use` line as `Edit::AddUse`, superseded by 0038; a workload estate — satz's presets report names an interface and holds no pack — has no Presets destination |
 | [0034](adr/0034-the-window-is-built-from-the-dioxus-component-library.md) | the window is built from the Dioxus component library and takes its look — its components, theme, Lucide icons and the Geist typeface; the app's own parts are built from library parts; the app is run through `dx` — superseding the Material 3 part of 0001 |
+| [0038](adr/0038-the-app-writes-no-use-line-and-shows-the-one-satz-names.md) | the app writes no `use` line: a pack here the estate does not use shows satz's `use_line` with Copy and the estate file's Edit, for its author to write; `Edit::AddUse` is gone and New pack only writes and opens the file |
 
 ## 7. Not built, and why
 
