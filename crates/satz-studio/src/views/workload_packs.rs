@@ -19,13 +19,14 @@
 //! not knowable, so the card's Reload reads the estate and the listed source again. The
 //! states and the matches are satz's report; the app derives none of its own.
 
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 
 use dioxus::prelude::*;
 use satz_studio_core::cst::UseState;
 use satz_studio_core::satz::reports::{
-    InterfaceFolder, PackExport, PackState, UpdateAction, UpdatePackReport, UpdatedPack,
-    WorkloadPackRow, WorkloadPacksReport,
+    InterfaceFolder, PackExport, PackState, QuestionRow, UpdateAction, UpdatePackReport,
+    UpdatedPack, WorkloadPackRow, WorkloadPacksReport,
 };
 use satz_studio_core::satz::workload::{Which, new_pack_id};
 
@@ -370,6 +371,29 @@ enum Confirm {
     RemoveSource(String),
 }
 
+/// Each pack's description by its id, as the questions report carries it: satz's pack
+/// listing has no description, and the questions report has one for each pack the estate
+/// uses that asks a question (`pack_description`, its header's first paragraph). `id_of`
+/// is the workload pack a question's `from` — the path its `use` line reads — names, `None`
+/// for a file outside `packs_dir`. A pack that asks nothing, or that the estate does not
+/// use, has none here.
+fn pack_descriptions(
+    questions: &[QuestionRow],
+    id_of: impl Fn(&str) -> Option<String>,
+) -> BTreeMap<String, String> {
+    let mut seen = BTreeSet::new();
+    let mut out = BTreeMap::new();
+    for q in questions.iter().filter(|q| !q.pack_description.is_empty()) {
+        if !seen.insert(q.from.as_str()) {
+            continue;
+        }
+        if let Some(id) = id_of(&q.from) {
+            out.entry(id).or_insert_with(|| q.pack_description.clone());
+        }
+    }
+    out
+}
+
 #[component]
 pub fn WorkloadPacksPane() -> Element {
     let app = use_context::<Store<AppStore>>();
@@ -403,6 +427,17 @@ pub fn WorkloadPacksPane() -> Element {
                     Some((id, u.path, u.named))
                 })
                 .collect()
+        })
+        .unwrap_or_default();
+    let descriptions = app
+        .estate()
+        .questions()
+        .read()
+        .as_ref()
+        .map(|r| {
+            pack_descriptions(&r.questions, |from| {
+                open.session.dir.pack_of_use(&open.main, from)
+            })
         })
         .unwrap_or_default();
     let packs_dir = open.session.dir.packs_dir();
@@ -451,6 +486,7 @@ pub fn WorkloadPacksPane() -> Element {
             }
             HereCard {
                 rows,
+                descriptions,
                 folders: folders.clone(),
                 listed: listed.is_some(),
                 local_listed: local.is_some(),
@@ -474,7 +510,7 @@ pub fn WorkloadPacksPane() -> Element {
                     }
                     CardContent {
                         for row in available {
-                            PackLine { key: "{row.id}", id: row.id.clone(), row: Some(row.clone()), folders: folders.clone(), local: false, used: false, named: Vec::new(), file: None, estate_file: open.main.clone(), edited: None, busy, confirm, publishing }
+                            PackLine { key: "{row.id}", id: row.id.clone(), row: Some(row.clone()), folders: folders.clone(), local: false, used: false, named: Vec::new(), description: None, file: None, estate_file: open.main.clone(), edited: None, busy, confirm, publishing }
                         }
                     }
                 }
@@ -546,6 +582,7 @@ pub fn WorkloadPacksPane() -> Element {
 #[component]
 fn HereCard(
     rows: Vec<HereRow>,
+    descriptions: BTreeMap<String, String>,
     folders: Vec<InterfaceFolder>,
     listed: bool,
     local_listed: bool,
@@ -656,6 +693,7 @@ fn HereCard(
                     id: here.id.clone(),
                     used: here.used.is_some(),
                     named: here.named.clone(),
+                    description: descriptions.get(&here.id).cloned(),
                     edited: edited_of(&here.id),
                     file: Some(files.join(format!("{}.satz", here.id))),
                     estate_file: estate_file.clone(),
@@ -721,6 +759,7 @@ fn PackLine(
     local: bool,
     used: bool,
     named: Vec<String>,
+    description: Option<String>,
     file: Option<PathBuf>,
     estate_file: PathBuf,
     edited: Option<UpdatedPack>,
@@ -732,6 +771,7 @@ fn PackLine(
     let handle = use_coroutine_handle::<EstateAction>();
     let mut details_open = use_signal(|| false);
     let mut flow_open = use_signal(|| false);
+    let mut about_open = use_signal(|| false);
     let state = row.as_ref().map(|r| r.state);
     let unmet = row.as_ref().is_some_and(WorkloadPackRow::has_unmet_read);
     let use_line = row
@@ -746,7 +786,42 @@ fn PackLine(
             open: flow_open(),
             on_open_change: move |now: bool| flow_open.set(now),
             div { class: "interfaces__export-head",
-                code { class: "interfaces__export-name", "{id}" }
+                if let Some(description) = description {
+                    Collapsible {
+                        class: "wpacks__about",
+                        open: about_open(),
+                        on_open_change: move |now: bool| about_open.set(now),
+                        div { class: "wpacks__toggle",
+                            CollapsibleTrigger {
+                                r#as: {
+                                    let id = id.clone();
+                                    move |mut trigger: Vec<Attribute>| {
+                                        let title = if about_open() { "Hide what the pack is for" } else { "Show what the pack is for" };
+                                        trigger.push(Attribute::new("title", title, None, false));
+                                        rsx! {
+                                            Button {
+                                                variant: ButtonVariant::Ghost,
+                                                size: ButtonSize::Sm,
+                                                attributes: trigger,
+                                                code { class: "interfaces__export-name", "{id}" }
+                                                if about_open() {
+                                                    ChevronUp { size: 16 }
+                                                } else {
+                                                    ChevronDown { size: 16 }
+                                                }
+                                            }
+                                        }
+                                    }
+                                },
+                            }
+                        }
+                        CollapsibleContent {
+                            p { class: "wpacks__description", "{description}" }
+                        }
+                    }
+                } else {
+                    code { class: "interfaces__export-name", "{id}" }
+                }
                 if let Some(row) = &row {
                     span { class: "interfaces__supporting", {versions(row)} }
                 }
@@ -777,6 +852,7 @@ fn PackLine(
                     }
                 }
                 if let Some((into, out)) = row.as_ref().map(flow_counts) {
+                    div { class: "wpacks__toggle",
                     CollapsibleTrigger {
                         r#as: move |mut trigger: Vec<Attribute>| {
                             let title = if flow_open() { "Hide what the pack reads and exports" } else { "Show what the pack reads and exports" };
@@ -799,6 +875,7 @@ fn PackLine(
                             }
                             }
                         },
+                    }
                     }
                 }
                 if row.is_some() {
@@ -1146,6 +1223,46 @@ mod tests {
     use satz_studio_core::satz::reports::{PackParam, PackRead};
 
     use super::*;
+
+    fn question(subject: &str, from: &str, description: &str) -> QuestionRow {
+        serde_json::from_value(serde_json::json!({
+            "subject": subject, "kind": "param", "prompt": "p", "reversal": "edit", "blast": "low",
+            "state": "unanswered", "blocking": false, "pack_description": description,
+            "from": from, "pack": "p"
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn a_pack_description_comes_from_the_questions_of_the_pack_the_use_line_reads() {
+        let questions = vec![
+            question(
+                "a",
+                "packs/rag-store-workload.satz",
+                "The RAG store, for one workload.",
+            ),
+            question(
+                "b",
+                "packs/rag-store-workload.satz",
+                "The RAG store, for one workload.",
+            ),
+            question("c", "packs/quiet.satz", ""),
+            question("d", "presets/estate-core.satz", "The bootstrap."),
+        ];
+        let id_of = |from: &str| {
+            from.strip_prefix("packs/")
+                .and_then(|f| f.strip_suffix(".satz"))
+                .map(str::to_string)
+        };
+        let got = pack_descriptions(&questions, id_of);
+        assert_eq!(
+            got.get("rag-store-workload").map(String::as_str),
+            Some("The RAG store, for one workload.")
+        );
+        // a pack whose header says nothing has no description, and a file outside
+        // packs_dir is no workload pack
+        assert_eq!(got.len(), 1);
+    }
 
     fn row(state: PackState, version: Option<&str>, upstream: Option<&str>) -> WorkloadPackRow {
         WorkloadPackRow {

@@ -1361,19 +1361,34 @@ span[data-style][padding="true"] {
 
 .interview__pack {
   display: flex;
-  align-items: flex-start;
-  gap: 12px;
+  flex-direction: column;
+  gap: 4px;
   padding: 8px 4px 0;
+}
+
+.interview__pack-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   color: var(--focused-border-color);
 }
 
+/* the trigger fills its box, so the box is as wide as the pack's name and chevron */
+.interview__pack-toggle {
+  width: fit-content;
+  min-width: 0;
+}
+
+/* the app's own text inside the ghost button keeps the pack header's blue */
 .interview__pack-name {
+  color: var(--focused-border-color);
   font-size: 0.875rem;
   font-weight: 600;
   font-family: var(--font-mono);
 }
 
 .interview__pack-description {
+  padding-left: 24px;
   font-size: 0.875rem;
   font-weight: 400;
   color: var(--secondary-color-5);
@@ -1393,9 +1408,9 @@ span[data-style][padding="true"] {
   user-select: text;
 }
 
+/* bold, at the size of the card's other text */
 .interview__prompt {
-  font-size: 1rem;
-  font-weight: 600;
+  font-size: 0.875rem;
   font-weight: 600;
 }
 
@@ -2413,6 +2428,25 @@ span[data-style][padding="true"] {
 /* ---- Packs: the Interfaces tab's cards, plus the actions of a pack, the line an unused
         one is read with, the difference of an edited one, the Add a source form and a
         pack's details ------------------------------------------------------------------ */
+
+/* a row's collapsible triggers fill their box: the box is as wide as what they hold */
+.wpacks__toggle {
+  width: fit-content;
+  min-width: 0;
+}
+
+/* the pack's name and its description join the row's head: the name in place, the
+   description on a line of its own below the head's other parts */
+.wpacks__about {
+  display: contents;
+}
+
+.wpacks__description {
+  order: 1;
+  flex-basis: 100%;
+  font-size: 0.875rem;
+  color: var(--secondary-color-5);
+}
 
 .wpacks__actions {
   display: flex;
