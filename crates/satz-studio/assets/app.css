@@ -2429,6 +2429,25 @@ span[data-style][padding="true"] {
         one is read with, the difference of an edited one, the Add a source form and a
         pack's details ------------------------------------------------------------------ */
 
+/* a row's collapsible triggers fill their box: the box is as wide as what they hold */
+.wpacks__toggle {
+  width: fit-content;
+  min-width: 0;
+}
+
+/* the pack's name and its description join the row's head: the name in place, the
+   description on a line of its own below the head's other parts */
+.wpacks__about {
+  display: contents;
+}
+
+.wpacks__description {
+  order: 1;
+  flex-basis: 100%;
+  font-size: 0.875rem;
+  color: var(--secondary-color-5);
+}
+
 .wpacks__actions {
   display: flex;
   align-items: center;
