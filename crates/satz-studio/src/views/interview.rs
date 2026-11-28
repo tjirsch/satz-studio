@@ -21,9 +21,9 @@
 
 use dioxus::prelude::*;
 use dioxus_icons::lucide::{
-    ArrowLeft, ArrowRight, Ban, Boxes, Check, CheckCheck, Circle, CircleCheck, CircleCheckBig,
-    Code, DoorOpen, History, Lightbulb, MessageCircleQuestionMark, OctagonAlert, PencilLine,
-    Sparkles,
+    ArrowLeft, ArrowRight, Ban, Boxes, Check, CheckCheck, ChevronDown, ChevronUp, Circle,
+    CircleCheck, CircleCheckBig, Code, DoorOpen, History, Lightbulb, MessageCircleQuestionMark,
+    OctagonAlert, PencilLine, Sparkles,
 };
 use std::collections::BTreeMap;
 
@@ -35,6 +35,7 @@ use satz_studio_core::satz::reports::{
 use crate::components::badge::{Badge, BadgeVariant};
 use crate::components::button::{Button, ButtonSize, ButtonVariant};
 use crate::components::card::{Card, CardContent};
+use crate::components::collapsible::{Collapsible, CollapsibleContent, CollapsibleTrigger};
 use crate::components::item::{
     Item, ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemSize, ItemTitle,
 };
@@ -689,7 +690,8 @@ const _: () = assert!(
     "only the filled button and Enter write an answer"
 );
 
-/// One question: the pack header and the card, which scroll, and below them the bar with
+/// One question: the pack header — the pack's name, which opens its description beneath it —
+/// and the card, which scroll, and below them the bar with
 /// Back, Skip and the filled button, which does not. The card owns what it holds — the
 /// field's draft or the chosen option — so the bar can read it; a card of another question,
 /// shape or starting value is a new card (`card_key`). An answer only the estate file can
@@ -781,15 +783,43 @@ fn QuestionCard(
     };
     let forward = text_forward(q.state, now.is_some());
     let picked = chosen().and_then(|c| q.options.iter().find(|o| o.param == c).cloned());
+    // the pack's description is behind its name, closed on every new card
+    let mut about_open = use_signal(|| false);
+    let group = q.group();
 
     rsx! {
         div { class: "interview__question",
             div { class: "interview__scroll",
                 if new_group {
-                    div { class: "interview__pack",
-                        Boxes { size: 20 }
-                        div {
-                            span { class: "interview__pack-name", "{q.group()}" }
+                    Collapsible {
+                        class: "interview__pack",
+                        open: about_open(),
+                        on_open_change: move |now: bool| about_open.set(now),
+                        div { class: "interview__pack-head",
+                            Boxes { size: 20 }
+                            div { class: "interview__pack-toggle",
+                                CollapsibleTrigger {
+                                    r#as: move |mut trigger: Vec<Attribute>| {
+                                        let title = if about_open() { "Hide what the pack is for" } else { "Show what the pack is for" };
+                                        trigger.push(Attribute::new("title", title, None, false));
+                                        rsx! {
+                                            Button {
+                                                variant: ButtonVariant::Ghost,
+                                                size: ButtonSize::Sm,
+                                                attributes: trigger,
+                                                span { class: "interview__pack-name", "{group}" }
+                                                if about_open() {
+                                                    ChevronUp { size: 16 }
+                                                } else {
+                                                    ChevronDown { size: 16 }
+                                                }
+                                            }
+                                        }
+                                    },
+                                }
+                            }
+                        }
+                        CollapsibleContent {
                             p { class: "interview__pack-description", "{q.pack_description}" }
                         }
                     }
