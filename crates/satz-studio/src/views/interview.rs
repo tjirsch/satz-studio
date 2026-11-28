@@ -22,9 +22,12 @@
 use dioxus::prelude::*;
 use dioxus_icons::lucide::{
     ArrowLeft, ArrowRight, Ban, Boxes, Check, CheckCheck, Circle, CircleCheck, CircleCheckBig,
-    DoorOpen, History, Lightbulb, MessageCircleQuestionMark, OctagonAlert, PencilLine, Sparkles,
+    Code, DoorOpen, History, Lightbulb, MessageCircleQuestionMark, OctagonAlert, PencilLine,
+    Sparkles,
 };
-use satz_studio_core::model::answer_kind;
+use std::collections::BTreeMap;
+
+use satz_studio_core::model::{SourceValue, answer_kind};
 use satz_studio_core::satz::reports::{
     Blast, NO_BRANCH, QuestionKind, QuestionRow, QuestionState, Reversal,
 };
@@ -36,8 +39,9 @@ use crate::components::item::{
     Item, ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemSize, ItemTitle,
 };
 use crate::components::progress::Progress;
-use crate::state::{AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt};
-use crate::widgets::{Draft, FieldKind, SwitchRow, Tip, TypedField};
+use crate::state::{AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt, View};
+use crate::views::value_source;
+use crate::widgets::{Draft, FieldKind, SwitchRow, Tip, TypedField, value_in_words};
 
 /// The questions in the order the view walks them: the unanswered ones as the report
 /// lists them, then — when asked for — the answered ones and the ones not asked.
@@ -334,12 +338,37 @@ pub fn recommends_otherwise(q: &QuestionRow) -> Option<&str> {
     }
 }
 
+/// An answer the estate file writes as something only the file can express — a named
+/// read, a reference to a param, a string that interpolates — which no typed field holds
+/// without losing what it reads. The questions report carries such an answer resolved or
+/// decoded (`${interface.rag-store.project_id}`, a referenced param's value), so the card
+/// takes it from the estate file instead and shows it there, never in a field.
+#[derive(Debug, Clone, PartialEq)]
+pub struct InFile {
+    /// the value as the estate file writes it: `"${{interface.rag-store.project_id}}"`
+    pub source: String,
+    /// what it reads, in words
+    pub words: String,
+}
+
+/// The [`InFile`] answer of a question: an answered param question whose value in the
+/// estate file — `value`, written as `source` — is not a literal. `None` for a literal,
+/// which the field shows and edits, and for a question not answered.
+pub fn in_file(q: &QuestionRow, value: &SourceValue, source: String) -> Option<InFile> {
+    if q.state != QuestionState::Answered || q.kind != QuestionKind::Param {
+        return None;
+    }
+    value_in_words(value).map(|words| InFile { source, words })
+}
+
 /// A question's state in words, as the card's badge and the list say it. A choice says
-/// its bound option's label, or `none`.
-pub fn state_of(q: &QuestionRow) -> String {
-    let answer = match q.kind {
-        QuestionKind::Oneof => q.bound_label().unwrap_or_default(),
-        QuestionKind::Param => q.current.as_ref().map(|v| q.shown(v)).unwrap_or_default(),
+/// its bound option's label, or `none`; an answer only the estate file can express says
+/// it as the file writes it.
+pub fn state_of(q: &QuestionRow, in_file: Option<&InFile>) -> String {
+    let answer = match (q.kind, in_file) {
+        (QuestionKind::Oneof, _) => q.bound_label().unwrap_or_default(),
+        (QuestionKind::Param, Some(f)) => f.source.clone(),
+        (QuestionKind::Param, None) => q.current.as_ref().map(|v| q.shown(v)).unwrap_or_default(),
     };
     match q.state {
         QuestionState::Unanswered if q.blocking => "needs a value".to_string(),
@@ -361,8 +390,8 @@ pub fn state_icon(q: &QuestionRow, size: u32) -> Element {
 }
 
 /// The list's supporting line for a question: its subject, then its state.
-pub fn listed(q: &QuestionRow) -> String {
-    format!("{} · {}", q.subject, state_of(q))
+pub fn listed(q: &QuestionRow, in_file: Option<&InFile>) -> String {
+    format!("{} · {}", q.subject, state_of(q, in_file))
 }
 
 /// The card's identity: its question, its field's shape and the value it starts on. A
@@ -370,10 +399,11 @@ pub fn listed(q: &QuestionRow) -> String {
 /// just written, reaching the card the walk moved to while the write was in flight —
 /// starts that card afresh, so it never holds a value the report no longer offers.
 /// The field is disabled while a write is in flight, so nothing typed is lost.
-fn card_key(q: &QuestionRow, field: Option<FieldKind>) -> String {
+fn card_key(q: &QuestionRow, field: Option<FieldKind>, in_file: Option<&InFile>) -> String {
     let offered = q.offered().map(shown).unwrap_or_default();
     let option = initial_option(q).unwrap_or_default();
-    format!("{}|{field:?}|{offered}|{option}", q.subject)
+    let written = in_file.map(|f| f.source.as_str()).unwrap_or_default();
+    format!("{}|{field:?}|{offered}|{option}|{written}", q.subject)
 }
 
 #[component]
@@ -416,6 +446,20 @@ pub fn DecisionsView() -> Element {
         }
     };
 
+    // the answers only the estate file can express, by subject, read from the file itself
+    let in_files: BTreeMap<String, InFile> =
+        match (app.estate().model().cloned(), app.estate().cst().cloned()) {
+            (Some(model), Some(cst)) => report
+                .questions
+                .iter()
+                .filter_map(|q| {
+                    let row = model.params.iter().find(|r| r.name == q.subject)?;
+                    let source = value_source(&cst, row.id)?;
+                    in_file(q, &row.value, source).map(|f| (q.subject.clone(), f))
+                })
+                .collect(),
+            _ => BTreeMap::new(),
+        };
     let s = report.summary.clone();
     let list = ordered(&report.questions, show_answered());
     let offered_defaults = report
@@ -489,7 +533,8 @@ pub fn DecisionsView() -> Element {
                 match current {
                     Some(q) => rsx! {
                         QuestionCard {
-                            key: "{card_key(&q, field)}",
+                            key: "{card_key(&q, field, in_files.get(&q.subject))}",
+                            in_file: in_files.get(&q.subject).cloned(),
                             question: q,
                             field,
                             previous_group,
@@ -555,7 +600,7 @@ pub fn DecisionsView() -> Element {
                                         ItemMedia { {state_icon(q, 20)} }
                                         ItemContent {
                                             ItemTitle { "{q.prompt}" }
-                                            ItemDescription { "{listed(q)}" }
+                                            ItemDescription { "{listed(q, in_files.get(&q.subject))}" }
                                         }
                                     }
                                 }
@@ -647,11 +692,14 @@ const _: () = assert!(
 /// One question: the pack header and the card, which scroll, and below them the bar with
 /// Back, Skip and the filled button, which does not. The card owns what it holds — the
 /// field's draft or the chosen option — so the bar can read it; a card of another question,
-/// shape or starting value is a new card (`card_key`).
+/// shape or starting value is a new card (`card_key`). An answer only the estate file can
+/// express (`in_file`) has no field: the card shows it as the file writes it, and its
+/// button reads Next.
 #[component]
 fn QuestionCard(
     question: QuestionRow,
     field: Option<FieldKind>,
+    in_file: Option<InFile>,
     previous_group: Option<String>,
     loading: bool,
     can_back: bool,
@@ -659,16 +707,17 @@ fn QuestionCard(
     onnext: EventHandler<()>,
     onaccept: EventHandler<(String, serde_json::Value)>,
 ) -> Element {
+    let app = use_context::<Store<AppStore>>();
     let q = question;
     let new_group = previous_group != Some(q.group());
     let one_way = q.one_way_door();
     let recommend = recommends_otherwise(&q).map(str::to_string);
-    let state_text = state_of(&q);
+    let state_text = state_of(&q, in_file.as_ref());
     let needs_value = q.blocking && q.state == QuestionState::Unanswered;
     let subject = q.subject.clone();
-    let kind = match q.kind {
-        QuestionKind::Param => field,
-        QuestionKind::Oneof => None,
+    let kind = match (q.kind, &in_file) {
+        (QuestionKind::Param, None) => field,
+        (QuestionKind::Param, Some(_)) | (QuestionKind::Oneof, _) => None,
     };
     let initial = kind.map(|k| Draft::of_json(q.offered(), k));
     let mut draft = use_signal(|| initial.clone());
@@ -792,8 +841,26 @@ fn QuestionCard(
                             }
                         }
                         div { class: "interview__answer",
-                            match (q.kind, kind, initial) {
-                                (QuestionKind::Param, Some(kind), Some(initial)) => rsx! {
+                            match (q.kind, kind, initial, &in_file) {
+                                (_, _, _, Some(f)) => rsx! {
+                                    p { class: "interview__in-file",
+                                        "Answered in the estate file: {f.words}."
+                                    }
+                                    code { class: "interview__in-file-source", "{subject} = {f.source}" }
+                                    div { class: "interview__in-file-edit",
+                                        p { class: "interview__hint",
+                                            "A field cannot hold this value without losing what it reads, so the card offers none; its Satz source is edited under Estate → Params."
+                                        }
+                                        Button {
+                                            variant: ButtonVariant::Ghost,
+                                            size: ButtonSize::Xs,
+                                            onclick: move |_| app.nav().set(View::Estate),
+                                            Code { size: 16 }
+                                            "Edit in Params"
+                                        }
+                                    }
+                                },
+                                (QuestionKind::Param, Some(kind), Some(initial), None) => rsx! {
                                         TypedField {
                                             kind,
                                             draft: initial,
@@ -809,12 +876,12 @@ fn QuestionCard(
                                             oncommit: move |_| enter(),
                                         }
                                 },
-                                (QuestionKind::Param, _, _) => rsx! {
+                                (QuestionKind::Param, _, _, None) => rsx! {
                                     p { class: "interview__hint",
                                         "There is no field for this answer: its param is declared as a map, or with no shape satz names. Write the value into the estate's params block."
                                     }
                                 },
-                                (QuestionKind::Oneof, _, _) => rsx! {
+                                (QuestionKind::Oneof, _, _, None) => rsx! {
                                     div { class: "interview__options",
                                         for (param, label) in choices(&q) {
                                             {
@@ -848,7 +915,7 @@ fn QuestionCard(
                                 },
                             }
                         }
-                        if q.kind == QuestionKind::Param {
+                        if q.kind == QuestionKind::Param && in_file.is_none() {
                             p { class: "interview__hint",
                                 "Accept writes " code { "{subject} = …" } " into the estate's params through satz's own writer; a pack line the answer switches on is uncommented by satz."
                             }
@@ -995,6 +1062,48 @@ mod tests {
         assert_eq!(one.value, json!(["a@example.com"]));
     }
 
+    /// An answer the estate writes as a named read is shown as the file writes it, with no
+    /// field — so no brace refusal and nothing to overwrite it — and the card moves on with
+    /// Next. The report's own value is the decoded `${…}`, which the card does not show.
+    #[test]
+    fn an_answered_named_read_is_shown_as_the_file_writes_it_and_has_no_field() {
+        use satz_studio_core::model::StrPart;
+        let mut rag = q("rag_project_id", QuestionState::Answered);
+        rag.current = Some(json!("${interface.rag-store.project_id}"));
+        let value = SourceValue::Str {
+            raw: "${{interface.rag-store.project_id}}".into(),
+            parts: vec![StrPart::TfRef("interface.rag-store.project_id".into())],
+        };
+        let source = "\"${{interface.rag-store.project_id}}\"".to_string();
+        let f = in_file(&rag, &value, source.clone()).expect("a named read is the file's");
+        assert_eq!(
+            f.words,
+            "a named read: `project_id` from the interface folder `rag-store`"
+        );
+        assert_eq!(
+            listed(&rag, Some(&f)),
+            "rag_project_id · answered: \"${{interface.rag-store.project_id}}\""
+        );
+        // the field it would have had cannot start on it: the value is not a literal
+        assert_eq!(Draft::of_source(&value, FieldKind::Text), None);
+        // no field, so no filled button: the text button reads Next and writes nothing
+        assert_eq!(text_forward(rag.state, false), Some("Next"));
+        // a literal answer keeps its field, and so does a question not answered
+        let plain = SourceValue::Str {
+            raw: "acme-rag".into(),
+            parts: vec![StrPart::Lit("acme-rag".into())],
+        };
+        assert_eq!(in_file(&rag, &plain, "\"acme-rag\"".into()), None);
+        let open = q("rag_project_id", QuestionState::Unanswered);
+        assert_eq!(in_file(&open, &value, source), None);
+        // typing a brace into an unanswered question's field is still refused
+        assert!(
+            Draft::Text("${interface.rag-store.project_id}".into())
+                .problem(FieldKind::Text, "rag_project_id")
+                .is_some()
+        );
+    }
+
     /// A question whose `empty` says what `""` means takes an empty field as its answer,
     /// and the card says the meaning beside the value.
     #[test]
@@ -1009,7 +1118,7 @@ mod tests {
         folder.empty = Some("no team folder".into());
         folder.current = Some(json!(""));
         assert_eq!(
-            listed(&folder),
+            listed(&folder, None),
             "team_folder_name · answered: \"\" (no team folder)"
         );
     }
@@ -1037,7 +1146,7 @@ mod tests {
         assert_eq!(initial_option(&c).as_deref(), Some(NO_BRANCH));
         let h = held_oneof(Some(NO_BRANCH), c.bound_option());
         assert_eq!(button(primary(c.state, h.changed, h.valid, false)), NEXT);
-        assert_eq!(listed(&c), "interface_notice · answered: None");
+        assert_eq!(listed(&c, None), "interface_notice · answered: None");
         c.required = true;
         c.state = QuestionState::Unanswered;
         assert_eq!(choices(&c).len(), 1, "a required choice has no None button");
@@ -1309,12 +1418,12 @@ mod tests {
     fn the_list_says_each_question_s_subject_and_its_answer() {
         let mut region = q("region", QuestionState::Answered);
         region.current = Some(json!("europe-west3"));
-        assert_eq!(listed(&region), "region · answered: europe-west3");
+        assert_eq!(listed(&region, None), "region · answered: europe-west3");
         let mut billing = q("billing", QuestionState::Unanswered);
         billing.blocking = true;
-        assert_eq!(listed(&billing), "billing · needs a value");
+        assert_eq!(listed(&billing, None), "billing · needs a value");
         assert_eq!(
-            listed(&q("domain", QuestionState::NotApplicable)),
+            listed(&q("domain", QuestionState::NotApplicable), None),
             "domain · not asked: its ask_when is false"
         );
     }
@@ -1346,10 +1455,13 @@ mod tests {
     fn a_card_is_new_when_the_value_it_starts_on_changes() {
         let mut region = q("region", QuestionState::Unanswered);
         region.default = Some(json!("europe-west3"));
-        let before = card_key(&region, Some(FieldKind::Text));
-        assert_eq!(before, card_key(&region.clone(), Some(FieldKind::Text)));
+        let before = card_key(&region, Some(FieldKind::Text), None);
+        assert_eq!(
+            before,
+            card_key(&region.clone(), Some(FieldKind::Text), None)
+        );
         region.default = Some(json!("europe-west4"));
-        assert_ne!(before, card_key(&region, Some(FieldKind::Text)));
+        assert_ne!(before, card_key(&region, Some(FieldKind::Text), None));
     }
 
     #[test]

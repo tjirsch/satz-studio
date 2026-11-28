@@ -1448,6 +1448,28 @@ span[data-style][padding="true"] {
   color: var(--secondary-color-5);
 }
 
+.interview__in-file {
+  font-size: 0.875rem;
+  font-weight: 400;
+}
+
+.interview__in-file-source {
+  padding: 8px 12px;
+  border-radius: 0.375rem;
+  background: var(--primary-color-4);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.interview__in-file-edit {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .interview__actions {
   flex: none;
   display: flex;
