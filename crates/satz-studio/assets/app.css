@@ -1154,10 +1154,6 @@ span[data-style][padding="true"] {
   color: var(--secondary-color-5);
 }
 
-.param-row__door {
-  height: 24px;
-}
-
 .param-row__field,
 .attr-row__field {
   display: flex;
@@ -2443,11 +2439,9 @@ span[data-style][padding="true"] {
   min-width: 0;
 }
 
-/* the pack's name and its description, and the params toggle and its panel, join the
-   row's head: each trigger in place, what it opens on a line of its own below the head's
-   other parts */
-.wpacks__about,
-.wpacks__inline {
+/* the pack's name and its description join the row's head: the name in place, the
+   description on a line of its own below the head's other parts */
+.wpacks__about {
   display: contents;
 }
 
@@ -2485,77 +2479,9 @@ span[data-style][padding="true"] {
   user-select: text;
 }
 
-/* what flows through a pack: the panel the row's in/out button opens under it —
-   Incoming and Outgoing side by side where they fit, each a heading over groups, each
-   group a source line over a list of two-line entries */
-.wpacks__flow {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 16px 24px;
-  padding: 12px 16px;
-  border-radius: 0.5rem;
-  background: var(--primary-color-3);
-}
-
-.wpacks__flow-side {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  min-width: 0;
-}
-
-.wpacks__flow-side h3 {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin: 0;
-  font-size: 1rem;
-  font-weight: 600;
-  color: var(--secondary-color-4);
-}
-
-.wpacks__flow-group {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.wpacks__flow-source,
-.wpacks__flow-line {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-.wpacks__flow-source {
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: var(--secondary-color-5);
-}
-
-.wpacks__flow-list {
-  margin: 0;
-  padding-left: 24px;
-  list-style: none;
-  font-size: 0.875rem;
-  font-weight: 400;
-  user-select: text;
-}
-
-.wpacks__flow-list li + li {
-  margin-top: 6px;
-}
-
-.wpacks__flow-why {
-  margin: 0 0 0 16px;
-}
-
-/* a pack's params: a block on the theme's surface, as the flow's, on a line of its own
-   below the head's other parts and the description; one compact line per declaration */
-.wpacks__params {
-  order: 2;
-  flex-basis: 100%;
+/* the panel a row's Interfaces or Params toggle opens under it, across the row's width:
+   a block on the theme's surface holding headed tables */
+.wpacks__panel {
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -2564,8 +2490,52 @@ span[data-style][padding="true"] {
   background: var(--primary-color-3);
 }
 
-.wpacks__params .wpacks__flow-list li + li {
-  margin-top: 2px;
+.wpacks__panel h3 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--secondary-color-4);
+}
+
+/* a panel's table: aligned columns, a rule between rows, each cell's lines stacked */
+.wpacks__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  font-weight: 400;
+  user-select: text;
+}
+
+.wpacks__table th {
+  padding: 4px 16px 4px 0;
+  border-bottom: 1px solid var(--primary-color-6);
+  text-align: left;
+  font-weight: 500;
+  color: var(--secondary-color-5);
+}
+
+.wpacks__table td {
+  padding: 6px 16px 6px 0;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+.wpacks__table tbody tr + tr td {
+  border-top: 1px solid var(--primary-color-6);
+}
+
+.wpacks__table th:last-child,
+.wpacks__table td:last-child {
+  padding-right: 0;
+}
+
+.wpacks__cell-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .wpacks__unmet {

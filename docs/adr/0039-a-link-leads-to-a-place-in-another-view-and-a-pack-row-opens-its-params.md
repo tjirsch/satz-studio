@@ -46,8 +46,15 @@ name the app cannot place — no row in either view — is plain text, never a l
 nowhere. "Edit in Params" uses the same place and now scrolls to the param's row.
 
 The Details dialog and `PackDetails` are gone; "Params (n)" counts the params and the
-list params a pack declares and opens one compact line per declaration under the row.
-This replaces the Details part of ADR 0032; the rest of 0032 holds.
+list params a pack declares. The two toggles share the row's one `Collapsible` and one
+open panel, so one is open at a time, and the panel stands under the whole row, across
+its width: tables with aligned columns — Param | Default | Marks and List param | Key |
+Fields | Defaults for Params; Value read | From | Feeds | Marks and Export | Interface |
+Description for Interfaces. The library offers no table; the tables are plain
+HTML tables laid out by `app.css`. A mark on a question or a param is the library's
+`Badge` with an icon and a short word, the sentence in its tooltip, with one look for one
+meaning in every view (`src/widgets/marks.rs`). This replaces the Details part of ADR
+0032; the rest of 0032 holds.
 
 ## Consequences
 

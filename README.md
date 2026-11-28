@@ -114,16 +114,16 @@ from source", "Not checked"), and what the source holds beyond them; each is fet
 updated from the source it came from, kept as your own or added to the estate from its
 row. Every listed pack — fetched or not yet — counts what flows through it, seen from the
 pack, as `satz packs --estate` matched it: "Interfaces (N ↓ / M ↑)", the values it reads from
-the interface folders and the values it exports. Opened, it lists the incoming values
+the interface folders and the values it exports. Opened, it shows a table of the incoming values
 grouped by what gives them — each interface folder of this estate, with the
 organization's estate that wrote it; the estate itself, where it sets the param the value
 would fill; or not given, with why — each with the description of the export that gives
 it and the param it fills with that param's question; and the outgoing values by
-interface, the core exports first, each with its description. A pack with a value this
-estate does not give is marked "Unmet read", so the list says before a fetch whether a
-pack fits. Beside it, "Params (n)" opens its params, one line each, with their defaults —
+interface, the core exports first, each with its description, in a second table. A pack with a value this
+estate does not give is marked "unmet read", so the list says before a fetch whether a
+pack fits. Beside it, "Params (n)" opens — in the same place, closing the other — a table of its params with their defaults —
 `none — must be provided` for one it declares without a value — and an "asked" mark where
-a question asks for one, then its list params with their fields; for a pack the estate
+a question asks for one, then a table of its list params with their fields; for a pack the estate
 uses, a param's name opens its row in Estate → Params and the mark opens the question in
 Decisions. satz-studio fetches a pack and writes no `use` line: a pack
 in `packs_dir` the estate does not use shows, under its row, "Write this line into the

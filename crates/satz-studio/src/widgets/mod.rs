@@ -4,6 +4,7 @@
 mod connector_tree;
 mod field;
 mod help;
+pub(crate) mod marks;
 mod source_tags;
 mod switch_row;
 mod tag_list;

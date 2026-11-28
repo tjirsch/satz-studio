@@ -8,15 +8,14 @@
 
 use dioxus::prelude::*;
 use dioxus_icons::lucide::{
-    Boxes, CircleQuestionMark, Code, DoorOpen, FileText, MessageCircleQuestionMark,
-    SlidersHorizontal, TextAlignStart,
+    Boxes, CircleQuestionMark, Code, FileText, MessageCircleQuestionMark, SlidersHorizontal,
+    TextAlignStart,
 };
 use satz_studio_core::cst::TypedValue;
 use satz_studio_core::edit::Edit;
 use satz_studio_core::model::{EditMode, ParamRow, SourceValue};
 use satz_studio_core::satz::reports::{PackRole, PacksReport};
 
-use crate::components::badge::{Badge, BadgeVariant};
 use crate::components::button::{Button, ButtonSize, ButtonVariant};
 use crate::components::card::{Card, CardContent};
 use crate::components::tooltip::{Tooltip, TooltipContent, TooltipTrigger};
@@ -25,6 +24,7 @@ use crate::state::{
     take_focus,
 };
 use crate::views::{line_text, value_source};
+use crate::widgets::marks::OneWayBadge;
 use crate::widgets::{Draft, Field, FieldKind, SourceTags, TypedField};
 
 /// The group a row belongs to: the pack whose question asks for it, else the estate.
@@ -233,10 +233,7 @@ fn ParamRowView(row: ParamRow, source: String, line: String, loading: bool) -> E
                 code { title: "{row.name}", "{row.own_name()}" }
                 span { class: "param-row__line", "line {row.line}" }
                 if row.one_way_door {
-                    Badge { variant: BadgeVariant::Destructive, class: "param-row__door",
-                        DoorOpen { size: 12 }
-                        "one-way door"
-                    }
+                    OneWayBadge {}
                 }
                 if let Some(asked) = asked {
                     Button {
