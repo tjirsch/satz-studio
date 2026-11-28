@@ -12,7 +12,7 @@ use dioxus::prelude::*;
 use dioxus_icons::lucide::{Network, SlidersHorizontal, Waypoints};
 
 use crate::components::tabs::{TabList, TabTrigger, Tabs};
-use crate::state::{AppStore, AppStoreStoreExt, DiagnosticSelection, EstateStoreStoreExt};
+use crate::state::{AppStore, AppStoreStoreExt, DiagnosticSelection, EstateStoreStoreExt, Focus};
 use crate::views::interfaces::InterfacesPane;
 use crate::views::params::ParamsPane;
 use crate::views::resources::ResourcesPane;
@@ -45,9 +45,11 @@ pub fn EstateView() -> Element {
     let mut pane = use_signal(|| Pane::Params);
 
     // A message names a line, and a line is a node: the drawer's selection belongs
-    // to the tree, so choosing one opens the tab that can show it.
+    // to the tree, so choosing one opens the tab that can show it. A link to a param's
+    // row opens on Params, the first tab, and wins over a selection the drawer still holds.
     use_effect(move || {
-        if (selection.0)().is_some() {
+        let to_param = matches!(app.focus().peek().as_ref(), Some(Focus::Param(_)));
+        if (selection.0)().is_some() && !to_param {
             pane.set(Pane::Resources);
         }
     });

@@ -53,7 +53,8 @@ several times, each a named use (`use "packs/vm.satz" named web`), asks its ques
 per use, under `web — packs/vm.satz`, and the answer is written as `web.vm_zone`; **Estate**, the file
 itself — its params (a named use's `web.<param>` stand under the use; a param it declares `none` reads "no value — must be provided"
 until a value is typed in its place; its own `locals { }` values are not params and stay
-as the file writes them), its resource tree, and the interfaces it publishes for other estates
+as the file writes them; a group's pack name opens the pack in Packs or the preset in
+Presets, and "Asked in Decisions" on a param opens the question that asks for it), its resource tree, and the interfaces it publishes for other estates
 to read, as `satz interfaces` reports them: the core exports every interface
 carries, then each interface with the interfaces it uses and its own exports — an
 interface of a named use, `<name>-<interface>`, saying which use it is, its folder that
@@ -104,7 +105,7 @@ lists every workload pack the estate uses first, each with a badge per name it i
 under, then the other files of `packs_dir`:
 the ones the repository wrote itself ("Own pack") and the ones `satz get-pack` fetched.
 When Packs opens, `satz packs --local` lists them without reading any pack source — no
-network — so each row has its state, where it came from and "Details" at once: a fetched
+network — so each row has its state, where it came from and its params at once: a fetched
 pack is "Edited here" or "Unchanged since fetched".
 Choosing a pack source — `satz`, the satz repository's `packs/`, then each source
 `config.toml` names, a GitHub repository or a folder — says how each fetched pack stands
@@ -112,7 +113,7 @@ against it, with a badge where it needs you ("Update available", "Edited here", 
 from source", "Not checked"), and what the source holds beyond them; each is fetched,
 updated from the source it came from, kept as your own or added to the estate from its
 row. Every listed pack — fetched or not yet — counts what flows through it, seen from the
-pack, as `satz packs --estate` matched it: "↓ N in · ↑ M out", the values it reads from
+pack, as `satz packs --estate` matched it: "Interfaces (N ↓ / M ↑)", the values it reads from
 the interface folders and the values it exports. Opened, it lists the incoming values
 grouped by what gives them — each interface folder of this estate, with the
 organization's estate that wrote it; the estate itself, where it sets the param the value
@@ -120,9 +121,11 @@ would fill; or not given, with why — each with the description of the export t
 it and the param it fills with that param's question; and the outgoing values by
 interface, the core exports first, each with its description. A pack with a value this
 estate does not give is marked "Unmet read", so the list says before a fetch whether a
-pack fits. "Details" shows its params with their defaults — `none — must be provided` for one it
-declares without a value — and the questions that ask for
-them, and its list params. satz-studio fetches a pack and writes no `use` line: a pack
+pack fits. Beside it, "Params (n)" opens its params, one line each, with their defaults —
+`none — must be provided` for one it declares without a value — and an "asked" mark where
+a question asks for one, then its list params with their fields; for a pack the estate
+uses, a param's name opens its row in Estate → Params and the mark opens the question in
+Decisions. satz-studio fetches a pack and writes no `use` line: a pack
 in `packs_dir` the estate does not use shows, under its row, "Write this line into the
 estate file <file>:" over the line satz names for it, with "Copy" and an Edit button that
 opens the estate file — for a pack whose header says `multiple`, the line ends in

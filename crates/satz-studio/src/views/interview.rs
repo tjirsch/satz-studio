@@ -40,7 +40,10 @@ use crate::components::item::{
     Item, ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemSize, ItemTitle,
 };
 use crate::components::progress::Progress;
-use crate::state::{AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt, View};
+use crate::state::{
+    AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt, Focus, go_to, scroll_to,
+    take_focus,
+};
 use crate::views::value_source;
 use crate::widgets::{Draft, FieldKind, SwitchRow, Tip, TypedField, value_in_words};
 
@@ -141,6 +144,33 @@ impl Walk {
             self.subject = None;
             self.index = 0;
         }
+    }
+
+    /// A link to the question `subject` (Estate → Params' "Asked in Decisions"): the card
+    /// moves to it, remembering the one it was on for Back. `None` when the report carries
+    /// no such question; otherwise whether answered questions have to be shown to hold it.
+    pub fn go_to(
+        &mut self,
+        questions: &[QuestionRow],
+        show_answered: bool,
+        subject: &str,
+    ) -> Option<bool> {
+        let q = questions.iter().find(|q| q.subject == subject)?;
+        let show = show_answered || q.state != QuestionState::Unanswered;
+        let index = ordered(questions, show)
+            .iter()
+            .position(|r| r.subject == subject)?;
+        let before = ordered(questions, show_answered);
+        if before
+            .get(self.position(&before))
+            .map(|q| q.subject.as_str())
+            != Some(subject)
+        {
+            self.leave(&before);
+        }
+        self.index = index;
+        self.subject = Some(subject.to_string());
+        Some(show)
     }
 
     pub fn can_go_back(&self) -> bool {
@@ -416,6 +446,28 @@ pub fn DecisionsView() -> Element {
     let loading = app.estate().loading().cloned();
     let mut show_answered = use_signal(|| false);
     let mut walk = use_signal(Walk::default);
+    // a link to a question (Estate → Params, Packs) puts it on the card once the report
+    // stands, showing the answered questions where it is one of them, and scrolls the list
+    // to its row
+    use_effect(move || {
+        let Some(Focus::Question(subject)) = app.focus().cloned() else {
+            return;
+        };
+        let Some(questions) = app.estate().questions().cloned().map(|r| r.questions) else {
+            return;
+        };
+        let place = Focus::Question(subject.clone());
+        if !take_focus(app, &place) {
+            return;
+        }
+        let shown = *show_answered.peek();
+        if let Some(show) = walk.write().go_to(&questions, shown, &subject) {
+            if show != shown {
+                show_answered.set(show);
+            }
+            scroll_to(&place.anchor());
+        }
+    });
 
     let Some(report) = report else {
         return rsx! {
@@ -593,6 +645,7 @@ pub fn DecisionsView() -> Element {
                                 for (n, q) in list.iter().enumerate() {
                                     Item {
                                         key: "{q.subject}",
+                                        id: Focus::Question(q.subject.clone()).anchor(),
                                         size: ItemSize::Sm,
                                         "data-selected": if n == i { "true" } else { "false" },
                                         onclick: move |_| {
@@ -884,7 +937,10 @@ fn QuestionCard(
                                         Button {
                                             variant: ButtonVariant::Ghost,
                                             size: ButtonSize::Xs,
-                                            onclick: move |_| app.nav().set(View::Estate),
+                                            onclick: {
+                                                let subject = subject.clone();
+                                                move |_| go_to(app, Focus::Param(subject.clone()))
+                                            },
                                             Code { size: 16 }
                                             "Edit in Params"
                                         }
@@ -1370,6 +1426,32 @@ mod tests {
         walk.open(&questions, true, 2);
         assert_eq!(walk.back(&questions, true), Some(true));
         assert_eq!(subject_at(&walk, &list), "region");
+        assert!(!walk.can_go_back());
+    }
+
+    /// A link from Estate → Params puts its question on the card: an answered one turns
+    /// "Show answered" on, the question the card was on is left for Back, and a subject the
+    /// report does not carry moves nothing.
+    #[test]
+    fn a_link_to_a_question_puts_it_on_the_card() {
+        let questions = vec![
+            q("region", QuestionState::Unanswered),
+            q("zone", QuestionState::Unanswered),
+            q("billing", QuestionState::Answered),
+        ];
+        let mut walk = Walk::default();
+        assert_eq!(walk.go_to(&questions, false, "zone"), Some(false));
+        assert_eq!(subject_at(&walk, &ordered(&questions, false)), "zone");
+        assert_eq!(walk.go_to(&questions, false, "billing"), Some(true));
+        assert_eq!(subject_at(&walk, &ordered(&questions, true)), "billing");
+        // the link to the question already on the card leaves nothing more behind
+        assert_eq!(walk.go_to(&questions, true, "billing"), Some(true));
+        assert_eq!(walk.go_to(&questions, true, "gone"), None);
+        assert_eq!(subject_at(&walk, &ordered(&questions, true)), "billing");
+        assert_eq!(walk.back(&questions, true), Some(true));
+        assert_eq!(subject_at(&walk, &ordered(&questions, true)), "zone");
+        assert_eq!(walk.back(&questions, true), Some(true));
+        assert_eq!(subject_at(&walk, &ordered(&questions, true)), "region");
         assert!(!walk.can_go_back());
     }
 

@@ -562,6 +562,8 @@ pub struct AppStore {
     /// the estate file a session is being opened on
     pub opening: Option<PathBuf>,
     pub nav: View,
+    /// the place in [`Self::nav`] a link just led to, until the view shows it ([`go_to`])
+    pub focus: Option<Focus>,
     /// the door of the Start screen the pane below the row belongs to
     pub door: Door,
     /// the command palette is over the window
@@ -602,6 +604,7 @@ impl AppStore {
             open: None,
             opening: None,
             nav: View::default(),
+            focus: None,
             door: Door::default(),
             palette_open: false,
             palette_review: false,
@@ -616,6 +619,72 @@ impl AppStore {
             install: InstallStore::default(),
         }
     }
+}
+
+/// A place in another view that a link leads to: a pack's row in Packs, a preset's card in
+/// Presets, a param's row in Estate → Params, a question's card in Decisions. [`go_to`]
+/// sets it with the view; the part of the view it names takes it once it stands
+/// ([`take_focus`]) — scrolls itself into view and opens what the link asked for — and
+/// the shell drops one whose view the window has left.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Focus {
+    /// a workload pack's row, by its id under `packs_dir`: its description opens
+    Pack(String),
+    /// a preset's card, by its path as a `use` line names it
+    Preset(String),
+    /// a param's row, by the name the estate binds, `web.vm_zone` for a named use's
+    Param(String),
+    /// a question's card, by its subject
+    Question(String),
+}
+
+impl Focus {
+    /// The view the place stands in.
+    pub fn view(&self) -> View {
+        match self {
+            Focus::Pack(_) => View::Packs,
+            Focus::Preset(_) => View::Presets,
+            Focus::Param(_) => View::Estate,
+            Focus::Question(_) => View::Decisions,
+        }
+    }
+
+    /// The `id` of the element the place is, which [`scroll_to`] finds.
+    pub fn anchor(&self) -> String {
+        match self {
+            Focus::Pack(id) => format!("pack-{id}"),
+            Focus::Preset(path) => format!("preset-{path}"),
+            Focus::Param(name) => format!("param-{name}"),
+            Focus::Question(subject) => format!("question-{subject}"),
+        }
+    }
+}
+
+/// Follow a link: open the view `focus` stands in, and leave `focus` for it to take.
+pub fn go_to(app: Store<AppStore>, focus: Focus) {
+    let view = focus.view();
+    app.focus().set(Some(focus));
+    app.nav().set(view);
+}
+
+/// Whether `place` is where a link just led: called from an effect of the row, card or
+/// view that renders the place, which the read subscribes to the focus. The focus is
+/// taken, so the place scrolls and opens once.
+pub fn take_focus(app: Store<AppStore>, place: &Focus) -> bool {
+    if app.focus().read().as_ref() != Some(place) {
+        return false;
+    }
+    app.focus().set(None);
+    true
+}
+
+/// Scroll the element whose `id` is `anchor` into the middle of the view, on the next
+/// frame: after the render that opened what the link asked for.
+pub fn scroll_to(anchor: &str) {
+    let id = serde_json::to_string(anchor).expect("a string serializes");
+    let _ = document::eval(&format!(
+        "requestAnimationFrame(() => document.getElementById({id})?.scrollIntoView({{block: 'center', behavior: 'smooth'}}))"
+    ));
 }
 
 /// The message the drawer selected last; the estate views scroll to it.

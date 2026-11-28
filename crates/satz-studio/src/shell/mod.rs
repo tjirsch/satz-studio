@@ -97,6 +97,14 @@ fn Frame() -> Element {
 fn Content() -> Element {
     let app = use_context::<Store<AppStore>>();
     let view = app.nav().cloned();
+    // a link's place belongs to the view it led to: leaving that view drops it, so a place
+    // the view never showed does not scroll the next visit
+    use_effect(move || {
+        let at = app.nav().cloned();
+        if app.focus().peek().as_ref().is_some_and(|f| f.view() != at) {
+            app.focus().set(None);
+        }
+    });
     if view.needs_estate() && app.open().is_none() {
         return rsx! { NoEstate { view } };
     }
