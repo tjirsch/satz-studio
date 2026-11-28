@@ -22,15 +22,13 @@
 use dioxus::prelude::*;
 use dioxus_icons::lucide::{
     ArrowLeft, ArrowRight, Ban, Boxes, Check, CheckCheck, ChevronDown, ChevronUp, Circle,
-    CircleCheck, CircleCheckBig, Code, DoorOpen, History, Lightbulb, MessageCircleQuestionMark,
-    OctagonAlert, PencilLine, Sparkles,
+    CircleCheck, CircleCheckBig, Code, Lightbulb, MessageCircleQuestionMark, OctagonAlert,
+    PencilLine,
 };
 use std::collections::BTreeMap;
 
 use satz_studio_core::model::{SourceValue, answer_kind};
-use satz_studio_core::satz::reports::{
-    Blast, NO_BRANCH, QuestionKind, QuestionRow, QuestionState, Reversal,
-};
+use satz_studio_core::satz::reports::{NO_BRANCH, QuestionKind, QuestionRow, QuestionState};
 
 use crate::components::badge::{Badge, BadgeVariant};
 use crate::components::button::{Button, ButtonSize, ButtonVariant};
@@ -40,9 +38,17 @@ use crate::components::item::{
     Item, ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemSize, ItemTitle,
 };
 use crate::components::progress::Progress;
-use crate::state::{AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt, View};
+use crate::state::{
+    AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt, Focus, go_to, scroll_to,
+    take_focus,
+};
 use crate::views::value_source;
+use crate::widgets::marks::{BlastBadge, OneWayBadge, ReversalBadge};
+#[cfg(test)]
+use crate::widgets::marks::{ONE_WAY_TIP, blast_tip, reversal_tip};
 use crate::widgets::{Draft, FieldKind, SwitchRow, Tip, TypedField, value_in_words};
+#[cfg(test)]
+use satz_studio_core::satz::reports::{Blast, Reversal};
 
 /// The questions in the order the view walks them: the unanswered ones as the report
 /// lists them, then — when asked for — the answered ones and the ones not asked.
@@ -141,6 +147,33 @@ impl Walk {
             self.subject = None;
             self.index = 0;
         }
+    }
+
+    /// A link to the question `subject` (Estate → Params' "Asked in Decisions"): the card
+    /// moves to it, remembering the one it was on for Back. `None` when the report carries
+    /// no such question; otherwise whether answered questions have to be shown to hold it.
+    pub fn go_to(
+        &mut self,
+        questions: &[QuestionRow],
+        show_answered: bool,
+        subject: &str,
+    ) -> Option<bool> {
+        let q = questions.iter().find(|q| q.subject == subject)?;
+        let show = show_answered || q.state != QuestionState::Unanswered;
+        let index = ordered(questions, show)
+            .iter()
+            .position(|r| r.subject == subject)?;
+        let before = ordered(questions, show_answered);
+        if before
+            .get(self.position(&before))
+            .map(|q| q.subject.as_str())
+            != Some(subject)
+        {
+            self.leave(&before);
+        }
+        self.index = index;
+        self.subject = Some(subject.to_string());
+        Some(show)
     }
 
     pub fn can_go_back(&self) -> bool {
@@ -416,6 +449,28 @@ pub fn DecisionsView() -> Element {
     let loading = app.estate().loading().cloned();
     let mut show_answered = use_signal(|| false);
     let mut walk = use_signal(Walk::default);
+    // a link to a question (Estate → Params, Packs) puts it on the card once the report
+    // stands, showing the answered questions where it is one of them, and scrolls the list
+    // to its row
+    use_effect(move || {
+        let Some(Focus::Question(subject)) = app.focus().cloned() else {
+            return;
+        };
+        let Some(questions) = app.estate().questions().cloned().map(|r| r.questions) else {
+            return;
+        };
+        let place = Focus::Question(subject.clone());
+        if !take_focus(app, &place) {
+            return;
+        }
+        let shown = *show_answered.peek();
+        if let Some(show) = walk.write().go_to(&questions, shown, &subject) {
+            if show != shown {
+                show_answered.set(show);
+            }
+            scroll_to(&place.anchor());
+        }
+    });
 
     let Some(report) = report else {
         return rsx! {
@@ -593,6 +648,7 @@ pub fn DecisionsView() -> Element {
                                 for (n, q) in list.iter().enumerate() {
                                     Item {
                                         key: "{q.subject}",
+                                        id: Focus::Question(q.subject.clone()).anchor(),
                                         size: ItemSize::Sm,
                                         "data-selected": if n == i { "true" } else { "false" },
                                         onclick: move |_| {
@@ -614,22 +670,6 @@ pub fn DecisionsView() -> Element {
     }
 }
 
-fn reversal_label(r: Reversal) -> &'static str {
-    match r {
-        Reversal::Edit => "changing it later: an edit",
-        Reversal::StateSurgery => "changing it later: state surgery",
-        Reversal::Recreate => "changing it later: a recreate",
-    }
-}
-
-fn blast_label(b: Blast) -> &'static str {
-    match b {
-        Blast::None => "blast: none",
-        Blast::Low => "blast: low",
-        Blast::High => "blast: high",
-    }
-}
-
 /// What a question's state badge means, as its tooltip says it: satz's `answered`,
 /// `unanswered` and `not-applicable`, and `blocking` for an unanswered question with no
 /// usable default.
@@ -647,35 +687,6 @@ pub fn state_tip(q: &QuestionRow) -> &'static str {
         }
     }
 }
-
-/// What changing the answer later does to the estate, in satz's words for `reversal`.
-pub fn reversal_tip(r: Reversal) -> &'static str {
-    match r {
-        Reversal::Edit => "Changing this answer later is an edit: one line, one apply.",
-        Reversal::StateSurgery => {
-            "Changing this answer later is state surgery: a rename plus state mv, and whatever the old name is wired into. Done with care."
-        }
-        Reversal::Recreate => {
-            "Changing this answer later destroys and recreates resources: globally unique ids, mail addresses, buckets."
-        }
-    }
-}
-
-/// What changing the answer later costs the running organization, in satz's words for
-/// `blast`. Independent of the reversal: one boolean to reverse can cut every existing
-/// SSH path.
-pub fn blast_tip(b: Blast) -> &'static str {
-    match b {
-        Blast::None => "Changing this answer later costs the running organization nothing.",
-        Blast::Low => "Changing this answer later costs the running organization little.",
-        Blast::High => {
-            "Changing this answer later hits the running organization hard: what runs on the old answer can stop working."
-        }
-    }
-}
-
-/// What the one-way door chip means.
-pub const ONE_WAY_TIP: &str = "Changing this answer later is a recreate or hits a high blast radius. Decide it with the reason above in view.";
 
 /// An answer is written by the filled button and by Enter in a text or number field, and
 /// by nothing else: not when the field loses focus — the button's own click blurs the
@@ -841,25 +852,10 @@ fn QuestionCard(
                             p { class: "interview__why", "{why}" }
                         }
                         div { class: "interview__tags",
-                            Tip { text: reversal_tip(q.reversal),
-                                Badge { variant: BadgeVariant::Outline,
-                                    History { size: 12 }
-                                    "{reversal_label(q.reversal)}"
-                                }
-                            }
-                            Tip { text: blast_tip(q.blast),
-                                Badge { variant: if q.blast == Blast::High { BadgeVariant::Destructive } else { BadgeVariant::Outline },
-                                    Sparkles { size: 12 }
-                                    "{blast_label(q.blast)}"
-                                }
-                            }
+                            ReversalBadge { reversal: q.reversal }
+                            BlastBadge { blast: q.blast }
                             if one_way {
-                                Tip { text: ONE_WAY_TIP,
-                                    Badge { variant: BadgeVariant::Destructive,
-                                        DoorOpen { size: 12 }
-                                        "one-way door"
-                                    }
-                                }
+                                OneWayBadge {}
                             }
                             span { class: "grow" }
                             span { class: "interview__from", "{q.from}" }
@@ -884,7 +880,10 @@ fn QuestionCard(
                                         Button {
                                             variant: ButtonVariant::Ghost,
                                             size: ButtonSize::Xs,
-                                            onclick: move |_| app.nav().set(View::Estate),
+                                            onclick: {
+                                                let subject = subject.clone();
+                                                move |_| go_to(app, Focus::Param(subject.clone()))
+                                            },
                                             Code { size: 16 }
                                             "Edit in Params"
                                         }
@@ -1370,6 +1369,32 @@ mod tests {
         walk.open(&questions, true, 2);
         assert_eq!(walk.back(&questions, true), Some(true));
         assert_eq!(subject_at(&walk, &list), "region");
+        assert!(!walk.can_go_back());
+    }
+
+    /// A link from Estate → Params puts its question on the card: an answered one turns
+    /// "Show answered" on, the question the card was on is left for Back, and a subject the
+    /// report does not carry moves nothing.
+    #[test]
+    fn a_link_to_a_question_puts_it_on_the_card() {
+        let questions = vec![
+            q("region", QuestionState::Unanswered),
+            q("zone", QuestionState::Unanswered),
+            q("billing", QuestionState::Answered),
+        ];
+        let mut walk = Walk::default();
+        assert_eq!(walk.go_to(&questions, false, "zone"), Some(false));
+        assert_eq!(subject_at(&walk, &ordered(&questions, false)), "zone");
+        assert_eq!(walk.go_to(&questions, false, "billing"), Some(true));
+        assert_eq!(subject_at(&walk, &ordered(&questions, true)), "billing");
+        // the link to the question already on the card leaves nothing more behind
+        assert_eq!(walk.go_to(&questions, true, "billing"), Some(true));
+        assert_eq!(walk.go_to(&questions, true, "gone"), None);
+        assert_eq!(subject_at(&walk, &ordered(&questions, true)), "billing");
+        assert_eq!(walk.back(&questions, true), Some(true));
+        assert_eq!(subject_at(&walk, &ordered(&questions, true)), "zone");
+        assert_eq!(walk.back(&questions, true), Some(true));
+        assert_eq!(subject_at(&walk, &ordered(&questions, true)), "region");
         assert!(!walk.can_go_back());
     }
 

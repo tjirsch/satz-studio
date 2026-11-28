@@ -26,7 +26,9 @@ use dioxus_icons::lucide::{
 use crate::components::badge::{Badge, BadgeVariant};
 use crate::components::button::{Button, ButtonVariant};
 use crate::components::card::{Card, CardContent, CardHeader};
-use crate::state::{AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt};
+use crate::state::{
+    AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt, Focus, scroll_to, take_focus,
+};
 use crate::widgets::{ConnectorBranch, ConnectorLine, ConnectorTree, HelpButton, SwitchRow};
 
 /// The header of the section for packs the file has no line for.
@@ -628,8 +630,17 @@ fn PackCard(
     let note = line_note(&row);
     let switchable = row.role == PackRole::Pack && row.by_hand.is_none();
     let path = row.path.clone();
+    let app = use_context::<Store<AppStore>>();
+    let here = Focus::Preset(row.path.clone());
+    let anchor = here.anchor();
+    // a link to this preset (an Estate → Params heading) scrolls its card into view
+    use_effect(move || {
+        if take_focus(app, &here) {
+            scroll_to(&here.anchor());
+        }
+    });
     rsx! {
-        Card {
+        Card { id: "{anchor}",
             CardHeader {
                 div { class: "pack-card__head",
                     Puzzle { size: 20 }

@@ -15,7 +15,10 @@
 //! through it ([`PackFlow`]): the interface values it reads, grouped by what gives each
 //! against the open estate as `satz packs --estate` matched it (satz's ADR 0100), and the
 //! values it exports, grouped by interface; a read the estate does not give marks the row
-//! "Unmet read". Its details ([`PackDetails`]) hold its params and list params. When an external editor is done with a pack is
+//! "unmet read". A second toggle opens its params and list params in the same place, one
+//! panel open at a time ([`PackParams`], [`Panel`]), each
+//! param of a pack the estate uses leading to its row in Estate → Params and to the
+//! question that asks for it ([`param_links`]). When an external editor is done with a pack is
 //! not knowable, so the card's Reload reads the estate and the listed source again. The
 //! states and the matches are satz's report; the app derives none of its own.
 
@@ -24,6 +27,7 @@ use std::path::PathBuf;
 
 use dioxus::prelude::*;
 use satz_studio_core::cst::UseState;
+use satz_studio_core::model::ParamRow;
 use satz_studio_core::satz::reports::{
     InterfaceFolder, PackExport, PackState, QuestionRow, UpdateAction, UpdatePackReport,
     UpdatedPack, WorkloadPackRow, WorkloadPacksReport,
@@ -33,7 +37,7 @@ use satz_studio_core::satz::workload::{Which, new_pack_id};
 use dioxus_icons::lucide::{
     ArrowDown, ArrowUp, Check, ChevronDown, ChevronUp, CircleAlert, CloudDownload, CloudOff,
     Copy as CopyIcon, Diff, Download, FilePlus, FolderInput, FolderUp, History, Hourglass, Package,
-    Pencil, RefreshCw, SlidersHorizontal, Tag, TriangleAlert, Unlink,
+    Pencil, RefreshCw, SlidersHorizontal, Tag, Unlink,
 };
 
 use crate::components::badge::{Badge, BadgeVariant};
@@ -43,11 +47,13 @@ use crate::components::collapsible::{Collapsible, CollapsibleContent, Collapsibl
 use crate::components::dialog::{Dialog, DialogTitle};
 use crate::components::progress::Progress;
 use crate::state::{
-    AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt, PackOp, SourceOp, edit_file,
+    AppStore, AppStoreStoreExt, EstateAction, EstateStoreStoreExt, Focus, PackOp, SourceOp,
+    edit_file, go_to, scroll_to, take_focus,
 };
 use crate::views::commands::copy_to_clipboard;
 use crate::views::pack_sources::{PackSourcesCard, Sheet};
 use crate::views::publish_pack::PublishDialog;
+use crate::widgets::marks::{AskedBadge, UnmetBadge};
 use crate::widgets::{Field, HelpButton, Tip};
 
 /// What gives a value a pack reads, as satz matched the read against the estate: the
@@ -151,6 +157,74 @@ fn flow_counts(row: &WorkloadPackRow) -> (usize, usize) {
     (read.len(), row.exports.len())
 }
 
+/// How many params the "Params (n)" toggle counts: the params a pack declares and its list
+/// params, so a pack that declares a list param alone does not read "Params (0)".
+fn param_count(row: &WorkloadPackRow) -> usize {
+    row.params.len() + row.list_params.len()
+}
+
+/// Where one param of a pack the estate uses leads: `row`, the name of its row in Estate →
+/// Params, where the estate binds it; `question`, the subject of the question card that
+/// asks for it in Decisions.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+struct ParamLink {
+    row: Option<String>,
+    question: Option<String>,
+}
+
+/// Whether `q` asks for the param `name` of the use `named` (`None` for the flat use),
+/// whose estate name is `full`: a question of the same use that names it — by its subject,
+/// a named use's question by the pack's own name — or a choice that has it as an option.
+fn asks(q: &QuestionRow, named: Option<&str>, name: &str, full: &str) -> bool {
+    q.named.as_deref() == named
+        && (q.label() == name || q.options.iter().any(|o| o.param == name || o.param == full))
+}
+
+/// Where each param of a pack the estate uses leads, by the pack's own name of the param:
+/// its row in Estate → Params ([`ParamRow::name`]) and the question that asks for it, each
+/// through the first of `uses` that has one — `uses` are the lines that read the pack in
+/// their order, `None` for a flat use and the name of a named use, whose params the estate
+/// binds as `<name>.<param>`. A param with neither has no entry; for a pack the estate does
+/// not use (`uses` empty) the map is empty and every name is plain text.
+fn param_links(
+    row: &WorkloadPackRow,
+    uses: &[Option<String>],
+    rows: &[ParamRow],
+    questions: &[QuestionRow],
+) -> BTreeMap<String, ParamLink> {
+    let names = row
+        .params
+        .iter()
+        .map(|p| p.name.as_str())
+        .chain(row.list_params.iter().map(|l| l.param.as_str()));
+    let mut out = BTreeMap::new();
+    for name in names {
+        let fulls: Vec<(Option<&str>, String)> = uses
+            .iter()
+            .map(|u| match u {
+                Some(n) => (Some(n.as_str()), format!("{n}.{name}")),
+                None => (None, name.to_string()),
+            })
+            .collect();
+        let link = ParamLink {
+            row: fulls
+                .iter()
+                .find(|(_, full)| rows.iter().any(|r| &r.name == full))
+                .map(|(_, full)| full.clone()),
+            question: fulls.iter().find_map(|(named, full)| {
+                questions
+                    .iter()
+                    .find(|q| asks(q, *named, name, full))
+                    .map(|q| q.subject.clone())
+            }),
+        };
+        if link != ParamLink::default() {
+            out.insert(name.to_string(), link);
+        }
+    }
+    out
+}
+
 /// A pack's exports, grouped by the interface they stand in: the core exports first,
 /// then each interface in the order the pack first names it.
 fn export_groups(exports: &[PackExport]) -> Vec<(Option<String>, Vec<PackExport>)> {
@@ -202,7 +276,7 @@ fn badge_tip(state: PackState, local: bool) -> &'static str {
     }
 }
 
-/// What "Unmet read" means for this pack: each value it reads from an interface folder
+/// What "unmet read" means for this pack: each value it reads from an interface folder
 /// that the estate does not give, by the param it would fill, and what makes the pack
 /// usable — the estate setting that param itself, or using an interface folder that
 /// exports the value.
@@ -456,6 +530,34 @@ pub fn WorkloadPacksPane() -> Element {
         None => (None, None),
     };
     let rows = here_rows(listed.as_ref(), local.as_ref(), &used);
+    // where each param of a used pack leads: its row in Estate → Params, its question
+    let param_rows = app
+        .estate()
+        .model()
+        .cloned()
+        .map(|m| m.params.clone())
+        .unwrap_or_default();
+    let questions = app
+        .estate()
+        .questions()
+        .cloned()
+        .map(|r| r.questions)
+        .unwrap_or_default();
+    let links: BTreeMap<String, BTreeMap<String, ParamLink>> = rows
+        .iter()
+        .filter_map(|here| {
+            let row = here.row.as_ref()?;
+            let uses: Vec<Option<String>> = used
+                .iter()
+                .filter(|(id, _, _)| *id == here.id)
+                .map(|(_, _, named)| named.clone())
+                .collect();
+            Some((
+                here.id.clone(),
+                param_links(row, &uses, &param_rows, &questions),
+            ))
+        })
+        .collect();
     // the folders are the estate's, the same in either listing: a pack's expander names
     // the estate that wrote each
     let folders: Vec<InterfaceFolder> = local
@@ -487,6 +589,7 @@ pub fn WorkloadPacksPane() -> Element {
             HereCard {
                 rows,
                 descriptions,
+                links,
                 folders: folders.clone(),
                 listed: listed.is_some(),
                 local_listed: local.is_some(),
@@ -510,7 +613,7 @@ pub fn WorkloadPacksPane() -> Element {
                     }
                     CardContent {
                         for row in available {
-                            PackLine { key: "{row.id}", id: row.id.clone(), row: Some(row.clone()), folders: folders.clone(), local: false, used: false, named: Vec::new(), description: None, file: None, estate_file: open.main.clone(), edited: None, busy, confirm, publishing }
+                            PackLine { key: "{row.id}", id: row.id.clone(), row: Some(row.clone()), folders: folders.clone(), local: false, used: false, named: Vec::new(), description: None, links: BTreeMap::new(), file: None, estate_file: open.main.clone(), edited: None, busy, confirm, publishing }
                         }
                     }
                 }
@@ -583,6 +686,7 @@ pub fn WorkloadPacksPane() -> Element {
 fn HereCard(
     rows: Vec<HereRow>,
     descriptions: BTreeMap<String, String>,
+    links: BTreeMap<String, BTreeMap<String, ParamLink>>,
     folders: Vec<InterfaceFolder>,
     listed: bool,
     local_listed: bool,
@@ -662,8 +766,8 @@ fn HereCard(
                     p { "The packs this estate uses come first, then the other files of {packs_dir}. A fetched pack is recorded in origin.toml beside the packs with the name of its source; a pack without a row there is this repository's own, and no fetch and no update writes it." }
                     p { "Choosing a pack source runs satz packs against it, and each fetched pack says how it stands: Update available — unchanged here, and the source holds a newer file; Edited here — changed since it was fetched, so an update leaves it as it is and shows the difference; Gone from source — the source holds it no longer; Not checked — fetched from another source than the one listed." }
                     p { "Before a source is chosen, satz packs --local lists the packs here without reading any source, so nothing goes over the network: Edited here — changed since it was fetched; Unchanged since fetched — the file is the one that was fetched, and whether its source holds a newer one is known once that source is chosen." }
-                    p { "The arrows on a pack count what flows through it, seen from the pack: in, the values it reads from the interface folders this estate uses; out, the values it exports. Opening them lists both. In is grouped by what gives each value — an interface folder, named with the organization's estate that wrote it, the estate itself where it sets the param the value would fill, or not given, with why — each value with its export's description and the param it fills with that param's question. Out is grouped by interface, the core exports first, each with its description. Unmet read marks a pack with a value this estate does not give; the transpile refuses it once the estate uses the pack." }
-                    p { "Details shows the rest of what a pack declares: its params with their defaults and the questions that ask for them, and its list params." }
+                    p { "Interfaces on a pack counts what flows through it, seen from the pack: ↓ in, the values it reads from the interface folders this estate uses; ↑ out, the values it exports. Opening it shows both as tables, in the place Params opens in: one of the two is open at a time. In is grouped by what gives each value — an interface folder, named with the organization's estate that wrote it, the estate itself where it sets the param the value would fill, or not given, with why — each value with its export's description and the param it fills with that param's question. Out is grouped by interface, the core exports first, each with its description. The mark unmet read stands on a pack with a value this estate does not give; the transpile refuses it once the estate uses the pack." }
+                    p { "Params opens the rest of what a pack declares: its params with their defaults, marked asked where a question asks for them, and its list params with their fields. For a pack this estate uses, a param's name opens its row in Estate → Params and the asked mark opens the question in Decisions." }
                     p { "Reload reads the estate again, the packs here and the listed pack source with them: the way to see a pack after New pack or Edit, since the window cannot tell when the editor is done with the file." }
                     p { "New pack writes {packs_dir}/<name>.satz and opens it in the editor Settings → Editor names, or this computer's text editor; Edit opens a pack the same way. satz-studio writes no use line: a pack here that the estate does not use shows the line that reads it, to copy and write into the estate file by hand — for a pack used under a name, its line ends in named <name>, and <name> is replaced by the use's name. Keep as own forgets where a fetched pack came from. What a pack asks is answered in Decisions." }
                     p { "Store in a pack source, on your own pack, copies it into a folder pack source with satz publish-pack once it clears review-pack's bar inside this estate, and records it as fetched from there, so other estates fetch it and update-pack follows it here too." }
@@ -694,6 +798,7 @@ fn HereCard(
                     used: here.used.is_some(),
                     named: here.named.clone(),
                     description: descriptions.get(&here.id).cloned(),
+                    links: links.get(&here.id).cloned().unwrap_or_default(),
                     edited: edited_of(&here.id),
                     file: Some(files.join(format!("{}.satz", here.id))),
                     estate_file: estate_file.clone(),
@@ -750,7 +855,10 @@ fn HereCard(
 /// says the estate reads it, and `named` the names of the named uses that read it — a
 /// badge each; `file` is where it is, for a pack that is here; `estate_file` is the
 /// estate's main file, which an unused pack's line is written into ([`UseLine`]);
-/// `folders` are the interface folders the estate uses, which the expander names.
+/// `folders` are the interface folders the estate uses, which the expander names;
+/// `links` where each param of a pack the estate uses leads ([`param_links`]). A link to
+/// the pack (an Estate → Params heading) scrolls the row into view and opens its
+/// description.
 #[component]
 fn PackLine(
     id: String,
@@ -760,6 +868,7 @@ fn PackLine(
     used: bool,
     named: Vec<String>,
     description: Option<String>,
+    links: BTreeMap<String, ParamLink>,
     file: Option<PathBuf>,
     estate_file: PathBuf,
     edited: Option<UpdatedPack>,
@@ -769,9 +878,17 @@ fn PackLine(
 ) -> Element {
     let app = use_context::<Store<AppStore>>();
     let handle = use_coroutine_handle::<EstateAction>();
-    let mut details_open = use_signal(|| false);
-    let mut flow_open = use_signal(|| false);
+    // the row's one open panel: Interfaces and Params share it, so opening one closes the other
+    let mut panel = use_signal(|| None::<Panel>);
     let mut about_open = use_signal(|| false);
+    let here = Focus::Pack(id.clone());
+    let anchor = here.anchor();
+    use_effect(move || {
+        if take_focus(app, &here) {
+            about_open.set(true);
+            scroll_to(&here.anchor());
+        }
+    });
     let state = row.as_ref().map(|r| r.state);
     let unmet = row.as_ref().is_some_and(WorkloadPackRow::has_unmet_read);
     let use_line = row
@@ -783,8 +900,13 @@ fn PackLine(
     rsx! {
         Collapsible {
             class: "interfaces__export",
-            open: flow_open(),
-            on_open_change: move |now: bool| flow_open.set(now),
+            id: "{anchor}",
+            open: panel().is_some(),
+            on_open_change: move |now: bool| {
+                if !now {
+                    panel.set(None);
+                }
+            },
             div { class: "interfaces__export-head",
                 if let Some(description) = description {
                     Collapsible {
@@ -844,42 +966,23 @@ fn PackLine(
                     }
                 }
                 if unmet && let Some(row) = &row {
-                    Tip { text: unmet_tip(row),
-                        Badge { variant: BadgeVariant::Destructive,
-                            TriangleAlert { size: 12 }
-                            "Unmet read"
-                        }
-                    }
+                    UnmetBadge { tip: unmet_tip(row) }
                 }
                 if let Some((into, out)) = row.as_ref().map(flow_counts) {
-                    div { class: "wpacks__toggle",
-                    CollapsibleTrigger {
-                        r#as: move |mut trigger: Vec<Attribute>| {
-                            let title = if flow_open() { "Hide what the pack reads and exports" } else { "Show what the pack reads and exports" };
-                            trigger.push(Attribute::new("title", title, None, false));
-                            rsx! {
-                            Button {
-                                variant: ButtonVariant::Ghost,
-                                size: ButtonSize::Sm,
-                                attributes: trigger,
-                                ArrowDown { size: 16 }
-                                span { "{into} in" }
-                                span { "·" }
-                                ArrowUp { size: 16 }
-                                span { "{out} out" }
-                                if flow_open() {
-                                    ChevronUp { size: 16 }
-                                } else {
-                                    ChevronDown { size: 16 }
-                                }
-                            }
-                            }
-                        },
-                    }
+                    PanelToggle {
+                        panel,
+                        which: Panel::Interfaces,
+                        label: format!("Interfaces ({into} ↓ / {out} ↑)"),
+                        what: "what the pack reads and exports",
                     }
                 }
-                if row.is_some() {
-                    Button { variant: ButtonVariant::Ghost, size: ButtonSize::Sm, onclick: move |_| details_open.set(true), "Details" }
+                if let Some(count) = row.as_ref().map(param_count).filter(|n| *n > 0) {
+                    PanelToggle {
+                        panel,
+                        which: Panel::Params,
+                        label: format!("Params ({count})"),
+                        what: "the params the pack declares",
+                    }
                 }
                 if let Some(origin) = row.as_ref().and_then(origin_text) {
                     code { class: "interfaces__at", "{origin}" }
@@ -965,8 +1068,12 @@ fn PackLine(
                 }
             }
             CollapsibleContent {
-                if let Some(row) = row.as_ref().filter(|_| flow_open()) {
-                    PackFlow { row: row.clone(), folders: folders.clone() }
+                if let Some(row) = &row {
+                    match panel() {
+                        Some(Panel::Interfaces) => rsx! { PackFlow { row: row.clone(), folders: folders.clone() } },
+                        Some(Panel::Params) => rsx! { PackParams { row: row.clone(), links: links.clone() } },
+                        None => rsx! {},
+                    }
                 }
             }
             if let Some(line) = use_line {
@@ -979,16 +1086,64 @@ fn PackLine(
                 }
             }
         }
-        if let Some(row) = row.filter(|_| details_open()) {
-            Dialog {
-                open: true,
-                on_open_change: move |now: bool| details_open.set(now),
-                class: "wpacks__details",
-                DialogTitle { "{id}" }
-                div { class: "dialog-body", PackDetails { row } }
-                div { class: "dialog-actions",
-                    Button { variant: ButtonVariant::Ghost, onclick: move |_| details_open.set(false), "Close" }
-                }
+    }
+}
+
+/// The two panels a pack's row opens under it, one at a time and across the row's width.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Panel {
+    /// what flows through the pack ([`PackFlow`])
+    Interfaces,
+    /// what it declares ([`PackParams`])
+    Params,
+}
+
+impl Panel {
+    /// The row's open panel after a press on the toggle of `self`: it opens, closing the
+    /// other, or closes when it is the one open.
+    fn pressed(self, open: Option<Panel>) -> Option<Panel> {
+        (open != Some(self)).then_some(self)
+    }
+}
+
+/// One of a row's two toggles: the trigger of the row's `Collapsible`, which both share —
+/// the row is open while either panel is. The library's trigger opens and closes the
+/// whole row, so this one keeps the trigger's attributes (its `aria-controls`, its
+/// class) but says its own `aria-expanded` and sets its own panel: opening it closes the
+/// other, and a second press closes it.
+#[component]
+fn PanelToggle(
+    mut panel: Signal<Option<Panel>>,
+    which: Panel,
+    label: String,
+    what: &'static str,
+) -> Element {
+    let open = panel() == Some(which);
+    rsx! {
+        div { class: "wpacks__toggle",
+            CollapsibleTrigger {
+                r#as: move |mut trigger: Vec<Attribute>| {
+                    trigger.retain(|a| {
+                        a.name != "aria-expanded" && !matches!(a.value, dioxus::dioxus_core::AttributeValue::Listener(_))
+                    });
+                    let title = if open { format!("Hide {what}") } else { format!("Show {what}") };
+                    trigger.push(Attribute::new("title", title, None, false));
+                    trigger.push(Attribute::new("aria-expanded", open, None, false));
+                    rsx! {
+                        Button {
+                            variant: ButtonVariant::Ghost,
+                            size: ButtonSize::Sm,
+                            attributes: trigger,
+                            onclick: move |_| panel.set(which.pressed(panel())),
+                            span { "{label}" }
+                            if open {
+                                ChevronUp { size: 16 }
+                            } else {
+                                ChevronDown { size: 16 }
+                            }
+                        }
+                    }
+                },
             }
         }
     }
@@ -1047,13 +1202,20 @@ fn takes_a_name(line: &str) -> bool {
     line.ends_with(" named <name>")
 }
 
-/// What flows through a pack, seen from the pack: what it reads, grouped by what gives
-/// each value against the open estate ([`incoming`]), and what it exports, grouped by
-/// interface ([`export_groups`]). The panel under the row its toggle opens.
+/// What flows through a pack, seen from the pack: what it reads, by what gives each value
+/// against the open estate ([`incoming`]), and what it exports, by interface
+/// ([`export_groups`]) — two tables with aligned columns, the panel the "Interfaces" toggle
+/// opens under the row.
 #[component]
 fn PackFlow(row: WorkloadPackRow, folders: Vec<InterfaceFolder>) -> Element {
-    let into = incoming(&row);
-    let out = export_groups(&row.exports);
+    let into: Vec<(Given, Incoming)> = incoming(&row)
+        .into_iter()
+        .flat_map(|(given, entries)| entries.into_iter().map(move |e| (given.clone(), e)))
+        .collect();
+    let out: Vec<(Option<String>, PackExport)> = export_groups(&row.exports)
+        .into_iter()
+        .flat_map(|(interface, exports)| exports.into_iter().map(move |e| (interface.clone(), e)))
+        .collect();
     let wrote = |folder: &str| {
         folders
             .iter()
@@ -1061,59 +1223,71 @@ fn PackFlow(row: WorkloadPackRow, folders: Vec<InterfaceFolder>) -> Element {
             .map(|f| format!("written by {}", f.estate))
     };
     rsx! {
-        div { class: "wpacks__flow",
-            section { class: "wpacks__flow-side",
-                h3 { ArrowDown { size: 18 } "Incoming" }
-                if into.is_empty() {
-                    p { class: "interfaces__supporting", "nothing" }
-                }
-                for (given, entries) in into {
-                    div { key: "{given:?}", class: "wpacks__flow-group",
-                        match &given {
-                            Given::Folder(folder) => rsx! {
-                                div { class: "wpacks__flow-source",
-                                    FolderInput { size: 18 }
-                                    code { "{folder}" }
-                                    if let Some(said) = wrote(folder) {
-                                        span { class: "interfaces__supporting", "{said}" }
-                                    }
-                                }
-                            },
-                            Given::Estate => rsx! {
-                                div { class: "wpacks__flow-source",
-                                    SlidersHorizontal { size: 18 }
-                                    "set by the estate"
-                                }
-                            },
-                            Given::Unmet => rsx! {
-                                div { class: "wpacks__flow-source wpacks__unmet",
-                                    TriangleAlert { size: 18 }
-                                    "not given"
-                                }
-                            },
+        div { class: "wpacks__panel",
+            h3 { ArrowDown { size: 18 } "Incoming" }
+            if into.is_empty() {
+                p { class: "interfaces__supporting", "nothing" }
+            } else {
+                table { class: "wpacks__table",
+                    thead {
+                        tr {
+                            th { "Value read" }
+                            th { "From" }
+                            th { "Feeds" }
+                            th { "Marks" }
                         }
-                        ul { class: "wpacks__flow-list",
-                            for entry in entries {
-                                li { key: "{entry.written}",
-                                    div { class: "wpacks__flow-line",
-                                        code { "{entry.written}" }
-                                        if let Some(d) = &entry.description {
-                                            span { class: "interfaces__supporting", "{d}" }
-                                        }
+                    }
+                    tbody {
+                        for (given, entry) in into {
+                            tr { key: "{given:?}-{entry.written}",
+                                td {
+                                    code { "{entry.written}" }
+                                    if let Some(d) = &entry.description {
+                                        div { class: "interfaces__supporting", "{d}" }
                                     }
-                                    if let Some(reason) = &entry.reason {
-                                        p { class: "wpacks__flow-why wpacks__unmet", "{reason}" }
+                                }
+                                td {
+                                    match &given {
+                                        Given::Folder(folder) => rsx! {
+                                            div { class: "wpacks__cell-line",
+                                                FolderInput { size: 16 }
+                                                code { "{folder}" }
+                                            }
+                                            if let Some(said) = wrote(folder) {
+                                                div { class: "interfaces__supporting", "{said}" }
+                                            }
+                                        },
+                                        Given::Estate => rsx! {
+                                            div { class: "wpacks__cell-line",
+                                                SlidersHorizontal { size: 16 }
+                                                "set by the estate"
+                                            }
+                                        },
+                                        Given::Unmet => rsx! {
+                                            div { class: "wpacks__cell-line wpacks__unmet", "not given" }
+                                            if let Some(reason) = &entry.reason {
+                                                div { class: "wpacks__unmet", "{reason}" }
+                                            }
+                                        },
                                     }
+                                }
+                                td {
                                     for param in entry.params.iter() {
-                                        div { key: "{param.name}", class: "wpacks__flow-line",
-                                            "→ "
+                                        div { key: "{param.name}",
                                             code { "{param.name}" }
                                             if let Some(prompt) = &param.prompt {
-                                                span { "{prompt}" }
+                                                div { "{prompt}" }
+                                            }
+                                            if let Some(why) = &param.why {
+                                                div { class: "interfaces__supporting", "{why}" }
                                             }
                                         }
-                                        if let Some(why) = &param.why {
-                                            p { class: "wpacks__flow-why interfaces__supporting", "{why}" }
+                                    }
+                                }
+                                td {
+                                    if given == Given::Unmet {
+                                        UnmetBadge {
+                                            tip: entry.reason.clone().unwrap_or_else(|| format!("The estate does not give {}.", entry.written)),
                                         }
                                     }
                                 }
@@ -1122,28 +1296,116 @@ fn PackFlow(row: WorkloadPackRow, folders: Vec<InterfaceFolder>) -> Element {
                     }
                 }
             }
-            section { class: "wpacks__flow-side",
-                h3 { ArrowUp { size: 18 } "Outgoing" }
-                if out.is_empty() {
-                    p { class: "interfaces__supporting", "nothing" }
-                }
-                for (interface, exports) in out {
-                    div { key: "{interface:?}", class: "wpacks__flow-group",
-                        div { class: "wpacks__flow-source",
-                            ArrowUp { size: 18 }
-                            match &interface {
-                                Some(name) => rsx! { "interface " code { "{name}" } },
-                                None => rsx! { "core" },
+            h3 { ArrowUp { size: 18 } "Outgoing" }
+            if out.is_empty() {
+                p { class: "interfaces__supporting", "nothing" }
+            } else {
+                table { class: "wpacks__table",
+                    thead {
+                        tr {
+                            th { "Export" }
+                            th { "Interface" }
+                            th { "Description" }
+                        }
+                    }
+                    tbody {
+                        for (interface, export) in out {
+                            tr { key: "{interface:?}-{export.name}",
+                                td { code { "{export.name}" } }
+                                td {
+                                    match &interface {
+                                        Some(name) => rsx! { code { "{name}" } },
+                                        None => rsx! { "core" },
+                                    }
+                                }
+                                td { class: "interfaces__supporting",
+                                    {export.description.clone().unwrap_or_default()}
+                                }
                             }
                         }
-                        ul { class: "wpacks__flow-list",
-                            for export in exports {
-                                li { key: "{export.name}",
-                                    div { class: "wpacks__flow-line",
-                                        code { "{export.name}" }
-                                        if let Some(d) = &export.description {
-                                            span { class: "interfaces__supporting", "{d}" }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// What a pack declares besides what flows through it, as satz's row gives it (satz's ADR
+/// 0100): its params — name, default or `none`, and the "asked" mark where a question asks
+/// for one — then its list params with key, fields and defaults, as two tables with
+/// aligned columns: the panel the "Params (n)" toggle opens under the row. For a pack the
+/// estate uses, a name opens its row in Estate → Params and the mark opens the question in
+/// Decisions (`links`); the estate's own values are not shown here.
+#[component]
+fn PackParams(row: WorkloadPackRow, links: BTreeMap<String, ParamLink>) -> Element {
+    rsx! {
+        div { class: "wpacks__panel",
+            if !row.params.is_empty() {
+                table { class: "wpacks__table",
+                    thead {
+                        tr {
+                            th { "Param" }
+                            th { "Default" }
+                            th { "Marks" }
+                        }
+                    }
+                    tbody {
+                        for param in row.params.iter() {
+                            {
+                                let link = links.get(&param.name).cloned().unwrap_or_default();
+                                let asked = param.question.then(|| match (&param.prompt, &param.why) {
+                                    (Some(prompt), Some(why)) => format!("{prompt} — {why}"),
+                                    (Some(prompt), None) => prompt.clone(),
+                                    (None, _) => "A question asks for this param.".to_string(),
+                                });
+                                rsx! {
+                                    tr { key: "{param.name}",
+                                        td { ParamName { name: param.name.clone(), row: link.row } }
+                                        td {
+                                            match &param.default {
+                                                Some(default) => rsx! { code { "{default}" } },
+                                                None => rsx! { span { class: "interfaces__supporting", "none — must be provided" } },
+                                            }
                                         }
+                                        td {
+                                            if let Some(asked) = asked {
+                                                AskedMark { tip: asked, question: link.question }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            if !row.list_params.is_empty() {
+                h3 { "List params" }
+                table { class: "wpacks__table",
+                    thead {
+                        tr {
+                            th { "List param" }
+                            th { "Key" }
+                            th { "Fields" }
+                            th { "Defaults" }
+                        }
+                    }
+                    tbody {
+                        for list in row.list_params.iter() {
+                            tr { key: "{list.param}",
+                                td {
+                                    ParamName {
+                                        name: list.param.clone(),
+                                        row: links.get(&list.param).and_then(|l| l.row.clone()),
+                                    }
+                                }
+                                td { code { "{list.key}" } }
+                                td { code { {list.fields.join(", ")} } }
+                                td {
+                                    if list.defaults.is_empty() {
+                                        span { class: "interfaces__supporting", "none" }
+                                    } else {
+                                        code { {list_defaults(&list.defaults)} }
                                     }
                                 }
                             }
@@ -1155,66 +1417,56 @@ fn PackFlow(row: WorkloadPackRow, folders: Vec<InterfaceFolder>) -> Element {
     }
 }
 
-/// What a pack declares beyond what flows through it, as satz's row gives it (satz's ADR
-/// 0100): its params, each with the question that asks for it, and its list params.
+/// A list param's field defaults as its row says them: `a = 1, b = "x"`.
+fn list_defaults(defaults: &BTreeMap<String, String>) -> String {
+    defaults
+        .iter()
+        .map(|(field, value)| format!("{field} = {value}"))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// A param's name in [`PackParams`]: a link to its row in Estate → Params where the estate
+/// binds it (`row`, the name it binds it by), plain monospace text otherwise.
 #[component]
-fn PackDetails(row: WorkloadPackRow) -> Element {
-    rsx! {
-        section { class: "wpacks__section",
-            h3 { "Params" }
-            if row.params.is_empty() {
-                p { class: "interfaces__supporting", "none" }
+fn ParamName(name: String, row: Option<String>) -> Element {
+    let app = use_context::<Store<AppStore>>();
+    match row {
+        Some(row) => rsx! {
+            Button {
+                variant: ButtonVariant::Link,
+                size: ButtonSize::Xs,
+                title: "Open {row} in Estate → Params",
+                onclick: move |_| go_to(app, Focus::Param(row.clone())),
+                code { "{name}" }
             }
-            ul { class: "wpacks__decls",
-                for param in row.params.iter() {
-                    li { key: "{param.name}",
-                        code { "{param.name}" }
-                        " — "
-                        match &param.default {
-                            Some(default) => rsx! { code { "{default}" } },
-                            None => rsx! { span { class: "interfaces__supporting", "none — must be provided" } },
-                        }
-                        if param.question {
-                            span { class: "interfaces__supporting",
-                                match &param.prompt {
-                                    Some(prompt) => format!(" — asked: {prompt}"),
-                                    None => " — asked".to_string(),
-                                }
-                            }
-                        }
-                        if let Some(why) = &param.why {
-                            p { class: "wpacks__flow-why interfaces__supporting", "{why}" }
-                        }
-                    }
-                }
+        },
+        None => rsx! {
+            code { "{name}" }
+        },
+    }
+}
+
+/// The "asked" mark of a param a question asks for ([`AskedBadge`], its tooltip the
+/// prompt and the `why`): where the estate uses the pack (`question`, the question's
+/// subject) the badge is the content of a `Link` button that opens the question in
+/// Decisions.
+#[component]
+fn AskedMark(tip: String, question: Option<String>) -> Element {
+    let app = use_context::<Store<AppStore>>();
+    match question {
+        Some(subject) => rsx! {
+            Button {
+                variant: ButtonVariant::Link,
+                size: ButtonSize::Xs,
+                title: "Open the question in Decisions",
+                onclick: move |_| go_to(app, Focus::Question(subject.clone())),
+                AskedBadge { tip }
             }
-        }
-        section { class: "wpacks__section",
-            h3 { "List params" }
-            if row.list_params.is_empty() {
-                p { class: "interfaces__supporting", "none" }
-            }
-            ul { class: "wpacks__decls",
-                for list in row.list_params.iter() {
-                    li { key: "{list.param}",
-                        code { "{list.param}" }
-                        " — key "
-                        code { "{list.key}" }
-                        {format!("; fields {}", list.fields.join(", "))}
-                        if !list.defaults.is_empty() {
-                            "; defaults "
-                            {
-                                list.defaults
-                                    .iter()
-                                    .map(|(field, value)| format!("{field} = {value}"))
-                                    .collect::<Vec<_>>()
-                                    .join(", ")
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        },
+        None => rsx! {
+            AskedBadge { tip }
+        },
     }
 }
 
@@ -1299,7 +1551,7 @@ mod tests {
         }
     }
 
-    /// "Unmet read" says which value is not given, for which param, and how the estate
+    /// "unmet read" says which value is not given, for which param, and how the estate
     /// gives it; a read the estate gives or binds is not named.
     #[test]
     fn the_unmet_read_tip_names_the_value_the_param_and_the_way_out() {
@@ -1365,7 +1617,7 @@ mod tests {
     /// The reads stand under the first folder that meets each, in the order the pack
     /// first reads from it, then under the estate where it sets the param, then under not
     /// given with satz's reason; a value read for two params is one entry naming both,
-    /// each with its question's prompt and why. Only a value not given earns "Unmet read".
+    /// each with its question's prompt and why. Only a value not given earns "unmet read".
     #[test]
     fn the_reads_are_grouped_by_what_gives_them() {
         let mut r = row(PackState::Available, None, Some("1.0"));
@@ -1699,5 +1951,167 @@ mod tests {
         assert!(takes_a_name("use \"packs/vm.satz\" named <name>"));
         assert!(!takes_a_name("use \"packs/vm.satz\""));
         assert!(!takes_a_name("use \"packs/vm.satz\" named web"));
+    }
+
+    fn list_param(name: &str) -> satz_studio_core::satz::reports::PackListParam {
+        satz_studio_core::satz::reports::PackListParam {
+            param: name.into(),
+            key: "name".into(),
+            fields: vec!["name".into(), "size".into()],
+            defaults: BTreeMap::new(),
+        }
+    }
+
+    /// "Params (n)" counts the params and the list params, so a pack that declares a
+    /// list param alone does not read "Params (0)".
+    #[test]
+    fn the_params_toggle_counts_params_and_list_params() {
+        let mut r = row(PackState::Own, Some("0.1"), None);
+        assert_eq!(param_count(&r), 0);
+        r.list_params = vec![list_param("disks")];
+        assert_eq!(param_count(&r), 1);
+        r.params = vec![
+            param("vm_zone", Some("Zone?"), None),
+            param("vm_name", None, None),
+        ];
+        assert_eq!(param_count(&r), 3);
+    }
+
+    fn bound(name: &str) -> ParamRow {
+        ParamRow {
+            id: 0,
+            name: name.into(),
+            value: satz_studio_core::model::SourceValue::Bool(true),
+            kind: satz_studio_core::model::ParamKind::Bool,
+            question: None,
+            one_way_door: false,
+            mode: satz_studio_core::model::EditMode::Value,
+            line: 1,
+            named: None,
+        }
+    }
+
+    fn asked(subject: &str, named: Option<&str>, param: Option<&str>) -> QuestionRow {
+        let mut q = question(subject, "packs/vm.satz", "");
+        q.named = named.map(str::to_string);
+        q.param = param.map(str::to_string);
+        q
+    }
+
+    /// A flat use links a param to the row of its own name and to the question whose
+    /// subject it is; a param the estate does not bind and no question asks has no link.
+    #[test]
+    fn a_flat_use_links_each_param_to_its_row_and_its_question() {
+        let mut r = row(PackState::Own, Some("0.1"), None);
+        r.params = vec![
+            param("vm_zone", Some("Zone?"), None),
+            param("vm_name", None, None),
+            param("vm_size", None, None),
+        ];
+        r.list_params = vec![list_param("disks")];
+        let rows = vec![bound("vm_zone"), bound("vm_name"), bound("disks")];
+        let questions = vec![asked("vm_zone", None, None)];
+        let links = param_links(&r, &[None], &rows, &questions);
+        assert_eq!(
+            links.get("vm_zone"),
+            Some(&ParamLink {
+                row: Some("vm_zone".into()),
+                question: Some("vm_zone".into()),
+            })
+        );
+        assert_eq!(
+            links.get("vm_name"),
+            Some(&ParamLink {
+                row: Some("vm_name".into()),
+                question: None,
+            })
+        );
+        assert_eq!(
+            links.get("disks").and_then(|l| l.row.as_deref()),
+            Some("disks")
+        );
+        assert!(!links.contains_key("vm_size"));
+    }
+
+    /// A named use links through `<name>.<param>`, the first use that binds the param
+    /// winning; its question is the one of that use, by the pack's own name of the param.
+    #[test]
+    fn a_named_use_links_through_its_dotted_names() {
+        let mut r = row(PackState::Own, Some("0.1"), None);
+        r.params = vec![param("vm_zone", Some("Zone?"), None)];
+        let rows = vec![bound("db.vm_zone")];
+        let questions = vec![
+            asked("web.vm_zone", Some("web"), Some("vm_zone")),
+            asked("db.vm_zone", Some("db"), Some("vm_zone")),
+        ];
+        let uses = [Some("web".to_string()), Some("db".to_string())];
+        let links = param_links(&r, &uses, &rows, &questions);
+        assert_eq!(
+            links.get("vm_zone"),
+            Some(&ParamLink {
+                row: Some("db.vm_zone".into()),
+                question: Some("web.vm_zone".into()),
+            })
+        );
+    }
+
+    /// An option of a choice is asked by the choice: its mark opens the choice's card.
+    #[test]
+    fn an_option_param_leads_to_its_choice() {
+        let mut r = row(PackState::Own, Some("0.1"), None);
+        r.params = vec![param("small", Some("Which size?"), None)];
+        let mut choice = asked("size", None, None);
+        choice.kind = satz_studio_core::satz::reports::QuestionKind::Oneof;
+        choice.options = vec![
+            serde_json::from_value(serde_json::json!({
+                "param": "small", "label": "Small", "selected": false
+            }))
+            .unwrap(),
+        ];
+        let links = param_links(&r, &[None], &[], &[choice]);
+        assert_eq!(
+            links.get("small").and_then(|l| l.question.as_deref()),
+            Some("size")
+        );
+    }
+
+    /// A pack the estate does not use has no use to follow: every name is plain text.
+    #[test]
+    fn a_pack_the_estate_does_not_use_links_nothing() {
+        let mut r = row(PackState::Available, None, Some("0.1"));
+        r.params = vec![param("vm_zone", Some("Zone?"), None)];
+        let links = param_links(
+            &r,
+            &[],
+            &[bound("vm_zone")],
+            &[asked("vm_zone", None, None)],
+        );
+        assert!(links.is_empty());
+    }
+
+    /// A row opens one panel at a time: a toggle opens its panel and closes the other, and
+    /// a second press on the open one closes the row.
+    #[test]
+    fn a_row_opens_one_panel_at_a_time() {
+        assert_eq!(Panel::Params.pressed(None), Some(Panel::Params));
+        assert_eq!(
+            Panel::Interfaces.pressed(Some(Panel::Params)),
+            Some(Panel::Interfaces)
+        );
+        assert_eq!(
+            Panel::Params.pressed(Some(Panel::Interfaces)),
+            Some(Panel::Params)
+        );
+        assert_eq!(Panel::Params.pressed(Some(Panel::Params)), None);
+    }
+
+    /// The list params' defaults read as Satz assignments, by field.
+    #[test]
+    fn a_list_param_s_defaults_read_as_assignments() {
+        let defaults = BTreeMap::from([
+            ("size".to_string(), "10".to_string()),
+            ("kind".to_string(), "\"ssd\"".to_string()),
+        ]);
+        assert_eq!(list_defaults(&defaults), "kind = \"ssd\", size = 10");
     }
 }
