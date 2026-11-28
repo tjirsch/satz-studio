@@ -16,7 +16,7 @@ pub(crate) mod typed_field;
 pub use connector_tree::{ConnectorBranch, ConnectorLine, ConnectorTree};
 pub use field::Field;
 pub use help::HelpButton;
-pub use source_tags::SourceTags;
+pub use source_tags::{SourceTags, value_in_words};
 pub use switch_row::SwitchRow;
 pub use tag_list::TagList;
 pub use tip::Tip;
